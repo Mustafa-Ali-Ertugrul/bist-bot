@@ -265,7 +265,7 @@ else:
     tab1, tab2 = st.tabs(["📊 Sinyaller", f"📈 {selected_ticker} Detay"])
     
     with tab1:
-        st.subheader("🎯 Alım Sinyalleri")
+        st.subheader("Alim Sinyalleri")
         
         buy_signals = [s for s in signals if s.score > 0]
         if buy_signals:
@@ -275,43 +275,80 @@ else:
                 reward = (s.target_price - s.price) / s.price * 100
                 rr = reward / risk if risk > 0 else 0
                 
-                with st.expander(f"{get_signal_emoji(s.signal_type)} {name} ({s.ticker.replace('.IS', '')}) - Skor: {s.score:+.0f}"):
+                # Verileri al
+                df_data = st.session_state.all_data.get(s.ticker)
+                if df_data is not None and len(df_data) >= 2:
+                    prev_price = df_data['close'].iloc[-2]
+                    day_change = (s.price - prev_price) / prev_price * 100
+                    day_emoji = "🔼" if day_change > 0 else "🔽"
+                else:
+                    day_change = 0
+                    day_emoji = "⚪"
+                
+                with st.expander(f"{get_signal_emoji(s.signal_type)} {name} ({s.ticker.replace('.IS', '')}) | Skor: {s.score:+.0f} | {day_emoji} %{abs(day_change):.1f}"):
+                    # Ana metrikler
                     col1, col2, col3, col4 = st.columns(4)
                     with col1:
-                        st.metric("Fiyat", f"₺{s.price:.2f}")
+                        st.metric("Fiyat", f"₺{s.price:.2f}", delta=f"{day_change:.1f}%")
                     with col2:
-                        st.metric("Stop-Loss", f"₺{s.stop_loss:.2f}", delta=f"{risk:.1f}%", delta_color="inverse")
+                        st.metric("Stop", f"₺{s.stop_loss:.2f}", delta=f"-{risk:.1f}%", delta_color="inverse")
                     with col3:
                         st.metric("Hedef", f"₺{s.target_price:.2f}", delta=f"+{reward:.1f}%", delta_color="normal")
                     with col4:
                         st.metric("R/R", f"1:{rr:.1f}")
                     
+                    # RSI bar
+                    if df_data is not None:
+                        ti = TechnicalIndicators()
+                        df_indicators = ti.add_rsi(df_data.copy())
+                        rsi = df_indicators['rsi'].iloc[-1]
+                        rsi_color = "green" if rsi < 30 else "red" if rsi > 70 else "yellow"
+                        st.markdown(f"**RSI:** :{rsi_color}[{rsi:.0f}]")
+                    
+                    # Nedenler
                     st.markdown("**Nedenler:**")
-                    for r in s.reasons:
+                    for r in s.reasons[:5]:
                         st.write(f"• {r}")
         else:
-            st.info("Alım sinyali yok")
+            st.info("Alim sinyali yok")
         
-        st.subheader("⚠️ Satış Sinyalleri")
+        st.subheader("Satis Sinyalleri")
         
         sell_signals = [s for s in signals if s.score < 0]
         if sell_signals:
             for s in sell_signals:
                 name = config.TICKER_NAMES.get(s.ticker, s.ticker)
-                with st.expander(f"{get_signal_emoji(s.signal_type)} {name} ({s.ticker.replace('.IS', '')}) - Skor: {s.score:+.0f}"):
+                
+                df_data = st.session_state.all_data.get(s.ticker)
+                if df_data is not None and len(df_data) >= 2:
+                    prev_price = df_data['close'].iloc[-2]
+                    day_change = (s.price - prev_price) / prev_price * 100
+                    day_emoji = "🔼" if day_change > 0 else "🔽"
+                else:
+                    day_change = 0
+                    day_emoji = "⚪"
+                
+                with st.expander(f"{get_signal_emoji(s.signal_type)} {name} ({s.ticker.replace('.IS', '')}) | Skor: {s.score:+.0f} | {day_emoji} %{abs(day_change):.1f}"):
                     col1, col2, col3 = st.columns(3)
                     with col1:
-                        st.metric("Fiyat", f"₺{s.price:.2f}")
+                        st.metric("Fiyat", f"₺{s.price:.2f}", delta=f"{day_change:.1f}%")
                     with col2:
                         st.metric("Direnç", f"₺{s.target_price:.2f}")
                     with col3:
                         st.metric("Güven", s.confidence)
                     
+                    if df_data is not None:
+                        ti = TechnicalIndicators()
+                        df_indicators = ti.add_rsi(df_data.copy())
+                        rsi = df_indicators['rsi'].iloc[-1]
+                        rsi_color = "green" if rsi < 30 else "red" if rsi > 70 else "yellow"
+                        st.markdown(f"**RSI:** :{rsi_color}[{rsi:.0f}]")
+                    
                     st.markdown("**Nedenler:**")
-                    for r in s.reasons:
+                    for r in s.reasons[:5]:
                         st.write(f"• {r}")
         else:
-            st.info("Satış sinyali yok")
+            st.info("Satis sinyali yok")
     
     with tab2:
         fetcher = st.session_state.data_fetcher
