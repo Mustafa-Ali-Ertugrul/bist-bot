@@ -22,7 +22,7 @@ def check_strong_signal(ticker, df):
     
     rsi = last.get("rsi")
     if rsi and rsi < 45:
-        conditions.append(f"RSI: {rsi:.0f} (Nötr/Düşük)")
+        conditions.append(f"RSI: {rsi:.0f}")
     
     vol_ratio = last.get("volume_ratio", 1.0)
     if vol_ratio and vol_ratio > 1.0:
@@ -36,21 +36,32 @@ def check_strong_signal(ticker, df):
     if sma_cross == "GOLDEN_CROSS":
         conditions.append("SMA: GOLDEN_CROSS")
     
-    if len(conditions) >= 4:
-        return True, conditions
-    return False, conditions
+    count = len(conditions)
+    
+    if count >= 3:
+        return "AL", conditions
+    elif count == 2:
+        return "SAT", conditions
+    else:
+        return None, conditions
 
 
-def send_strong_signal_notification(ticker, conditions):
+def send_strong_signal_notification(ticker, signal_type, conditions):
     name = config.TICKER_NAMES.get(ticker, ticker)
-    conditions_text = "\n".join([f"  ✅ {c}" for c in conditions])
+    conditions_text = "\n".join([f"  • {c}" for c in conditions])
+    
+    if signal_type == "AL":
+        emoji = "🚀💰"
+        title = "AL"
+    else:
+        emoji = "🔴📉"
+        title = "SAT"
     
     message = f"""
-🚀💰 <b>KESİN AL!</b> - {name}
+{emoji} <b>{title}!</b> - {name}
 ━━━━━━━━━━━━━━━━
+Koşullar ({len(conditions)}/4):
 {conditions_text}
-
-📊 Tüm koşullar sağlandı!
 ━━━━━━━━━━━━━━━━
 ⚠️ <i>Yatırım tavsiyesi değildir!</i>
 """
@@ -86,9 +97,9 @@ if "signals" not in st.session_state or len(st.session_state.get("signals", []))
         signals = engine.scan_all(all_data)
         
         for ticker, df in all_data.items():
-            is_strong, conditions = check_strong_signal(ticker, df)
-            if is_strong:
-                send_strong_signal_notification(ticker, conditions)
+            signal_type, conditions = check_strong_signal(ticker, df)
+            if signal_type:
+                send_strong_signal_notification(ticker, signal_type, conditions)
         
         st.session_state.signals = signals
         st.session_state.all_data = all_data
