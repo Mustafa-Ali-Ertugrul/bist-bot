@@ -388,7 +388,8 @@ else:
                     # RSI ve diger gostergeler
                     if df_data is not None:
                         ti = TechnicalIndicators()
-                        df_indicators = ti.add_rsi(df_data.copy())
+                        df_indicators = ti.add_all(df_data.copy())
+                        
                         rsi = df_indicators['rsi'].iloc[-1]
                         
                         # RSI renklendirme
@@ -527,7 +528,7 @@ else:
                     
                     if df_data is not None:
                         ti = TechnicalIndicators()
-                        df_indicators = ti.add_rsi(df_data.copy())
+                        df_indicators = ti.add_all(df_data.copy())
                         rsi = df_indicators['rsi'].iloc[-1]
                         rsi_color = "green" if rsi < 30 else "red" if rsi > 70 else "white"
                         rsi_durum = "Asiri Satim" if rsi < 30 else "Asiri Alim" if rsi > 70 else "Nötr"
