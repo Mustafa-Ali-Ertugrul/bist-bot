@@ -287,10 +287,45 @@ else:
                     change_str = "0%"
                 
                 with st.expander(f"{get_signal_emoji(s.signal_type)} **{name}** ({s.ticker.replace('.IS', '')}) | Skor: {s.score:+.0f} | {change_str}"):
+                    # Mini grafik - Alim Seviyeleri
+                    fig_levels = go.Figure()
+                    
+                    # Zarar bölgesi (kirmizi)
+                    fig_levels.add_vrect(
+                        x0=s.stop_loss, x1=s.price,
+                        fillcolor="red", opacity=0.15, line_width=0,
+                        annotation_text="ZARAR", annotation_position="bottom left"
+                    )
+                    
+                    # Kazanç bölgesi (yesil)
+                    fig_levels.add_vrect(
+                        x0=s.price, x1=s.target_price,
+                        fillcolor="green", opacity=0.15, line_width=0,
+                        annotation_text="KAZANC", annotation_position="top left"
+                    )
+                    
+                    # Fiyat çizgileri
+                    fig_levels.add_hline(y=0, line_dash="solid", line_color="white", line_width=2, annotation_text=f"Giris: ₺{s.price:.2f}", annotation_position="top")
+                    fig_levels.add_hline(y=0, line_dash="dash", line_color="red", line_width=2, annotation_text=f"Stop: ₺{s.stop_loss:.2f}", annotation_position="bottom")
+                    fig_levels.add_hline(y=0, line_dash="dash", line_color="green", line_width=2, annotation_text=f"Hedef: ₺{s.target_price:.2f}", annotation_position="top")
+                    
+                    fig_levels.update_layout(
+                        height=120,
+                        margin=dict(l=10, r=10, t=30, b=30),
+                        xaxis=dict(
+                            range=[s.stop_loss * 0.95, s.target_price * 1.05],
+                            showgrid=False
+                        ),
+                        yaxis=dict(showticklabels=False, showgrid=False),
+                        template="plotly_dark",
+                        showlegend=False
+                    )
+                    st.plotly_chart(fig_levels, use_container_width=True)
+                    
                     # Ana metrikler
                     col1, col2, col3, col4 = st.columns(4)
                     with col1:
-                        st.metric("Fiyat", f"₺{s.price:.2f}", delta=f"{day_change:+.1f}%")
+                        st.metric("Giris", f"₺{s.price:.2f}", delta=f"{day_change:+.1f}%")
                     with col2:
                         st.metric("Stop", f"₺{s.stop_loss:.2f}", delta=f"-{risk:.1f}%", delta_color="inverse")
                     with col3:
@@ -298,7 +333,7 @@ else:
                     with col4:
                         st.metric("R/R", f"1:{rr:.1f}")
                     
-                    # RSI bar
+                    # RSI
                     if df_data is not None:
                         ti = TechnicalIndicators()
                         df_indicators = ti.add_rsi(df_data.copy())
@@ -331,11 +366,37 @@ else:
                     change_str = "0%"
                 
                 with st.expander(f"{get_signal_emoji(s.signal_type)} **{name}** ({s.ticker.replace('.IS', '')}) | Skor: {s.score:+.0f} | {change_str}"):
+                    # Mini grafik - Satis Seviyeleri
+                    fig_levels = go.Figure()
+                    
+                    # Yukarı hareket bölgesi (kirmizi - satista kar)
+                    fig_levels.add_vrect(
+                        x0=s.price, x1=s.target_price,
+                        fillcolor="red", opacity=0.15, line_width=0,
+                        annotation_text="KISA POZ. KAZANC", annotation_position="top left"
+                    )
+                    
+                    fig_levels.add_hline(y=0, line_dash="solid", line_color="white", line_width=2, annotation_text=f"Giris: ₺{s.price:.2f}", annotation_position="top")
+                    fig_levels.add_hline(y=0, line_dash="dash", line_color="green", line_width=2, annotation_text=f"Stop: ₺{s.target_price:.2f}", annotation_position="bottom")
+                    
+                    fig_levels.update_layout(
+                        height=120,
+                        margin=dict(l=10, r=10, t=30, b=30),
+                        xaxis=dict(
+                            range=[s.price * 0.95, s.target_price * 1.05],
+                            showgrid=False
+                        ),
+                        yaxis=dict(showticklabels=False, showgrid=False),
+                        template="plotly_dark",
+                        showlegend=False
+                    )
+                    st.plotly_chart(fig_levels, use_container_width=True)
+                    
                     col1, col2, col3 = st.columns(3)
                     with col1:
                         st.metric("Fiyat", f"₺{s.price:.2f}", delta=f"{day_change:+.1f}%")
                     with col2:
-                        st.metric("Direnç", f"₺{s.target_price:.2f}")
+                        st.metric("Hedef", f"₺{s.target_price:.2f}")
                     with col3:
                         st.metric("Güven", s.confidence)
                     
