@@ -262,7 +262,7 @@ else:
     
     st.divider()
     
-    tab1, tab2 = st.tabs(["📊 Sinyaller", f"📈 {selected_ticker} Detay"])
+    tab1, tab2 = st.tabs(["Sinyaller", f"{selected_ticker} Detay"])
     
     with tab1:
         st.subheader("Alim Sinyalleri")
@@ -280,16 +280,17 @@ else:
                 if df_data is not None and len(df_data) >= 2:
                     prev_price = df_data['close'].iloc[-2]
                     day_change = (s.price - prev_price) / prev_price * 100
-                    day_emoji = "🔼" if day_change > 0 else "🔽"
+                    change_color = "green" if day_change > 0 else "red"
+                    change_str = f":{change_color}[{day_change:+.1f}%]"
                 else:
                     day_change = 0
-                    day_emoji = "⚪"
+                    change_str = "0%"
                 
-                with st.expander(f"{get_signal_emoji(s.signal_type)} {name} ({s.ticker.replace('.IS', '')}) | Skor: {s.score:+.0f} | {day_emoji} %{abs(day_change):.1f}"):
+                with st.expander(f"{get_signal_emoji(s.signal_type)} **{name}** ({s.ticker.replace('.IS', '')}) | Skor: {s.score:+.0f} | {change_str}"):
                     # Ana metrikler
                     col1, col2, col3, col4 = st.columns(4)
                     with col1:
-                        st.metric("Fiyat", f"₺{s.price:.2f}", delta=f"{day_change:.1f}%")
+                        st.metric("Fiyat", f"₺{s.price:.2f}", delta=f"{day_change:+.1f}%")
                     with col2:
                         st.metric("Stop", f"₺{s.stop_loss:.2f}", delta=f"-{risk:.1f}%", delta_color="inverse")
                     with col3:
@@ -323,15 +324,16 @@ else:
                 if df_data is not None and len(df_data) >= 2:
                     prev_price = df_data['close'].iloc[-2]
                     day_change = (s.price - prev_price) / prev_price * 100
-                    day_emoji = "🔼" if day_change > 0 else "🔽"
+                    change_color = "green" if day_change > 0 else "red"
+                    change_str = f":{change_color}[{day_change:+.1f}%]"
                 else:
                     day_change = 0
-                    day_emoji = "⚪"
+                    change_str = "0%"
                 
-                with st.expander(f"{get_signal_emoji(s.signal_type)} {name} ({s.ticker.replace('.IS', '')}) | Skor: {s.score:+.0f} | {day_emoji} %{abs(day_change):.1f}"):
+                with st.expander(f"{get_signal_emoji(s.signal_type)} **{name}** ({s.ticker.replace('.IS', '')}) | Skor: {s.score:+.0f} | {change_str}"):
                     col1, col2, col3 = st.columns(3)
                     with col1:
-                        st.metric("Fiyat", f"₺{s.price:.2f}", delta=f"{day_change:.1f}%")
+                        st.metric("Fiyat", f"₺{s.price:.2f}", delta=f"{day_change:+.1f}%")
                     with col2:
                         st.metric("Direnç", f"₺{s.target_price:.2f}")
                     with col3:
