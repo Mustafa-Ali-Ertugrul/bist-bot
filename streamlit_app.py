@@ -11,14 +11,38 @@ from strategy import StrategyEngine, SignalType
 st.set_page_config(
     page_title="BIST Bot",
     page_icon="🤖",
-    layout="centered",
-    initial_sidebar_state="collapsed"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
+
+st.markdown("""
+<style>
+    [data-testid="stSidebar"] {
+        min-width: 280px;
+    }
+    [data-testid="stSidebarContent"] {
+        background-color: #0e1117;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 if "data_fetcher" not in st.session_state:
     st.session_state.data_fetcher = BISTDataFetcher()
 if "engine" not in st.session_state:
     st.session_state.engine = StrategyEngine()
+
+if "signals" not in st.session_state or len(st.session_state.get("signals", [])) == 0:
+    try:
+        fetcher = st.session_state.data_fetcher
+        engine = st.session_state.engine
+        fetcher.clear_cache()
+        all_data = fetcher.fetch_all()
+        signals = engine.scan_all(all_data)
+        st.session_state.signals = signals
+        st.session_state.all_data = all_data
+        st.rerun()
+    except Exception as e:
+        st.error(f"Tarama hatası: {e}")
 
 st.markdown("""
 <style>
@@ -226,12 +250,12 @@ with st.sidebar:
     
     st.divider()
     
+    if "signals" not in st.session_state or len(st.session_state.get("signals", [])) == 0:
+        st.session_state.signals, st.session_state.all_data = run_scan()
+        st.rerun()
+    
     if st.button("🔄 Taramayı Yenile", type="primary"):
         st.session_state.signals, st.session_state.all_data = run_scan()
-    
-    if "signals" not in st.session_state:
-        st.session_state.signals = []
-        st.session_state.all_data = {}
     
 
 if not st.session_state.signals:
@@ -372,7 +396,7 @@ else:
                             plot_bgcolor="#0d1117",
                             paper_bgcolor="#0d1117"
                         )
-                        st.plotly_chart(fig, use_container_width=True)
+                        st.plotly_chart(fig, use_container_width=True, key="heatmap_chart")
                     
                     # Ana metrikler
                     col1, col2, col3, col4 = st.columns(4)
@@ -516,7 +540,7 @@ else:
                             plot_bgcolor="#0d1117",
                             paper_bgcolor="#0d1117"
                         )
-                        st.plotly_chart(fig, use_container_width=True)
+                        st.plotly_chart(fig, use_container_width=True, key="signals_chart")
                     
                     col1, col2, col3 = st.columns(3)
                     with col1:
@@ -574,12 +598,19 @@ else:
                     ticker_list,
                     format_func=lambda x: f"{config.TICKER_NAMES.get(x, x)} ({x.replace('.IS', '')})"
                 )
+            with col2:
+                period = st.selectbox(
+                    "Periyot",
+                    ["1mo", "3mo", "6mo", "1y", "2y", "5y"],
+                    index=1,
+                    format_func=lambda x: {"1mo": "1 Ay", "3mo": "3 Ay", "6mo": "6 Ay", "1y": "1 Yıl", "2y": "2 Yıl", "5y": "5 Yıl"}[x]
+                )
             
             if detail_ticker:
                 fetcher = st.session_state.data_fetcher
                 
                 with st.spinner("Veri yükleniyor..."):
-                    df = fetcher.fetch_single(detail_ticker, period="6mo")
+                    df = fetcher.fetch_single(detail_ticker, period=period)
                 
                 if df is not None:
                     ti = TechnicalIndicators()
@@ -608,10 +639,10 @@ else:
                     
                     col1, col2 = st.columns([3, 1])
                     with col1:
-                        st.plotly_chart(plot_candlestick(df, detail_ticker), use_container_width=True)
+                        st.plotly_chart(plot_candlestick(df, detail_ticker), use_container_width=True, key="detail_candlestick")
                     with col2:
-                        st.plotly_chart(plot_rsi(df), use_container_width=True)
-                        st.plotly_chart(plot_volume(df), use_container_width=True)
+                        st.plotly_chart(plot_rsi(df), use_container_width=True, key="detail_rsi")
+                        st.plotly_chart(plot_volume(df), use_container_width=True, key="detail_volume")
                     
                     st.divider()
                     
@@ -684,10 +715,10 @@ else:
             
             col1, col2 = st.columns([3, 1])
             with col1:
-                st.plotly_chart(plot_candlestick(df, selected_ticker), use_container_width=True)
+                st.plotly_chart(plot_candlestick(df, selected_ticker), use_container_width=True, key="candlestick_chart")
             with col2:
-                st.plotly_chart(plot_rsi(df), use_container_width=True)
-                st.plotly_chart(plot_volume(df), use_container_width=True)
+                st.plotly_chart(plot_rsi(df), use_container_width=True, key="rsi_chart")
+                st.plotly_chart(plot_volume(df), use_container_width=True, key="volume_chart")
             
             st.divider()
             
