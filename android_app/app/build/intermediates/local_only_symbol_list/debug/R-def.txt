@@ -1,0 +1,12 @@
+R_DEF: Internal format may change without notice
+local
+color black
+color colorAccent
+color colorPrimary
+color colorPrimaryDark
+color white
+id splashContainer
+id webView
+layout activity_main
+style AppTheme
+style Theme.BistBot
