@@ -5,3 +5,8 @@ __pycache__/
 .env
 *.log
 .DS_Store
+android_app/.gradle/
+android_app/app/build/
+android_app/app/.gradle/
+android_app/build/
+android_app/local.properties
