@@ -7,6 +7,55 @@ import config
 from data_fetcher import BISTDataFetcher
 from indicators import TechnicalIndicators
 from strategy import StrategyEngine, SignalType
+from notifier import TelegramNotifier
+
+
+def check_strong_signal(ticker, df):
+    if df is None or len(df) < 30:
+        return None, []
+    
+    ti = TechnicalIndicators()
+    df = ti.add_all(df)
+    last = df.iloc[-1]
+    
+    conditions = []
+    
+    rsi = last.get("rsi")
+    if rsi and rsi < 45:
+        conditions.append(f"RSI: {rsi:.0f} (Nötr/Düşük)")
+    
+    vol_ratio = last.get("volume_ratio", 1.0)
+    if vol_ratio and vol_ratio > 1.0:
+        conditions.append(f"Hacim: {vol_ratio:.1f}x")
+    
+    macd_cross = last.get("macd_cross")
+    if macd_cross == "BULLISH":
+        conditions.append("MACD: BULLISH")
+    
+    sma_cross = last.get("sma_cross")
+    if sma_cross == "GOLDEN_CROSS":
+        conditions.append("SMA: GOLDEN_CROSS")
+    
+    if len(conditions) >= 4:
+        return True, conditions
+    return False, conditions
+
+
+def send_strong_signal_notification(ticker, conditions):
+    name = config.TICKER_NAMES.get(ticker, ticker)
+    conditions_text = "\n".join([f"  ✅ {c}" for c in conditions])
+    
+    message = f"""
+🚀💰 <b>KESİN AL!</b> - {name}
+━━━━━━━━━━━━━━━━
+{conditions_text}
+
+📊 Tüm koşullar sağlandı!
+━━━━━━━━━━━━━━━━
+⚠️ <i>Yatırım tavsiyesi değildir!</i>
+"""
+    notifier = TelegramNotifier()
+    notifier.send_message(message.strip())
 
 st.set_page_config(
     page_title="BIST Bot",
@@ -35,6 +84,12 @@ if "signals" not in st.session_state or len(st.session_state.get("signals", []))
         fetcher.clear_cache()
         all_data = fetcher.fetch_all()
         signals = engine.scan_all(all_data)
+        
+        for ticker, df in all_data.items():
+            is_strong, conditions = check_strong_signal(ticker, df)
+            if is_strong:
+                send_strong_signal_notification(ticker, conditions)
+        
         st.session_state.signals = signals
         st.session_state.all_data = all_data
         st.rerun()
