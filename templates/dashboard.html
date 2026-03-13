@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BIST Bot — Dashboard</title>
+    <style>
+        :root {
+            --bg: #0d1117;
+            --card: #161b22;
+            --border: #30363d;
+            --text: #c9d1d9;
+            --text-dim: #8b949e;
+            --green: #3fb950;
+            --red: #f85149;
+            --yellow: #d29922;
+            --blue: #58a6ff;
+            --purple: #bc8cff;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            background: var(--bg);
+            color: var(--text);
+            padding: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 1.8em;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: var(--text-dim);
+            margin-bottom: 30px;
+            font-size: 0.9em;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 12px 24px;
+            border: 1px solid var(--border);
+            background: var(--card);
+            color: var(--text);
+            border-radius: 8px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 0.9em;
+            transition: all 0.2s;
+        }
+
+        button:hover { border-color: var(--blue); }
+        button:disabled { opacity: 0.5; cursor: wait; }
+        button.primary { background: var(--blue); color: #000; border: none; }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            color: var(--text-dim);
+            font-size: 0.8em;
+            text-transform: uppercase;
+        }
+
+        .signals-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        .signals-table th,
+        .signals-table td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .signals-table th {
+            background: var(--card);
+            color: var(--text-dim);
+            font-size: 0.8em;
+            text-transform: uppercase;
+            position: sticky;
+            top: 0;
+        }
+
+        .signals-table tr:hover {
+            background: rgba(88, 166, 255, 0.05);
+        }
+
+        .score-positive { color: var(--green); }
+        .score-negative { color: var(--red); }
+        .score-neutral { color: var(--yellow); }
+
+        .signal-badge {
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            font-weight: bold;
+        }
+
+        .badge-buy { background: rgba(63,185,80,0.15); color: var(--green); }
+        .badge-sell { background: rgba(248,81,73,0.15); color: var(--red); }
+        .badge-hold { background: rgba(139,148,158,0.15); color: var(--text-dim); }
+
+        .reasons-list {
+            font-size: 0.8em;
+            color: var(--text-dim);
+            max-width: 400px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-dim);
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 30px;
+            height: 30px;
+            border: 3px solid var(--border);
+            border-top-color: var(--blue);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        #detail-modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8);
+            z-index: 100;
+            overflow-y: auto;
+            padding: 40px;
+        }
+
+        .modal-content {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 30px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .modal-close {
+            float: right;
+            font-size: 1.5em;
+            cursor: pointer;
+            color: var(--text-dim);
+        }
+
+        .modal-close:hover { color: var(--red); }
+
+        @media (max-width: 768px) {
+            body { padding: 10px; }
+            .stat-value { font-size: 1.4em; }
+            .signals-table { font-size: 0.8em; }
+        }
+    </style>
+</head>
+<body>
+
+<h1>🤖 BIST Trading Bot</h1>
+<p class="subtitle">Semi-Automated Signal Generator • v1.0</p>
+
+<div class="controls">
+    <button class="primary" id="btn-scan" onclick="runScan()">
+        🔍 Tam Tarama Başlat
+    </button>
+    <button onclick="loadHistory()">📋 Sinyal Geçmişi</button>
+    <button onclick="loadStats()">📊 Performans</button>
+</div>
+
+<div class="stats-grid" id="stats-grid">
+    <div class="stat-card">
+        <div class="stat-value" id="stat-scanned">—</div>
+        <div class="stat-label">Taranan</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value score-positive" id="stat-buys">—</div>
+        <div class="stat-label">Alım Sinyali</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value score-negative" id="stat-sells">—</div>
+        <div class="stat-label">Satış Sinyali</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" id="stat-time">—</div>
+        <div class="stat-label">Son Tarama</div>
+    </div>
+</div>
+
+<div id="signals-container">
+    <div class="loading" id="loading" style="display:none">
+        <div class="spinner"></div>
+        <p style="margin-top:10px">Tarama yapılıyor... (~30 saniye)</p>
+    </div>
+
+    <table class="signals-table" id="signals-table" style="display:none">
+        <thead>
+            <tr>
+                <th>Hisse</th>
+                <th>Sinyal</th>
+                <th>Skor</th>
+                <th>Fiyat</th>
+                <th>Stop-Loss</th>
+                <th>Hedef</th>
+                <th>Güven</th>
+                <th>Nedenler</th>
+            </tr>
+        </thead>
+        <tbody id="signals-body"></tbody>
+    </table>
+</div>
+
+<div id="detail-modal">
+    <div class="modal-content">
+        <span class="modal-close" onclick="closeModal()">✕</span>
+        <div id="modal-body"></div>
+    </div>
+</div>
+
+<script>
+async function runScan() {
+    const btn = document.getElementById('btn-scan');
+    const loading = document.getElementById('loading');
+    const table = document.getElementById('signals-table');
+
+    btn.disabled = true;
+    btn.textContent = '⏳ Taranıyor...';
+    loading.style.display = 'block';
+    table.style.display = 'none';
+
+    try {
+        const res = await fetch('/api/scan', { method: 'POST' });
+        const data = await res.json();
+
+        if (data.status === 'ok') {
+            renderSignals(data.signals);
+            document.getElementById('stat-scanned').textContent = data.scanned;
+
+            const buys = data.signals.filter(s => s.score > 0).length;
+            const sells = data.signals.filter(s => s.score < 0).length;
+
+            document.getElementById('stat-buys').textContent = buys;
+            document.getElementById('stat-sells').textContent = sells;
+
+            const now = new Date();
+            document.getElementById('stat-time').textContent =
+                now.getHours().toString().padStart(2,'0') + ':' +
+                now.getMinutes().toString().padStart(2,'0');
+        } else {
+            alert('Hata: ' + data.message);
+        }
+    } catch (e) {
+        alert('Bağlantı hatası: ' + e.message);
+    }
+
+    btn.disabled = false;
+    btn.textContent = '🔍 Tam Tarama Başlat';
+    loading.style.display = 'none';
+}
+
+function renderSignals(signals) {
+    const tbody = document.getElementById('signals-body');
+    const table = document.getElementById('signals-table');
+    tbody.innerHTML = '';
+
+    signals.forEach(s => {
+        const scoreClass = s.score > 0 ? 'score-positive'
+                         : s.score < 0 ? 'score-negative'
+                         : 'score-neutral';
+
+        const badgeClass = s.score > 15 ? 'badge-buy'
+                         : s.score < -15 ? 'badge-sell'
+                         : 'badge-hold';
+
+        const reasons = s.reasons.slice(0, 3).join(' • ');
+
+        const row = document.createElement('tr');
+        row.style.cursor = 'pointer';
+        row.onclick = () => showDetail(s.ticker);
+        row.innerHTML = `
+            <td><strong>${s.name}</strong><br>
+                <span style="color:var(--text-dim);font-size:0.8em">
+                    ${s.ticker.replace('.IS','')}
+                </span>
+            </td>
+            <td><span class="signal-badge ${badgeClass}">${s.signal}</span></td>
+            <td class="${scoreClass}" style="font-weight:bold">
+                ${s.score > 0 ? '+' : ''}${s.score.toFixed(0)}
+            </td>
+            <td>₺${s.price.toFixed(2)}</td>
+            <td style="color:var(--red)">₺${s.stop_loss.toFixed(2)}</td>
+            <td style="color:var(--green)">₺${s.target.toFixed(2)}</td>
+            <td>${s.confidence}</td>
+            <td class="reasons-list">${reasons}</td>
+        `;
+        tbody.appendChild(row);
+    });
+
+    table.style.display = 'table';
+}
+
+async function showDetail(ticker) {
+    const modal = document.getElementById('detail-modal');
+    const body = document.getElementById('modal-body');
+
+    body.innerHTML = '<div class="loading"><div class="spinner"></div><p>Yükleniyor...</p></div>';
+    modal.style.display = 'block';
+
+    try {
+        const res = await fetch(`/api/analyze/${ticker}`);
+        const data = await res.json();
+
+        if (data.status === 'ok') {
+            const s = data.snapshot;
+            const sig = data.signal;
+
+            body.innerHTML = `
+                <h2>${data.name} (${ticker.replace('.IS','')})</h2>
+                <br>
+                <h3>${sig.type} (Skor: ${sig.score > 0 ? '+' : ''}${sig.score.toFixed(0)})</h3>
+                <br>
+                <table style="width:100%">
+                    <tr><td>Kapanış</td><td>₺${s.close}</td></tr>
+                    <tr><td>Değişim</td><td>${s.change_pct}%</td></tr>
+                    <tr><td>RSI</td><td>${s.rsi} (${s.rsi_zone})</td></tr>
+                    <tr><td>Hacim Oranı</td><td>${s.volume_ratio}x</td></tr>
+                    <tr><td>ATR</td><td>₺${s.atr}</td></tr>
+                    <tr><td>Destek</td><td>₺${s.support}</td></tr>
+                    <tr><td>Direnç</td><td>₺${s.resistance}</td></tr>
+                    <tr><td>Stop-Loss</td><td style="color:var(--red)">₺${sig.stop_loss}</td></tr>
+                    <tr><td>Hedef</td><td style="color:var(--green)">₺${sig.target}</td></tr>
+                </table>
+                <br>
+                <h3>Nedenler:</h3>
+                <ul>
+                    ${sig.reasons.map(r => `<li>${r}</li>`).join('')}
+                </ul>
+            `;
+        }
+    } catch(e) {
+        body.innerHTML = `<p>Hata: ${e.message}</p>`;
+    }
+}
+
+function closeModal() {
+    document.getElementById('detail-modal').style.display = 'none';
+}
+
+async function loadHistory() {
+    try {
+        const res = await fetch('/api/signals/history?limit=30');
+        const data = await res.json();
+        if (data.signals && data.signals.length > 0) {
+            alert(`Son ${data.signals.length} sinyal yüklendi.\n\n` +
+                  data.signals.slice(0,5).map(s =>
+                      `${s.ticker}: ${s.signal_type} (₺${s.price})`
+                  ).join('\n'));
+        } else {
+            alert('Henüz kayıtlı sinyal yok. Önce tarama yapın.');
+        }
+    } catch(e) { alert('Hata: ' + e.message); }
+}
+
+async function loadStats() {
+    try {
+        const res = await fetch('/api/stats');
+        const data = await res.json();
+        const s = data.stats;
+        alert(
+            `📊 Performans İstatistikleri\n\n` +
+            `Toplam Sinyal: ${s.total_signals}\n` +
+            `Tamamlanan: ${s.completed}\n` +
+            `Kazanan: ${s.profitable}\n` +
+            `Kazanma Oranı: %${s.win_rate}\n` +
+            `Ort. Kâr/Zarar: %${s.avg_profit_pct}`
+        );
+    } catch(e) { alert('Hata: ' + e.message); }
+}
+
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeModal();
+});
+</script>
+
+</body>
+</html>
