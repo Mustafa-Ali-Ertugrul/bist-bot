@@ -12,19 +12,8 @@ st.set_page_config(
     page_title="BIST Bot",
     page_icon="🤖",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="auto"
 )
-
-st.markdown("""
-<style>
-    [data-testid="stSidebar"] {
-        min-width: 280px;
-    }
-    [data-testid="stSidebarContent"] {
-        background-color: #0e1117;
-    }
-</style>
-""", unsafe_allow_html=True)
 
 if "data_fetcher" not in st.session_state:
     st.session_state.data_fetcher = BISTDataFetcher()
