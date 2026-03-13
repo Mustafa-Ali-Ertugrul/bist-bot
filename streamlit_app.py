@@ -15,6 +15,14 @@ st.set_page_config(
     initial_sidebar_state="auto"
 )
 
+st.markdown("""
+<style>
+    section[data-testid="stSidebar"] {
+        width: 200px !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 if "data_fetcher" not in st.session_state:
     st.session_state.data_fetcher = BISTDataFetcher()
 if "engine" not in st.session_state:
