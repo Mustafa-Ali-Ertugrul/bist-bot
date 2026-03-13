@@ -385,13 +385,46 @@ else:
                     with col4:
                         st.metric("R/R", f"1:{rr:.1f}")
                     
-                    # RSI
+                    # RSI ve diger gostergeler
                     if df_data is not None:
                         ti = TechnicalIndicators()
                         df_indicators = ti.add_rsi(df_data.copy())
                         rsi = df_indicators['rsi'].iloc[-1]
-                        rsi_color = "green" if rsi < 30 else "red" if rsi > 70 else "yellow"
-                        st.markdown(f"**RSI:** :{rsi_color}[{rsi:.0f}]")
+                        
+                        # RSI renklendirme
+                        if rsi < 30:
+                            rsi_color = "green"
+                            rsi_durum = "Asiri Satim"
+                        elif rsi > 70:
+                            rsi_color = "red"
+                            rsi_durum = "Asiri Alim"
+                        else:
+                            rsi_color = "white"
+                            rsi_durum = "Nötr"
+                        
+                        # Hacim
+                        vol_ratio = df_indicators['volume_ratio'].iloc[-1]
+                        vol_color = "green" if vol_ratio > 1.5 else "red" if vol_ratio < 0.8 else "white"
+                        
+                        # MACD
+                        macd_cross = df_indicators['macd_cross'].iloc[-1]
+                        macd_color = "green" if macd_cross == "BULLISH" else "red" if macd_cross == "BEARISH" else "white"
+                        
+                        # SMA Cross
+                        sma_cross = df_indicators['sma_cross'].iloc[-1]
+                        sma_color = "green" if sma_cross == "GOLDEN_CROSS" else "red" if sma_cross == "DEATH_CROSS" else "white"
+                        
+                        # Gostergeler
+                        st.markdown("### Gostergeler")
+                        col1, col2, col3, col4 = st.columns(4)
+                        with col1:
+                            st.markdown(f"**RSI:** :{rsi_color}[{rsi:.0f}] - {rsi_durum}")
+                        with col2:
+                            st.markdown(f"**Hacim:** :{vol_color}[{vol_ratio:.1f}x]")
+                        with col3:
+                            st.markdown(f"**MACD:** :{macd_color}[{macd_cross}]")
+                        with col4:
+                            st.markdown(f"**SMA:** :{sma_color}[{sma_cross}]")
                     
                     # Nedenler
                     st.markdown("**Nedenler:**")
@@ -496,8 +529,28 @@ else:
                         ti = TechnicalIndicators()
                         df_indicators = ti.add_rsi(df_data.copy())
                         rsi = df_indicators['rsi'].iloc[-1]
-                        rsi_color = "green" if rsi < 30 else "red" if rsi > 70 else "yellow"
-                        st.markdown(f"**RSI:** :{rsi_color}[{rsi:.0f}]")
+                        rsi_color = "green" if rsi < 30 else "red" if rsi > 70 else "white"
+                        rsi_durum = "Asiri Satim" if rsi < 30 else "Asiri Alim" if rsi > 70 else "Nötr"
+                        
+                        vol_ratio = df_indicators['volume_ratio'].iloc[-1]
+                        vol_color = "green" if vol_ratio > 1.5 else "red" if vol_ratio < 0.8 else "white"
+                        
+                        macd_cross = df_indicators['macd_cross'].iloc[-1]
+                        macd_color = "green" if macd_cross == "BULLISH" else "red" if macd_cross == "BEARISH" else "white"
+                        
+                        sma_cross = df_indicators['sma_cross'].iloc[-1]
+                        sma_color = "green" if sma_cross == "GOLDEN_CROSS" else "red" if sma_cross == "DEATH_CROSS" else "white"
+                        
+                        st.markdown("### Gostergeler")
+                        col1, col2, col3, col4 = st.columns(4)
+                        with col1:
+                            st.markdown(f"**RSI:** :{rsi_color}[{rsi:.0f}] - {rsi_durum}")
+                        with col2:
+                            st.markdown(f"**Hacim:** :{vol_color}[{vol_ratio:.1f}x]")
+                        with col3:
+                            st.markdown(f"**MACD:** :{macd_color}[{macd_cross}]")
+                        with col4:
+                            st.markdown(f"**SMA:** :{sma_color}[{sma_cross}]")
                     
                     st.markdown("**Nedenler:**")
                     for r in s.reasons[:5]:
