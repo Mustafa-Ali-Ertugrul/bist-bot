@@ -1,0 +1,5 @@
+[build]
+requirements = "requirements.txt"
+
+[run]
+python_version = "3.13"
