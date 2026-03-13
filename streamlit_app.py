@@ -396,7 +396,7 @@ else:
                             plot_bgcolor="#0d1117",
                             paper_bgcolor="#0d1117"
                         )
-                        st.plotly_chart(fig, use_container_width=True, key="heatmap_chart")
+                        st.plotly_chart(fig, use_container_width=True, key=f"chart_{s.ticker}")
                     
                     # Ana metrikler
                     col1, col2, col3, col4 = st.columns(4)
@@ -540,7 +540,7 @@ else:
                             plot_bgcolor="#0d1117",
                             paper_bgcolor="#0d1117"
                         )
-                        st.plotly_chart(fig, use_container_width=True, key="signals_chart")
+                        st.plotly_chart(fig, use_container_width=True, key=f"sell_chart_{s.ticker}")
                     
                     col1, col2, col3 = st.columns(3)
                     with col1:
