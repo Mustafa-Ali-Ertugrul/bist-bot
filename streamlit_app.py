@@ -12,7 +12,7 @@ st.set_page_config(
     page_title="BIST Bot",
     page_icon="🤖",
     layout="centered",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
 if "data_fetcher" not in st.session_state:
