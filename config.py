@@ -22,7 +22,6 @@ WATCHLIST = [
     "FROTO.IS",
     "PETKM.IS",
     "KRDMD.IS",
-    "SISE.IS",
     "HEKTS.IS",
     "AYGAZ.IS",
     "ISCTR.IS",
@@ -31,19 +30,9 @@ WATCHLIST = [
     "VAKBN.IS",
     "AKSA.IS",
     "ARCLK.IS",
-    "ASELS.IS",
-    "BEYZD.IS",
-    "BIENY.IS",
-    "BRISA.IS",
     "CCOLA.IS",
     "CIMSA.IS",
     "CLEBI.IS",
-    "CMBTR.IS",
-    "DENGE.IS",
-    "DERIM.IS",
-    "DMSAS.IS",
-    "ECILC.IS",
-    "EGEEN.IS",
     "ENJSA.IS",
     "ERBOS.IS",
     "FENIS.IS",
@@ -51,16 +40,27 @@ WATCHLIST = [
     "FORMT.IS",
     "GENTS.IS",
     "GLYHO.IS",
-    "GUBRF.IS",
-    "HLGYO.IS",
-    "IDEAS.IS",
-    "IHGZM.IS",
     "IPEKE.IS",
+    "IZMDC.IS",
+    "KARSN.IS",
+    "KAYSE.IS",
+    "KONTR.IS",
+    "KORFM.IS",
+    "LKMNH.IS",
+    "MAKIM.IS",
+    "MGROS.IS",
+    "MRGYO.IS",
+    "ODAS.IS",
+    "PNLSN.IS",
+    "PSDTC.IS",
+    "SEKFK.IS",
+    "SEKFS.IS",
+    "SOKM.IS",
 ]
 
 TICKER_NAMES = {
-    "ASELS.IS": "ASELSAN",
     "THYAO.IS": "THY",
+    "ASELS.IS": "ASELSAN",
     "SASA.IS": "SASA",
     "KCHOL.IS": "Koç Holding",
     "EREGL.IS": "Ereğli",
@@ -74,8 +74,43 @@ TICKER_NAMES = {
     "TAVHL.IS": "TAV",
     "TOASO.IS": "Tofaş",
     "FROTO.IS": "Ford Otosan",
+    "PETKM.IS": "Petkim",
+    "KRDMD.IS": "Kardemir",
+    "HEKTS.IS": "Hektaş",
+    "AYGAZ.IS": "Aygaç",
+    "ISCTR.IS": "İş Bankası",
+    "YKBNK.IS": "Yapı Kredi",
+    "HALKB.IS": "Halkbank",
+    "VAKBN.IS": "VakıfBank",
+    "AKSA.IS": "Aksa",
+    "ARCLK.IS": "Arçelik",
+    "CCOLA.IS": "Coca Cola",
+    "CIMSA.IS": "Çimsa",
+    "CLEBI.IS": "Clebi",
+    "ENJSA.IS": "Enjsa",
+    "ERBOS.IS": "Erbos",
+    "FENIS.IS": "Feniş",
+    "FMIZP.IS": "Formpi",
+    "FORMT.IS": "Formet",
+    "GENTS.IS": "Gents",
+    "GLYHO.IS": "Gülho",
+    "IPEKE.IS": "İpek",
+    "IZMDC.IS": "İzdemir",
+    "KARSN.IS": "Karsan",
+    "KAYSE.IS": "Kayse",
+    "KONTR.IS": "Kontrol",
+    "KORFM.IS": "Korfm",
+    "LKMNH.IS": "Lokman",
+    "MAKIM.IS": "Makim",
+    "MGROS.IS": "Migros",
+    "MRGYO.IS": "Merit Gayrimenkul",
+    "ODAS.IS": "Odas",
+    "PNLSN.IS": "Pınar",
+    "PSDTC.IS": "Panda",
+    "SEKFK.IS": "Şeker",
+    "SEKFS.IS": "Şeker Finans",
+    "SOKM.IS": "Sök",
 }
-
 
 RSI_PERIOD = 14
 RSI_OVERSOLD = 30
@@ -99,10 +134,8 @@ VOLUME_SPIKE_MULTIPLIER = 1.5
 DATA_PERIOD = "3mo"
 DATA_INTERVAL = "1d"
 
-
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
-
 
 SCAN_INTERVAL_MINUTES = 15
 MARKET_OPEN_HOUR = 10
