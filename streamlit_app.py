@@ -289,8 +289,10 @@ else:
                 with st.expander(f"{get_signal_emoji(s.signal_type)} **{name}** ({s.ticker.replace('.IS', '')}) | Skor: {s.score:+.0f} | {change_str}"):
                     # Grafik - Fiyat ve Seviyeler
                     if df_data is not None:
-                        # Son 30 günlük veri
+                        # Son 30 günlük veri - temizle
                         df_chart = df_data.tail(30).copy()
+                        df_chart = df_chart.reset_index()
+                        df_chart = df_chart.dropna()
                         
                         fig = go.Figure()
                         
@@ -302,63 +304,73 @@ else:
                             low=df_chart['low'],
                             close=df_chart['close'],
                             name='Fiyat',
-                            increasing_line_color='green',
-                            decreasing_line_color='red'
+                            increasing_line_color='#00CC96',
+                            decreasing_line_color='#EF553B'
                         ))
                         
                         # Giris fiyati
                         fig.add_hline(
                             y=s.price,
                             line_dash="solid",
-                            line_color="blue",
-                            line_width=2,
-                            annotation_text=f"GIRIS: ₺{s.price:.2f}",
-                            annotation_position="top right"
+                            line_color="#3399FF",
+                            line_width=2
                         )
                         
                         # Stop-loss
                         fig.add_hline(
                             y=s.stop_loss,
                             line_dash="dash",
-                            line_color="red",
-                            line_width=2,
-                            annotation_text=f"STOP: ₺{s.stop_loss:.2f}",
-                            annotation_position="bottom right"
+                            line_color="#EF553B",
+                            line_width=2
                         )
                         
                         # Hedef
                         fig.add_hline(
                             y=s.target_price,
                             line_dash="dash",
-                            line_color="green",
-                            line_width=2,
-                            annotation_text=f"HEDEF: ₺{s.target_price:.2f}",
-                            annotation_position="top right"
+                            line_color="#00CC96",
+                            line_width=2
                         )
                         
-                        # Zarar bölgesi (kirmizi dortgen)
+                        # Zarar bölgesi
                         fig.add_hrect(
                             y0=s.stop_loss, y1=s.price,
-                            fillcolor="red", opacity=0.1, line_width=0,
-                            annotation_text="ZARAR BOLGESI", annotation_position="inside bottom",
-                            annotation_font_color="red"
+                            fillcolor="#EF553B", opacity=0.15, line_width=0,
+                            layer="below"
                         )
                         
-                        # Kazanç bölgesi (yesil dortgen)
+                        # Kazanç bölgesi
                         fig.add_hrect(
                             y0=s.price, y1=s.target_price,
-                            fillcolor="green", opacity=0.1, line_width=0,
-                            annotation_text="KAZANC BOLGESI", annotation_position="inside top",
-                            annotation_font_color="green"
+                            fillcolor="#00CC96", opacity=0.15, line_width=0,
+                            layer="below"
+                        )
+                        
+                        # Fiyat etiketleri
+                        fig.add_annotation(
+                            x=0, y=s.price, xref="paper", yref="y",
+                            text=f"G: {s.price:.2f}", showarrow=False,
+                            xanchor="left", bgcolor="#3399FF", font=dict(color="white")
+                        )
+                        fig.add_annotation(
+                            x=0, y=s.stop_loss, xref="paper", yref="y",
+                            text=f"S: {s.stop_loss:.2f}", showarrow=False,
+                            xanchor="left", bgcolor="#EF553B", font=dict(color="white")
+                        )
+                        fig.add_annotation(
+                            x=0, y=s.target_price, xref="paper", yref="y",
+                            text=f"H: {s.target_price:.2f}", showarrow=False,
+                            xanchor="left", bgcolor="#00CC96", font=dict(color="white")
                         )
                         
                         fig.update_layout(
-                            height=300,
+                            height=280,
                             template="plotly_dark",
-                            xaxis_title="Tarih",
-                            yaxis_title="Fiyat (TL)",
-                            margin=dict(l=50, r=50, t=50, b=50),
-                            xaxis_rangeslider_visible=False
+                            margin=dict(l=60, r=20, t=40, b=40),
+                            xaxis_rangeslider_visible=False,
+                            showlegend=False,
+                            plot_bgcolor="#0d1117",
+                            paper_bgcolor="#0d1117"
                         )
                         st.plotly_chart(fig, use_container_width=True)
                     
@@ -409,6 +421,8 @@ else:
                     # Grafik - Fiyat ve Seviyeler
                     if df_data is not None:
                         df_chart = df_data.tail(30).copy()
+                        df_chart = df_chart.reset_index()
+                        df_chart = df_chart.dropna()
                         
                         fig = go.Figure()
                         
@@ -420,45 +434,53 @@ else:
                             low=df_chart['low'],
                             close=df_chart['close'],
                             name='Fiyat',
-                            increasing_line_color='green',
-                            decreasing_line_color='red'
+                            increasing_line_color='#00CC96',
+                            decreasing_line_color='#EF553B'
                         ))
                         
                         # Giris fiyati
                         fig.add_hline(
                             y=s.price,
                             line_dash="solid",
-                            line_color="orange",
-                            line_width=2,
-                            annotation_text=f"GIRIS: ₺{s.price:.2f}",
-                            annotation_position="top right"
+                            line_color="#FF9900",
+                            line_width=2
                         )
                         
                         # Hedef (direnc)
                         fig.add_hline(
                             y=s.target_price,
                             line_dash="dash",
-                            line_color="red",
-                            line_width=2,
-                            annotation_text=f"HEDEF: ₺{s.target_price:.2f}",
-                            annotation_position="top right"
+                            line_color="#EF553B",
+                            line_width=2
                         )
                         
                         # Kisa pozisyon kar bölgesi
                         fig.add_hrect(
                             y0=s.price, y1=s.target_price,
-                            fillcolor="red", opacity=0.1, line_width=0,
-                            annotation_text="KISA POZ. KAR", annotation_position="inside top",
-                            annotation_font_color="red"
+                            fillcolor="#EF553B", opacity=0.15, line_width=0,
+                            layer="below"
+                        )
+                        
+                        # Fiyat etiketleri
+                        fig.add_annotation(
+                            x=0, y=s.price, xref="paper", yref="y",
+                            text=f"G: {s.price:.2f}", showarrow=False,
+                            xanchor="left", bgcolor="#FF9900", font=dict(color="white")
+                        )
+                        fig.add_annotation(
+                            x=0, y=s.target_price, xref="paper", yref="y",
+                            text=f"H: {s.target_price:.2f}", showarrow=False,
+                            xanchor="left", bgcolor="#EF553B", font=dict(color="white")
                         )
                         
                         fig.update_layout(
-                            height=300,
+                            height=280,
                             template="plotly_dark",
-                            xaxis_title="Tarih",
-                            yaxis_title="Fiyat (TL)",
-                            margin=dict(l=50, r=50, t=50, b=50),
-                            xaxis_rangeslider_visible=False
+                            margin=dict(l=60, r=20, t=40, b=40),
+                            xaxis_rangeslider_visible=False,
+                            showlegend=False,
+                            plot_bgcolor="#0d1117",
+                            paper_bgcolor="#0d1117"
                         )
                         st.plotly_chart(fig, use_container_width=True)
                     
