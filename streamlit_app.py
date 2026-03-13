@@ -262,7 +262,7 @@ else:
     
     st.divider()
     
-    tab1, tab2 = st.tabs(["Sinyaller", f"{selected_ticker} Detay"])
+    tab1, tab2, tab3 = st.tabs(["Sinyaller", f"{selected_ticker} Detay", "Tüm Hisseler"])
     
     with tab1:
         st.subheader("Alim Sinyalleri")
@@ -558,6 +558,103 @@ else:
                         st.write(f"• {r}")
         else:
             st.info("Satis sinyali yok")
+    
+    with tab3:
+        st.subheader("Tüm Hisseler Detay")
+        
+        if not st.session_state.all_data:
+            st.warning("Önce tarama yapın!")
+        else:
+            ticker_list = list(st.session_state.all_data.keys())
+            
+            col1, col2 = st.columns([1, 3])
+            with col1:
+                detail_ticker = st.selectbox(
+                    "Hisse seçin",
+                    ticker_list,
+                    format_func=lambda x: f"{config.TICKER_NAMES.get(x, x)} ({x.replace('.IS', '')})"
+                )
+            
+            if detail_ticker:
+                fetcher = st.session_state.data_fetcher
+                
+                with st.spinner("Veri yükleniyor..."):
+                    df = fetcher.fetch_single(detail_ticker, period="6mo")
+                
+                if df is not None:
+                    ti = TechnicalIndicators()
+                    df = ti.add_all(df)
+                    snapshot = ti.get_snapshot(df)
+                    signal = st.session_state.engine.analyze(detail_ticker, df)
+                    
+                    name = config.TICKER_NAMES.get(detail_ticker, detail_ticker)
+                    st.markdown(f"### 📈 {name} ({detail_ticker.replace('.IS', '')})")
+                    
+                    col1, col2, col3, col4, col5 = st.columns(5)
+                    with col1:
+                        st.metric("Fiyat", f"₺{snapshot['close']}", delta=f"{snapshot['change_pct']}%")
+                    with col2:
+                        rsi_color = "green" if snapshot['rsi'] < 30 else "red" if snapshot['rsi'] > 70 else "white"
+                        st.markdown(f"**RSI:** :{rsi_color}[{snapshot['rsi']:.0f}]")
+                    with col3:
+                        vol_color = "green" if snapshot['volume_ratio'] > 1.5 else "red" if snapshot['volume_ratio'] < 0.8 else "white"
+                        st.markdown(f"**Hacim:** :{vol_color}[{snapshot['volume_ratio']:.1f}x]")
+                    with col4:
+                        st.metric("ATR", f"₺{snapshot['atr']:.2f}")
+                    with col5:
+                        st.metric("Destek", f"₺{snapshot['support']:.2f}")
+                    
+                    st.divider()
+                    
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        st.plotly_chart(plot_candlestick(df, detail_ticker), use_container_width=True)
+                    with col2:
+                        st.plotly_chart(plot_rsi(df), use_container_width=True)
+                        st.plotly_chart(plot_volume(df), use_container_width=True)
+                    
+                    st.divider()
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.markdown("### 📉 Teknik Göstergeler")
+                        rsi_zone = "Aşırı Alım" if snapshot['rsi'] > 70 else "Aşırı Satım" if snapshot['rsi'] < 30 else "Nötr"
+                        st.write(f"**RSI:** {snapshot['rsi']:.1f} ({rsi_zone})")
+                        st.write(f"**SMA Cross:** {snapshot['sma_cross']}")
+                        st.write(f"**MACD Cross:** {snapshot['macd_cross']}")
+                        st.write(f"**BB Position:** {snapshot['bb_position']}")
+                        st.write(f"**Hacim Oranı:** {snapshot['volume_ratio']}x")
+                        st.write(f"**Destek:** ₺{snapshot['support']:.2f}")
+                        st.write(f"**Direnç:** ₺{snapshot['resistance']:.2f}")
+                    
+                    with col2:
+                        st.markdown("### 🎯 Alım/Satım Sinyali")
+                        if signal:
+                            color = get_signal_color(signal.signal_type)
+                            st.markdown(f"**Sinyal:** :{color}[{signal.signal_type.value}]")
+                            st.write(f"**Skor:** {signal.score:+.0f}/100")
+                            st.write(f"**Giriş:** ₺{signal.price:.2f}")
+                            st.write(f"**Stop-Loss:** ₺{signal.stop_loss:.2f}")
+                            st.write(f"**Hedef:** ₺{signal.target_price:.2f}")
+                            
+                            risk = (signal.price - signal.stop_loss) / signal.price * 100
+                            reward = (signal.target_price - signal.price) / signal.price * 100
+                            rr = reward / risk if risk > 0 else 0
+                            st.write(f"**R/R Oranı:** 1:{rr:.1f}")
+                            
+                            st.markdown("**Nedenler:**")
+                            for r in signal.reasons[:5]:
+                                st.write(f"• {r}")
+                        else:
+                            st.info("Sinyal yok")
+                    
+                    st.divider()
+                    
+                    with st.expander("📊 Fiyat Verileri"):
+                        st.dataframe(
+                            df[['open', 'high', 'low', 'close', 'volume']].tail(30),
+                            use_container_width=True
+                        )
     
     with tab2:
         fetcher = st.session_state.data_fetcher
