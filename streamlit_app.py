@@ -1,16 +1,12 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-import plotly.express as px
 from datetime import datetime
-import time
-import os
 
 import config
 from data_fetcher import BISTDataFetcher
 from indicators import TechnicalIndicators
 from strategy import StrategyEngine, SignalType
-from database import SignalDatabase
 
 st.set_page_config(
     page_title="BIST Bot",
@@ -23,8 +19,6 @@ if "data_fetcher" not in st.session_state:
     st.session_state.data_fetcher = BISTDataFetcher()
 if "engine" not in st.session_state:
     st.session_state.engine = StrategyEngine()
-if "db" not in st.session_state:
-    st.session_state.db = SignalDatabase()
 
 st.markdown("""
 <style>
@@ -106,25 +100,21 @@ def get_signal_color(signal_type):
 
 
 def run_scan():
-    fetcher = st.session_state.data_fetcher
-    engine = st.session_state.engine
-    
-    with st.spinner("Veriler çekiliyor..."):
-        fetcher.clear_cache()
-        all_data = fetcher.fetch_all()
-    
-    with st.spinner("Analiz yapılıyor..."):
-        signals = engine.scan_all(all_data)
-    
-    actionable = engine.get_actionable_signals(signals)
-    for s in actionable:
-        st.session_state.db.save_signal(s)
-    
-    buys = [s for s in signals if s.score > 0]
-    sells = [s for s in signals if s.score < 0]
-    st.session_state.db.save_scan_log(len(all_data), len(actionable), len(buys), len(sells))
-    
-    return signals, all_data
+    try:
+        fetcher = st.session_state.data_fetcher
+        engine = st.session_state.engine
+        
+        with st.spinner("Veriler cekiliyor..."):
+            fetcher.clear_cache()
+            all_data = fetcher.fetch_all()
+        
+        with st.spinner("Analiz yapiliyor..."):
+            signals = engine.scan_all(all_data)
+        
+        return signals, all_data
+    except Exception as e:
+        st.error(f"Hata: {str(e)}")
+        return [], {}
 
 
 def plot_candlestick(df, ticker):
@@ -168,9 +158,7 @@ def plot_candlestick(df, ticker):
         template="plotly_dark",
         height=400,
         margin=dict(l=10, r=10, t=30, b=10),
-        xaxis_rangeslider_visible=False,
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)'
+        xaxis_rangeslider_visible=False
     )
     return fig
 
@@ -197,8 +185,6 @@ def plot_volume(df):
         template="plotly_dark",
         height=150,
         margin=dict(l=10, r=10, t=10, b=10),
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
         showlegend=False
     )
     return fig
@@ -222,8 +208,6 @@ def plot_rsi(df):
         height=150,
         margin=dict(l=10, r=10, t=10, b=10),
         yaxis=dict(range=[0, 100]),
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
         showlegend=False
     )
     return fig
@@ -249,23 +233,6 @@ with st.sidebar:
         st.session_state.signals = []
         st.session_state.all_data = {}
     
-    st.divider()
-    
-    st.markdown("### 📊 İstatistikler")
-    stats = st.session_state.db.get_performance_stats()
-    col1, col2 = st.columns(2)
-    with col1:
-        st.metric("Toplam Sinyal", stats["total_signals"])
-    with col2:
-        st.metric("Kazanma %", f"%{stats['win_rate']}")
-    
-    st.divider()
-    
-    with st.expander("📋 Geçmiş Sinyaller"):
-        history = st.session_state.db.get_recent_signals(limit=10)
-        for s in history:
-            st.write(f"{s['ticker']}: {s['signal_type']} - ₺{s['price']}")
-
 
 if not st.session_state.signals:
     st.info("👆 'Taramayı Yenile' butonuna basarak başlayın!")
