@@ -287,40 +287,80 @@ else:
                     change_str = "0%"
                 
                 with st.expander(f"{get_signal_emoji(s.signal_type)} **{name}** ({s.ticker.replace('.IS', '')}) | Skor: {s.score:+.0f} | {change_str}"):
-                    # Mini grafik - Alim Seviyeleri
-                    fig_levels = go.Figure()
-                    
-                    # Zarar bölgesi (kirmizi)
-                    fig_levels.add_vrect(
-                        x0=s.stop_loss, x1=s.price,
-                        fillcolor="red", opacity=0.15, line_width=0,
-                        annotation_text="ZARAR", annotation_position="bottom left"
-                    )
-                    
-                    # Kazanç bölgesi (yesil)
-                    fig_levels.add_vrect(
-                        x0=s.price, x1=s.target_price,
-                        fillcolor="green", opacity=0.15, line_width=0,
-                        annotation_text="KAZANC", annotation_position="top left"
-                    )
-                    
-                    # Fiyat çizgileri
-                    fig_levels.add_hline(y=0, line_dash="solid", line_color="white", line_width=2, annotation_text=f"Giris: ₺{s.price:.2f}", annotation_position="top")
-                    fig_levels.add_hline(y=0, line_dash="dash", line_color="red", line_width=2, annotation_text=f"Stop: ₺{s.stop_loss:.2f}", annotation_position="bottom")
-                    fig_levels.add_hline(y=0, line_dash="dash", line_color="green", line_width=2, annotation_text=f"Hedef: ₺{s.target_price:.2f}", annotation_position="top")
-                    
-                    fig_levels.update_layout(
-                        height=120,
-                        margin=dict(l=10, r=10, t=30, b=30),
-                        xaxis=dict(
-                            range=[s.stop_loss * 0.95, s.target_price * 1.05],
-                            showgrid=False
-                        ),
-                        yaxis=dict(showticklabels=False, showgrid=False),
-                        template="plotly_dark",
-                        showlegend=False
-                    )
-                    st.plotly_chart(fig_levels, use_container_width=True)
+                    # Grafik - Fiyat ve Seviyeler
+                    if df_data is not None:
+                        # Son 30 günlük veri
+                        df_chart = df_data.tail(30).copy()
+                        
+                        fig = go.Figure()
+                        
+                        # Mum grafik
+                        fig.add_trace(go.Candlestick(
+                            x=df_chart.index,
+                            open=df_chart['open'],
+                            high=df_chart['high'],
+                            low=df_chart['low'],
+                            close=df_chart['close'],
+                            name='Fiyat',
+                            increasing_line_color='green',
+                            decreasing_line_color='red'
+                        ))
+                        
+                        # Giris fiyati
+                        fig.add_hline(
+                            y=s.price,
+                            line_dash="solid",
+                            line_color="blue",
+                            line_width=2,
+                            annotation_text=f"GIRIS: ₺{s.price:.2f}",
+                            annotation_position="top right"
+                        )
+                        
+                        # Stop-loss
+                        fig.add_hline(
+                            y=s.stop_loss,
+                            line_dash="dash",
+                            line_color="red",
+                            line_width=2,
+                            annotation_text=f"STOP: ₺{s.stop_loss:.2f}",
+                            annotation_position="bottom right"
+                        )
+                        
+                        # Hedef
+                        fig.add_hline(
+                            y=s.target_price,
+                            line_dash="dash",
+                            line_color="green",
+                            line_width=2,
+                            annotation_text=f"HEDEF: ₺{s.target_price:.2f}",
+                            annotation_position="top right"
+                        )
+                        
+                        # Zarar bölgesi (kirmizi dortgen)
+                        fig.add_hrect(
+                            y0=s.stop_loss, y1=s.price,
+                            fillcolor="red", opacity=0.1, line_width=0,
+                            annotation_text="ZARAR BOLGESI", annotation_position="inside bottom",
+                            annotation_font_color="red"
+                        )
+                        
+                        # Kazanç bölgesi (yesil dortgen)
+                        fig.add_hrect(
+                            y0=s.price, y1=s.target_price,
+                            fillcolor="green", opacity=0.1, line_width=0,
+                            annotation_text="KAZANC BOLGESI", annotation_position="inside top",
+                            annotation_font_color="green"
+                        )
+                        
+                        fig.update_layout(
+                            height=300,
+                            template="plotly_dark",
+                            xaxis_title="Tarih",
+                            yaxis_title="Fiyat (TL)",
+                            margin=dict(l=50, r=50, t=50, b=50),
+                            xaxis_rangeslider_visible=False
+                        )
+                        st.plotly_chart(fig, use_container_width=True)
                     
                     # Ana metrikler
                     col1, col2, col3, col4 = st.columns(4)
@@ -366,31 +406,61 @@ else:
                     change_str = "0%"
                 
                 with st.expander(f"{get_signal_emoji(s.signal_type)} **{name}** ({s.ticker.replace('.IS', '')}) | Skor: {s.score:+.0f} | {change_str}"):
-                    # Mini grafik - Satis Seviyeleri
-                    fig_levels = go.Figure()
-                    
-                    # Yukarı hareket bölgesi (kirmizi - satista kar)
-                    fig_levels.add_vrect(
-                        x0=s.price, x1=s.target_price,
-                        fillcolor="red", opacity=0.15, line_width=0,
-                        annotation_text="KISA POZ. KAZANC", annotation_position="top left"
-                    )
-                    
-                    fig_levels.add_hline(y=0, line_dash="solid", line_color="white", line_width=2, annotation_text=f"Giris: ₺{s.price:.2f}", annotation_position="top")
-                    fig_levels.add_hline(y=0, line_dash="dash", line_color="green", line_width=2, annotation_text=f"Stop: ₺{s.target_price:.2f}", annotation_position="bottom")
-                    
-                    fig_levels.update_layout(
-                        height=120,
-                        margin=dict(l=10, r=10, t=30, b=30),
-                        xaxis=dict(
-                            range=[s.price * 0.95, s.target_price * 1.05],
-                            showgrid=False
-                        ),
-                        yaxis=dict(showticklabels=False, showgrid=False),
-                        template="plotly_dark",
-                        showlegend=False
-                    )
-                    st.plotly_chart(fig_levels, use_container_width=True)
+                    # Grafik - Fiyat ve Seviyeler
+                    if df_data is not None:
+                        df_chart = df_data.tail(30).copy()
+                        
+                        fig = go.Figure()
+                        
+                        # Mum grafik
+                        fig.add_trace(go.Candlestick(
+                            x=df_chart.index,
+                            open=df_chart['open'],
+                            high=df_chart['high'],
+                            low=df_chart['low'],
+                            close=df_chart['close'],
+                            name='Fiyat',
+                            increasing_line_color='green',
+                            decreasing_line_color='red'
+                        ))
+                        
+                        # Giris fiyati
+                        fig.add_hline(
+                            y=s.price,
+                            line_dash="solid",
+                            line_color="orange",
+                            line_width=2,
+                            annotation_text=f"GIRIS: ₺{s.price:.2f}",
+                            annotation_position="top right"
+                        )
+                        
+                        # Hedef (direnc)
+                        fig.add_hline(
+                            y=s.target_price,
+                            line_dash="dash",
+                            line_color="red",
+                            line_width=2,
+                            annotation_text=f"HEDEF: ₺{s.target_price:.2f}",
+                            annotation_position="top right"
+                        )
+                        
+                        # Kisa pozisyon kar bölgesi
+                        fig.add_hrect(
+                            y0=s.price, y1=s.target_price,
+                            fillcolor="red", opacity=0.1, line_width=0,
+                            annotation_text="KISA POZ. KAR", annotation_position="inside top",
+                            annotation_font_color="red"
+                        )
+                        
+                        fig.update_layout(
+                            height=300,
+                            template="plotly_dark",
+                            xaxis_title="Tarih",
+                            yaxis_title="Fiyat (TL)",
+                            margin=dict(l=50, r=50, t=50, b=50),
+                            xaxis_rangeslider_visible=False
+                        )
+                        st.plotly_chart(fig, use_container_width=True)
                     
                     col1, col2, col3 = st.columns(3)
                     with col1:
