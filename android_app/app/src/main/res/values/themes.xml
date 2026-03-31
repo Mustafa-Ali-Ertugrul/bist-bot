@@ -5,5 +5,7 @@
         <item name="android:colorPrimaryDark">@color/colorPrimaryDark</item>
         <item name="android:colorAccent">@color/colorAccent</item>
         <item name="android:windowBackground">@color/black</item>
+        <!-- Android 12+ Splash Screen ayarlarını devre dışı bırakıp kendi tasarımımızı kullanmak için -->
+        <item name="android:windowIsTranslucent">true</item>
     </style>
 </resources>
