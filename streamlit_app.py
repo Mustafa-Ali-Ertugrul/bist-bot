@@ -343,90 +343,145 @@ else:
     sell_pct = (sells / total * 100) if total > 0 else 0
     neutral_pct = (neutral / total * 100) if total > 0 else 0
     
+    total_score = sum(s.score for s in signals)
+    max_possible = total * 100
+    sentiment = (total_score / max_possible * 100) if max_possible > 0 else 0
+    sentiment_clamped = max(-100, min(100, sentiment))
+    
+    if sentiment_clamped > 20:
+        sentiment_label = "ALIM AGIRLIKLI"
+        sentiment_color = "#00CC96"
+        sentiment_emoji = "🟢"
+    elif sentiment_clamped < -20:
+        sentiment_label = "SATIS AGIRLIKLI"
+        sentiment_color = "#EF553B"
+        sentiment_emoji = "🔴"
+    else:
+        sentiment_label = "NOTR"
+        sentiment_color = "#8b949e"
+        sentiment_emoji = "⚪"
+    
+    buy_angle = buy_pct / 100 * 360
+    neutral_angle = neutral_pct / 100 * 360
+    sell_angle = sell_pct / 100 * 360
+    
+    r = 70
+    stroke_w = 18
+    circumference = 2 * 3.14159 * r
+    
+    buy_stroke = buy_pct / 100 * circumference
+    neutral_stroke = neutral_pct / 100 * circumference
+    sell_stroke = sell_pct / 100 * circumference
+    
+    buy_offset = 0
+    neutral_offset = -buy_stroke
+    sell_offset = -(buy_stroke + neutral_stroke)
+    
     st.markdown(f"""
     <style>
         .signal-card {{
             background: #161b22;
-            border-radius: 12px;
-            padding: 16px;
+            border-radius: 16px;
+            padding: 20px;
             margin: 8px 0;
             border: 1px solid #30363d;
+            text-align: center;
         }}
-        .signal-bar-bg {{
-            background: #21262d;
-            border-radius: 8px;
-            height: 24px;
-            overflow: hidden;
-            display: flex;
-            margin: 12px 0;
+        .gauge-container {{
+            position: relative;
+            width: 180px;
+            height: 180px;
+            margin: 0 auto 12px;
         }}
-        .signal-bar-buy {{
-            background: linear-gradient(90deg, #00CC96, #00E5A0);
+        .gauge-ring {{
+            width: 100%;
             height: 100%;
-            border-radius: 8px 0 0 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #000;
-            font-weight: bold;
-            font-size: 13px;
-            min-width: 0;
+            transform: rotate(-90deg);
         }}
-        .signal-bar-neutral {{
-            background: #484f58;
-            height: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #fff;
-            font-size: 12px;
-            min-width: 0;
+        .gauge-center {{
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
         }}
-        .signal-bar-sell {{
-            background: linear-gradient(90deg, #E5534B, #EF553B);
-            height: 100%;
-            border-radius: 0 8px 8px 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #fff;
-            font-weight: bold;
-            font-size: 13px;
-            min-width: 0;
-        }}
-        .signal-label {{
-            display: flex;
-            justify-content: space-between;
+        .gauge-sentiment {{
             font-size: 14px;
-            margin-bottom: 4px;
+            font-weight: bold;
+            color: {sentiment_color};
+            letter-spacing: 1px;
+        }}
+        .gauge-score {{
+            font-size: 28px;
+            font-weight: bold;
+            color: #fff;
+            margin-top: 2px;
+        }}
+        .signal-stats {{
+            display: flex;
+            justify-content: space-around;
+            margin-top: 12px;
+        }}
+        .stat-item {{
+            text-align: center;
+        }}
+        .stat-value {{
+            font-size: 22px;
+            font-weight: bold;
+        }}
+        .stat-label {{
+            font-size: 12px;
+            color: #8b949e;
+            margin-top: 2px;
         }}
         .scan-time {{
             text-align: center;
             color: #8b949e;
             font-size: 13px;
-            margin-top: 8px;
+            margin-top: 12px;
+            padding-top: 10px;
+            border-top: 1px solid #21262d;
         }}
     </style>
     """, unsafe_allow_html=True)
     
     st.markdown(f"""
     <div class="signal-card">
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-            <span style="font-size:16px; font-weight:bold; color:#00CC96;">🟢 Alım Sinyali: {buys}</span>
-            <span style="font-size:16px; font-weight:bold; color:#484f58;">⚪ Nötr: {neutral}</span>
-            <span style="font-size:16px; font-weight:bold; color:#EF553B;">🔴 Satış Sinyali: {sells}</span>
+        <div class="gauge-container">
+            <svg class="gauge-ring" viewBox="0 0 180 180">
+                <circle cx="90" cy="90" r="{r}" fill="none" stroke="#21262d" stroke-width="{stroke_w}" />
+                <circle cx="90" cy="90" r="{r}" fill="none" stroke="#EF553B" stroke-width="{stroke_w}"
+                    stroke-dasharray="{sell_stroke} {circumference}"
+                    stroke-dashoffset="{sell_offset}"
+                    stroke-linecap="round" />
+                <circle cx="90" cy="90" r="{r}" fill="none" stroke="#484f58" stroke-width="{stroke_w}"
+                    stroke-dasharray="{neutral_stroke} {circumference}"
+                    stroke-dashoffset="{neutral_offset}" />
+                <circle cx="90" cy="90" r="{r}" fill="none" stroke="#00CC96" stroke-width="{stroke_w}"
+                    stroke-dasharray="{buy_stroke} {circumference}"
+                    stroke-dashoffset="{buy_offset}"
+                    stroke-linecap="round" />
+            </svg>
+            <div class="gauge-center">
+                <div class="gauge-sentiment">{sentiment_emoji} {sentiment_label}</div>
+                <div class="gauge-score">{sentiment_clamped:+.0f}</div>
+            </div>
         </div>
-        <div class="signal-bar-bg">
-            <div class="signal-bar-buy" style="width:{buy_pct:.1f}%;">{buys}</div>
-            <div class="signal-bar-neutral" style="width:{neutral_pct:.1f}%;"></div>
-            <div class="signal-bar-sell" style="width:{sell_pct:.1f}%;">{sells}</div>
+        <div class="signal-stats">
+            <div class="stat-item">
+                <div class="stat-value" style="color:#00CC96;">{buys}</div>
+                <div class="stat-label">🟢 Alım</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" style="color:#484f58;">{neutral}</div>
+                <div class="stat-label">⚪ Nötr</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" style="color:#EF553B;">{sells}</div>
+                <div class="stat-label">🔴 Satış</div>
+            </div>
         </div>
-        <div class="signal-label">
-            <span style="color:#00CC96;">📈 %{buy_pct:.0f}</span>
-            <span style="color:#8b949e;">Taranan: {total} hisse</span>
-            <span style="color:#EF553B;">%{sell_pct:.0f} 📉</span>
-        </div>
-        <div class="scan-time">🕐 Son Tarama: {datetime.now().strftime("%H:%M")}</div>
+        <div class="scan-time">🕐 Son Tarama: {datetime.now().strftime("%H:%M")} | Taranan: {total} hisse</div>
     </div>
     """, unsafe_allow_html=True)
     
