@@ -578,7 +578,7 @@ else:
         sub_buy, sub_strong, sub_sell = st.tabs(["🟢 Alım", "💰 Güçlü Alım", "🔴 Satış"])
         
         with sub_buy:
-            buy_signals = [s for s in signals if s.signal_type in (SignalType.BUY, SignalType.WEAK_BUY)]
+            buy_signals = [s for s in signals if 10 <= s.score < 40]
             if buy_signals:
                 for s in buy_signals:
                     render_signal_card(s)
@@ -586,7 +586,7 @@ else:
                 st.info("Alım sinyali yok")
         
         with sub_strong:
-            strong_buy_signals = [s for s in signals if s.signal_type == SignalType.STRONG_BUY]
+            strong_buy_signals = [s for s in signals if s.score >= 40]
             if strong_buy_signals:
                 for s in strong_buy_signals:
                     render_signal_card(s)
@@ -594,7 +594,7 @@ else:
                 st.info("Güçlü alım sinyali yok")
         
         with sub_sell:
-            sell_signals = [s for s in signals if s.signal_type in (SignalType.WEAK_SELL, SignalType.SELL, SignalType.STRONG_SELL)]
+            sell_signals = [s for s in signals if s.score < 10]
             if sell_signals:
                 for s in sell_signals:
                     render_signal_card(s, is_sell=True)
