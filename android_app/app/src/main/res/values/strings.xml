@@ -15,4 +15,5 @@
     <string name="signal_strong_buy">🔥 GÜÇLÜ ALIM: %s</string>
     <string name="signal_buy">✅ ALINABİLİR: %s</string>
     <string name="signal_sell">🚨 SATIM: %s</string>
+    <string name="signal_change">🔔 SİNYAL DEĞİŞİKLİĞİ: %s</string>
 </resources>

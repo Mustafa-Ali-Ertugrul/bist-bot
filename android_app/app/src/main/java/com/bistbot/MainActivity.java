@@ -241,5 +241,15 @@ public class MainActivity extends AppCompatActivity {
         public void showSell(String stock, String message) {
             sendNotification(String.format(getString(R.string.signal_sell), stock), message, Color.RED);
         }
+
+        @JavascriptInterface
+        public void showSignalChange(String stock, String oldSignal, String newSignal, String message) {
+            String title = String.format(getString(R.string.signal_change), stock);
+            String fullMessage = oldSignal + " → " + newSignal + "\n" + message;
+            int color = newSignal.contains("GÜÇLÜ AL") || newSignal.contains("AL")
+                    ? Color.parseColor("#006400")
+                    : Color.parseColor("#8B0000");
+            sendNotification(title, fullMessage, color);
+        }
     }
 }
