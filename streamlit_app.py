@@ -366,16 +366,6 @@ else:
         sentiment_color = "#8b949e"
         sentiment_emoji = "⚪"
     
-    r = 70
-    stroke_w = 18
-    circumference = 2 * 3.14159 * r
-    
-    buy_stroke = buy_pct / 100 * circumference
-    sell_stroke = sell_pct / 100 * circumference
-    
-    buy_offset = 0
-    sell_offset = -buy_stroke
-    
     st.markdown(f"""
     <style>
         .signal-card {{
@@ -395,7 +385,14 @@ else:
         .gauge-ring {{
             width: 100%;
             height: 100%;
-            transform: rotate(-90deg);
+            border-radius: 50%;
+            background: conic-gradient(
+                #00CC96 0deg {buy_pct * 3.6}deg,
+                #EF553B {buy_pct * 3.6}deg {buy_pct * 3.6 + sell_pct * 3.6}deg,
+                #21262d {buy_pct * 3.6 + sell_pct * 3.6}deg 360deg
+            );
+            mask: radial-gradient(transparent 55%, black 56%);
+            -webkit-mask: radial-gradient(transparent 55%, black 56%);
         }}
         .gauge-center {{
             position: absolute;
@@ -447,17 +444,7 @@ else:
     st.markdown(f"""
     <div class="signal-card">
         <div class="gauge-container">
-            <svg class="gauge-ring" viewBox="0 0 180 180">
-                <circle cx="90" cy="90" r="{r}" fill="none" stroke="#21262d" stroke-width="{stroke_w}" />
-                <circle cx="90" cy="90" r="{r}" fill="none" stroke="#EF553B" stroke-width="{stroke_w}"
-                    stroke-dasharray="{sell_stroke} {circumference}"
-                    stroke-dashoffset="{sell_offset}"
-                    stroke-linecap="round" />
-                <circle cx="90" cy="90" r="{r}" fill="none" stroke="#00CC96" stroke-width="{stroke_w}"
-                    stroke-dasharray="{buy_stroke} {circumference}"
-                    stroke-dashoffset="{buy_offset}"
-                    stroke-linecap="round" />
-            </svg>
+            <div class="gauge-ring"></div>
             <div class="gauge-center">
                 <div class="gauge-sentiment">{sentiment_emoji} {sentiment_label}</div>
                 <div class="gauge-score">{sentiment_clamped:+.0f}</div>
