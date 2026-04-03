@@ -575,15 +575,7 @@ else:
     tab1, tab2, tab3 = st.tabs(["Sinyaller", f"{selected_ticker} Detay", "Tüm Hisseler"])
     
     with tab1:
-        sub_buy, sub_strong, sub_sell = st.tabs(["🟢 Alım", "💰 Güçlü Alım", "🔴 Satış"])
-        
-        with sub_buy:
-            buy_signals = [s for s in signals if 10 <= s.score < 40]
-            if buy_signals:
-                for s in buy_signals:
-                    render_signal_card(s)
-            else:
-                st.info("Alım sinyali yok")
+        sub_strong, sub_buy, sub_sell = st.tabs(["💰 Güçlü Alım", "🟢 Alım", "🔴 Satış"])
         
         with sub_strong:
             strong_buy_signals = [s for s in signals if s.score >= 40]
@@ -592,6 +584,14 @@ else:
                     render_signal_card(s)
             else:
                 st.info("Güçlü alım sinyali yok")
+        
+        with sub_buy:
+            buy_signals = [s for s in signals if 10 <= s.score < 40]
+            if buy_signals:
+                for s in buy_signals:
+                    render_signal_card(s)
+            else:
+                st.info("Alım sinyali yok")
         
         with sub_sell:
             sell_signals = [s for s in signals if s.score < 10]
