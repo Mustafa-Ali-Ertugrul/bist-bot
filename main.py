@@ -10,7 +10,7 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 import config
 from data_fetcher import BISTDataFetcher
-from strategy import StrategyEngine, SignalType
+from strategy import StrategyEngine, SignalType, Signal
 from notifier import TelegramNotifier
 from database import SignalDatabase
 from backtest import Backtester
@@ -40,6 +40,32 @@ class BISTBot:
     def _shutdown(self, signum, frame):
         logger.info("\n🛑 Bot durduruluyor...")
         self.running = False
+
+    def _check_signal_changes(self, signals: list):
+        for s in signals:
+            prev = self.db.get_latest_signal(s.ticker)
+            if prev and prev["signal_type"] != s.signal_type.value:
+                from datetime import datetime as dt
+                
+                old_signal = Signal(
+                    ticker=prev["ticker"],
+                    signal_type=SignalType(prev["signal_type"]),
+                    score=prev["score"],
+                    price=prev["price"],
+                    stop_loss=prev.get("stop_loss", 0) or 0,
+                    target_price=prev.get("target_price", 0) or 0,
+                    confidence=prev.get("confidence", "DÜŞÜK") or "DÜŞÜK",
+                    timestamp=dt.fromisoformat(prev["timestamp"]),
+                )
+                
+                self.notifier.send_signal_change(
+                    s.ticker, old_signal, s
+                )
+                logger.info(
+                    f"🔔 Sinyal değişikliği: {s.ticker} "
+                    f"{prev['signal_type']} → {s.signal_type.value}"
+                )
+                sleep(1)
 
     def scan_once(self) -> list:
         logger.info("\n" + "█" * 55)
@@ -74,6 +100,8 @@ class BISTBot:
         for s in signals:
             if s.signal_type not in (SignalType.HOLD,):
                 print(s)
+
+        self._check_signal_changes(signals)
 
         for s in actionable:
             self.db.save_signal(s)

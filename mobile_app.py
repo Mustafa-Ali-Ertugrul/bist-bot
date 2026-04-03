@@ -7,7 +7,7 @@ import config
 from data_fetcher import BISTDataFetcher
 from indicators import TechnicalIndicators
 from strategy import StrategyEngine, SignalType
-from notifier import TelegramNotifier
+from streamlit_utils import check_signals, send_signal_notification
 
 
 st.set_page_config(
@@ -40,50 +40,6 @@ st.markdown("""
     .signal-neutral { background: #1a1a1a; padding: 10px; border-radius: 8px; margin: 5px 0; }
 </style>
 """, unsafe_allow_html=True)
-
-
-def check_signals(ticker, df):
-    if df is None or len(df) < 30:
-        return None, []
-    
-    ti = TechnicalIndicators()
-    df = ti.add_all(df)
-    last = df.iloc[-1]
-    
-    conditions = []
-    
-    rsi = last.get("rsi")
-    if rsi and rsi < 45:
-        conditions.append(f"RSI: {rsi:.0f}")
-    
-    vol_ratio = last.get("volume_ratio", 1.0)
-    if vol_ratio and vol_ratio > 1.0:
-        conditions.append(f"Hacim: {vol_ratio:.1f}x")
-    
-    macd_cross = last.get("macd_cross")
-    if macd_cross == "BULLISH":
-        conditions.append("MACD: BULLISH")
-    
-    sma_cross = last.get("sma_cross")
-    if sma_cross == "GOLDEN_CROSS":
-        conditions.append("SMA: GOLDEN_CROSS")
-    
-    count = len(conditions)
-    
-    if count >= 3:
-        return "AL", conditions
-    elif count == 2:
-        return "SAT", conditions
-    else:
-        return None, conditions
-
-
-def send_notification(ticker, signal_type, conditions):
-    name = config.TICKER_NAMES.get(ticker, ticker)
-    emoji = "🚀" if signal_type == "AL" else "🔴"
-    message = f"{emoji} {signal_type}: {name}\n" + "\n".join(conditions)
-    notifier = TelegramNotifier()
-    notifier.send_message(message)
 
 
 @st.cache_data(ttl=300)

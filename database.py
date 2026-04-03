@@ -89,6 +89,26 @@ class SignalDatabase:
             ))
             conn.commit()
 
+    def get_latest_signal(self, ticker: str) -> Optional[dict]:
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute("""
+                SELECT * FROM signals
+                WHERE ticker = ?
+                ORDER BY timestamp DESC LIMIT 1
+            """, (ticker,)).fetchone()
+        return dict(row) if row else None
+
+    def get_latest_signal(self, ticker: str) -> Optional[dict]:
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute("""
+                SELECT * FROM signals
+                WHERE ticker = ?
+                ORDER BY timestamp DESC LIMIT 1
+            """, (ticker,)).fetchone()
+        return dict(row) if row else None
+
     def get_recent_signals(
         self,
         limit: int = 50,

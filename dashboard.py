@@ -2,6 +2,7 @@ from flask import Flask, render_template, jsonify, request
 from datetime import datetime
 import json
 import logging
+import pandas as pd
 
 import config
 from data_fetcher import BISTDataFetcher
@@ -132,9 +133,6 @@ def api_signal_history():
 def api_stats():
     stats = db.get_performance_stats()
     return jsonify({"status": "ok", "stats": stats})
-
-
-import pandas as pd
 
 
 if __name__ == "__main__":

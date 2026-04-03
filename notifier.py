@@ -134,6 +134,98 @@ class TelegramNotifier:
 """
         return self.send_message(message.strip())
 
+    def send_signal_change(
+        self,
+        ticker: str,
+        old_signal: Signal,
+        new_signal: Signal
+    ) -> bool:
+        name = config.TICKER_NAMES.get(ticker, ticker)
+
+        emoji_map = {
+            SignalType.STRONG_BUY: "🚀💰",
+            SignalType.BUY: "🟢📈",
+            SignalType.WEAK_BUY: "🟡📊",
+            SignalType.HOLD: "⚪⏸️",
+            SignalType.WEAK_SELL: "🟠📉",
+            SignalType.SELL: "🔴📉",
+            SignalType.STRONG_SELL: "🚨🔻",
+        }
+
+        old_emoji = emoji_map.get(old_signal.signal_type, "📊")
+        new_emoji = emoji_map.get(new_signal.signal_type, "📊")
+
+        direction = "⬆️ YÜKSELİYOR" if new_signal.score > old_signal.score else "⬇️ DÜŞÜYOR"
+
+        message = f"""
+🔔 <b>SİNYAL DEĞİŞİKLİĞİ!</b>
+━━━━━━━━━━━━━━━━━━━━
+
+📊 <b>{name}</b> ({ticker.replace('.IS', '')})
+
+{old_emoji} {old_signal.signal_type.value}
+     ↓
+{new_emoji} <b>{new_signal.signal_type.value}</b>
+
+📈 <b>Skor:</b> {old_signal.score:+.0f} → <b>{new_signal.score:+.0f}</b>
+{direction}
+
+💰 <b>Yeni Fiyat:</b> ₺{new_signal.price:.2f}
+🛑 <b>Stop-Loss:</b> ₺{new_signal.stop_loss:.2f}
+🎯 <b>Hedef:</b> ₺{new_signal.target_price:.2f}
+
+⏰ {datetime.now().strftime('%d.%m.%Y %H:%M')}
+━━━━━━━━━━━━━━━━━━━━
+⚠️ <i>Yatırım tavsiyesi değildir!</i>
+"""
+        return self.send_message(message.strip())
+
+    def send_signal_change(
+        self,
+        ticker: str,
+        old_signal: Signal,
+        new_signal: Signal
+    ) -> bool:
+        name = config.TICKER_NAMES.get(ticker, ticker)
+
+        emoji_map = {
+            SignalType.STRONG_BUY: "🚀💰",
+            SignalType.BUY: "🟢📈",
+            SignalType.WEAK_BUY: "🟡📊",
+            SignalType.HOLD: "⚪⏸️",
+            SignalType.WEAK_SELL: "🟠📉",
+            SignalType.SELL: "🔴📉",
+            SignalType.STRONG_SELL: "🚨🔻",
+        }
+
+        old_emoji = emoji_map.get(old_signal.signal_type, "📊")
+        new_emoji = emoji_map.get(new_signal.signal_type, "📊")
+
+        direction = "⬆️ YÜKSELİYOR" if new_signal.score > old_signal.score else "⬇️ DÜŞÜYOR"
+
+        message = f"""
+🔔 <b>SİNYAL DEĞİŞİKLİĞİ!</b>
+━━━━━━━━━━━━━━━━━━━━
+
+📊 <b>{name}</b> ({ticker.replace('.IS', '')})
+
+{old_emoji} {old_signal.signal_type.value}
+     ↓
+{new_emoji} <b>{new_signal.signal_type.value}</b>
+
+📈 <b>Skor:</b> {old_signal.score:+.0f} → <b>{new_signal.score:+.0f}</b>
+{direction}
+
+💰 <b>Yeni Fiyat:</b> ₺{new_signal.price:.2f}
+🛑 <b>Stop-Loss:</b> ₺{new_signal.stop_loss:.2f}
+🎯 <b>Hedef:</b> ₺{new_signal.target_price:.2f}
+
+⏰ {datetime.now().strftime('%d.%m.%Y %H:%M')}
+━━━━━━━━━━━━━━━━━━━━
+⚠️ <i>Yatırım tavsiyesi değildir!</i>
+"""
+        return self.send_message(message.strip())
+
     def send_startup_message(self):
         msg = (
             "🤖 <b>BIST Bot Başlatıldı!</b>\n\n"
