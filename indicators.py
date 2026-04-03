@@ -160,7 +160,10 @@ class TechnicalIndicators:
             rsi_min = rsi_window.min()
             price_at_rsi_min = df["close"].loc[rsi_min_idx]
             
-            prev_rsi_min_idx = df["rsi"].iloc[max(0, i - lookback * 2):i - lookback].idxmin()
+            prev_slice = df["rsi"].iloc[max(0, i - lookback * 2):i - lookback]
+            if prev_slice.dropna().empty:
+                continue
+            prev_rsi_min_idx = prev_slice.idxmin()
             if pd.isna(prev_rsi_min_idx):
                 continue
             
@@ -194,7 +197,10 @@ class TechnicalIndicators:
             macd_min = macd_window.min()
             price_at_macd_min = df["close"].loc[macd_min_idx]
             
-            prev_macd_min_idx = df["macd"].iloc[max(0, i - lookback * 2):i - lookback].idxmin()
+            prev_slice = df["macd"].iloc[max(0, i - lookback * 2):i - lookback]
+            if prev_slice.dropna().empty:
+                continue
+            prev_macd_min_idx = prev_slice.idxmin()
             if pd.isna(prev_macd_min_idx):
                 continue
             
