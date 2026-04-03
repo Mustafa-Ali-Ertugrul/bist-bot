@@ -335,17 +335,100 @@ if not st.session_state.signals:
 else:
     signals = st.session_state.signals
     
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("Taranan", len(st.session_state.all_data))
-    with col2:
-        buys = len([s for s in signals if s.score > 0])
-        st.metric("Alım Sinyali", buys, delta_color="normal")
-    with col3:
-        sells = len([s for s in signals if s.score < 0])
-        st.metric("Satış Sinyali", sells, delta_color="inverse")
-    with col4:
-        st.metric("Son Tarama", datetime.now().strftime("%H:%M"))
+    total = len(st.session_state.all_data)
+    buys = len([s for s in signals if s.score > 0])
+    sells = len([s for s in signals if s.score < 0])
+    neutral = total - buys - sells
+    buy_pct = (buys / total * 100) if total > 0 else 0
+    sell_pct = (sells / total * 100) if total > 0 else 0
+    neutral_pct = (neutral / total * 100) if total > 0 else 0
+    
+    st.markdown(f"""
+    <style>
+        .signal-card {{
+            background: #161b22;
+            border-radius: 12px;
+            padding: 16px;
+            margin: 8px 0;
+            border: 1px solid #30363d;
+        }}
+        .signal-bar-bg {{
+            background: #21262d;
+            border-radius: 8px;
+            height: 24px;
+            overflow: hidden;
+            display: flex;
+            margin: 12px 0;
+        }}
+        .signal-bar-buy {{
+            background: linear-gradient(90deg, #00CC96, #00E5A0);
+            height: 100%;
+            border-radius: 8px 0 0 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #000;
+            font-weight: bold;
+            font-size: 13px;
+            min-width: 0;
+        }}
+        .signal-bar-neutral {{
+            background: #484f58;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-size: 12px;
+            min-width: 0;
+        }}
+        .signal-bar-sell {{
+            background: linear-gradient(90deg, #E5534B, #EF553B);
+            height: 100%;
+            border-radius: 0 8px 8px 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-weight: bold;
+            font-size: 13px;
+            min-width: 0;
+        }}
+        .signal-label {{
+            display: flex;
+            justify-content: space-between;
+            font-size: 14px;
+            margin-bottom: 4px;
+        }}
+        .scan-time {{
+            text-align: center;
+            color: #8b949e;
+            font-size: 13px;
+            margin-top: 8px;
+        }}
+    </style>
+    """, unsafe_allow_html=True)
+    
+    st.markdown(f"""
+    <div class="signal-card">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="font-size:16px; font-weight:bold; color:#00CC96;">🟢 Alım Sinyali: {buys}</span>
+            <span style="font-size:16px; font-weight:bold; color:#484f58;">⚪ Nötr: {neutral}</span>
+            <span style="font-size:16px; font-weight:bold; color:#EF553B;">🔴 Satış Sinyali: {sells}</span>
+        </div>
+        <div class="signal-bar-bg">
+            <div class="signal-bar-buy" style="width:{buy_pct:.1f}%;">{buys}</div>
+            <div class="signal-bar-neutral" style="width:{neutral_pct:.1f}%;"></div>
+            <div class="signal-bar-sell" style="width:{sell_pct:.1f}%;">{sells}</div>
+        </div>
+        <div class="signal-label">
+            <span style="color:#00CC96;">📈 %{buy_pct:.0f}</span>
+            <span style="color:#8b949e;">Taranan: {total} hisse</span>
+            <span style="color:#EF553B;">%{sell_pct:.0f} 📉</span>
+        </div>
+        <div class="scan-time">🕐 Son Tarama: {datetime.now().strftime("%H:%M")}</div>
+    </div>
+    """, unsafe_allow_html=True)
     
     st.divider()
     
