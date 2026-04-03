@@ -300,6 +300,108 @@ def plot_rsi(df):
     return fig
 
 
+def render_signal_card(s, is_sell=False):
+    name = config.TICKER_NAMES.get(s.ticker, s.ticker)
+    risk = (s.price - s.stop_loss) / s.price * 100
+    reward = (s.target_price - s.price) / s.price * 100
+    rr = reward / risk if risk > 0 else 0
+    
+    df_data = st.session_state.all_data.get(s.ticker)
+    if df_data is not None and len(df_data) >= 2:
+        prev_price = df_data['close'].iloc[-2]
+        day_change = (s.price - prev_price) / prev_price * 100
+        change_color = "green" if day_change > 0 else "red"
+        change_str = f":{change_color}[{day_change:+.1f}%]"
+    else:
+        day_change = 0
+        change_str = "0%"
+    
+    with st.expander(f"{get_signal_emoji(s.signal_type)} **{name}** ({s.ticker.replace('.IS', '')}) | Skor: {s.score:+.0f} | {change_str}"):
+        if df_data is not None:
+            df_chart = df_data.tail(30).copy()
+            df_chart = df_chart.reset_index()
+            df_chart = df_chart.dropna()
+            
+            fig = go.Figure()
+            
+            fig.add_trace(go.Candlestick(
+                x=df_chart.index,
+                open=df_chart['open'],
+                high=df_chart['high'],
+                low=df_chart['low'],
+                close=df_chart['close'],
+                name='Fiyat',
+                increasing_line_color='#00CC96',
+                decreasing_line_color='#EF553B'
+            ))
+            
+            if not is_sell:
+                fig.add_hline(y=s.price, line_dash="solid", line_color="#3399FF", line_width=2)
+                fig.add_hline(y=s.stop_loss, line_dash="dash", line_color="#EF553B", line_width=2)
+                fig.add_hline(y=s.target_price, line_dash="dash", line_color="#00CC96", line_width=2)
+                fig.add_hrect(y0=s.stop_loss, y1=s.price, fillcolor="#EF553B", opacity=0.15, line_width=0, layer="below")
+                fig.add_hrect(y0=s.price, y1=s.target_price, fillcolor="#00CC96", opacity=0.15, line_width=0, layer="below")
+                fig.add_annotation(x=0, y=s.price, xref="paper", yref="y", text=f"G: {s.price:.2f}", showarrow=False, xanchor="left", bgcolor="#3399FF", font=dict(color="white"))
+                fig.add_annotation(x=0, y=s.stop_loss, xref="paper", yref="y", text=f"S: {s.stop_loss:.2f}", showarrow=False, xanchor="left", bgcolor="#EF553B", font=dict(color="white"))
+                fig.add_annotation(x=0, y=s.target_price, xref="paper", yref="y", text=f"H: {s.target_price:.2f}", showarrow=False, xanchor="left", bgcolor="#00CC96", font=dict(color="white"))
+            else:
+                fig.add_hline(y=s.price, line_dash="solid", line_color="#FF9900", line_width=2)
+                fig.add_hline(y=s.target_price, line_dash="dash", line_color="#EF553B", line_width=2)
+                fig.add_hrect(y0=s.price, y1=s.target_price, fillcolor="#EF553B", opacity=0.15, line_width=0, layer="below")
+                fig.add_annotation(x=0, y=s.price, xref="paper", yref="y", text=f"G: {s.price:.2f}", showarrow=False, xanchor="left", bgcolor="#FF9900", font=dict(color="white"))
+                fig.add_annotation(x=0, y=s.target_price, xref="paper", yref="y", text=f"H: {s.target_price:.2f}", showarrow=False, xanchor="left", bgcolor="#EF553B", font=dict(color="white"))
+            
+            fig.update_layout(height=280, template="plotly_dark", margin=dict(l=60, r=20, t=40, b=40), xaxis_rangeslider_visible=False, showlegend=False, plot_bgcolor="#0d1117", paper_bgcolor="#0d1117")
+            st.plotly_chart(fig, use_container_width=True, key=f"chart_{s.ticker}_{s.signal_type.name}")
+        
+        if not is_sell:
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Giris", f"₺{s.price:.2f}", delta=f"{day_change:+.1f}%")
+            with col2:
+                st.metric("Stop", f"₺{s.stop_loss:.2f}", delta=f"-{risk:.1f}%", delta_color="inverse")
+            with col3:
+                st.metric("Hedef", f"₺{s.target_price:.2f}", delta=f"+{reward:.1f}%", delta_color="normal")
+            with col4:
+                st.metric("R/R", f"1:{rr:.1f}")
+        else:
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Fiyat", f"₺{s.price:.2f}", delta=f"{day_change:+.1f}%")
+            with col2:
+                st.metric("Hedef", f"₺{s.target_price:.2f}")
+            with col3:
+                st.metric("Güven", s.confidence)
+        
+        if df_data is not None:
+            ti = TechnicalIndicators()
+            df_indicators = ti.add_all(df_data.copy())
+            rsi = df_indicators['rsi'].iloc[-1]
+            rsi_color = "green" if rsi < 30 else "red" if rsi > 70 else "white"
+            rsi_durum = "Asiri Satim" if rsi < 30 else "Asiri Alim" if rsi > 70 else "Nötr"
+            vol_ratio = df_indicators['volume_ratio'].iloc[-1]
+            vol_color = "green" if vol_ratio > 1.5 else "red" if vol_ratio < 0.8 else "white"
+            macd_cross = df_indicators['macd_cross'].iloc[-1]
+            macd_color = "green" if macd_cross == "BULLISH" else "red" if macd_cross == "BEARISH" else "white"
+            sma_cross = df_indicators['sma_cross'].iloc[-1]
+            sma_color = "green" if sma_cross == "GOLDEN_CROSS" else "red" if sma_cross == "DEATH_CROSS" else "white"
+            
+            st.markdown("### Gostergeler")
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.markdown(f"**RSI:** :{rsi_color}[{rsi:.0f}] - {rsi_durum}")
+            with col2:
+                st.markdown(f"**Hacim:** :{vol_color}[{vol_ratio:.1f}x]")
+            with col3:
+                st.markdown(f"**MACD:** :{macd_color}[{macd_cross}]")
+            with col4:
+                st.markdown(f"**SMA:** :{sma_color}[{sma_cross}]")
+        
+        st.markdown("**Nedenler:**")
+        for r in s.reasons[:5]:
+            st.write(f"• {r}")
+
+
 st.title("🤖 BIST Trading Bot")
 
 with st.sidebar:
@@ -336,17 +438,17 @@ else:
     signals = st.session_state.signals
     
     total = len(st.session_state.all_data)
+    buys = len([s for s in signals if s.score > 0])
+    sells = len([s for s in signals if s.score < 0])
+    neutral = total - buys - sells
+    buy_pct = (buys / total * 100) if total > 0 else 0
+    sell_pct = (sells / total * 100) if total > 0 else 0
+    neutral_pct = (neutral / total * 100) if total > 0 else 0
     
     from strategy import SignalType
     strong_buy_count = len([s for s in signals if s.signal_type in (SignalType.STRONG_BUY,)])
     buy_count = len([s for s in signals if s.signal_type in (SignalType.BUY, SignalType.WEAK_BUY)])
     sell_count = len([s for s in signals if s.signal_type in (SignalType.WEAK_SELL, SignalType.SELL, SignalType.STRONG_SELL)])
-    
-    total_buy = strong_buy_count + buy_count
-    total_sell = sell_count
-    
-    buy_pct = (total_buy / total * 100) if total > 0 else 0
-    sell_pct = (total_sell / total * 100) if total > 0 else 0
     
     total_score = sum(s.score for s in signals)
     max_possible = total * 100
@@ -389,7 +491,7 @@ else:
             background: conic-gradient(
                 #00CC96 0deg {buy_pct * 3.6}deg,
                 #EF553B {buy_pct * 3.6}deg {buy_pct * 3.6 + sell_pct * 3.6}deg,
-                #21262d {buy_pct * 3.6 + sell_pct * 3.6}deg 360deg
+                #ffffff {buy_pct * 3.6 + sell_pct * 3.6}deg 360deg
             );
             mask: radial-gradient(transparent 55%, black 56%);
             -webkit-mask: radial-gradient(transparent 55%, black 56%);
@@ -452,15 +554,15 @@ else:
         </div>
         <div class="signal-stats">
             <div class="stat-item">
-                <div class="stat-value" style="color:#00E5A0;">{strong_buy_count}</div>
-                <div class="stat-label">💰 Güçlü Alım</div>
-            </div>
-            <div class="stat-item">
-                <div class="stat-value" style="color:#00CC96;">{buy_count}</div>
+                <div class="stat-value" style="color:#00CC96;">{buys}</div>
                 <div class="stat-label">🟢 Alım</div>
             </div>
             <div class="stat-item">
-                <div class="stat-value" style="color:#EF553B;">{sell_count}</div>
+                <div class="stat-value" style="color:#ffffff;">{neutral}</div>
+                <div class="stat-label">⚪ Nötr</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" style="color:#EF553B;">{sells}</div>
                 <div class="stat-label">🔴 Satış</div>
             </div>
         </div>
@@ -473,299 +575,31 @@ else:
     tab1, tab2, tab3 = st.tabs(["Sinyaller", f"{selected_ticker} Detay", "Tüm Hisseler"])
     
     with tab1:
-        st.subheader("Alim Sinyalleri")
+        sub_buy, sub_strong, sub_sell = st.tabs(["🟢 Alım", "💰 Güçlü Alım", "🔴 Satış"])
         
-        buy_signals = [s for s in signals if s.score > 0]
-        if buy_signals:
-            for s in buy_signals:
-                name = config.TICKER_NAMES.get(s.ticker, s.ticker)
-                risk = (s.price - s.stop_loss) / s.price * 100
-                reward = (s.target_price - s.price) / s.price * 100
-                rr = reward / risk if risk > 0 else 0
-                
-                # Verileri al
-                df_data = st.session_state.all_data.get(s.ticker)
-                if df_data is not None and len(df_data) >= 2:
-                    prev_price = df_data['close'].iloc[-2]
-                    day_change = (s.price - prev_price) / prev_price * 100
-                    change_color = "green" if day_change > 0 else "red"
-                    change_str = f":{change_color}[{day_change:+.1f}%]"
-                else:
-                    day_change = 0
-                    change_str = "0%"
-                
-                with st.expander(f"{get_signal_emoji(s.signal_type)} **{name}** ({s.ticker.replace('.IS', '')}) | Skor: {s.score:+.0f} | {change_str}"):
-                    # Grafik - Fiyat ve Seviyeler
-                    if df_data is not None:
-                        # Son 30 günlük veri - temizle
-                        df_chart = df_data.tail(30).copy()
-                        df_chart = df_chart.reset_index()
-                        df_chart = df_chart.dropna()
-                        
-                        fig = go.Figure()
-                        
-                        # Mum grafik
-                        fig.add_trace(go.Candlestick(
-                            x=df_chart.index,
-                            open=df_chart['open'],
-                            high=df_chart['high'],
-                            low=df_chart['low'],
-                            close=df_chart['close'],
-                            name='Fiyat',
-                            increasing_line_color='#00CC96',
-                            decreasing_line_color='#EF553B'
-                        ))
-                        
-                        # Giris fiyati
-                        fig.add_hline(
-                            y=s.price,
-                            line_dash="solid",
-                            line_color="#3399FF",
-                            line_width=2
-                        )
-                        
-                        # Stop-loss
-                        fig.add_hline(
-                            y=s.stop_loss,
-                            line_dash="dash",
-                            line_color="#EF553B",
-                            line_width=2
-                        )
-                        
-                        # Hedef
-                        fig.add_hline(
-                            y=s.target_price,
-                            line_dash="dash",
-                            line_color="#00CC96",
-                            line_width=2
-                        )
-                        
-                        # Zarar bölgesi
-                        fig.add_hrect(
-                            y0=s.stop_loss, y1=s.price,
-                            fillcolor="#EF553B", opacity=0.15, line_width=0,
-                            layer="below"
-                        )
-                        
-                        # Kazanç bölgesi
-                        fig.add_hrect(
-                            y0=s.price, y1=s.target_price,
-                            fillcolor="#00CC96", opacity=0.15, line_width=0,
-                            layer="below"
-                        )
-                        
-                        # Fiyat etiketleri
-                        fig.add_annotation(
-                            x=0, y=s.price, xref="paper", yref="y",
-                            text=f"G: {s.price:.2f}", showarrow=False,
-                            xanchor="left", bgcolor="#3399FF", font=dict(color="white")
-                        )
-                        fig.add_annotation(
-                            x=0, y=s.stop_loss, xref="paper", yref="y",
-                            text=f"S: {s.stop_loss:.2f}", showarrow=False,
-                            xanchor="left", bgcolor="#EF553B", font=dict(color="white")
-                        )
-                        fig.add_annotation(
-                            x=0, y=s.target_price, xref="paper", yref="y",
-                            text=f"H: {s.target_price:.2f}", showarrow=False,
-                            xanchor="left", bgcolor="#00CC96", font=dict(color="white")
-                        )
-                        
-                        fig.update_layout(
-                            height=280,
-                            template="plotly_dark",
-                            margin=dict(l=60, r=20, t=40, b=40),
-                            xaxis_rangeslider_visible=False,
-                            showlegend=False,
-                            plot_bgcolor="#0d1117",
-                            paper_bgcolor="#0d1117"
-                        )
-                        st.plotly_chart(fig, use_container_width=True, key=f"chart_{s.ticker}")
-                    
-                    # Ana metrikler
-                    col1, col2, col3, col4 = st.columns(4)
-                    with col1:
-                        st.metric("Giris", f"₺{s.price:.2f}", delta=f"{day_change:+.1f}%")
-                    with col2:
-                        st.metric("Stop", f"₺{s.stop_loss:.2f}", delta=f"-{risk:.1f}%", delta_color="inverse")
-                    with col3:
-                        st.metric("Hedef", f"₺{s.target_price:.2f}", delta=f"+{reward:.1f}%", delta_color="normal")
-                    with col4:
-                        st.metric("R/R", f"1:{rr:.1f}")
-                    
-                    # RSI ve diger gostergeler
-                    if df_data is not None:
-                        ti = TechnicalIndicators()
-                        df_indicators = ti.add_all(df_data.copy())
-                        
-                        rsi = df_indicators['rsi'].iloc[-1]
-                        
-                        # RSI renklendirme
-                        if rsi < 30:
-                            rsi_color = "green"
-                            rsi_durum = "Asiri Satim"
-                        elif rsi > 70:
-                            rsi_color = "red"
-                            rsi_durum = "Asiri Alim"
-                        else:
-                            rsi_color = "white"
-                            rsi_durum = "Nötr"
-                        
-                        # Hacim
-                        vol_ratio = df_indicators['volume_ratio'].iloc[-1]
-                        vol_color = "green" if vol_ratio > 1.5 else "red" if vol_ratio < 0.8 else "white"
-                        
-                        # MACD
-                        macd_cross = df_indicators['macd_cross'].iloc[-1]
-                        macd_color = "green" if macd_cross == "BULLISH" else "red" if macd_cross == "BEARISH" else "white"
-                        
-                        # SMA Cross
-                        sma_cross = df_indicators['sma_cross'].iloc[-1]
-                        sma_color = "green" if sma_cross == "GOLDEN_CROSS" else "red" if sma_cross == "DEATH_CROSS" else "white"
-                        
-                        # Gostergeler
-                        st.markdown("### Gostergeler")
-                        col1, col2, col3, col4 = st.columns(4)
-                        with col1:
-                            st.markdown(f"**RSI:** :{rsi_color}[{rsi:.0f}] - {rsi_durum}")
-                        with col2:
-                            st.markdown(f"**Hacim:** :{vol_color}[{vol_ratio:.1f}x]")
-                        with col3:
-                            st.markdown(f"**MACD:** :{macd_color}[{macd_cross}]")
-                        with col4:
-                            st.markdown(f"**SMA:** :{sma_color}[{sma_cross}]")
-                    
-                    # Nedenler
-                    st.markdown("**Nedenler:**")
-                    for r in s.reasons[:5]:
-                        st.write(f"• {r}")
-        else:
-            st.info("Alim sinyali yok")
+        with sub_buy:
+            buy_signals = [s for s in signals if s.signal_type in (SignalType.BUY, SignalType.WEAK_BUY)]
+            if buy_signals:
+                for s in buy_signals:
+                    render_signal_card(s)
+            else:
+                st.info("Alım sinyali yok")
         
-        st.subheader("Satis Sinyalleri")
+        with sub_strong:
+            strong_buy_signals = [s for s in signals if s.signal_type == SignalType.STRONG_BUY]
+            if strong_buy_signals:
+                for s in strong_buy_signals:
+                    render_signal_card(s)
+            else:
+                st.info("Güçlü alım sinyali yok")
         
-        sell_signals = [s for s in signals if s.score < 0]
-        if sell_signals:
-            for s in sell_signals:
-                name = config.TICKER_NAMES.get(s.ticker, s.ticker)
-                
-                df_data = st.session_state.all_data.get(s.ticker)
-                if df_data is not None and len(df_data) >= 2:
-                    prev_price = df_data['close'].iloc[-2]
-                    day_change = (s.price - prev_price) / prev_price * 100
-                    change_color = "green" if day_change > 0 else "red"
-                    change_str = f":{change_color}[{day_change:+.1f}%]"
-                else:
-                    day_change = 0
-                    change_str = "0%"
-                
-                with st.expander(f"{get_signal_emoji(s.signal_type)} **{name}** ({s.ticker.replace('.IS', '')}) | Skor: {s.score:+.0f} | {change_str}"):
-                    # Grafik - Fiyat ve Seviyeler
-                    if df_data is not None:
-                        df_chart = df_data.tail(30).copy()
-                        df_chart = df_chart.reset_index()
-                        df_chart = df_chart.dropna()
-                        
-                        fig = go.Figure()
-                        
-                        # Mum grafik
-                        fig.add_trace(go.Candlestick(
-                            x=df_chart.index,
-                            open=df_chart['open'],
-                            high=df_chart['high'],
-                            low=df_chart['low'],
-                            close=df_chart['close'],
-                            name='Fiyat',
-                            increasing_line_color='#00CC96',
-                            decreasing_line_color='#EF553B'
-                        ))
-                        
-                        # Giris fiyati
-                        fig.add_hline(
-                            y=s.price,
-                            line_dash="solid",
-                            line_color="#FF9900",
-                            line_width=2
-                        )
-                        
-                        # Hedef (direnc)
-                        fig.add_hline(
-                            y=s.target_price,
-                            line_dash="dash",
-                            line_color="#EF553B",
-                            line_width=2
-                        )
-                        
-                        # Kisa pozisyon kar bölgesi
-                        fig.add_hrect(
-                            y0=s.price, y1=s.target_price,
-                            fillcolor="#EF553B", opacity=0.15, line_width=0,
-                            layer="below"
-                        )
-                        
-                        # Fiyat etiketleri
-                        fig.add_annotation(
-                            x=0, y=s.price, xref="paper", yref="y",
-                            text=f"G: {s.price:.2f}", showarrow=False,
-                            xanchor="left", bgcolor="#FF9900", font=dict(color="white")
-                        )
-                        fig.add_annotation(
-                            x=0, y=s.target_price, xref="paper", yref="y",
-                            text=f"H: {s.target_price:.2f}", showarrow=False,
-                            xanchor="left", bgcolor="#EF553B", font=dict(color="white")
-                        )
-                        
-                        fig.update_layout(
-                            height=280,
-                            template="plotly_dark",
-                            margin=dict(l=60, r=20, t=40, b=40),
-                            xaxis_rangeslider_visible=False,
-                            showlegend=False,
-                            plot_bgcolor="#0d1117",
-                            paper_bgcolor="#0d1117"
-                        )
-                        st.plotly_chart(fig, use_container_width=True, key=f"sell_chart_{s.ticker}")
-                    
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        st.metric("Fiyat", f"₺{s.price:.2f}", delta=f"{day_change:+.1f}%")
-                    with col2:
-                        st.metric("Hedef", f"₺{s.target_price:.2f}")
-                    with col3:
-                        st.metric("Güven", s.confidence)
-                    
-                    if df_data is not None:
-                        ti = TechnicalIndicators()
-                        df_indicators = ti.add_all(df_data.copy())
-                        rsi = df_indicators['rsi'].iloc[-1]
-                        rsi_color = "green" if rsi < 30 else "red" if rsi > 70 else "white"
-                        rsi_durum = "Asiri Satim" if rsi < 30 else "Asiri Alim" if rsi > 70 else "Nötr"
-                        
-                        vol_ratio = df_indicators['volume_ratio'].iloc[-1]
-                        vol_color = "green" if vol_ratio > 1.5 else "red" if vol_ratio < 0.8 else "white"
-                        
-                        macd_cross = df_indicators['macd_cross'].iloc[-1]
-                        macd_color = "green" if macd_cross == "BULLISH" else "red" if macd_cross == "BEARISH" else "white"
-                        
-                        sma_cross = df_indicators['sma_cross'].iloc[-1]
-                        sma_color = "green" if sma_cross == "GOLDEN_CROSS" else "red" if sma_cross == "DEATH_CROSS" else "white"
-                        
-                        st.markdown("### Gostergeler")
-                        col1, col2, col3, col4 = st.columns(4)
-                        with col1:
-                            st.markdown(f"**RSI:** :{rsi_color}[{rsi:.0f}] - {rsi_durum}")
-                        with col2:
-                            st.markdown(f"**Hacim:** :{vol_color}[{vol_ratio:.1f}x]")
-                        with col3:
-                            st.markdown(f"**MACD:** :{macd_color}[{macd_cross}]")
-                        with col4:
-                            st.markdown(f"**SMA:** :{sma_color}[{sma_cross}]")
-                    
-                    st.markdown("**Nedenler:**")
-                    for r in s.reasons[:5]:
-                        st.write(f"• {r}")
-        else:
-            st.info("Satis sinyali yok")
+        with sub_sell:
+            sell_signals = [s for s in signals if s.signal_type in (SignalType.WEAK_SELL, SignalType.SELL, SignalType.STRONG_SELL)]
+            if sell_signals:
+                for s in sell_signals:
+                    render_signal_card(s, is_sell=True)
+            else:
+                st.info("Satış sinyali yok")
     
     with tab3:
         st.subheader("Tüm Hisseler Detay")
