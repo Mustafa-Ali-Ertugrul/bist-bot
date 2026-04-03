@@ -22,14 +22,14 @@
             android:layout_height="200dp"
             android:src="@drawable/app_icon"
             android:scaleType="centerInside"
-            android:contentDescription="BIST Bot Logo" />
+            android:contentDescription="@string/app_name" />
 
         <TextView
             android:id="@+id/loadingTitle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="24dp"
-            android:text="BIST BOT"
+            android:text="@string/app_name"
             android:textColor="@color/colorAccent"
             android:textSize="32sp"
             android:textStyle="bold" />
