@@ -336,12 +336,16 @@ else:
     signals = st.session_state.signals
     
     total = len(st.session_state.all_data)
-    buys = len([s for s in signals if s.score > 0])
-    sells = len([s for s in signals if s.score < 0])
-    neutral = total - buys - sells
-    buy_pct = (buys / total * 100) if total > 0 else 0
-    sell_pct = (sells / total * 100) if total > 0 else 0
-    neutral_pct = (neutral / total * 100) if total > 0 else 0
+    
+    from strategy import SignalType
+    strong_buy_count = len([s for s in signals if s.signal_type in (SignalType.STRONG_BUY,)])
+    buy_count = len([s for s in signals if s.signal_type in (SignalType.BUY, SignalType.WEAK_BUY)])
+    sell_count = len([s for s in signals if s.signal_type in (SignalType.WEAK_SELL, SignalType.SELL, SignalType.STRONG_SELL)])
+    
+    signal_with_score = [s for s in signals if s.signal_type != SignalType.HOLD]
+    strong_buy_pct = (strong_buy_count / total * 100) if total > 0 else 0
+    buy_pct = (buy_count / total * 100) if total > 0 else 0
+    sell_pct = (sell_count / total * 100) if total > 0 else 0
     
     total_score = sum(s.score for s in signals)
     max_possible = total * 100
@@ -361,21 +365,17 @@ else:
         sentiment_color = "#8b949e"
         sentiment_emoji = "⚪"
     
-    buy_angle = buy_pct / 100 * 360
-    neutral_angle = neutral_pct / 100 * 360
-    sell_angle = sell_pct / 100 * 360
-    
     r = 70
     stroke_w = 18
     circumference = 2 * 3.14159 * r
     
+    strong_buy_stroke = strong_buy_pct / 100 * circumference
     buy_stroke = buy_pct / 100 * circumference
-    neutral_stroke = neutral_pct / 100 * circumference
     sell_stroke = sell_pct / 100 * circumference
     
-    buy_offset = 0
-    neutral_offset = -buy_stroke
-    sell_offset = -(buy_stroke + neutral_stroke)
+    strong_buy_offset = 0
+    buy_offset = -strong_buy_stroke
+    sell_offset = -(strong_buy_stroke + buy_stroke)
     
     st.markdown(f"""
     <style>
@@ -454,12 +454,12 @@ else:
                     stroke-dasharray="{sell_stroke} {circumference}"
                     stroke-dashoffset="{sell_offset}"
                     stroke-linecap="round" />
-                <circle cx="90" cy="90" r="{r}" fill="none" stroke="#484f58" stroke-width="{stroke_w}"
-                    stroke-dasharray="{neutral_stroke} {circumference}"
-                    stroke-dashoffset="{neutral_offset}" />
                 <circle cx="90" cy="90" r="{r}" fill="none" stroke="#00CC96" stroke-width="{stroke_w}"
                     stroke-dasharray="{buy_stroke} {circumference}"
-                    stroke-dashoffset="{buy_offset}"
+                    stroke-dashoffset="{buy_offset}" />
+                <circle cx="90" cy="90" r="{r}" fill="none" stroke="#00E5A0" stroke-width="{stroke_w}"
+                    stroke-dasharray="{strong_buy_stroke} {circumference}"
+                    stroke-dashoffset="{strong_buy_offset}"
                     stroke-linecap="round" />
             </svg>
             <div class="gauge-center">
@@ -469,15 +469,15 @@ else:
         </div>
         <div class="signal-stats">
             <div class="stat-item">
-                <div class="stat-value" style="color:#00CC96;">{buys}</div>
+                <div class="stat-value" style="color:#00E5A0;">{strong_buy_count}</div>
+                <div class="stat-label">💰 Güçlü Alım</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" style="color:#00CC96;">{buy_count}</div>
                 <div class="stat-label">🟢 Alım</div>
             </div>
             <div class="stat-item">
-                <div class="stat-value" style="color:#484f58;">{neutral}</div>
-                <div class="stat-label">⚪ Nötr</div>
-            </div>
-            <div class="stat-item">
-                <div class="stat-value" style="color:#EF553B;">{sells}</div>
+                <div class="stat-value" style="color:#EF553B;">{sell_count}</div>
                 <div class="stat-label">🔴 Satış</div>
             </div>
         </div>
