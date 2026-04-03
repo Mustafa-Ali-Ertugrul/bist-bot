@@ -54,12 +54,12 @@ class Signal:
 
 
 class StrategyEngine:
-    STRONG_BUY_THRESHOLD = 60
-    BUY_THRESHOLD = 35
-    WEAK_BUY_THRESHOLD = 15
-    WEAK_SELL_THRESHOLD = -15
-    SELL_THRESHOLD = -35
-    STRONG_SELL_THRESHOLD = -60
+    STRONG_BUY_THRESHOLD = 40
+    BUY_THRESHOLD = 10
+    WEAK_BUY_THRESHOLD = 0
+    WEAK_SELL_THRESHOLD = 0
+    SELL_THRESHOLD = -10
+    STRONG_SELL_THRESHOLD = -40
 
     def __init__(self):
         self.indicators = TechnicalIndicators()
@@ -78,117 +78,223 @@ class StrategyEngine:
         rsi = last.get("rsi")
         if pd.notna(rsi):
             if rsi < 25:
-                score += 25
+                score += 18
                 reasons.append(f"RSI çok düşük ({rsi:.1f}) → Aşırı satım")
             elif rsi < 30:
-                score += 20
+                score += 14
                 reasons.append(f"RSI düşük ({rsi:.1f}) → Satım bölgesi")
             elif rsi < 40:
-                score += 10
+                score += 7
                 reasons.append(f"RSI düşük-nötr ({rsi:.1f})")
             elif rsi > 80:
-                score -= 25
+                score -= 18
                 reasons.append(f"RSI çok yüksek ({rsi:.1f}) → Aşırı alım")
             elif rsi > 70:
-                score -= 20
+                score -= 14
                 reasons.append(f"RSI yüksek ({rsi:.1f}) → Alım bölgesi")
             elif rsi > 60:
-                score -= 5
+                score -= 4
                 reasons.append(f"RSI yüksek-nötr ({rsi:.1f})")
             else:
                 reasons.append(f"RSI nötr ({rsi:.1f})")
 
+        stoch_k = last.get("stoch_k")
+        stoch_d = last.get("stoch_d")
+        if pd.notna(stoch_k) and pd.notna(stoch_d):
+            stoch_cross = last.get("stoch_cross", "NONE")
+            if stoch_cross == "BULLISH":
+                score += 8
+                reasons.append(f"Stochastic Bullish Cross (K:{stoch_k:.0f}, D:{stoch_d:.0f})")
+            elif stoch_cross == "BEARISH":
+                score -= 8
+                reasons.append(f"Stochastic Bearish Cross (K:{stoch_k:.0f}, D:{stoch_d:.0f})")
+            
+            if stoch_k < 20 and stoch_d < 20:
+                score += 6
+                reasons.append(f"Stochastic aşırı satım bölgesi (K:{stoch_k:.0f})")
+            elif stoch_k > 80 and stoch_d > 80:
+                score -= 6
+                reasons.append(f"Stochastic aşırı alım bölgesi (K:{stoch_k:.0f})")
+            
+            if stoch_k > stoch_d and stoch_k < 50:
+                score += 3
+                reasons.append(f"Stochastic yükseliş eğilimi")
+            elif stoch_k < stoch_d and stoch_k > 50:
+                score -= 3
+                reasons.append(f"Stochastic düşüş eğilimi")
+
+        cci = last.get("cci")
+        if pd.notna(cci):
+            if cci < -100:
+                score += 8
+                reasons.append(f"CCI aşırı satım ({cci:.0f})")
+            elif cci < -50:
+                score += 4
+                reasons.append(f"CCI düşük ({cci:.0f})")
+            elif cci > 100:
+                score -= 8
+                reasons.append(f"CCI aşırı alım ({cci:.0f})")
+            elif cci > 50:
+                score -= 4
+                reasons.append(f"CCI yüksek ({cci:.0f})")
+
         sma_cross = last.get("sma_cross", "NONE")
         if sma_cross == "GOLDEN_CROSS":
-            score += 20
+            score += 12
             reasons.append("SMA Golden Cross ✨ → Yükseliş sinyali")
         elif sma_cross == "DEATH_CROSS":
-            score -= 20
+            score -= 12
             reasons.append("SMA Death Cross 💀 → Düşüş sinyali")
         else:
             sma_fast = last.get(f"sma_{config.SMA_FAST}")
             sma_slow = last.get(f"sma_{config.SMA_SLOW}")
             if pd.notna(sma_fast) and pd.notna(sma_slow):
                 if sma_fast > sma_slow:
-                    score += 5
-                    reasons.append(f"SMA trend yukarı (SMA{config.SMA_FAST} > SMA{config.SMA_SLOW})")
+                    score += 3
+                    reasons.append(f"SMA trend yukarı")
                 else:
-                    score -= 5
-                    reasons.append(f"SMA trend aşağı (SMA{config.SMA_FAST} < SMA{config.SMA_SLOW})")
+                    score -= 3
+                    reasons.append(f"SMA trend aşağı")
+
+        ema_cross = last.get("ema_cross", "NONE")
+        if ema_cross == "BULLISH":
+            score += 10
+            reasons.append("EMA Bullish Cross ⚡ → Hızlı yükseliş")
+        elif ema_cross == "BEARISH":
+            score -= 10
+            reasons.append("EMA Bearish Cross ⚡ → Hızlı düşüş")
 
         macd_cross = last.get("macd_cross", "NONE")
         macd_hist = last.get("macd_histogram")
+        macd_hist_inc = last.get("macd_hist_increasing", False)
 
         if macd_cross == "BULLISH":
-            score += 20
+            score += 12
             reasons.append("MACD Bullish Crossover 📈")
         elif macd_cross == "BEARISH":
-            score -= 20
+            score -= 12
             reasons.append("MACD Bearish Crossover 📉")
 
         if pd.notna(macd_hist):
-            if macd_hist > 0:
+            if macd_hist > 0 and macd_hist_inc:
                 score += 5
+                reasons.append(f"MACD Histogram güçleniyor ({macd_hist:.2f})")
+            elif macd_hist > 0:
+                score += 3
                 reasons.append(f"MACD Histogram pozitif ({macd_hist:.2f})")
-            else:
+            elif macd_hist < 0 and not macd_hist_inc:
                 score -= 5
+                reasons.append(f"MACD Histogram zayıflıyor ({macd_hist:.2f})")
+            else:
+                score -= 3
                 reasons.append(f"MACD Histogram negatif ({macd_hist:.2f})")
+
+        adx = last.get("adx")
+        plus_di = last.get("plus_di")
+        minus_di = last.get("minus_di")
+        if pd.notna(adx) and pd.notna(plus_di) and pd.notna(minus_di):
+            if adx > 25:
+                if plus_di > minus_di:
+                    score += 8
+                    reasons.append(f"Güçlü yükseliş trendi (ADX:{adx:.0f}, +DI>{minus_di:.0f})")
+                else:
+                    score -= 8
+                    reasons.append(f"Güçlü düşüş trendi (ADX:{adx:.0f}, -DI>{plus_di:.0f})")
+            else:
+                if plus_di > minus_di:
+                    score += 3
+                    reasons.append(f"Zayıf yükseliş trendi (ADX:{adx:.0f})")
+                else:
+                    score -= 3
+                    reasons.append(f"Zayıf düşüş trendi (ADX:{adx:.0f})")
+
+        di_cross = last.get("di_cross", "NONE")
+        if di_cross == "BULLISH":
+            score += 6
+            reasons.append("+DI/-DI Bullish Cross")
+        elif di_cross == "BEARISH":
+            score -= 6
+            reasons.append("+DI/-DI Bearish Cross")
 
         bb_pos = last.get("bb_position", "MIDDLE")
         bb_pct = last.get("bb_percent")
+        bb_squeeze = last.get("bb_squeeze", False)
 
         if bb_pos == "BELOW_LOWER":
-            score += 15
+            score += 10
             reasons.append("Fiyat Bollinger alt bandının altında → Alım fırsatı")
         elif bb_pos == "ABOVE_UPPER":
-            score -= 15
+            score -= 10
             reasons.append("Fiyat Bollinger üst bandının üstünde → Aşırı uzamış")
         elif pd.notna(bb_pct):
             if bb_pct < 0.2:
-                score += 8
+                score += 5
                 reasons.append(f"Bollinger %B düşük ({bb_pct:.2f})")
             elif bb_pct > 0.8:
-                score -= 8
+                score -= 5
                 reasons.append(f"Bollinger %B yüksek ({bb_pct:.2f})")
+        
+        if bb_squeeze:
+            reasons.append("Bollinger Squeeze → Patlama bekleniyor ⚠️")
 
         vol_spike = last.get("volume_spike", False)
         vol_ratio = last.get("volume_ratio", 1.0)
         pv_confirm = last.get("price_volume_confirm", False)
+        vol_trend = last.get("volume_trend", "FLAT")
 
         if vol_spike:
             price_change = last["close"] - df.iloc[-2]["close"]
             if price_change > 0:
-                score += 10
-                reasons.append(
-                    f"Hacim patlaması + fiyat yükselişi "
-                    f"(hacim {vol_ratio:.1f}x ortalama)"
-                )
+                score += 8
+                reasons.append(f"Hacim patlaması + yükseliş ({vol_ratio:.1f}x)")
             else:
-                score -= 10
-                reasons.append(
-                    f"Hacim patlaması + fiyat düşüşü "
-                    f"(hacim {vol_ratio:.1f}x ortalama)"
-                )
+                score -= 8
+                reasons.append(f"Hacim patlaması + düşüş ({vol_ratio:.1f}x)")
 
         if pv_confirm:
-            score += 3
-            reasons.append("Fiyat-Hacim uyumu mevcut ✓")
+            score += 2
+            reasons.append("Fiyat-Hacim uyumu ✓")
+        
+        if vol_trend == "INCREASING":
+            score += 2
+            reasons.append("Hacim artıyor 📊")
+        elif vol_trend == "DECREASING":
+            score -= 2
+            reasons.append("Hacim azalıyor 📊")
+
+        obv_trend = last.get("obv_trend", "FLAT")
+        if obv_trend == "UP":
+            score += 4
+            reasons.append("OBV yükseliş trendi → Akış var")
+        elif obv_trend == "DOWN":
+            score -= 4
+            reasons.append("OBV düşüş trendi → Çıkış var")
 
         dist_support = last.get("dist_to_support_pct", 50)
         dist_resist = last.get("dist_to_resistance_pct", 50)
 
         if pd.notna(dist_support) and dist_support < 2:
-            score += 10
-            reasons.append(
-                f"Fiyat desteğe çok yakın "
-                f"(%{dist_support:.1f} uzaklık)"
-            )
+            score += 6
+            reasons.append(f"Fiyat desteğe yakın (%{dist_support:.1f})")
         elif pd.notna(dist_resist) and dist_resist < 2:
-            score -= 10
-            reasons.append(
-                f"Fiyat dirence çok yakın "
-                f"(%{dist_resist:.1f} uzaklık)"
-            )
+            score -= 6
+            reasons.append(f"Fiyat dirence yakın (%{dist_resist:.1f})")
+
+        rsi_div = last.get("rsi_divergence", "NONE")
+        if rsi_div == "BULLISH":
+            score += 15
+            reasons.append("🔥 RSI Bullish Divergence → Güçlü dönüş sinyali")
+        elif rsi_div == "BEARISH":
+            score -= 15
+            reasons.append("🔥 RSI Bearish Divergence → Güçlü dönüş sinyali")
+
+        macd_div = last.get("macd_divergence", "NONE")
+        if macd_div == "BULLISH":
+            score += 12
+            reasons.append("🔥 MACD Bullish Divergence → Güçlü dönüş sinyali")
+        elif macd_div == "BEARISH":
+            score -= 12
+            reasons.append("🔥 MACD Bearish Divergence → Güçlü dönüş sinyali")
 
         score = max(-100, min(100, score))
 

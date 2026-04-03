@@ -376,26 +376,67 @@ def render_signal_card(s, is_sell=False):
         if df_data is not None:
             ti = TechnicalIndicators()
             df_indicators = ti.add_all(df_data.copy())
-            rsi = df_indicators['rsi'].iloc[-1]
+            last = df_indicators.iloc[-1]
+            
+            rsi = last['rsi']
             rsi_color = "green" if rsi < 30 else "red" if rsi > 70 else "white"
             rsi_durum = "Asiri Satim" if rsi < 30 else "Asiri Alim" if rsi > 70 else "Nötr"
-            vol_ratio = df_indicators['volume_ratio'].iloc[-1]
+            
+            stoch_k = last.get('stoch_k', 50)
+            stoch_d = last.get('stoch_d', 50)
+            stoch_color = "green" if stoch_k < 20 else "red" if stoch_k > 80 else "white"
+            
+            vol_ratio = last['volume_ratio']
             vol_color = "green" if vol_ratio > 1.5 else "red" if vol_ratio < 0.8 else "white"
-            macd_cross = df_indicators['macd_cross'].iloc[-1]
+            
+            macd_cross = last['macd_cross']
             macd_color = "green" if macd_cross == "BULLISH" else "red" if macd_cross == "BEARISH" else "white"
-            sma_cross = df_indicators['sma_cross'].iloc[-1]
+            
+            sma_cross = last['sma_cross']
             sma_color = "green" if sma_cross == "GOLDEN_CROSS" else "red" if sma_cross == "DEATH_CROSS" else "white"
+            
+            ema_cross = last.get('ema_cross', 'NONE')
+            ema_color = "green" if ema_cross == "BULLISH" else "red" if ema_cross == "BEARISH" else "white"
+            
+            adx = last.get('adx', 0)
+            adx_str = "Güçlü" if adx > 25 else "Zayıf"
+            
+            cci = last.get('cci', 0)
+            cci_color = "green" if cci < -100 else "red" if cci > 100 else "white"
+            
+            obv_trend = last.get('obv_trend', 'FLAT')
+            obv_color = "green" if obv_trend == "UP" else "red" if obv_trend == "DOWN" else "white"
+            
+            rsi_div = last.get('rsi_divergence', 'NONE')
+            macd_div = last.get('macd_divergence', 'NONE')
             
             st.markdown("### Gostergeler")
             col1, col2, col3, col4 = st.columns(4)
             with col1:
                 st.markdown(f"**RSI:** :{rsi_color}[{rsi:.0f}] - {rsi_durum}")
+                st.markdown(f"**Stoch:** :{stoch_color}[K:{stoch_k:.0f}/D:{stoch_d:.0f}]")
             with col2:
                 st.markdown(f"**Hacim:** :{vol_color}[{vol_ratio:.1f}x]")
+                st.markdown(f"**OBV:** :{obv_color}[{obv_trend}]")
             with col3:
                 st.markdown(f"**MACD:** :{macd_color}[{macd_cross}]")
+                st.markdown(f"**CCI:** :{cci_color}[{cci:.0f}]")
             with col4:
                 st.markdown(f"**SMA:** :{sma_color}[{sma_cross}]")
+                st.markdown(f"**ADX:** [{adx:.0f}] {adx_str}")
+            
+            if rsi_div != 'NONE' or macd_div != 'NONE' or ema_cross != 'NONE':
+                st.markdown("### Ek Sinyaller")
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    div_color = "green" if rsi_div == "BULLISH" else "red" if rsi_div == "BEARISH" else "white"
+                    st.markdown(f"**RSI Div:** :{div_color}[{rsi_div}]")
+                with col2:
+                    div_color = "green" if macd_div == "BULLISH" else "red" if macd_div == "BEARISH" else "white"
+                    st.markdown(f"**MACD Div:** :{div_color}[{macd_div}]")
+                with col3:
+                    em_color = "green" if ema_cross == "BULLISH" else "red" if ema_cross == "BEARISH" else "white"
+                    st.markdown(f"**EMA:** :{em_color}[{ema_cross}]")
         
         st.markdown("**Nedenler:**")
         for r in s.reasons[:5]:
@@ -446,9 +487,9 @@ else:
     neutral_pct = (neutral / total * 100) if total > 0 else 0
     
     from strategy import SignalType
-    strong_buy_count = len([s for s in signals if s.signal_type in (SignalType.STRONG_BUY,)])
-    buy_count = len([s for s in signals if s.signal_type in (SignalType.BUY, SignalType.WEAK_BUY)])
-    sell_count = len([s for s in signals if s.signal_type in (SignalType.WEAK_SELL, SignalType.SELL, SignalType.STRONG_SELL)])
+    strong_buy_count = len([s for s in signals if s.score >= 40])
+    buy_count = len([s for s in signals if 10 <= s.score < 40])
+    sell_count = len([s for s in signals if s.score < 10])
     
     total_score = sum(s.score for s in signals)
     max_possible = total * 100
