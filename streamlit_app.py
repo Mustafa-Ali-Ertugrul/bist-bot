@@ -387,23 +387,75 @@ def render_signal_card(s, is_sell=False):
 st.title("🤖 BIST Trading Bot")
 
 with st.sidebar:
-    st.header("⚙️ Ayarlar")
+    st.markdown("""
+    <style>
+        section[data-testid="stSidebar"] {
+            background: #161b22;
+            border-right: 1px solid #30363d;
+        }
+        section[data-testid="stSidebar"] .stSelectbox > div > div > select {
+            font-size: 13px;
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 8px;
+        }
+        .sidebar-section-title {
+            color: #c9d1d9;
+            font-size: 13px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+            margin-top: 16px;
+        }
+        .sidebar-divider {
+            border-top: 1px solid #30363d;
+            margin: 12px 0;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
+    st.markdown('<div class="sidebar-section-title">📊 Hisse Seç</div>', unsafe_allow_html=True)
     
-    selected_ticker = st.selectbox(
-        "Hisse Seç",
-        config.WATCHLIST,
-        format_func=lambda x: f"{config.TICKER_NAMES.get(x, x)} ({x.replace('.IS', '')})"
+    ticker_options = [f"{config.TICKER_NAMES.get(x, x)} ({x.replace('.IS', '')})" for x in config.WATCHLIST]
+    selected_idx = st.selectbox(
+        "",
+        range(len(config.WATCHLIST)),
+        format_func=lambda i: ticker_options[i],
+        label_visibility="collapsed"
     )
+    selected_ticker = config.WATCHLIST[selected_idx]
     
-    st.divider()
-    
+    signals = st.session_state.get("signals", [])
+    if signals:
+        st.markdown('<div class="sidebar-divider"></div>', unsafe_allow_html=True)
+        st.markdown('<div class="sidebar-section-title">📈 Özet</div>', unsafe_allow_html=True)
+        
+        buys = len([s for s in signals if s.score > 0])
+        sells = len([s for s in signals if s.score < 0])
+        total = len(st.session_state.get("all_data", {}))
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Al", buys, delta=f"{buys/total*100:.0f}%" if total else "")
+        with col2:
+            st.metric("Sat", sells, delta=f"{sells/total*100:.0f}%" if total else "")
+        with col3:
+            st.metric("Toplam", total)
+
+
+header_col1, header_col2 = st.columns([4, 1])
+with header_col1:
+    pass
+with header_col2:
     if "signals" not in st.session_state or len(st.session_state.get("signals", [])) == 0:
         st.session_state.signals, st.session_state.all_data = run_scan()
         st.rerun()
     
-    if st.button("🔄 Taramayı Yenile", type="primary"):
+    if st.button("🔄 Yenile", type="primary", use_container_width=True):
         st.session_state.signals, st.session_state.all_data = run_scan()
-    
+        st.rerun()
 
 if not st.session_state.signals:
     st.info("👆 'Taramayı Yenile' butonuna basarak başlayın!")
