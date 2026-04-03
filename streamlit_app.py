@@ -342,10 +342,11 @@ else:
     buy_count = len([s for s in signals if s.signal_type in (SignalType.BUY, SignalType.WEAK_BUY)])
     sell_count = len([s for s in signals if s.signal_type in (SignalType.WEAK_SELL, SignalType.SELL, SignalType.STRONG_SELL)])
     
-    signal_with_score = [s for s in signals if s.signal_type != SignalType.HOLD]
-    strong_buy_pct = (strong_buy_count / total * 100) if total > 0 else 0
-    buy_pct = (buy_count / total * 100) if total > 0 else 0
-    sell_pct = (sell_count / total * 100) if total > 0 else 0
+    total_buy = strong_buy_count + buy_count
+    total_sell = sell_count
+    
+    buy_pct = (total_buy / total * 100) if total > 0 else 0
+    sell_pct = (total_sell / total * 100) if total > 0 else 0
     
     total_score = sum(s.score for s in signals)
     max_possible = total * 100
@@ -369,13 +370,11 @@ else:
     stroke_w = 18
     circumference = 2 * 3.14159 * r
     
-    strong_buy_stroke = strong_buy_pct / 100 * circumference
     buy_stroke = buy_pct / 100 * circumference
     sell_stroke = sell_pct / 100 * circumference
     
-    strong_buy_offset = 0
-    buy_offset = -strong_buy_stroke
-    sell_offset = -(strong_buy_stroke + buy_stroke)
+    buy_offset = 0
+    sell_offset = -buy_stroke
     
     st.markdown(f"""
     <style>
@@ -456,10 +455,7 @@ else:
                     stroke-linecap="round" />
                 <circle cx="90" cy="90" r="{r}" fill="none" stroke="#00CC96" stroke-width="{stroke_w}"
                     stroke-dasharray="{buy_stroke} {circumference}"
-                    stroke-dashoffset="{buy_offset}" />
-                <circle cx="90" cy="90" r="{r}" fill="none" stroke="#00E5A0" stroke-width="{stroke_w}"
-                    stroke-dasharray="{strong_buy_stroke} {circumference}"
-                    stroke-dashoffset="{strong_buy_offset}"
+                    stroke-dashoffset="{buy_offset}"
                     stroke-linecap="round" />
             </svg>
             <div class="gauge-center">
