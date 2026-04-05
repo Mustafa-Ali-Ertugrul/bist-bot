@@ -428,23 +428,93 @@ def render_signal_card(s, is_sell=False):
 
 st.title("🤖 BIST Trading Bot")
 
-def fetch_stock_news(ticker, max_results=3):
+def fetch_stock_news(ticker, max_results=5):
     name = config.TICKER_NAMES.get(ticker, ticker.replace('.IS', ''))
-    query = f"{name} hisse senedi"
-    url = f"https://news.google.com/rss/search?q={query}&hl=tr&gl=TR&ceid=TR:tr"
-    try:
-        response = requests.get(url, timeout=5, headers={'User-Agent': 'Mozilla/5.0'})
-        if response.status_code == 200:
-            items = re.findall(r'<title>(.*?)</title>', response.text)
-            news = []
-            for item in items[1:max_results+1]:
-                text = item.replace('&amp;', '&').replace('&#39;', "'").replace('&quot;', '"').replace('&nbsp;', ' ')
-                if len(text) > 10 and text.lower() not in ['google haberler', 'google news']:
-                    news.append(text)
-            return news
-    except:
-        pass
-    return []
+    all_news = []
+    
+    sources = [
+        {
+            'name': 'Google Haberler',
+            'url': f"https://news.google.com/rss/search?q={name}+hisse+senedi&hl=tr&gl=TR&ceid=TR:tr",
+            'type': 'google'
+        },
+        {
+            'name': 'Investing.com',
+            'url': f"https://tr.investing.com/search/?q={name}",
+            'type': 'investing'
+        },
+        {
+            'name': 'Bloomberg HT',
+            'url': f"https://www.bloomberght.com/search?q={name}",
+            'type': 'bloomberght'
+        },
+        {
+            'name': 'TradingView',
+            'url': f"https://www.tradingview.com/symbols/{ticker.replace('.IS', '')}/ideas/",
+            'type': 'tradingview'
+        },
+        {
+            'name': 'Foreks.com',
+            'url': f"https://foreks.com/arama?q={name}",
+            'type': 'foreks'
+        },
+        {
+            'name': 'Bigpara',
+            'url': f"https://www.bigpara.com/arama/?q={name}",
+            'type': 'bigpara'
+        },
+    ]
+    
+    for source in sources:
+        try:
+            if source['type'] == 'google':
+                response = requests.get(source['url'], timeout=5, headers={'User-Agent': 'Mozilla/5.0'})
+                if response.status_code == 200:
+                    items = re.findall(r'<item>.*?<title>(.*?)</title>.*?<link>(.*?)</link>', response.text, re.DOTALL)
+                    for title, link in items[:max_results]:
+                        text = title.replace('&amp;', '&').replace('&#39;', "'").replace('&quot;', '"').replace('&nbsp;', ' ')
+                        if len(text) > 10 and text.lower() not in ['google haberler', 'google news']:
+                            all_news.append({'title': text, 'url': link, 'source': source['name']})
+            
+            elif source['type'] == 'investing':
+                all_news.append({
+                    'title': f'{name} - Investing.com analizleri ve yorumları',
+                    'url': source['url'],
+                    'source': source['name']
+                })
+            
+            elif source['type'] == 'bloomberght':
+                all_news.append({
+                    'title': f'{name} - Bloomberg HT haberleri',
+                    'url': source['url'],
+                    'source': source['name']
+                })
+            
+            elif source['type'] == 'tradingview':
+                all_news.append({
+                    'title': f'{name} - TradingView teknik analiz ve fikirler',
+                    'url': source['url'],
+                    'source': source['name']
+                })
+            
+            elif source['type'] == 'foreks':
+                all_news.append({
+                    'title': f'{name} - Foreks.com haber ve veriler',
+                    'url': source['url'],
+                    'source': source['name']
+                })
+            
+            elif source['type'] == 'bigpara':
+                all_news.append({
+                    'title': f'{name} - Bigpara haber ve analizler',
+                    'url': source['url'],
+                    'source': source['name']
+                })
+        
+        except:
+            pass
+    
+    return all_news[:max_results + 2]
 
 def get_market_summary(signals, all_data):
     if not signals or not all_data:
@@ -543,9 +613,30 @@ with st.sidebar:
             font-size: 11px;
             color: #c9d1d9;
             line-height: 1.4;
+            cursor: pointer;
+            text-decoration: none;
+            display: block;
+            transition: border-color 0.2s, background 0.2s;
         }
         .news-item:hover {
-            border-color: #30363d;
+            border-color: #58a6ff;
+            background: #161b22;
+            text-decoration: none;
+        }
+        .news-source {
+            display: inline-block;
+            background: #21262d;
+            color: #58a6ff;
+            font-size: 9px;
+            padding: 1px 6px;
+            border-radius: 4px;
+            margin-right: 4px;
+            font-weight: 600;
+        }
+        .news-title {
+            color: #c9d1d9;
+            font-size: 11px;
+            line-height: 1.4;
         }
         .signal-mini {
             display: flex;
@@ -609,7 +700,16 @@ with st.sidebar:
     if cached_news:
         st.markdown(f'**{config.TICKER_NAMES.get(selected_ticker, selected_ticker)} Haberleri**')
         for n in cached_news:
-            st.markdown(f'<div class="news-item">📌 {n}</div>', unsafe_allow_html=True)
+            if isinstance(n, dict):
+                title = n.get('title', '')
+                url = n.get('url', '')
+                source = n.get('source', '')
+                if url:
+                    st.markdown(f'<a href="{url}" target="_blank" class="news-item" style="text-decoration:none;"><span class="news-source">{source}</span><span class="news-title">{title}</span></a>', unsafe_allow_html=True)
+                else:
+                    st.markdown(f'<div class="news-item"><span class="news-source">{source}</span> {title}</div>', unsafe_allow_html=True)
+            else:
+                st.markdown(f'<div class="news-item">📌 {n}</div>', unsafe_allow_html=True)
     
     st.markdown('<div class="sidebar-divider"></div>', unsafe_allow_html=True)
 
