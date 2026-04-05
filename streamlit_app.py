@@ -1038,7 +1038,7 @@ else:
     
     st.divider()
     
-    tab1, tab2, tab3 = st.tabs(["Sinyaller", f"{selected_ticker} Detay", "Tüm Hisseler"])
+    tab1, tab2, tab3 = st.tabs(["Sinyaller", "📊 Detay", "Tüm Hisseler"])
     
     with tab1:
         sub_strong, sub_buy, sub_sell = st.tabs(["💰 Güçlü Alım", "🟢 Alım", "🔴 Satış"])
