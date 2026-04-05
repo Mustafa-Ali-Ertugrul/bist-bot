@@ -868,14 +868,16 @@ if not st.session_state.signals:
 
 else:
     signals = st.session_state.signals
+    all_data = st.session_state.all_data
     
     # Filtreleri uygula
     filtered_signals = []
+    filtered_out = 0
     ti = TechnicalIndicators()
-    all_data = st.session_state.all_data
     
     for s in signals:
         if s.score < st.session_state.min_score_filter:
+            filtered_out += 1
             continue
         
         if s.ticker in all_data:
@@ -886,8 +888,10 @@ else:
                 vol_r = last.get('volume_ratio', 1.0)
                 
                 if rsi < st.session_state.rsi_min_filter or rsi > st.session_state.rsi_max_filter:
+                    filtered_out += 1
                     continue
-                if vol_r < st.session_state.vol_ratio_filter:
+                if vol_r > 0 and vol_r < st.session_state.vol_ratio_filter:
+                    filtered_out += 1
                     continue
             except:
                 pass
@@ -895,6 +899,9 @@ else:
         filtered_signals.append(s)
     
     signals = filtered_signals
+    
+    if filtered_out > 0:
+        st.info(f"🔍 {filtered_out} sinyal filtrelendi, {len(signals)} sinyal gösteriliyor")
     
     total = len(st.session_state.all_data)
     buys = len([s for s in signals if s.score > 0])
