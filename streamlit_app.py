@@ -2,6 +2,10 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime
+import time
+import threading
+import requests
+import re
 
 import config
 from data_fetcher import BISTDataFetcher
@@ -28,6 +32,44 @@ if "data_fetcher" not in st.session_state:
     st.session_state.data_fetcher = BISTDataFetcher()
 if "engine" not in st.session_state:
     st.session_state.engine = StrategyEngine()
+
+if "auto_refresh" not in st.session_state:
+    st.session_state.auto_refresh = False
+if "refresh_interval" not in st.session_state:
+    st.session_state.refresh_interval = 5
+if "min_score_filter" not in st.session_state:
+    st.session_state.min_score_filter = -100
+if "rsi_min_filter" not in st.session_state:
+    st.session_state.rsi_min_filter = 0
+if "rsi_max_filter" not in st.session_state:
+    st.session_state.rsi_max_filter = 100
+if "vol_ratio_filter" not in st.session_state:
+    st.session_state.vol_ratio_filter = 0.0
+if "notify_min_score" not in st.session_state:
+    st.session_state.notify_min_score = 30
+if "notify_telegram" not in st.session_state:
+    st.session_state.notify_telegram = bool(config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID)
+if "last_scan_time" not in st.session_state:
+    st.session_state.last_scan_time = None
+
+if "auto_refresh" not in st.session_state:
+    st.session_state.auto_refresh = False
+if "refresh_interval" not in st.session_state:
+    st.session_state.refresh_interval = 5
+if "min_score_filter" not in st.session_state:
+    st.session_state.min_score_filter = -100
+if "rsi_min_filter" not in st.session_state:
+    st.session_state.rsi_min_filter = 0
+if "rsi_max_filter" not in st.session_state:
+    st.session_state.rsi_max_filter = 100
+if "vol_ratio_filter" not in st.session_state:
+    st.session_state.vol_ratio_filter = 0.0
+if "notify_min_score" not in st.session_state:
+    st.session_state.notify_min_score = 30
+if "notify_telegram" not in st.session_state:
+    st.session_state.notify_telegram = bool(config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID)
+if "last_scan_time" not in st.session_state:
+    st.session_state.last_scan_time = None
 
 if "signals" not in st.session_state or len(st.session_state.get("signals", [])) == 0:
     try:
@@ -386,12 +428,74 @@ def render_signal_card(s, is_sell=False):
 
 st.title("🤖 BIST Trading Bot")
 
+def fetch_stock_news(ticker, max_results=3):
+    name = config.TICKER_NAMES.get(ticker, ticker.replace('.IS', ''))
+    query = f"{name} hisse senedi"
+    url = f"https://news.google.com/rss/search?q={query}&hl=tr&gl=TR&ceid=TR:tr"
+    try:
+        response = requests.get(url, timeout=5, headers={'User-Agent': 'Mozilla/5.0'})
+        if response.status_code == 200:
+            items = re.findall(r'<title>(.*?)</title>', response.text)
+            news = []
+            for item in items[1:max_results+1]:
+                text = item.replace('&amp;', '&').replace('&#39;', "'").replace('&quot;', '"').replace('&nbsp;', ' ')
+                if len(text) > 10 and text.lower() not in ['google haberler', 'google news']:
+                    news.append(text)
+            return news
+    except:
+        pass
+    return []
+
+def get_market_summary(signals, all_data):
+    if not signals or not all_data:
+        return {}
+    
+    ti = TechnicalIndicators()
+    sector_data = {}
+    rsi_values = []
+    vol_ratios = []
+    strong_signals = []
+    
+    for ticker, df in all_data.items():
+        try:
+            df_ind = ti.add_all(df.copy())
+            last = df_ind.iloc[-1]
+            rsi = last.get('rsi', 50)
+            vol_r = last.get('volume_ratio', 1.0)
+            rsi_values.append(rsi)
+            vol_ratios.append(vol_r)
+            
+            if rsi < 30:
+                sector_data['Asırı Satım'] = sector_data.get('Asırı Satım', 0) + 1
+            elif rsi > 70:
+                sector_data['Asırı Alım'] = sector_data.get('Asırı Alım', 0) + 1
+            else:
+                sector_data['Nötr'] = sector_data.get('Nötr', 0) + 1
+            
+            for s in signals:
+                if s.ticker == ticker and abs(s.score) >= 30:
+                    strong_signals.append({'ticker': ticker, 'score': s.score, 'rsi': rsi, 'vol': vol_r})
+        except:
+            pass
+    
+    avg_rsi = sum(rsi_values) / len(rsi_values) if rsi_values else 50
+    avg_vol = sum(vol_ratios) / len(vol_ratios) if vol_ratios else 1.0
+    
+    return {
+        'sector_dist': sector_data,
+        'avg_rsi': avg_rsi,
+        'avg_vol_ratio': avg_vol,
+        'strong_signals': sorted(strong_signals, key=lambda x: abs(x['score']), reverse=True)[:5],
+        'total_analyzed': len(rsi_values)
+    }
+
 with st.sidebar:
     st.markdown("""
     <style>
         section[data-testid="stSidebar"] {
             background: #161b22;
             border-right: 1px solid #30363d;
+            padding: 16px 12px;
         }
         section[data-testid="stSidebar"] .stSelectbox > div > div > select {
             font-size: 13px;
@@ -401,21 +505,88 @@ with st.sidebar:
             padding: 8px;
         }
         .sidebar-section-title {
-            color: #c9d1d9;
-            font-size: 13px;
-            font-weight: 600;
+            color: #58a6ff;
+            font-size: 12px;
+            font-weight: 700;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 8px;
-            margin-top: 16px;
+            letter-spacing: 0.8px;
+            margin-bottom: 10px;
+            margin-top: 18px;
+            padding-bottom: 4px;
+            border-bottom: 1px solid #21262d;
         }
         .sidebar-divider {
             border-top: 1px solid #30363d;
-            margin: 12px 0;
+            margin: 14px 0;
+        }
+        .sidebar-metric {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 0;
+        }
+        .sidebar-metric-label {
+            color: #8b949e;
+            font-size: 12px;
+        }
+        .sidebar-metric-value {
+            color: #c9d1d9;
+            font-size: 13px;
+            font-weight: 600;
+        }
+        .news-item {
+            background: #0d1117;
+            border-radius: 8px;
+            padding: 8px 10px;
+            margin: 6px 0;
+            border: 1px solid #21262d;
+            font-size: 11px;
+            color: #c9d1d9;
+            line-height: 1.4;
+        }
+        .news-item:hover {
+            border-color: #30363d;
+        }
+        .signal-mini {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 5px 8px;
+            margin: 3px 0;
+            background: #0d1117;
+            border-radius: 6px;
+            font-size: 11px;
         }
     </style>
     """, unsafe_allow_html=True)
 
+    # === OTOMATIK YENILEME ===
+    st.markdown('<div class="sidebar-section-title">⚡ Otomatik Yenileme</div>', unsafe_allow_html=True)
+    
+    st.session_state.auto_refresh = st.toggle(
+        "Otomatik Yenile",
+        value=st.session_state.auto_refresh,
+        help="Belirli aralıklarla otomatik tarama yap"
+    )
+    
+    if st.session_state.auto_refresh:
+        interval_options = {1: "1 dk", 3: "3 dk", 5: "5 dk", 10: "10 dk", 15: "15 dk"}
+        st.session_state.refresh_interval = st.select_slider(
+            "Aralık",
+            options=[1, 3, 5, 10, 15],
+            value=st.session_state.refresh_interval,
+            format_func=lambda x: interval_options[x]
+        )
+        
+        if st.session_state.last_scan_time:
+            elapsed = (datetime.now() - st.session_state.last_scan_time).total_seconds()
+            remaining = max(0, st.session_state.refresh_interval * 60 - elapsed)
+            if remaining > 0:
+                st.markdown(f'<div class="sidebar-metric"><span class="sidebar-metric-label">Sonraki:</span><span class="sidebar-metric-value">{remaining:.0f}s</span></div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="sidebar-divider"></div>', unsafe_allow_html=True)
+
+    # === HISSE SECIMI ===
     st.markdown('<div class="sidebar-section-title">📊 Hisse Seç</div>', unsafe_allow_html=True)
     
     ticker_options = [f"{config.TICKER_NAMES.get(x, x)} ({x.replace('.IS', '')})" for x in config.WATCHLIST]
@@ -423,18 +594,91 @@ with st.sidebar:
         "",
         range(len(config.WATCHLIST)),
         format_func=lambda i: ticker_options[i],
-        label_visibility="collapsed"
+        label_visibility="collapsed",
+        key="sidebar_ticker"
     )
     selected_ticker = config.WATCHLIST[selected_idx]
     
+    # Haberleri getir
+    if st.button("📰 Haberleri Getir", use_container_width=True, type="secondary"):
+        with st.spinner("Haberler aranıyor..."):
+            news = fetch_stock_news(selected_ticker)
+            st.session_state[f"news_{selected_ticker}"] = news
+    
+    cached_news = st.session_state.get(f"news_{selected_ticker}", [])
+    if cached_news:
+        st.markdown(f'**{config.TICKER_NAMES.get(selected_ticker, selected_ticker)} Haberleri**')
+        for n in cached_news:
+            st.markdown(f'<div class="news-item">📌 {n}</div>', unsafe_allow_html=True)
+    
+    st.markdown('<div class="sidebar-divider"></div>', unsafe_allow_html=True)
+
+    # === GELISMIS FILTRELER ===
+    st.markdown('<div class="sidebar-section-title">🔍 Gelişmiş Filtreler</div>', unsafe_allow_html=True)
+    
+    st.session_state.min_score_filter = st.slider(
+        "Min Skor",
+        min_value=-100,
+        max_value=100,
+        value=st.session_state.min_score_filter,
+        help="Minimum sinyal skoru"
+    )
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.session_state.rsi_min_filter = st.slider(
+            "RSI Min",
+            min_value=0,
+            max_value=100,
+            value=st.session_state.rsi_min_filter,
+            key="rsi_min"
+        )
+    with col2:
+        st.session_state.rsi_max_filter = st.slider(
+            "RSI Max",
+            min_value=0,
+            max_value=100,
+            value=st.session_state.rsi_max_filter,
+            key="rsi_max"
+        )
+    
+    st.session_state.vol_ratio_filter = st.slider(
+        "Min Hacim Oranı",
+        min_value=0.0,
+        max_value=5.0,
+        value=st.session_state.vol_ratio_filter,
+        step=0.1,
+        help="Minimum hacim oranı (1.0 = normal)"
+    )
+    
+    # Aktif filtreleri göster
+    active_filters = []
+    if st.session_state.min_score_filter > -100:
+        active_filters.append(f"Skor ≥ {st.session_state.min_score_filter}")
+    if st.session_state.rsi_min_filter > 0 or st.session_state.rsi_max_filter < 100:
+        active_filters.append(f"RSI {st.session_state.rsi_min_filter}-{st.session_state.rsi_max_filter}")
+    if st.session_state.vol_ratio_filter > 0:
+        active_filters.append(f"Hacim ≥ {st.session_state.vol_ratio_filter}x")
+    
+    if active_filters:
+        st.markdown(f'<div style="color:#58a6ff;font-size:11px;margin-top:6px;">✅ {len(active_filters)} aktif filtre</div>', unsafe_allow_html=True)
+    else:
+        st.markdown('<div style="color:#8b949e;font-size:11px;margin-top:6px;">Filtre yok</div>', unsafe_allow_html=True)
+    
+    st.markdown('<div class="sidebar-divider"></div>', unsafe_allow_html=True)
+
+    # === PIYASA ÖZETI ===
     signals = st.session_state.get("signals", [])
-    if signals:
-        st.markdown('<div class="sidebar-divider"></div>', unsafe_allow_html=True)
-        st.markdown('<div class="sidebar-section-title">📈 Özet</div>', unsafe_allow_html=True)
+    all_data = st.session_state.get("all_data", {})
+    
+    if signals and all_data:
+        st.markdown('<div class="sidebar-section-title">📈 Piyasa Özeti</div>', unsafe_allow_html=True)
+        
+        market_summary = get_market_summary(signals, all_data)
         
         buys = len([s for s in signals if s.score > 0])
         sells = len([s for s in signals if s.score < 0])
-        total = len(st.session_state.get("all_data", {}))
+        total = len(all_data)
         
         col1, col2, col3 = st.columns(3)
         with col1:
@@ -443,7 +687,59 @@ with st.sidebar:
             st.metric("Sat", sells, delta=f"{sells/total*100:.0f}%" if total else "")
         with col3:
             st.metric("Toplam", total)
+        
+        if market_summary:
+            st.markdown(f'<div class="sidebar-metric"><span class="sidebar-metric-label">Ort. RSI:</span><span class="sidebar-metric-value">{market_summary["avg_rsi"]:.0f}</span></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="sidebar-metric"><span class="sidebar-metric-label">Ort. Hacim:</span><span class="sidebar-metric-value">{market_summary["avg_vol_ratio"]:.1f}x</span></div>', unsafe_allow_html=True)
+            
+            if market_summary.get('sector_dist'):
+                st.markdown('<div class="sidebar-divider"></div>', unsafe_allow_html=True)
+                st.markdown('<div style="color:#8b949e;font-size:11px;margin-bottom:6px;">RSI Dağılımı</div>', unsafe_allow_html=True)
+                for zone, count in market_summary['sector_dist'].items():
+                    color = "#00CC96" if zone == "Asırı Satım" else "#EF553B" if zone == "Asırı Alım" else "#8b949e"
+                    pct = count / market_summary['total_analyzed'] * 100 if market_summary['total_analyzed'] > 0 else 0
+                    st.markdown(f'<div class="sidebar-metric"><span class="sidebar-metric-label" style="color:{color}">{zone}:</span><span class="sidebar-metric-value">{count} ({pct:.0f}%)</span></div>', unsafe_allow_html=True)
+            
+            if market_summary.get('strong_signals'):
+                st.markdown('<div class="sidebar-divider"></div>', unsafe_allow_html=True)
+                st.markdown('<div style="color:#8b949e;font-size:11px;margin-bottom:6px;">En Güçlü Sinyaller</div>', unsafe_allow_html=True)
+                for sig in market_summary['strong_signals'][:5]:
+                    name = config.TICKER_NAMES.get(sig['ticker'], sig['ticker'].replace('.IS', ''))
+                    sig_color = "#00CC96" if sig['score'] > 0 else "#EF553B"
+                    st.markdown(f'<div class="signal-mini"><span style="color:#c9d1d9">{name}</span><span style="color:{sig_color};font-weight:700">{sig["score"]:+.0f}</span></div>', unsafe_allow_html=True)
+    
+    st.markdown('<div class="sidebar-divider"></div>', unsafe_allow_html=True)
 
+    # === BILDIRIM AYARLARI ===
+    st.markdown('<div class="sidebar-section-title">🔔 Bildirim Ayarları</div>', unsafe_allow_html=True)
+    
+    st.session_state.notify_telegram = st.toggle(
+        "Telegram Bildirimi",
+        value=st.session_state.notify_telegram,
+        disabled=not (config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID),
+        help="Telegram üzerinden bildirim gönder"
+    )
+    
+    if not config.TELEGRAM_BOT_TOKEN or not config.TELEGRAM_CHAT_ID:
+        st.caption("⚠️ .env dosyasına Telegram ayarlarını ekleyin")
+    
+    st.session_state.notify_min_score = st.slider(
+        "Min Skor (Bildirim)",
+        min_value=0,
+        max_value=100,
+        value=st.session_state.notify_min_score,
+        help="Bu skorun üzerindeki sinyaller için bildirim gönder"
+    )
+    
+    st.markdown(f'<div class="sidebar-metric"><span class="sidebar-metric-label">Bildirim eşiği:</span><span class="sidebar-metric-value">≥ {st.session_state.notify_min_score}</span></div>', unsafe_allow_html=True)
+
+# Otomatik yenileme kontrolü
+if st.session_state.auto_refresh and st.session_state.last_scan_time:
+    elapsed = (datetime.now() - st.session_state.last_scan_time).total_seconds()
+    if elapsed >= st.session_state.refresh_interval * 60:
+        st.session_state.signals, st.session_state.all_data = run_scan()
+        st.session_state.last_scan_time = datetime.now()
+        st.rerun()
 
 header_col1, header_col2 = st.columns([4, 1])
 with header_col1:
@@ -451,10 +747,12 @@ with header_col1:
 with header_col2:
     if "signals" not in st.session_state or len(st.session_state.get("signals", [])) == 0:
         st.session_state.signals, st.session_state.all_data = run_scan()
+        st.session_state.last_scan_time = datetime.now()
         st.rerun()
     
     if st.button("🔄 Yenile", type="primary", use_container_width=True):
         st.session_state.signals, st.session_state.all_data = run_scan()
+        st.session_state.last_scan_time = datetime.now()
         st.rerun()
 
 if not st.session_state.signals:
@@ -470,6 +768,33 @@ if not st.session_state.signals:
 
 else:
     signals = st.session_state.signals
+    
+    # Filtreleri uygula
+    filtered_signals = []
+    ti = TechnicalIndicators()
+    all_data = st.session_state.all_data
+    
+    for s in signals:
+        if s.score < st.session_state.min_score_filter:
+            continue
+        
+        if s.ticker in all_data:
+            try:
+                df_ind = ti.add_all(all_data[s.ticker].copy())
+                last = df_ind.iloc[-1]
+                rsi = last.get('rsi', 50)
+                vol_r = last.get('volume_ratio', 1.0)
+                
+                if rsi < st.session_state.rsi_min_filter or rsi > st.session_state.rsi_max_filter:
+                    continue
+                if vol_r < st.session_state.vol_ratio_filter:
+                    continue
+            except:
+                pass
+        
+        filtered_signals.append(s)
+    
+    signals = filtered_signals
     
     total = len(st.session_state.all_data)
     buys = len([s for s in signals if s.score > 0])
