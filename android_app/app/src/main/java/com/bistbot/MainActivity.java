@@ -82,6 +82,17 @@ public class MainActivity extends AppCompatActivity {
             }
 
             @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                String url = request.getUrl().toString();
+                if (url.startsWith("http://") || url.startsWith("https://")) {
+                    Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                    startActivity(intent);
+                    return true;
+                }
+                return false;
+            }
+
+            @Override
             public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
                 if (request.isForMainFrame()) {
                     Toast.makeText(MainActivity.this, R.string.connection_error, Toast.LENGTH_LONG).show();

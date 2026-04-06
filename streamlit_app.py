@@ -115,8 +115,8 @@ st.markdown("""
     }
     
     div[data-testid="stMetric"]:hover {
-        border-color: rgba(99, 102, 241, 0.3);
-        box-shadow: 0 4px 20px rgba(99, 102, 241, 0.1);
+        border-color: rgba(30, 64, 175, 0.3);
+        box-shadow: 0 4px 20px rgba(30, 64, 175, 0.1);
     }
     
     /* Modern Buttons */
@@ -129,21 +129,21 @@ st.markdown("""
         letter-spacing: 0.3px;
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         border: none;
-        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+        background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%);
         color: white;
-        box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
+        box-shadow: 0 4px 15px rgba(30, 64, 175, 0.3);
     }
     
     .stButton > button:hover {
         transform: translateY(-2px);
-        box-shadow: 0 6px 25px rgba(99, 102, 241, 0.45);
+        box-shadow: 0 6px 25px rgba(30, 64, 175, 0.45);
     }
     
     /* Typography */
     h1 {
         font-size: 32px !important;
         font-weight: 800 !important;
-        background: linear-gradient(135deg, #6366f1, #8b5cf6, #a78bfa);
+        background: linear-gradient(135deg, #1e3a8a, #1e40af, #2563eb);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         letter-spacing: -0.5px;
@@ -171,7 +171,7 @@ st.markdown("""
     }
     
     .streamlit-expanderHeader:hover {
-        border-color: rgba(99, 102, 241, 0.3);
+        border-color: rgba(30, 64, 175, 0.3);
     }
     
     /* Tabs Modern */
@@ -188,7 +188,7 @@ st.markdown("""
     }
     
     .stTabs [data-baseweb="tab"][aria-selected="true"] {
-        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        background: linear-gradient(135deg, #1e3a8a, #1e40af);
         border-color: transparent;
     }
     
@@ -201,7 +201,7 @@ st.markdown("""
     
     /* Slider Modern */
     .stSlider > div > div > div > div {
-        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        background: linear-gradient(135deg, #1e3a8a, #1e40af);
     }
     
     /* Divider */
@@ -653,7 +653,7 @@ with st.sidebar:
             color: #f1f5f9;
         }
         .sidebar-section-title {
-            color: #a78bfa;
+            color: #60a5fa;
             font-size: 11px;
             font-weight: 700;
             text-transform: uppercase;
@@ -701,14 +701,14 @@ with st.sidebar:
             transition: all 0.2s ease;
         }
         .news-item:hover {
-            border-color: rgba(99, 102, 241, 0.4);
-            background: rgba(99, 102, 241, 0.05);
+            border-color: rgba(30, 64, 175, 0.4);
+            background: rgba(30, 64, 175, 0.05);
             text-decoration: none;
         }
         .news-source {
             display: inline-block;
-            background: rgba(99, 102, 241, 0.15);
-            color: #a78bfa;
+            background: rgba(30, 64, 175, 0.15);
+            color: #60a5fa;
             font-size: 10px;
             padding: 2px 8px;
             border-radius: 6px;
@@ -734,7 +734,7 @@ with st.sidebar:
             transition: all 0.2s ease;
         }
         .signal-mini:hover {
-            border-color: rgba(99, 102, 241, 0.3);
+            border-color: rgba(30, 64, 175, 0.3);
         }
     </style>
     """, unsafe_allow_html=True)
@@ -1035,8 +1035,8 @@ else:
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }}
         .signal-card:hover {{
-            border-color: rgba(99, 102, 241, 0.3);
-            box-shadow: 0 8px 32px rgba(99, 102, 241, 0.15);
+            border-color: rgba(30, 64, 175, 0.3);
+            box-shadow: 0 8px 32px rgba(30, 64, 175, 0.15);
             transform: translateY(-2px);
         }}
         .gauge-container {{

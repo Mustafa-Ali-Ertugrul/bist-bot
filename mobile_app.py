@@ -32,21 +32,21 @@ st.markdown("""
         border-radius: 12px;
         font-weight: 600;
         border: none;
-        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+        background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%);
         color: white;
-        box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
+        box-shadow: 0 4px 15px rgba(30, 64, 175, 0.3);
         transition: all 0.3s ease;
     }
     .stButton > button:hover {
         transform: translateY(-2px);
-        box-shadow: 0 6px 25px rgba(99, 102, 241, 0.45);
+        box-shadow: 0 6px 25px rgba(30, 64, 175, 0.45);
     }
     
     /* Typography */
     h1 { 
         font-size: 28px !important;
         font-weight: 800 !important;
-        background: linear-gradient(135deg, #6366f1, #8b5cf6, #a78bfa);
+        background: linear-gradient(135deg, #1e3a8a, #1e40af, #2563eb);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
     }
