@@ -19,25 +19,93 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    .stApp { background: #0d1117; }
+    .stApp { 
+        background: linear-gradient(135deg, #0a0e1a 0%, #111827 50%, #0f172a 100%);
+    }
     [data-testid="stSidebar"] { display: none; }
+    
+    /* Modern Buttons */
     .stButton > button {
         width: 100%;
-        padding: 15px;
+        padding: 16px;
         font-size: 16px;
+        border-radius: 12px;
+        font-weight: 600;
+        border: none;
+        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+        color: white;
+        box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
+        transition: all 0.3s ease;
+    }
+    .stButton > button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 25px rgba(99, 102, 241, 0.45);
+    }
+    
+    /* Typography */
+    h1 { 
+        font-size: 28px !important;
+        font-weight: 800 !important;
+        background: linear-gradient(135deg, #6366f1, #8b5cf6, #a78bfa);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+    h2 { 
+        font-size: 20px !important;
+        font-weight: 700 !important;
+        color: #f1f5f9;
+    }
+    h3 { 
+        font-size: 16px !important;
+        font-weight: 600 !important;
+        color: #e2e8f0;
+    }
+    
+    /* Glassmorphism Metrics */
+    div[data-testid="stMetric"] {
+        background: rgba(255, 255, 255, 0.03);
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 14px;
+        padding: 14px;
+    }
+    
+    /* Signal Cards */
+    .signal-buy { 
+        background: rgba(16, 185, 129, 0.08);
+        border: 1px solid rgba(16, 185, 129, 0.2);
+        padding: 14px;
+        border-radius: 12px;
+        margin: 8px 0;
+    }
+    .signal-sell { 
+        background: rgba(239, 68, 68, 0.08);
+        border: 1px solid rgba(239, 68, 68, 0.2);
+        padding: 14px;
+        border-radius: 12px;
+        margin: 8px 0;
+    }
+    .signal-neutral { 
+        background: rgba(148, 163, 184, 0.06);
+        border: 1px solid rgba(148, 163, 184, 0.15);
+        padding: 14px;
+        border-radius: 12px;
+        margin: 8px 0;
+    }
+    
+    /* Expander Modern */
+    .streamlit-expanderHeader {
+        background: rgba(255, 255, 255, 0.02);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 12px;
+    }
+    
+    /* Selectbox */
+    .stSelectbox > div > div {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 10px;
     }
-    h1 { font-size: 24px !important; }
-    h2 { font-size: 18px !important; }
-    h3 { font-size: 16px !important; }
-    div[data-testid="stMetric"] {
-        background: #161b22;
-        padding: 10px;
-        border-radius: 8px;
-    }
-    .signal-buy { background: #1a3d1a; padding: 10px; border-radius: 8px; margin: 5px 0; }
-    .signal-sell { background: #3d1a1a; padding: 10px; border-radius: 8px; margin: 5px 0; }
-    .signal-neutral { background: #1a1a1a; padding: 10px; border-radius: 8px; margin: 5px 0; }
 </style>
 """, unsafe_allow_html=True)
 

@@ -92,57 +92,134 @@ if "signals" not in st.session_state or len(st.session_state.get("signals", []))
 
 st.markdown("""
 <style>
+    /* Global Modern Theme */
     .stApp {
-        background: #0d1117;
+        background: linear-gradient(135deg, #0a0e1a 0%, #111827 50%, #0f172a 100%);
     }
-    /* Mobil için büyük butonlar */
+    
+    /* Sidebar Modern */
+    section[data-testid="stSidebar"] {
+        background: rgba(17, 24, 39, 0.95) !important;
+        backdrop-filter: blur(20px);
+        border-right: 1px solid rgba(255, 255, 255, 0.06) !important;
+    }
+    
+    /* Glassmorphism Cards */
+    div[data-testid="stMetric"] {
+        background: rgba(255, 255, 255, 0.03);
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 16px;
+        padding: 20px;
+        transition: all 0.3s ease;
+    }
+    
+    div[data-testid="stMetric"]:hover {
+        border-color: rgba(99, 102, 241, 0.3);
+        box-shadow: 0 4px 20px rgba(99, 102, 241, 0.1);
+    }
+    
+    /* Modern Buttons */
     .stButton > button {
         width: 100%;
-        padding: 20px;
-        font-size: 18px;
-        border-radius: 15px;
-    }
-    /* Mobil metin boyutları */
-    .stMarkdown {
+        padding: 16px;
         font-size: 16px;
+        border-radius: 12px;
+        font-weight: 600;
+        letter-spacing: 0.3px;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        border: none;
+        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+        color: white;
+        box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
     }
+    
+    .stButton > button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 25px rgba(99, 102, 241, 0.45);
+    }
+    
+    /* Typography */
     h1 {
-        font-size: 28px !important;
+        font-size: 32px !important;
+        font-weight: 800 !important;
+        background: linear-gradient(135deg, #6366f1, #8b5cf6, #a78bfa);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        letter-spacing: -0.5px;
     }
+    
     h2 {
-        font-size: 22px !important;
+        font-size: 24px !important;
+        font-weight: 700 !important;
+        color: #f1f5f9;
     }
+    
     h3 {
         font-size: 18px !important;
+        font-weight: 600 !important;
+        color: #e2e8f0;
     }
-    /* Metric kartları mobilde büyük */
-    div[data-testid="stMetric"] {
-        background: #161b22;
-        padding: 15px;
+    
+    /* Expander Modern */
+    .streamlit-expanderHeader {
+        background: rgba(255, 255, 255, 0.02);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 12px;
+        padding: 16px;
+        transition: all 0.2s ease;
+    }
+    
+    .streamlit-expanderHeader:hover {
+        border-color: rgba(99, 102, 241, 0.3);
+    }
+    
+    /* Tabs Modern */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 10px;
+        padding: 10px 20px;
+        transition: all 0.2s ease;
+    }
+    
+    .stTabs [data-baseweb="tab"][aria-selected="true"] {
+        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        border-color: transparent;
+    }
+    
+    /* Selectbox Modern */
+    .stSelectbox > div > div {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 10px;
     }
-    div[data-testid="stMetricLabel"] {
-        font-size: 14px;
+    
+    /* Slider Modern */
+    .stSlider > div > div > div > div {
+        background: linear-gradient(135deg, #6366f1, #8b5cf6);
     }
-    div[data-testid="stMetricValue"] {
-        font-size: 20px;
+    
+    /* Divider */
+    hr {
+        border-color: rgba(255, 255, 255, 0.06);
     }
-    /* Expander mobilde tam genişlik */
-    .streamlit-expanderHeader {
-        font-size: 16px;
-        padding: 15px;
-    }
-    /* Tablo mobilde kaydırılabilir */
-    .dataframe {
-        font-size: 12px;
-    }
-    /* Sidebar mobilde açık */
-    section[data-testid="stSidebar"] {
-        width: 100% !important;
-    }
-    /* Metrik değerleri */
+    
+    /* Text */
     p, li {
         font-size: 15px;
+        color: #cbd5e1;
+    }
+    
+    /* Dataframe Modern */
+    .dataframe {
+        background: rgba(255, 255, 255, 0.02);
+        border-radius: 12px;
+        overflow: hidden;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -563,90 +640,101 @@ with st.sidebar:
     st.markdown("""
     <style>
         section[data-testid="stSidebar"] {
-            background: #161b22;
-            border-right: 1px solid #30363d;
+            background: rgba(17, 24, 39, 0.95);
+            border-right: 1px solid rgba(255, 255, 255, 0.06);
             padding: 16px 12px;
         }
         section[data-testid="stSidebar"] .stSelectbox > div > div > select {
             font-size: 13px;
-            background: #0d1117;
-            border: 1px solid #30363d;
-            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 10px;
             padding: 8px;
+            color: #f1f5f9;
         }
         .sidebar-section-title {
-            color: #58a6ff;
-            font-size: 12px;
+            color: #a78bfa;
+            font-size: 11px;
             font-weight: 700;
             text-transform: uppercase;
-            letter-spacing: 0.8px;
-            margin-bottom: 10px;
-            margin-top: 18px;
-            padding-bottom: 4px;
-            border-bottom: 1px solid #21262d;
+            letter-spacing: 1.2px;
+            margin-bottom: 12px;
+            margin-top: 20px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
         }
         .sidebar-divider {
-            border-top: 1px solid #30363d;
-            margin: 14px 0;
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
+            margin: 16px 0;
         }
         .sidebar-metric {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 6px 0;
+            padding: 8px 12px;
+            margin: 4px 0;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 8px;
         }
         .sidebar-metric-label {
-            color: #8b949e;
+            color: #64748b;
             font-size: 12px;
+            font-weight: 500;
         }
         .sidebar-metric-value {
-            color: #c9d1d9;
+            color: #e2e8f0;
             font-size: 13px;
             font-weight: 600;
         }
         .news-item {
-            background: #0d1117;
-            border-radius: 8px;
-            padding: 8px 10px;
-            margin: 6px 0;
-            border: 1px solid #21262d;
-            font-size: 11px;
-            color: #c9d1d9;
-            line-height: 1.4;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 10px;
+            padding: 10px 12px;
+            margin: 8px 0;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            font-size: 12px;
+            color: #cbd5e1;
+            line-height: 1.5;
             cursor: pointer;
             text-decoration: none;
             display: block;
-            transition: border-color 0.2s, background 0.2s;
+            transition: all 0.2s ease;
         }
         .news-item:hover {
-            border-color: #58a6ff;
-            background: #161b22;
+            border-color: rgba(99, 102, 241, 0.4);
+            background: rgba(99, 102, 241, 0.05);
             text-decoration: none;
         }
         .news-source {
             display: inline-block;
-            background: #21262d;
-            color: #58a6ff;
-            font-size: 9px;
-            padding: 1px 6px;
-            border-radius: 4px;
-            margin-right: 4px;
+            background: rgba(99, 102, 241, 0.15);
+            color: #a78bfa;
+            font-size: 10px;
+            padding: 2px 8px;
+            border-radius: 6px;
+            margin-right: 6px;
             font-weight: 600;
+            letter-spacing: 0.3px;
         }
         .news-title {
-            color: #c9d1d9;
-            font-size: 11px;
-            line-height: 1.4;
+            color: #cbd5e1;
+            font-size: 12px;
+            line-height: 1.5;
         }
         .signal-mini {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 5px 8px;
-            margin: 3px 0;
-            background: #0d1117;
-            border-radius: 6px;
-            font-size: 11px;
+            padding: 8px 12px;
+            margin: 4px 0;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 8px;
+            font-size: 12px;
+            transition: all 0.2s ease;
+        }
+        .signal-mini:hover {
+            border-color: rgba(99, 102, 241, 0.3);
         }
     </style>
     """, unsafe_allow_html=True)
@@ -937,27 +1025,34 @@ else:
     st.markdown(f"""
     <style>
         .signal-card {{
-            background: #161b22;
-            border-radius: 16px;
-            padding: 20px;
-            margin: 8px 0;
-            border: 1px solid #30363d;
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 20px;
+            padding: 28px;
+            margin: 12px 0;
             text-align: center;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }}
+        .signal-card:hover {{
+            border-color: rgba(99, 102, 241, 0.3);
+            box-shadow: 0 8px 32px rgba(99, 102, 241, 0.15);
+            transform: translateY(-2px);
         }}
         .gauge-container {{
             position: relative;
             width: 180px;
             height: 180px;
-            margin: 0 auto 12px;
+            margin: 0 auto 16px;
         }}
         .gauge-ring {{
             width: 100%;
             height: 100%;
             border-radius: 50%;
             background: conic-gradient(
-                #00CC96 0deg {buy_pct * 3.6}deg,
-                #EF553B {buy_pct * 3.6}deg {buy_pct * 3.6 + sell_pct * 3.6}deg,
-                #ffffff {buy_pct * 3.6 + sell_pct * 3.6}deg 360deg
+                #10b981 0deg {buy_pct * 3.6}deg,
+                #ef4444 {buy_pct * 3.6}deg {buy_pct * 3.6 + sell_pct * 3.6}deg,
+                #94a3b8 {buy_pct * 3.6 + sell_pct * 3.6}deg 360deg
             );
             mask: radial-gradient(transparent 55%, black 56%);
             -webkit-mask: radial-gradient(transparent 55%, black 56%);
@@ -971,40 +1066,46 @@ else:
         }}
         .gauge-sentiment {{
             font-size: 14px;
-            font-weight: bold;
+            font-weight: 700;
             color: {sentiment_color};
-            letter-spacing: 1px;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
         }}
         .gauge-score {{
-            font-size: 28px;
-            font-weight: bold;
-            color: #fff;
-            margin-top: 2px;
+            font-size: 32px;
+            font-weight: 800;
+            color: #f1f5f9;
+            margin-top: 4px;
+            letter-spacing: -1px;
         }}
         .signal-stats {{
             display: flex;
             justify-content: space-around;
-            margin-top: 12px;
+            margin-top: 16px;
         }}
         .stat-item {{
             text-align: center;
         }}
         .stat-value {{
-            font-size: 22px;
-            font-weight: bold;
+            font-size: 24px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
         }}
         .stat-label {{
             font-size: 12px;
-            color: #8b949e;
-            margin-top: 2px;
+            color: #64748b;
+            margin-top: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 500;
         }}
         .scan-time {{
             text-align: center;
-            color: #8b949e;
+            color: #64748b;
             font-size: 13px;
-            margin-top: 12px;
-            padding-top: 10px;
-            border-top: 1px solid #21262d;
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
         }}
     </style>
     """, unsafe_allow_html=True)
