@@ -34,6 +34,22 @@ class SignalDatabase:
                     profit_pct REAL
                 )
             """)
+            
+            conn.execute(f"""
+                CREATE TABLE IF NOT EXISTS {config.PAPER_TRADES_TABLE} (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp TEXT NOT NULL,
+                    ticker TEXT NOT NULL,
+                    signal_type TEXT NOT NULL,
+                    entry_price REAL NOT NULL,
+                    entry_date TEXT NOT NULL,
+                    exit_price REAL,
+                    exit_date TEXT,
+                    outcome TEXT DEFAULT 'OPEN',
+                    expected_profit_pct REAL,
+                    actual_profit_pct REAL
+                )
+            """)
 
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS scan_log (
@@ -189,4 +205,65 @@ class SignalDatabase:
                 profitable / completed * 100, 1
             ) if completed > 0 else 0,
             "avg_profit_pct": round(avg_profit, 2) if avg_profit else 0,
+        }
+
+    def add_paper_trade(
+        self,
+        ticker: str,
+        signal_type: str,
+        entry_price: float,
+        entry_date: str,
+        expected_profit_pct: float = None,
+    ):
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                f"""INSERT INTO {config.PAPER_TRADES_TABLE}
+                   (timestamp, ticker, signal_type, entry_price, entry_date, expected_profit_pct)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (
+                    datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    ticker,
+                    signal_type,
+                    entry_price,
+                    entry_date,
+                    expected_profit_pct,
+                ),
+            )
+            conn.commit()
+
+    def close_paper_trade(
+        self,
+        ticker: str,
+        exit_price: float,
+        exit_date: str,
+        actual_profit_pct: float = None,
+    ):
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                f"""UPDATE {config.PAPER_TRADES_TABLE}
+                   SET exit_price = ?, exit_date = ?, outcome = 'CLOSED', actual_profit_pct = ?
+                   WHERE ticker = ? AND outcome = 'OPEN'
+                   ORDER BY id DESC LIMIT 1""",
+                (exit_price, exit_date, actual_profit_pct, ticker),
+            )
+            conn.commit()
+
+    def get_paper_performance(self) -> dict:
+        with sqlite3.connect(self.db_path) as conn:
+            trades = conn.execute(
+                f"""SELECT * FROM {config.PAPER_TRADES_TABLE} WHERE outcome = 'CLOSED'"""
+            ).fetchall()
+            
+            if not trades:
+                return {}
+            
+            profitable = sum(1 for t in trades if t[10] and t[10] > 0)
+            total = len(trades)
+            avg_profit = sum(t[10] for t in trades if t[10]) / total if total > 0 else 0
+        
+        return {
+            "total_trades": total,
+            "profitable": profitable,
+            "win_rate": round(profitable / total * 100, 1) if total > 0 else 0,
+            "avg_profit_pct": round(avg_profit, 2),
         }

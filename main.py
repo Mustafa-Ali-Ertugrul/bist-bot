@@ -105,6 +105,15 @@ class BISTBot:
 
         for s in actionable:
             self.db.save_signal(s)
+            
+            if getattr(config, "PAPER_MODE", False):
+                self.db.add_paper_trade(
+                    ticker=s.ticker,
+                    signal_type=s.signal_type.value,
+                    entry_price=s.price,
+                    entry_date=s.timestamp.strftime("%Y-%m-%d"),
+                    expected_profit_pct=None,
+                )
 
         self.db.save_scan_log(
             len(all_data), len(actionable),

@@ -5,6 +5,11 @@ from datetime import datetime
 from typing import Optional
 import logging
 
+try:
+    import yfinance as yf
+except ImportError:
+    yf = None
+
 import config
 from indicators import TechnicalIndicators
 from strategy import StrategyEngine, SignalType
@@ -330,3 +335,78 @@ if __name__ == "__main__":
                             f"{t.profit_pct:+.1f}% | "
                             f"{t.holding_days}g"
                         )
+
+
+def calculate_metrics(trades, benchmark_return: float = None) -> dict:
+    if not trades:
+        return {}
+    
+    winning = [t for t in trades if t.profit_pct > 0]
+    losing = [t for t in trades if t.profit_pct <= 0]
+    
+    avg_win = np.mean([t.profit_pct for t in winning]) if winning else 0
+    avg_loss = abs(np.mean([t.profit_pct for t in losing])) if losing else 0
+    
+    avg_r = avg_win / avg_loss if avg_loss > 0 else 0
+    
+    return {
+        "win_rate": len(winning) / len(trades) * 100 if trades else 0,
+        "avg_r": avg_r,
+        "avg_win": avg_win,
+        "avg_loss": avg_loss,
+        "total_trades": len(trades),
+        "benchmark_return": benchmark_return or 0,
+    }
+
+
+def generate_report(result: BacktestResult, benchmark_return: float = None) -> str:
+    metrics = calculate_metrics(result.trades, benchmark_return)
+    
+    bot_return = result.total_return_pct
+    alpha = bot_return - (benchmark_return or 0)
+    
+    emoji = "📈" if alpha >= 0 else "📉"
+    
+    report = f"""
+╔══════════════════════════════════════════╗
+║         📊 BACKTEST RAPORU              ║
+╠══════════════════════════════════════════╣
+  Hisse          : {result.ticker}
+  Periyot       : {result.period}
+  ─────────────────────────────────────
+  Başlangıç      : ₺{result.initial_capital:,.0f}
+  Bitiş          : ₺{result.final_capital:,.0f}
+  ─────────────────────────────────────
+  📊 Bot Getiri  : %{bot_return:+.2f}
+  📊 Benchmark   : %{benchmark_return:+.2f}
+  {emoji} Alfa       : %{alpha:+.2f}
+  ─────────────────────────────────────
+  Win Rate      : %{result.win_rate:.1f}
+  Ort. R        : {metrics['avg_r']:.2f}
+  Ort. Kazanç    : %{metrics['avg_win']:.2f}
+  Ort. Kayıp    : %{metrics['avg_loss']:.2f}
+  Max Drawdown  : %{result.max_drawdown_pct:.2f}
+  Sharpe       : {result.sharpe_ratio:.2f}
+╚══════════════════════════════════════════╝
+"""
+    return report
+
+
+def compare_benchmark(ticker: str, df: pd.DataFrame) -> float:
+    try:
+        if yf is None:
+            return 0
+        bench = yf.download(
+            getattr(config, "BENCHMARK_TICKER", "^XU100"),
+            start=df.index[0],
+            end=df.index[-1],
+            progress=False
+        )
+        if bench is not None and len(bench) > 0:
+            bench_cols = [c[0] for c in bench.columns]
+            close_col = "Close" if "Close" in bench_cols else bench_cols[0]
+            bench_return = (bench[close_col].iloc[-1] / bench[close_col].iloc[0] - 1) * 100
+            return bench_return
+    except Exception as e:
+        logger.warning(f"Benchmark veri hatası: {e}")
+    return 0
