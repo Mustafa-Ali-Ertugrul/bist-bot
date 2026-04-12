@@ -38,15 +38,15 @@ class SignalDatabase:
             conn.execute(f"""
                 CREATE TABLE IF NOT EXISTS {config.PAPER_TRADES_TABLE} (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    timestamp TEXT NOT NULL,
                     ticker TEXT NOT NULL,
                     signal_type TEXT NOT NULL,
-                    entry_price REAL NOT NULL,
-                    entry_date TEXT NOT NULL,
-                    exit_price REAL,
-                    exit_date TEXT,
+                    signal_price REAL NOT NULL,
+                    signal_time TEXT NOT NULL,
+                    close_price REAL,
+                    score INTEGER,
+                    regime TEXT,
+                    filled_at REAL,
                     outcome TEXT DEFAULT 'OPEN',
-                    expected_profit_pct REAL,
                     actual_profit_pct REAL
                 )
             """)
@@ -211,25 +211,51 @@ class SignalDatabase:
         self,
         ticker: str,
         signal_type: str,
-        entry_price: float,
-        entry_date: str,
-        expected_profit_pct: float = None,
+        signal_price: float,
+        signal_time: str = None,
+        score: int = 0,
+        regime: str = "UNKNOWN",
     ):
+        signal_time = signal_time or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
         with sqlite3.connect(self.db_path) as conn:
             conn.execute(
                 f"""INSERT INTO {config.PAPER_TRADES_TABLE}
-                   (timestamp, ticker, signal_type, entry_price, entry_date, expected_profit_pct)
+                   (ticker, signal_type, signal_price, signal_time, score, regime)
                    VALUES (?, ?, ?, ?, ?, ?)""",
                 (
-                    datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     ticker,
                     signal_type,
-                    entry_price,
-                    entry_date,
-                    expected_profit_pct,
+                    signal_price,
+                    signal_time,
+                    score,
+                    regime,
                 ),
             )
             conn.commit()
+
+    def update_paper_close(self, ticker: str, close_price: float):
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                f"""UPDATE {config.PAPER_TRADES_TABLE}
+                   SET close_price = ?, outcome = 'CLOSED',
+                   actual_profit_pct = (signal_price - close_price) / signal_price * 100
+                   WHERE ticker = ? AND outcome = 'OPEN'
+                   ORDER BY id DESC LIMIT 1""",
+                (close_price, ticker),
+            )
+            conn.commit()
+
+    def update_all_paper_close(self, prices: dict):
+        for ticker, close_price in prices.items():
+            self.update_paper_close(ticker, close_price)
+
+    def get_open_paper_trades(self) -> list:
+        with sqlite3.connect(self.db_path) as conn:
+            return conn.execute(
+                f"""SELECT * FROM {config.PAPER_TRADES_TABLE} 
+                   WHERE outcome = 'OPEN'"""
+            ).fetchall()
 
     def close_paper_trade(
         self,

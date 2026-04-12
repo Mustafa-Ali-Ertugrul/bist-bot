@@ -107,12 +107,14 @@ class BISTBot:
             self.db.save_signal(s)
             
             if getattr(config, "PAPER_MODE", False):
+                regime = "BULL"
                 self.db.add_paper_trade(
                     ticker=s.ticker,
                     signal_type=s.signal_type.value,
-                    entry_price=s.price,
-                    entry_date=s.timestamp.strftime("%Y-%m-%d"),
-                    expected_profit_pct=None,
+                    signal_price=s.price,
+                    signal_time=s.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+                    score=int(s.score),
+                    regime=regime,
                 )
 
         self.db.save_scan_log(
@@ -131,7 +133,32 @@ class BISTBot:
                 self.notifier.send_signal(s)
                 sleep(1)
 
+        if getattr(config, "PAPER_MODE", False):
+            self.update_paper_trades()
+
         return signals
+
+    def update_paper_trades(self):
+        if not getattr(config, "PAPER_MODE", False):
+            return
+        
+        from data_fetcher import BISTDataFetcher
+        fetcher = BISTDataFetcher()
+        
+        open_trades = self.db.get_open_paper_trades()
+        if not open_trades:
+            return
+        
+        prices = {}
+        for trade in open_trades:
+            ticker = trade[1]
+            df = fetcher.fetch_single(ticker, period="1d")
+            if df is not None:
+                prices[ticker] = float(df["close"].iloc[-1])
+        
+        if prices:
+            self.db.update_all_paper_close(prices)
+            logger.info(f"  📊 Paper trade güncellendi: {len(prices)} hisse")
 
     def run_loop(self):
         self.running = True
