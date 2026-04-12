@@ -7,4 +7,3 @@ plotly>=5.18.0
 python-dotenv>=1.0.0
 flask>=3.0.0
 scikit-learn>=1.4.0
-tensorflow>=2.15.0
