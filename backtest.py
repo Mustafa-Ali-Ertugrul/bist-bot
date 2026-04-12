@@ -82,6 +82,7 @@ class Backtester:
         self.initial_capital = initial_capital
         self.commission_pct = commission_pct or (
             getattr(config, "COMMISSION_BUY", 0.0002) + 
+            getattr(config, "COMMISSION_SELL", 0.0002) +
             getattr(config, "BSMV", 0.0005)
         )
         self.slippage_pct = slippage_pct or getattr(config, "SLIPPAGE", 0.001)

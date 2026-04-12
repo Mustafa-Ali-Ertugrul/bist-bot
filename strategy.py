@@ -19,20 +19,31 @@ class MarketRegime(Enum):
     UNKNOWN = "UNKNOWN"
 
 
-def detect_regime(df: pd.DataFrame) -> MarketRegime:
-    if df is None or len(df) < 30:
+def detect_regime(df: pd.DataFrame, lookback: int = 20) -> MarketRegime:
+    if df is None or len(df) < 50:
         return MarketRegime.UNKNOWN
     
     last = df.iloc[-1]
+    prev = df.iloc[-lookback:-1]
+    
     adx = last.get("adx", 0)
     ema_fast = last.get(f"ema_{config.EMA_FAST}")
     ema_slow = last.get(f"ema_{config.EMA_SLOW}")
+    sma_20 = last.get(f"sma_{config.SMA_SLOW}")
+    
+    current_price = last["close"]
+    past_price = prev["close"].iloc[0] if len(prev) > 0 else current_price
+    
+    price_above_ma = current_price > sma_20
+    price_change_pct = (current_price - past_price) / past_price * 100
     
     if adx > 25:
-        if ema_fast > ema_slow:
+        if ema_fast > ema_slow and price_above_ma:
             return MarketRegime.BULL
-        else:
+        elif ema_fast < ema_slow and not price_above_ma:
             return MarketRegime.BEAR
+        elif abs(price_change_pct) > 5:
+            return MarketRegime.BULL if price_change_pct > 0 else MarketRegime.BEAR
     
     return MarketRegime.SIDEWAYS
 

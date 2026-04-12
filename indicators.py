@@ -313,10 +313,25 @@ class TechnicalIndicators:
         return df
     
     @staticmethod
-    def volume_confirmed(df: pd.DataFrame, threshold: float = None) -> bool:
-        threshold = threshold or getattr(config, "VOLUME_CONFIRM_MULTIPLIER", 1.5)
+    def volume_confirmed(df: pd.DataFrame, ticker: str = None, threshold: float = None) -> bool:
+        if df is None or len(df) < 25:
+            return False
+        
         last = df.iloc[-1]
         vol_ratio = last.get("volume_ratio", 1.0)
+        
+        if ticker:
+            base_threshold = getattr(config, "VOLUME_CONFIRM_MULTIPLIER", 1.5)
+            liquidity_factor = config.TICKER_NAMES.get(ticker, "")
+            if liquidity_factor in ("SASA", "EREGL", "KRDMD"):
+                threshold = threshold or 1.2
+            elif liquidity_factor in ("THYAO", "GARAN", "AKBNK"):
+                threshold = threshold or 1.8
+            else:
+                threshold = threshold or base_threshold
+        else:
+            threshold = threshold or 1.5
+        
         return vol_ratio >= threshold
 
     @staticmethod
