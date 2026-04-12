@@ -1,7 +1,12 @@
 import os
-from dotenv import load_dotenv
+import sys
 
-load_dotenv()
+if sys.platform != "win32":
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+    except ImportError:
+        pass
 
 
 WATCHLIST = [
@@ -145,3 +150,8 @@ FLASK_PORT = 5000
 FLASK_DEBUG = True
 
 DB_PATH = "bist_signals.db"
+
+ML_SEQUENCE_LENGTH = 60
+ML_EPOCHS = 50
+ML_BATCH_SIZE = 32
+ML_MODEL_PATH = "models"
