@@ -24,8 +24,11 @@ def find_best_params(
     ticker: str,
     df: pd.DataFrame,
     rsi_range: tuple = (25, 35),
-    lookback_days: int = 180,
+    lookback_days: int = None,
+    test_days: int = None,
 ) -> Optional[OptimizedParams]:
+    lookback_days = lookback_days or getattr(config, "WALKFORWARD_TRAIN_DAYS", 180)
+    test_days = test_days or getattr(config, "WALKFORWARD_TEST_DAYS", 30)
     if df is None or len(df) < lookback_days + 30:
         logger.warning(f"Yetersiz veri: {len(df) if df is not None else 0}")
         return None

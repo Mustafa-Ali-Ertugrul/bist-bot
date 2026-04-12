@@ -74,16 +74,23 @@ class Backtester:
     def __init__(
         self,
         initial_capital: float = 8500.0,
-        commission_pct: float = 0.002,
+        commission_pct: float = None,
         buy_threshold: float = 35,
         sell_threshold: float = -15,
+        slippage_pct: float = None,
     ):
         self.initial_capital = initial_capital
-        self.commission_pct = commission_pct
-        self.slippage_pct = 0.001
+        self.commission_pct = commission_pct or (
+            getattr(config, "COMMISSION_BUY", 0.0002) + 
+            getattr(config, "BSMV", 0.0005)
+        )
+        self.slippage_pct = slippage_pct or getattr(config, "SLIPPAGE", 0.001)
         self.buy_threshold = buy_threshold
         self.sell_threshold = sell_threshold
         self.last_buy_date = None
+        self.idle_days = 0
+        self.total_days = 0
+        self.avg_holding_days = 0
         self.indicators = TechnicalIndicators()
         self.engine = StrategyEngine()
 
@@ -240,6 +247,16 @@ class Backtester:
         else:
             sharpe = 0
 
+        avg_holding = 0
+        idle_ratio = 0
+        if trades:
+            holding_days = [t.holding_days for t in trades]
+            avg_holding = round(np.mean(holding_days), 1)
+            total_days = (df.index[-1] - df.index[0]).days
+            idle_ratio = round((total_days - sum(holding_days)) / total_days * 100, 1) if total_days > 0 else 0
+        
+        self.avg_holding_days = avg_holding
+        
         result = BacktestResult(
             ticker=ticker,
             period=f"{df.index[0].strftime('%d.%m.%Y')} → "
@@ -263,7 +280,9 @@ class Backtester:
             sharpe_ratio=round(sharpe, 2),
             trades=trades,
         )
-
+        
+        logger.info(f"  📊 Ort. holding: {avg_holding} gün, Idle: %{idle_ratio}")
+        
         return result
 
     def _calculate_score(self, df: pd.DataFrame) -> float:

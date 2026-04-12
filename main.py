@@ -125,7 +125,7 @@ class BISTBot:
 
             strong = [
                 s for s in actionable
-                if abs(s.score) >= 35
+                if abs(s.score) >= getattr(config, "TELEGRAM_MIN_SCORE", 70)
             ]
             for s in strong:
                 self.notifier.send_signal(s)

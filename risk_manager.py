@@ -51,6 +51,25 @@ class RiskManager:
         self.atr_target_mult = atr_target_multiplier
         self.fixed_stop_pct = fixed_stop_pct
         self.fixed_target_pct = fixed_target_pct
+        self.sector_positions = {}
+
+    def check_sector_limit(self, ticker: str) -> bool:
+        sector = getattr(config, "SECTOR_MAP", {}).get(ticker)
+        if not sector:
+            return True
+        
+        sector_limit = getattr(config, "SECTOR_LIMIT", 2)
+        current = self.sector_positions.get(sector, 0)
+        
+        if current >= sector_limit:
+            logger.warning(f"  Sektör limiti: {sector} ({current}/{sector_limit})")
+            return False
+        
+        self.sector_positions[sector] = current + 1
+        return True
+
+    def reset_sectors(self):
+        self.sector_positions = {}
 
     def calculate(
         self,

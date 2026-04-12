@@ -12,6 +12,31 @@ from risk_manager import RiskManager
 logger = logging.getLogger(__name__)
 
 
+class MarketRegime(Enum):
+    BULL = "BULL"
+    BEAR = "BEAR"
+    SIDEWAYS = "SIDEWAYS"
+    UNKNOWN = "UNKNOWN"
+
+
+def detect_regime(df: pd.DataFrame) -> MarketRegime:
+    if df is None or len(df) < 30:
+        return MarketRegime.UNKNOWN
+    
+    last = df.iloc[-1]
+    adx = last.get("adx", 0)
+    ema_fast = last.get(f"ema_{config.EMA_FAST}")
+    ema_slow = last.get(f"ema_{config.EMA_SLOW}")
+    
+    if adx > 25:
+        if ema_fast > ema_slow:
+            return MarketRegime.BULL
+        else:
+            return MarketRegime.BEAR
+    
+    return MarketRegime.SIDEWAYS
+
+
 class SignalType(Enum):
     STRONG_BUY = "💰 GÜÇLÜ AL"
     BUY = "🟢 AL"

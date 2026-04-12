@@ -311,6 +311,13 @@ class TechnicalIndicators:
         df.loc[df["volume_sma_20"].diff() < 0, "volume_trend"] = "DECREASING"
         
         return df
+    
+    @staticmethod
+    def volume_confirmed(df: pd.DataFrame, threshold: float = None) -> bool:
+        threshold = threshold or getattr(config, "VOLUME_CONFIRM_MULTIPLIER", 1.5)
+        last = df.iloc[-1]
+        vol_ratio = last.get("volume_ratio", 1.0)
+        return vol_ratio >= threshold
 
     @staticmethod
     def add_atr(df: pd.DataFrame, period: int = 14) -> pd.DataFrame:
