@@ -16,7 +16,7 @@
         android:label="BIST Bot"
         android:supportsRtl="true"
         android:theme="@style/Theme.BistBot"
-        android:usesCleartextTraffic="false">
+        android:usesCleartextTraffic="true">
         
         <activity
             android:name=".MainActivity"

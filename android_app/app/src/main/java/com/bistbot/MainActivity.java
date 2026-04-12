@@ -22,11 +22,9 @@ import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
-import android.widget.LinearLayout;
 import android.widget.Toast;
 
 import androidx.activity.OnBackPressedCallback;
-import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.app.NotificationCompat;
@@ -39,10 +37,9 @@ public class MainActivity extends AppCompatActivity {
     private static final String TAG = "BISTBot";
     private static final String CHANNEL_ID = "bist_bot_notifications";
     private static final int PERMISSION_REQUEST_CODE = 123;
+    private static final String APP_URL = "https://ais-dev-rsgc7cv3ciwaa5kzv7gysh-293260048803.europe-west2.run.app";
 
     private WebView webView;
-    private LinearLayout splashContainer;
-    private boolean isLoaded = false;
     private PowerManager.WakeLock wakeLock;
     private static final AtomicInteger notificationIdCounter = new AtomicInteger(1);
 
@@ -51,57 +48,53 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        acquireWakeLock();
-
+        // İzinler ve Arka Plan Ayarları
         createNotificationChannel();
         requestNotificationPermission();
         requestBatteryOptimizationExemption();
         requestExactAlarmPermission();
-
         MarketOpenReceiver.scheduleNextAlarm(this);
 
+        // WebView Başlatma
         webView = findViewById(R.id.webView);
-        splashContainer = findViewById(R.id.splashContainer);
-
+        
+        // WebView Ayarları (Senin verdiğin modern ayarlar)
         WebSettings webSettings = webView.getSettings();
         webSettings.setJavaScriptEnabled(true);
         webSettings.setDomStorageEnabled(true);
-        webSettings.setAllowFileAccess(false);
+        webSettings.setUseWideViewPort(true);
+        webSettings.setLoadWithOverviewMode(true);
         webSettings.setCacheMode(WebSettings.LOAD_DEFAULT);
+        webSettings.setAllowFileAccess(false);
 
+        // Android - JS Köprüsü (Bildirimler için)
         webView.addJavascriptInterface(new WebAppInterface(this), "Android");
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
-            public void onPageFinished(WebView view, String url) {
-                if (!isLoaded) {
-                    isLoaded = true;
-                    splashContainer.setVisibility(View.GONE);
-                    webView.setVisibility(View.VISIBLE);
-                }
-            }
-
-            @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 String url = request.getUrl().toString();
-                if (url.startsWith("http://") || url.startsWith("https://")) {
-                    Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
-                    startActivity(intent);
-                    return true;
+                // Sadece bizim URL ise içeride aç, değilse tarayıcıya gönder
+                if (url.contains("run.app") || url.contains("bistbot")) {
+                    return false;
                 }
-                return false;
+                Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                startActivity(intent);
+                return true;
             }
 
             @Override
             public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
                 if (request.isForMainFrame()) {
-                    Toast.makeText(MainActivity.this, R.string.connection_error, Toast.LENGTH_LONG).show();
+                    Toast.makeText(MainActivity.this, "Bağlantı hatası oluştu!", Toast.LENGTH_LONG).show();
                 }
             }
         });
 
-        webView.loadUrl(getString(R.string.streamlit_url));
+        // URL Yükle
+        webView.loadUrl(APP_URL);
 
+        // Geri Tuşu Mantığı
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
             public void handleOnBackPressed() {
@@ -109,54 +102,23 @@ public class MainActivity extends AppCompatActivity {
                     webView.goBack();
                 } else {
                     setEnabled(false);
-                    getOnBackPressedDispatcher().onBackPressed();
+                    MainActivity.this.onBackPressed();
                 }
             }
         });
     }
 
-    private void acquireWakeLock() {
-        PowerManager powerManager = (PowerManager) getSystemService(Context.POWER_SERVICE);
-        if (powerManager != null) {
-            wakeLock = powerManager.newWakeLock(
-                    PowerManager.SCREEN_BRIGHT_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP,
-                    "BISTBot::WakeLock"
-            );
-            wakeLock.acquire(10 * 60 * 1000L);
-        }
-    }
-
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        if (wakeLock != null && wakeLock.isHeld()) {
-            wakeLock.release();
-        }
-    }
-
-    @Override
-    protected void onResume() {
-        super.onResume();
-        acquireWakeLock();
-    }
-
-    @Override
-    protected void onPause() {
-        super.onPause();
-        if (wakeLock != null && wakeLock.isHeld()) {
-            wakeLock.release();
-        }
-    }
-
     private void createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            CharSequence name = getString(R.string.notification_channel_name);
-            String description = getString(R.string.notification_channel_description);
+            CharSequence name = "BIST Bot Bildirimleri";
+            String description = "Piyasa ve sinyal bildirimleri";
             int importance = NotificationManager.IMPORTANCE_HIGH;
             NotificationChannel channel = new NotificationChannel(CHANNEL_ID, name, importance);
             channel.setDescription(description);
             NotificationManager notificationManager = getSystemService(NotificationManager.class);
-            notificationManager.createNotificationChannel(channel);
+            if (notificationManager != null) {
+                notificationManager.createNotificationChannel(channel);
+            }
         }
     }
 
@@ -172,13 +134,9 @@ public class MainActivity extends AppCompatActivity {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             AlarmManager alarmManager = getSystemService(AlarmManager.class);
             if (alarmManager != null && !alarmManager.canScheduleExactAlarms()) {
-                try {
-                    Intent intent = new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM);
-                    intent.setData(Uri.parse("package:" + getPackageName()));
-                    startActivity(intent);
-                } catch (Exception e) {
-                    Log.e(TAG, "Exact alarm permission request failed", e);
-                }
+                Intent intent = new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM);
+                intent.setData(Uri.parse("package:" + getPackageName()));
+                startActivity(intent);
             }
         }
     }
@@ -187,13 +145,9 @@ public class MainActivity extends AppCompatActivity {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             PowerManager powerManager = (PowerManager) getSystemService(Context.POWER_SERVICE);
             if (powerManager != null && !powerManager.isIgnoringBatteryOptimizations(getPackageName())) {
-                try {
-                    Intent intent = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
-                    intent.setData(Uri.parse("package:" + getPackageName()));
-                    startActivity(intent);
-                } catch (Exception e) {
-                    Log.e(TAG, "Battery optimization exemption request failed", e);
-                }
+                Intent intent = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+                intent.setData(Uri.parse("package:" + getPackageName()));
+                startActivity(intent);
             }
         }
     }
@@ -211,7 +165,7 @@ public class MainActivity extends AppCompatActivity {
         );
 
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setSmallIcon(R.drawable.app_icon)
+                .setSmallIcon(R.mipmap.ic_launcher) // İkon düzeltildi
                 .setContentTitle(title)
                 .setContentText(message)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -228,39 +182,11 @@ public class MainActivity extends AppCompatActivity {
 
     public class WebAppInterface {
         Context mContext;
-
-        WebAppInterface(Context c) {
-            mContext = c;
-        }
+        WebAppInterface(Context c) { mContext = c; }
 
         @JavascriptInterface
         public void showNotification(String title, String message) {
             sendNotification(title, message, Color.GRAY);
-        }
-
-        @JavascriptInterface
-        public void showStrongBuy(String stock, String message) {
-            sendNotification(String.format(getString(R.string.signal_strong_buy), stock), message, Color.parseColor("#006400"));
-        }
-
-        @JavascriptInterface
-        public void showBuy(String stock, String message) {
-            sendNotification(String.format(getString(R.string.signal_buy), stock), message, Color.GREEN);
-        }
-
-        @JavascriptInterface
-        public void showSell(String stock, String message) {
-            sendNotification(String.format(getString(R.string.signal_sell), stock), message, Color.RED);
-        }
-
-        @JavascriptInterface
-        public void showSignalChange(String stock, String oldSignal, String newSignal, String message) {
-            String title = String.format(getString(R.string.signal_change), stock);
-            String fullMessage = oldSignal + " → " + newSignal + "\n" + message;
-            int color = newSignal.contains("GÜÇLÜ AL") || newSignal.contains("AL")
-                    ? Color.parseColor("#006400")
-                    : Color.parseColor("#8B0000");
-            sendNotification(title, fullMessage, color);
         }
     }
 }

@@ -90,15 +90,21 @@ class Signal:
 
 
 class StrategyEngine:
-    STRONG_BUY_THRESHOLD = 40
-    BUY_THRESHOLD = 10
-    WEAK_BUY_THRESHOLD = 0
-    WEAK_SELL_THRESHOLD = 0
-    SELL_THRESHOLD = -10
-    STRONG_SELL_THRESHOLD = -40
+    STRONG_BUY_THRESHOLD = getattr(config, "STRONG_BUY_THRESHOLD", 40)
+    BUY_THRESHOLD = getattr(config, "BUY_THRESHOLD", 10)
+    WEAK_BUY_THRESHOLD = getattr(config, "WEAK_BUY_THRESHOLD", 0)
+    WEAK_SELL_THRESHOLD = getattr(config, "WEAK_SELL_THRESHOLD", 0)
+    SELL_THRESHOLD = getattr(config, "SELL_THRESHOLD", -10)
+    STRONG_SELL_THRESHOLD = getattr(config, "STRONG_SELL_THRESHOLD", -40)
 
     def __init__(self):
         self.indicators = TechnicalIndicators()
+        self.STRONG_BUY_THRESHOLD = getattr(config, "STRONG_BUY_THRESHOLD", self.STRONG_BUY_THRESHOLD)
+        self.BUY_THRESHOLD = getattr(config, "BUY_THRESHOLD", self.BUY_THRESHOLD)
+        self.WEAK_BUY_THRESHOLD = getattr(config, "WEAK_BUY_THRESHOLD", self.WEAK_BUY_THRESHOLD)
+        self.WEAK_SELL_THRESHOLD = getattr(config, "WEAK_SELL_THRESHOLD", self.WEAK_SELL_THRESHOLD)
+        self.SELL_THRESHOLD = getattr(config, "SELL_THRESHOLD", self.SELL_THRESHOLD)
+        self.STRONG_SELL_THRESHOLD = getattr(config, "STRONG_SELL_THRESHOLD", self.STRONG_SELL_THRESHOLD)
 
     def analyze(self, ticker: str, df: pd.DataFrame) -> Optional[Signal]:
         if df is None or len(df) < 30:
@@ -388,7 +394,7 @@ class StrategyEngine:
 
         price = float(last["close"])
         
-        rm = RiskManager(capital=8500)
+        rm = RiskManager(capital=getattr(config, "INITIAL_CAPITAL", 8500.0))
         risk_levels = rm.calculate(df)
         
         stop_loss = risk_levels.final_stop

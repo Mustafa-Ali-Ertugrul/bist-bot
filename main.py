@@ -229,7 +229,7 @@ class BISTBot:
         logger.info("\n🧪 BACKTEST BAŞLIYOR")
         logger.info("=" * 55)
 
-        backtester = Backtester(initial_capital=8500)
+        backtester = Backtester(initial_capital=getattr(config, "INITIAL_CAPITAL", 8500.0))
         results = []
 
         for ticker in config.WATCHLIST:

@@ -73,13 +73,13 @@ class BacktestResult:
 class Backtester:
     def __init__(
         self,
-        initial_capital: float = 8500.0,
+        initial_capital: float = None,
         commission_pct: float = None,
         buy_threshold: float = 35,
         sell_threshold: float = -15,
         slippage_pct: float = None,
     ):
-        self.initial_capital = initial_capital
+        self.initial_capital = initial_capital if initial_capital is not None else getattr(config, "INITIAL_CAPITAL", 8500.0)
         self.commission_pct = commission_pct or (
             getattr(config, "COMMISSION_BUY", 0.0002) + 
             getattr(config, "COMMISSION_SELL", 0.0002) +
@@ -330,7 +330,7 @@ if __name__ == "__main__":
     from data_fetcher import BISTDataFetcher
 
     fetcher = BISTDataFetcher()
-    backtester = Backtester(initial_capital=8500)
+    backtester = Backtester(initial_capital=getattr(config, "INITIAL_CAPITAL", 8500.0))
 
     print("🧪 Backtest başlıyor...\n")
 

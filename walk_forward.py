@@ -47,7 +47,7 @@ def find_best_params(
         config.RSI_OVERSOLD = rsi_oversold
 
         bt = Backtester(
-            initial_capital=config.WATCHLIST and 8500 or 8500.0,
+            initial_capital=getattr(config, "INITIAL_CAPITAL", 8500.0),
             buy_threshold=35,
             sell_threshold=-15,
         )

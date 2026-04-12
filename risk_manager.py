@@ -38,14 +38,14 @@ class RiskLevels:
 class RiskManager:
     def __init__(
         self,
-        capital: float = 8500.0,
+        capital: float = None,
         max_risk_per_trade_pct: float = 2.0,
         atr_stop_multiplier: float = 2.0,
         atr_target_multiplier: float = 3.0,
         fixed_stop_pct: float = 5.0,
         fixed_target_pct: float = 8.0,
     ):
-        self.capital = capital
+        self.capital = capital if capital is not None else getattr(config, "INITIAL_CAPITAL", 8500.0)
         self.max_risk_pct = max_risk_per_trade_pct
         self.atr_stop_mult = atr_stop_multiplier
         self.atr_target_mult = atr_target_multiplier
@@ -321,7 +321,7 @@ if __name__ == "__main__":
 
     fetcher = BISTDataFetcher()
     ti = TechnicalIndicators()
-    rm = RiskManager(capital=8500)
+    rm = RiskManager(capital=getattr(config, "INITIAL_CAPITAL", 8500.0))
 
     test_tickers = ["ASELS.IS", "THYAO.IS", "BIMAS.IS"]
 
