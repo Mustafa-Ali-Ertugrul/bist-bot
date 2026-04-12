@@ -133,6 +133,7 @@ class BISTBot:
         while self.running:
             now = datetime.now()
             hour = now.hour
+            minute = now.minute
 
             weekday = now.weekday()
 
@@ -150,10 +151,24 @@ class BISTBot:
                 sleep(min(wait, 1800))
                 continue
 
+            warmup_minutes = getattr(config, "MARKET_WARMUP_MINUTES", 15)
+            half_day_hour = getattr(config, "MARKET_HALF_DAY_HOUR", 13)
+            
             if hour >= config.MARKET_CLOSE_HOUR:
                 logger.info("🌙 Borsa kapandı. Yarın görüşürüz!")
                 self.scan_once()
                 sleep(3600 * 14)
+                continue
+            
+            if hour == config.MARKET_OPEN_HOUR and minute < warmup_minutes:
+                logger.info(f"🌅 Açılış gürültüsü - ilk {warmup_minutes} dakika bekleniyor...")
+                sleep(60)
+                continue
+                
+            if hour >= half_day_hour and hour < config.MARKET_CLOSE_HOUR:
+                logger.info("🌓 Yarım gün - sadece son saatlerde tarama yapılıyor")
+                self.scan_once()
+                sleep(3600 * (config.MARKET_CLOSE_HOUR - half_day_hour))
                 continue
 
             try:

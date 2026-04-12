@@ -75,8 +75,10 @@ class Backtester:
     ):
         self.initial_capital = initial_capital
         self.commission_pct = commission_pct
+        self.slippage_pct = 0.001
         self.buy_threshold = buy_threshold
         self.sell_threshold = sell_threshold
+        self.last_buy_date = None
         self.indicators = TechnicalIndicators()
         self.engine = StrategyEngine()
 
@@ -115,11 +117,16 @@ class Backtester:
 
             if position is None:
                 if score >= self.buy_threshold:
+                    if self.last_buy_date is not None and (date - self.last_buy_date).days < 1:
+                        continue
+                    
+                    buy_price = price * (1 + self.slippage_pct)
                     effective_capital = capital * (1 - self.commission_pct)
-                    shares = int(effective_capital / price)
+                    shares = int(effective_capital / buy_price)
 
                     if shares > 0:
-                        cost = shares * price * (1 + self.commission_pct)
+                        cost = shares * buy_price * (1 + self.commission_pct)
+                        self.last_buy_date = date
                         position = {
                             "entry_date": date,
                             "entry_price": price,
@@ -152,8 +159,9 @@ class Backtester:
                     reason = "SİNYAL"
 
                 if sell:
+                    sell_price = price * (1 - self.slippage_pct)
                     revenue = (
-                        position["shares"] * price
+                        position["shares"] * sell_price
                         * (1 - self.commission_pct)
                     )
                     profit_tl = revenue - position["cost"]

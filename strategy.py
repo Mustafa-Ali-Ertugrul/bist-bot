@@ -72,8 +72,38 @@ class StrategyEngine:
         df = self.indicators.add_all(df)
 
         last = df.iloc[-1]
+        prev = df.iloc[-2]
         score = 0.0
         reasons = []
+
+        adx = last.get("adx")
+        if pd.notna(adx):
+            if adx < getattr(config, "ADX_THRESHOLD", 20):
+                logger.debug(f"  {ticker}: ADX düşük ({adx:.1f}) - Trend yok, sinyal üretme")
+                return None
+
+        ema_long = last.get(f"ema_{config.EMA_LONG}")
+        if pd.notna(ema_long):
+            price = last["close"]
+            above_ema = price > ema_long
+            last_above_ema = prev["close"] > prev.get(f"ema_{config.EMA_LONG}", ema_long)
+            if above_ema and not last_above_ema:
+                reasons.append(f"Fiyat EMA{config.EMA_LONG}'i kesti (yukarı)")
+            elif above_ema:
+                if adx >= getattr(config, "ADX_THRESHOLD", 20):
+                    score += 10
+                    reasons.append(f"yükseliş trendi (EMA{config.EMA_LONG} üzerinde)")
+            elif not above_ema and last_above_ema:
+                reasons.append(f"Fiyat EMA{config.EMA_LONG}'i kesti (aşağı)")
+
+        volume_sma_20 = last.get("volume_sma_20")
+        volume = last.get("volume")
+        if pd.notna(volume_sma_20) and pd.notna(volume):
+            vol_ratio = volume / volume_sma_20
+            min_vol_ratio = getattr(config, "VOLUME_CONFIRM_MULTIPLIER", 1.5)
+            if vol_ratio >= min_vol_ratio:
+                score += 8
+                reasons.append(f"Hacim onayı ({vol_ratio:.1f}x ort)")
 
         rsi = last.get("rsi")
         if pd.notna(rsi):
