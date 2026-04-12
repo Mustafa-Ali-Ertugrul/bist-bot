@@ -5,6 +5,16 @@ __pycache__/
 .env
 *.log
 .DS_Store
+.idea/
+.vscode/
+*.iml
+*.lock
+*.tmp
+*.temp
+build/
+.gradle/
+**/.gradle/
+**/build/
 models/
 android_app/.gradle/
 android_app/app/build/

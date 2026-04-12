@@ -1,12 +1,10 @@
 import os
-import sys
 
-if sys.platform != "win32":
-    try:
-        from dotenv import load_dotenv
-        load_dotenv()
-    except ImportError:
-        pass
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 
 WATCHLIST = [
