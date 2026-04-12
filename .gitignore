@@ -1,28 +1,19 @@
-__pycache__/
-*.pyc
-*.pyo
-*.db
-.env
-*.log
-.DS_Store
-.idea/
-.vscode/
-*.iml
-*.lock
-*.tmp
-*.temp
-build/
-.gradle/
-**/.gradle/
+# Android build files
 **/build/
-models/
-android_app/.gradle/
-android_app/app/build/
-android_app/app/.gradle/
-android_app/build/
-android_app/local.properties
-android_app/app/local.properties
-android_app/.idea/
-android_app/app/.idea/
-android_app/*.iml
-android_app/app/*.iml
+**/.gradle/
+**/local.properties
+**/.idea/
+**/*.iml
+**/*.apk
+**/*.aab
+
+# Python files
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+.venv
+venv/
+
+# DS_Store
+.DS_Store
