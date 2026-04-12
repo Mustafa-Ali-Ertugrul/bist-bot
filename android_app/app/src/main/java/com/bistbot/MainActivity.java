@@ -1,22 +1,14 @@
 package com.bistbot;
 
-import android.Manifest;
-import android.app.AlarmManager;
-import android.app.NotificationChannel;
-import android.app.NotificationManager;
-import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
-import android.content.pm.PackageManager;
-import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.PowerManager;
-import android.provider.Settings;
 import android.util.Log;
-import android.view.View;
+import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
+import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
@@ -24,169 +16,133 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Toast;
 
-import androidx.activity.OnBackPressedCallback;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.app.ActivityCompat;
-import androidx.core.app.NotificationCompat;
-import androidx.core.app.NotificationManagerCompat;
-import androidx.core.content.ContextCompat;
-
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class MainActivity extends AppCompatActivity {
-    private static final String TAG = "BISTBot";
-    private static final String CHANNEL_ID = "bist_bot_notifications";
-    private static final int PERMISSION_REQUEST_CODE = 123;
-    private static final String APP_URL = "https://ais-dev-rsgc7cv3ciwaa5kzv7gysh-293260048803.europe-west2.run.app";
 
+    private static final String TAG = "MainActivity";
     private WebView webView;
-    private PowerManager.WakeLock wakeLock;
-    private static final AtomicInteger notificationIdCounter = new AtomicInteger(1);
+    // Uygulamanın bağlandığı ana URL
+    private static final String APP_URL = "https://ais-dev-rsgc7cv3ciwaa5kzv7gysh-293260048803.europe-west2.run.app";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        // İzinler ve Arka Plan Ayarları
-        createNotificationChannel();
-        requestNotificationPermission();
-        requestBatteryOptimizationExemption();
-        requestExactAlarmPermission();
-        MarketOpenReceiver.scheduleNextAlarm(this);
-
-        // WebView Başlatma
         webView = findViewById(R.id.webView);
-        
-        // WebView Ayarları (Senin verdiğin modern ayarlar)
+
+        // WebView Ayarları
         WebSettings webSettings = webView.getSettings();
         webSettings.setJavaScriptEnabled(true);
         webSettings.setDomStorageEnabled(true);
+        webSettings.setDatabaseEnabled(true);
         webSettings.setUseWideViewPort(true);
         webSettings.setLoadWithOverviewMode(true);
-        webSettings.setCacheMode(WebSettings.LOAD_DEFAULT);
-        webSettings.setAllowFileAccess(false);
+        
+        // Google Login için User-Agent Tanımlama (Zorunlu)
+        // WebView olduğunu gizleyip standart Chrome gibi davranmasını sağlar
+        String userAgent = "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36";
+        webSettings.setUserAgentString(userAgent);
 
-        // Android - JS Köprüsü (Bildirimler için)
+        // Önbellek ve Güvenlik Ayarları
+        webSettings.setCacheMode(WebSettings.LOAD_DEFAULT);
+        webSettings.setAllowFileAccess(true);
+        webSettings.setAllowContentAccess(true);
+        webSettings.setJavaScriptCanOpenWindowsAutomatically(true);
+        webSettings.setSupportMultipleWindows(true);
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            webSettings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+        }
+
+        CookieManager cookieManager = CookieManager.getInstance();
+        cookieManager.setAcceptCookie(true);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            cookieManager.setAcceptThirdPartyCookies(webView, true);
+        }
+
+        // Android - JS Köprüsü
         webView.addJavascriptInterface(new WebAppInterface(this), "Android");
+        
+        webView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, android.os.Message resultMsg) {
+                WebView newWebView = new WebView(MainActivity.this);
+                newWebView.getSettings().setJavaScriptEnabled(true);
+                newWebView.getSettings().setSupportMultipleWindows(true);
+                newWebView.getSettings().setJavaScriptCanOpenWindowsAutomatically(true);
+                
+                newWebView.setWebViewClient(new WebViewClient());
+                
+                WebView.WebViewTransport transport = (WebView.WebViewTransport) resultMsg.obj;
+                transport.setWebView(newWebView);
+                resultMsg.sendToTarget();
+                return true;
+            }
+        });
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
+            public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
+                CookieManager.getInstance().flush();
+                Log.d(TAG, "Loaded: " + url);
+            }
+
+            @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 String url = request.getUrl().toString();
-                // Sadece bizim URL ise içeride aç, değilse tarayıcıya gönder
-                if (url.contains("run.app") || url.contains("bistbot")) {
+                
+                // Google Login ve uygulamanın kendi domainlerini WebView içinde tut
+                if (url.contains("google.com") || url.contains("run.app") || url.contains("bistbot") || url.contains("firebaseapp.com")) {
                     return false;
                 }
-                Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
-                startActivity(intent);
+                
+                // Diğer her şeyi (dış linkler) harici tarayıcıda aç
+                try {
+                    Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                    startActivity(intent);
+                } catch (Exception e) {
+                    Log.e(TAG, "Error opening URL: " + url);
+                }
                 return true;
             }
 
             @Override
             public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
                 if (request.isForMainFrame()) {
-                    Toast.makeText(MainActivity.this, "Bağlantı hatası oluştu!", Toast.LENGTH_LONG).show();
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        Log.e(TAG, "WebView error: " + error.getDescription());
+                    }
                 }
             }
         });
 
-        // URL Yükle
+        // URL'yi yükle
         webView.loadUrl(APP_URL);
-
-        // Geri Tuşu Mantığı
-        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
-            @Override
-            public void handleOnBackPressed() {
-                if (webView.canGoBack()) {
-                    webView.goBack();
-                } else {
-                    setEnabled(false);
-                    MainActivity.this.onBackPressed();
-                }
-            }
-        });
     }
 
-    private void createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            CharSequence name = "BIST Bot Bildirimleri";
-            String description = "Piyasa ve sinyal bildirimleri";
-            int importance = NotificationManager.IMPORTANCE_HIGH;
-            NotificationChannel channel = new NotificationChannel(CHANNEL_ID, name, importance);
-            channel.setDescription(description);
-            NotificationManager notificationManager = getSystemService(NotificationManager.class);
-            if (notificationManager != null) {
-                notificationManager.createNotificationChannel(channel);
-            }
-        }
-    }
-
-    private void requestNotificationPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.POST_NOTIFICATIONS}, PERMISSION_REQUEST_CODE);
-            }
-        }
-    }
-
-    private void requestExactAlarmPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            AlarmManager alarmManager = getSystemService(AlarmManager.class);
-            if (alarmManager != null && !alarmManager.canScheduleExactAlarms()) {
-                Intent intent = new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM);
-                intent.setData(Uri.parse("package:" + getPackageName()));
-                startActivity(intent);
-            }
-        }
-    }
-
-    private void requestBatteryOptimizationExemption() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            PowerManager powerManager = (PowerManager) getSystemService(Context.POWER_SERVICE);
-            if (powerManager != null && !powerManager.isIgnoringBatteryOptimizations(getPackageName())) {
-                Intent intent = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
-                intent.setData(Uri.parse("package:" + getPackageName()));
-                startActivity(intent);
-            }
-        }
-    }
-
-    public void sendNotification(String title, String message, int color) {
-        Intent intent = new Intent(this, MainActivity.class);
-        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-
-        int notifId = notificationIdCounter.incrementAndGet();
-        PendingIntent pendingIntent = PendingIntent.getActivity(
-                this,
-                notifId,
-                intent,
-                PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0)
-        );
-
-        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setSmallIcon(R.mipmap.ic_launcher) // İkon düzeltildi
-                .setContentTitle(title)
-                .setContentText(message)
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
-                .setAutoCancel(true)
-                .setColor(color)
-                .setColorized(true)
-                .setContentIntent(pendingIntent);
-
-        NotificationManagerCompat notificationManager = NotificationManagerCompat.from(this);
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED || Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-            notificationManager.notify(notifId, builder.build());
-        }
-    }
-
+    // JavaScript'ten Android kodunu çağırmak için sınıf
     public class WebAppInterface {
         Context mContext;
-        WebAppInterface(Context c) { mContext = c; }
+
+        WebAppInterface(Context c) {
+            mContext = c;
+        }
 
         @JavascriptInterface
-        public void showNotification(String title, String message) {
-            sendNotification(title, message, Color.GRAY);
+        public void showToast(String toast) {
+            Toast.makeText(mContext, toast, Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (webView.canGoBack()) {
+            webView.goBack();
+        } else {
+            super.onBackPressed();
         }
     }
 }

@@ -1,21 +1,33 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="black">#000000</color>
-    <color name="colorAccent">#FFD700</color>
-    <color name="colorPrimary">#000000</color>
-    <color name="colorPrimaryDark">#000000</color>
+    <color name="black">#0a0e1a</color>
+    <color name="cardBackground">#111827</color>
+    <color name="colorAccent">#1e40af</color>
+    <color name="colorPrimary">#0a0e1a</color>
+    <color name="colorPrimaryDark">#070a12</color>
+    <color name="textPrimary">#f1f5f9</color>
+    <color name="textSecondary">#94a3b8</color>
     <color name="white">#FFFFFF</color>
-    <style name="AppTheme" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:colorPrimary">@color/colorPrimary</item>
-        <item name="android:colorPrimaryDark">@color/colorPrimaryDark</item>
-        <item name="android:colorAccent">@color/colorAccent</item>
-        <item name="android:windowNoTitle">true</item>
-        <item name="android:windowFullscreen">false</item>
-    </style>
-    <style name="Theme.BistBot" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:colorPrimary">@color/colorPrimary</item>
-        <item name="android:colorPrimaryDark">@color/colorPrimaryDark</item>
-        <item name="android:colorAccent">@color/colorAccent</item>
+    <string name="app_name">BIST Bot</string>
+    <string name="connection_error">Bağlantı hatası!</string>
+    <string name="loading_data">Veriler Yükleniyor...</string>
+    <string name="market_close_text">Saat 18:00. Günlük kapanış verilerini ve analizleri kontrol edin.</string>
+    <string name="market_close_title">Borsa Kapandı! 📉</string>
+    <string name="market_open_text">Saat 10:00. Günlük tarama sonuçlarını kontrol etmek için tıklayın.</string>
+    <string name="market_open_title">Borsa Açıldı! 📈</string>
+    <string name="market_tracking_text">Saat %1$d:00. Güncel durum için tıklayın.</string>
+    <string name="market_tracking_title">Piyasa Takibi 📊</string>
+    <string name="notification_channel_description">BIST Bot\'tan gelen al/sat sinyalleri</string>
+    <string name="notification_channel_name">BIST Bot Bildirimleri</string>
+    <string name="signal_buy">✅ ALINABİLİR: %s</string>
+    <string name="signal_change">🔔 SİNYAL DEĞİŞİKLİĞİ: %s</string>
+    <string name="signal_sell">🚨 SATIM: %s</string>
+    <string name="signal_strong_buy">🔥 GÜÇLÜ ALIM: %s</string>
+    <string name="streamlit_url">https://bist-bot-nxbsldnd77brg8whgatyxu.streamlit.app</string>
+    <style name="Theme.BistBot" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="colorPrimary">@color/colorPrimary</item>
+        <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
+        <item name="colorAccent">@color/colorAccent</item>
         <item name="android:windowBackground">@color/black</item>
     </style>
 </resources>

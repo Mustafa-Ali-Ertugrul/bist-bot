@@ -1,12 +1,32 @@
 R_DEF: Internal format may change without notice
 local
 color black
+color cardBackground
 color colorAccent
 color colorPrimary
 color colorPrimaryDark
+color textPrimary
+color textSecondary
 color white
-id splashContainer
+drawable app_icon
 id webView
 layout activity_main
-style AppTheme
+mipmap ic_launcher
+mipmap ic_launcher_round
+string app_name
+string connection_error
+string loading_data
+string market_close_text
+string market_close_title
+string market_open_text
+string market_open_title
+string market_tracking_text
+string market_tracking_title
+string notification_channel_description
+string notification_channel_name
+string signal_buy
+string signal_change
+string signal_sell
+string signal_strong_buy
+string streamlit_url
 style Theme.BistBot

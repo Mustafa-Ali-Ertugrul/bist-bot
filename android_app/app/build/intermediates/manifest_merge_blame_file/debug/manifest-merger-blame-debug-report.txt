@@ -14,75 +14,114 @@
 12    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 12-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:5:5-79
 12-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:5:22-76
-13
-14    <permission
-14-->[androidx.core:core:1.9.0] C:\Users\Ali\.gradle\caches\transforms-4\8b7d7c6033c0ad55d1cbada688971ac0\transformed\core-1.9.0\AndroidManifest.xml:22:5-24:47
-15        android:name="com.bistbot.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
-15-->[androidx.core:core:1.9.0] C:\Users\Ali\.gradle\caches\transforms-4\8b7d7c6033c0ad55d1cbada688971ac0\transformed\core-1.9.0\AndroidManifest.xml:23:9-81
-16        android:protectionLevel="signature" />
-16-->[androidx.core:core:1.9.0] C:\Users\Ali\.gradle\caches\transforms-4\8b7d7c6033c0ad55d1cbada688971ac0\transformed\core-1.9.0\AndroidManifest.xml:24:9-44
-17
-18    <uses-permission android:name="com.bistbot.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
-18-->[androidx.core:core:1.9.0] C:\Users\Ali\.gradle\caches\transforms-4\8b7d7c6033c0ad55d1cbada688971ac0\transformed\core-1.9.0\AndroidManifest.xml:26:5-97
-18-->[androidx.core:core:1.9.0] C:\Users\Ali\.gradle\caches\transforms-4\8b7d7c6033c0ad55d1cbada688971ac0\transformed\core-1.9.0\AndroidManifest.xml:26:22-94
-19
-20    <application
-20-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:7:5-23:19
-21        android:allowBackup="true"
-21-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:8:9-35
-22        android:appComponentFactory="androidx.core.app.CoreComponentFactory"
-22-->[androidx.core:core:1.9.0] C:\Users\Ali\.gradle\caches\transforms-4\8b7d7c6033c0ad55d1cbada688971ac0\transformed\core-1.9.0\AndroidManifest.xml:28:18-86
-23        android:debuggable="true"
-24        android:extractNativeLibs="true"
-25        android:label="BIST Bot"
-25-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:9:9-33
-26        android:supportsRtl="true"
-26-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:10:9-35
-27        android:theme="@android:style/Theme.NoTitleBar"
-27-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:11:9-56
-28        android:usesCleartextTraffic="true" >
-28-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:12:9-44
-29        <activity
-29-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:14:9-22:20
-30            android:name="com.bistbot.MainActivity"
-30-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:15:13-41
-31            android:exported="true"
-31-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:16:13-36
-32            android:screenOrientation="portrait" >
-32-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:17:13-49
-33            <intent-filter>
-33-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:18:13-21:29
-34                <action android:name="android.intent.action.MAIN" />
-34-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:19:17-69
-34-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:19:25-66
-35
-36                <category android:name="android.intent.category.LAUNCHER" />
-36-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:20:17-77
-36-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:20:27-74
-37            </intent-filter>
-38        </activity>
-39
-40        <provider
-40-->[androidx.emoji2:emoji2:1.2.0] C:\Users\Ali\.gradle\caches\transforms-4\eba360f5ec7a9c841218e587f8b7ce98\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:24:9-32:20
-41            android:name="androidx.startup.InitializationProvider"
-41-->[androidx.emoji2:emoji2:1.2.0] C:\Users\Ali\.gradle\caches\transforms-4\eba360f5ec7a9c841218e587f8b7ce98\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:25:13-67
-42            android:authorities="com.bistbot.androidx-startup"
-42-->[androidx.emoji2:emoji2:1.2.0] C:\Users\Ali\.gradle\caches\transforms-4\eba360f5ec7a9c841218e587f8b7ce98\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:26:13-68
-43            android:exported="false" >
-43-->[androidx.emoji2:emoji2:1.2.0] C:\Users\Ali\.gradle\caches\transforms-4\eba360f5ec7a9c841218e587f8b7ce98\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:27:13-37
-44            <meta-data
-44-->[androidx.emoji2:emoji2:1.2.0] C:\Users\Ali\.gradle\caches\transforms-4\eba360f5ec7a9c841218e587f8b7ce98\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:29:13-31:52
-45                android:name="androidx.emoji2.text.EmojiCompatInitializer"
-45-->[androidx.emoji2:emoji2:1.2.0] C:\Users\Ali\.gradle\caches\transforms-4\eba360f5ec7a9c841218e587f8b7ce98\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:30:17-75
-46                android:value="androidx.startup" />
-46-->[androidx.emoji2:emoji2:1.2.0] C:\Users\Ali\.gradle\caches\transforms-4\eba360f5ec7a9c841218e587f8b7ce98\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:31:17-49
-47            <meta-data
-47-->[androidx.lifecycle:lifecycle-process:2.4.1] C:\Users\Ali\.gradle\caches\transforms-4\aa7f666a0066d08b784bddcbbaaedb82\transformed\jetified-lifecycle-process-2.4.1\AndroidManifest.xml:31:13-33:52
-48                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
-48-->[androidx.lifecycle:lifecycle-process:2.4.1] C:\Users\Ali\.gradle\caches\transforms-4\aa7f666a0066d08b784bddcbbaaedb82\transformed\jetified-lifecycle-process-2.4.1\AndroidManifest.xml:32:17-78
-49                android:value="androidx.startup" />
-49-->[androidx.lifecycle:lifecycle-process:2.4.1] C:\Users\Ali\.gradle\caches\transforms-4\aa7f666a0066d08b784bddcbbaaedb82\transformed\jetified-lifecycle-process-2.4.1\AndroidManifest.xml:33:17-49
-50        </provider>
-51    </application>
-52
-53</manifest>
+13    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+13-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:6:5-77
+13-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:6:22-74
+14    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+14-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:7:5-79
+14-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:7:22-76
+15    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+15-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:8:5-81
+15-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:8:22-78
+16    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+16-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:9:5-95
+16-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:9:22-92
+17    <uses-permission android:name="android.permission.WAKE_LOCK" />
+17-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:10:5-68
+17-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:10:22-65
+18
+19    <permission
+19-->[androidx.core:core:1.12.0] C:\Users\Ali\.gradle\caches\transforms-3\d96d5ff2b7712e4b68518182e56ec4a5\transformed\core-1.12.0\AndroidManifest.xml:22:5-24:47
+20        android:name="com.bistbot.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+20-->[androidx.core:core:1.12.0] C:\Users\Ali\.gradle\caches\transforms-3\d96d5ff2b7712e4b68518182e56ec4a5\transformed\core-1.12.0\AndroidManifest.xml:23:9-81
+21        android:protectionLevel="signature" />
+21-->[androidx.core:core:1.12.0] C:\Users\Ali\.gradle\caches\transforms-3\d96d5ff2b7712e4b68518182e56ec4a5\transformed\core-1.12.0\AndroidManifest.xml:24:9-44
+22
+23    <uses-permission android:name="com.bistbot.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
+23-->[androidx.core:core:1.12.0] C:\Users\Ali\.gradle\caches\transforms-3\d96d5ff2b7712e4b68518182e56ec4a5\transformed\core-1.12.0\AndroidManifest.xml:26:5-97
+23-->[androidx.core:core:1.12.0] C:\Users\Ali\.gradle\caches\transforms-3\d96d5ff2b7712e4b68518182e56ec4a5\transformed\core-1.12.0\AndroidManifest.xml:26:22-94
+24
+25    <application
+25-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:12:5-42:19
+26        android:allowBackup="true"
+26-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:13:9-35
+27        android:appComponentFactory="androidx.core.app.CoreComponentFactory"
+27-->[androidx.core:core:1.12.0] C:\Users\Ali\.gradle\caches\transforms-3\d96d5ff2b7712e4b68518182e56ec4a5\transformed\core-1.12.0\AndroidManifest.xml:28:18-86
+28        android:debuggable="true"
+29        android:extractNativeLibs="true"
+30        android:icon="@mipmap/ic_launcher"
+30-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:14:9-43
+31        android:label="BIST Bot"
+31-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:16:9-33
+32        android:roundIcon="@mipmap/ic_launcher_round"
+32-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:15:9-54
+33        android:supportsRtl="true"
+33-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:17:9-35
+34        android:theme="@style/Theme.BistBot"
+34-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:18:9-45
+35        android:usesCleartextTraffic="true" >
+35-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:19:9-44
+36        <activity
+36-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:21:9-29:20
+37            android:name="com.bistbot.MainActivity"
+37-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:22:13-41
+38            android:exported="true"
+38-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:23:13-36
+39            android:screenOrientation="portrait" >
+39-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:24:13-49
+40            <intent-filter>
+40-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:25:13-28:29
+41                <action android:name="android.intent.action.MAIN" />
+41-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:26:17-69
+41-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:26:25-66
+42
+43                <category android:name="android.intent.category.LAUNCHER" />
+43-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:27:17-77
+43-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:27:27-74
+44            </intent-filter>
+45        </activity>
+46
+47        <receiver
+47-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:31:9-40:20
+48            android:name="com.bistbot.MarketOpenReceiver"
+48-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:32:13-47
+49            android:exported="true" >
+49-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:33:13-36
+50            <intent-filter>
+50-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:34:13-36:29
+51                <action android:name="android.intent.action.BOOT_COMPLETED" />
+51-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:35:17-79
+51-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:35:25-76
+52            </intent-filter>
+53            <intent-filter>
+53-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:37:13-39:29
+54                <action android:name="com.bistbot.DISMISS_NOTIFICATION" />
+54-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:38:17-75
+54-->C:\Users\Ali\OneDrive\Masaüstü\bist_bot\android_app\app\src\main\AndroidManifest.xml:38:25-72
+55            </intent-filter>
+56        </receiver>
+57
+58        <provider
+58-->[androidx.emoji2:emoji2:1.2.0] C:\Users\Ali\.gradle\caches\transforms-3\870579bb6a02c4a9fcf44cd76a070088\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:24:9-32:20
+59            android:name="androidx.startup.InitializationProvider"
+59-->[androidx.emoji2:emoji2:1.2.0] C:\Users\Ali\.gradle\caches\transforms-3\870579bb6a02c4a9fcf44cd76a070088\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:25:13-67
+60            android:authorities="com.bistbot.androidx-startup"
+60-->[androidx.emoji2:emoji2:1.2.0] C:\Users\Ali\.gradle\caches\transforms-3\870579bb6a02c4a9fcf44cd76a070088\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:26:13-68
+61            android:exported="false" >
+61-->[androidx.emoji2:emoji2:1.2.0] C:\Users\Ali\.gradle\caches\transforms-3\870579bb6a02c4a9fcf44cd76a070088\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:27:13-37
+62            <meta-data
+62-->[androidx.emoji2:emoji2:1.2.0] C:\Users\Ali\.gradle\caches\transforms-3\870579bb6a02c4a9fcf44cd76a070088\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:29:13-31:52
+63                android:name="androidx.emoji2.text.EmojiCompatInitializer"
+63-->[androidx.emoji2:emoji2:1.2.0] C:\Users\Ali\.gradle\caches\transforms-3\870579bb6a02c4a9fcf44cd76a070088\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:30:17-75
+64                android:value="androidx.startup" />
+64-->[androidx.emoji2:emoji2:1.2.0] C:\Users\Ali\.gradle\caches\transforms-3\870579bb6a02c4a9fcf44cd76a070088\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:31:17-49
+65            <meta-data
+65-->[androidx.lifecycle:lifecycle-process:2.4.1] C:\Users\Ali\.gradle\caches\transforms-3\a7dda3e8c97e6492492c13a00b16e584\transformed\jetified-lifecycle-process-2.4.1\AndroidManifest.xml:31:13-33:52
+66                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
+66-->[androidx.lifecycle:lifecycle-process:2.4.1] C:\Users\Ali\.gradle\caches\transforms-3\a7dda3e8c97e6492492c13a00b16e584\transformed\jetified-lifecycle-process-2.4.1\AndroidManifest.xml:32:17-78
+67                android:value="androidx.startup" />
+67-->[androidx.lifecycle:lifecycle-process:2.4.1] C:\Users\Ali\.gradle\caches\transforms-3\a7dda3e8c97e6492492c13a00b16e584\transformed\jetified-lifecycle-process-2.4.1\AndroidManifest.xml:33:17-49
+68        </provider>
+69    </application>
+70
+71</manifest>

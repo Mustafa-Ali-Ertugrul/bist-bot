@@ -4,7 +4,7 @@
             "outputFile": "com.bistbot.app-mergeDebugResources-19:/values-v16/values-v16.xml",
             "map": [
                 {
-                    "source": "C:\\Users\\Ali\\.gradle\\caches\\transforms-4\\8b7d7c6033c0ad55d1cbada688971ac0\\transformed\\core-1.9.0\\res\\values-v16\\values-v16.xml",
+                    "source": "C:\\Users\\Ali\\.gradle\\caches\\transforms-3\\d96d5ff2b7712e4b68518182e56ec4a5\\transformed\\core-1.12.0\\res\\values-v16\\values-v16.xml",
                     "from": {
                         "startLines": "2",
                         "startColumns": "4",
@@ -14,7 +14,7 @@
                     }
                 },
                 {
-                    "source": "C:\\Users\\Ali\\.gradle\\caches\\transforms-4\\60cd596aafa3b3e4afd0c6b6ffb24cd5\\transformed\\appcompat-1.6.1\\res\\values-v16\\values-v16.xml",
+                    "source": "C:\\Users\\Ali\\.gradle\\caches\\transforms-3\\bf1c39337335c1f6113c5963bd626d0d\\transformed\\appcompat-1.6.1\\res\\values-v16\\values-v16.xml",
                     "from": {
                         "startLines": "2",
                         "startColumns": "4",
