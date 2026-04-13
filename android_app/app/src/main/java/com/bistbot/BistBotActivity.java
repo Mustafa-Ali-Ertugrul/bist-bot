@@ -14,6 +14,7 @@ import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.ProgressBar;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
@@ -24,6 +25,7 @@ public class BistBotActivity extends AppCompatActivity {
     private static final String HOME_URL = "https://bist-bot-620752985356.europe-west2.run.app";
 
     private WebView webView;
+    private ProgressBar loadingIndicator;
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -32,6 +34,7 @@ public class BistBotActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         webView = findViewById(R.id.webView);
+        loadingIndicator = findViewById(R.id.loadingIndicator);
         configureWebView();
 
         Log.d(TAG, "Startup URL: " + HOME_URL);
@@ -45,7 +48,7 @@ public class BistBotActivity extends AppCompatActivity {
         settings.setDatabaseEnabled(true);
         settings.setUseWideViewPort(true);
         settings.setLoadWithOverviewMode(true);
-        settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
+        settings.setCacheMode(WebSettings.LOAD_DEFAULT);
         settings.setAllowFileAccess(false);
         settings.setAllowContentAccess(false);
 
@@ -59,8 +62,6 @@ public class BistBotActivity extends AppCompatActivity {
             cookieManager.setAcceptThirdPartyCookies(webView, true);
         }
 
-        webView.clearCache(true);
-        webView.clearHistory();
         webView.addJavascriptInterface(new WebAppInterface(this), "Android");
         webView.setWebViewClient(new AppWebViewClient());
     }
@@ -83,14 +84,28 @@ public class BistBotActivity extends AppCompatActivity {
         }
 
         @Override
+        public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
+            super.onPageStarted(view, url, favicon);
+            if (loadingIndicator != null) {
+                loadingIndicator.setVisibility(android.view.View.VISIBLE);
+            }
+        }
+
+        @Override
         public void onPageFinished(WebView view, String url) {
             super.onPageFinished(view, url);
+            if (loadingIndicator != null) {
+                loadingIndicator.setVisibility(android.view.View.GONE);
+            }
             Log.d(TAG, "Loaded: " + url);
         }
 
         @Override
         public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
             if (request.isForMainFrame()) {
+                if (loadingIndicator != null) {
+                    loadingIndicator.setVisibility(android.view.View.GONE);
+                }
                 CharSequence description = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
                     ? error.getDescription()
                     : "Unknown error";
