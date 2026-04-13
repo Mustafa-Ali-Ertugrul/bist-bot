@@ -42,6 +42,9 @@ def bootstrap_state():
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
+    view_param = st.query_params.get("view", st.session_state.current_view)
+    if view_param in {"dashboard", "signals", "analysis", "settings"}:
+        st.session_state.current_view = view_param
 
 
 def inject_styles():
@@ -100,10 +103,55 @@ def inject_styles():
             .signal-chip.buy {background:rgba(72,221,188,0.12);color:#48ddbc;}
             .signal-chip.sell {background:rgba(255,180,170,0.12);color:#ffb4aa;}
             .footer-note {color:#738091;font-size:12px;text-align:center;margin-top:20px;}
+            .bottom-nav {
+                position: fixed;
+                left: 50%;
+                bottom: 14px;
+                transform: translateX(-50%);
+                width: min(760px, calc(100vw - 20px));
+                background: rgba(16,20,26,0.92);
+                border: 1px solid rgba(255,255,255,0.08);
+                border-radius: 22px;
+                backdrop-filter: blur(20px);
+                box-shadow: 0 20px 50px rgba(0,0,0,0.35);
+                padding: 10px;
+                display: grid;
+                grid-template-columns: repeat(4, 1fr);
+                gap: 8px;
+                z-index: 9999;
+            }
+            .bottom-nav a {
+                text-decoration: none;
+                color: #9aa4b2;
+                border-radius: 16px;
+                padding: 10px 6px;
+                text-align: center;
+                font-size: 11px;
+                font-weight: 800;
+                letter-spacing: 0.14em;
+                text-transform: uppercase;
+                transition: all 0.18s ease;
+                border: 1px solid transparent;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 6px;
+            }
+            .bottom-nav a.active {
+                background: rgba(72,221,188,0.12);
+                color: #48ddbc;
+                border-color: rgba(72,221,188,0.18);
+            }
+            .bottom-nav-icon {
+                font-size: 18px;
+                line-height: 1;
+                letter-spacing: normal;
+            }
             @media (max-width: 768px) {
                 .block-container {padding-left:0.8rem;padding-right:0.8rem;}
                 .hero-shell {padding:20px;border-radius:20px;}
                 .hero-title {font-size:32px;}
+                .bottom-nav {bottom: 10px; width: calc(100vw - 16px); border-radius: 18px;}
             }
         </style>
         """,
@@ -311,13 +359,17 @@ def render_top_shell(signals, summary):
 
 
 def render_navigation():
-    cols = st.columns(4)
-    views = [("Dashboard", "dashboard"), ("Signals", "signals"), ("Analysis", "analysis"), ("Settings", "settings")]
-    for col, (label, view) in zip(cols, views):
-        with col:
-            if st.button(label, use_container_width=True, type="primary" if st.session_state.current_view == view else "secondary"):
-                st.session_state.current_view = view
-                st.rerun()
+    items = [
+        ("dashboard", "Dashboard", "◫"),
+        ("signals", "Signals", "◌"),
+        ("analysis", "Analysis", "◭"),
+        ("settings", "Settings", "◎"),
+    ]
+    links = []
+    for view, label, icon in items:
+        active = "active" if st.session_state.current_view == view else ""
+        links.append(f'<a class="{active}" href="?view={view}"><span class="bottom-nav-icon">{icon}</span><span>{label}</span></a>')
+    st.markdown(f'<div class="bottom-nav">{"".join(links)}</div>', unsafe_allow_html=True)
 
 
 def metric_card(title, value, subtitle=""):
@@ -512,7 +564,6 @@ if st.session_state.auto_refresh and st.session_state.last_scan_time:
         st.rerun()
 
 render_top_shell(signals, market_summary)
-render_navigation()
 
 if not signals:
     st.warning("Sinyal bulunamadi. Tarama tekrarlandiginda ekran otomatik dolacak.")
@@ -527,3 +578,4 @@ else:
         render_settings(signals)
 
 st.markdown(f"<div class='footer-note'>BIST Bot modern terminal · Son guncelleme {datetime.now().strftime('%d.%m.%Y %H:%M')}</div>", unsafe_allow_html=True)
+render_navigation()
