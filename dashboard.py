@@ -2,6 +2,7 @@ from flask import Flask, render_template, jsonify, request
 from datetime import datetime
 import json
 import logging
+import time
 import pandas as pd
 
 import config
@@ -18,6 +19,14 @@ engine = StrategyEngine()
 db = SignalDatabase()
 
 
+@app.route("/health")
+def health():
+    return jsonify({
+        "status": "ok",
+        "timestamp": datetime.now().isoformat(),
+    })
+
+
 @app.route("/")
 def index():
     return render_template("dashboard.html")
@@ -25,6 +34,7 @@ def index():
 
 @app.route("/api/scan", methods=["POST"])
 def api_scan():
+    start_time = time.time()
     try:
         fetcher.clear_cache()
         all_data = fetcher.fetch_all()
@@ -56,11 +66,13 @@ def api_scan():
                 "timestamp": s.timestamp.isoformat(),
             })
 
+        duration_ms = (time.time() - start_time) * 1000
         return jsonify({
             "status": "ok",
             "scanned": len(all_data),
             "signals": results,
             "timestamp": datetime.now().isoformat(),
+            "duration_ms": round(duration_ms, 2),
         })
 
     except Exception as e:
@@ -70,6 +82,7 @@ def api_scan():
 
 @app.route("/api/analyze/<ticker>")
 def api_analyze(ticker):
+    start_time = time.time()
     try:
         if not ticker.endswith(".IS"):
             ticker += ".IS"
@@ -111,6 +124,7 @@ def api_analyze(ticker):
                 "target": signal.target_price if signal else 0,
             },
             "price_data": price_data,
+            "duration_ms": round((time.time() - start_time) * 1000, 2),
         }
 
         return jsonify(result)
