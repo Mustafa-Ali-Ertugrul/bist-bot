@@ -84,8 +84,8 @@ class TechnicalIndicators:
         df["minus_dm"] = low_diff.clip(lower=0)
         df.loc[low_diff <= high_diff, "minus_dm"] = 0
         
-        plus_di = 100 * pd.Series(plus_dm).rolling(window=period).mean() / df["atr"]
-        minus_di = 100 * pd.Series(minus_dm).rolling(window=period).mean() / df["atr"]
+        plus_di = 100 * df["plus_dm"].rolling(window=period).mean() / df["atr"]
+        minus_di = 100 * df["minus_dm"].rolling(window=period).mean() / df["atr"]
         
         dx = 100 * abs(plus_di - minus_di) / (plus_di + minus_di)
         df["adx"] = dx.rolling(window=period).mean()
