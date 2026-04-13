@@ -1,5 +1,7 @@
 from flask import Flask, render_template, jsonify, request
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+
+TR = timezone(timedelta(hours=3))
 import json
 import logging
 import time
@@ -23,7 +25,7 @@ db = SignalDatabase()
 def health():
     return jsonify({
         "status": "ok",
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": datetime.now(TR).isoformat(),
     })
 
 
@@ -71,7 +73,7 @@ def api_scan():
             "status": "ok",
             "scanned": len(all_data),
             "signals": results,
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now(TR).isoformat(),
             "duration_ms": round(duration_ms, 2),
         })
 

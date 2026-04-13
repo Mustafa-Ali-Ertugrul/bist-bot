@@ -1,6 +1,8 @@
 import requests
 import logging
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+
+TR = timezone(timedelta(hours=3))
 
 import config
 from strategy import Signal, SignalType
@@ -113,7 +115,7 @@ class TelegramNotifier:
             for s in top_sells
         ]) or "  Yok"
 
-        now = datetime.now().strftime("%d.%m.%Y %H:%M")
+        now = datetime.now(TR).strftime("%d.%m.%Y %H:%M")
 
         message = f"""
 🔍 <b>BIST TARAMA RAPORU</b>
@@ -174,7 +176,7 @@ class TelegramNotifier:
 🛑 <b>Stop-Loss:</b> ₺{new_signal.stop_loss:.2f}
 🎯 <b>Hedef:</b> ₺{new_signal.target_price:.2f}
 
-⏰ {datetime.now().strftime('%d.%m.%Y %H:%M')}
+⏰ {datetime.now(TR).strftime('%d.%m.%Y %H:%M')}
 ━━━━━━━━━━━━━━━━━━━━
 ⚠️ <i>Yatırım tavsiyesi değildir!</i>
 """
@@ -220,7 +222,7 @@ class TelegramNotifier:
 🛑 <b>Stop-Loss:</b> ₺{new_signal.stop_loss:.2f}
 🎯 <b>Hedef:</b> ₺{new_signal.target_price:.2f}
 
-⏰ {datetime.now().strftime('%d.%m.%Y %H:%M')}
+⏰ {datetime.now(TR).strftime('%d.%m.%Y %H:%M')}
 ━━━━━━━━━━━━━━━━━━━━
 ⚠️ <i>Yatırım tavsiyesi değildir!</i>
 """
@@ -231,7 +233,7 @@ class TelegramNotifier:
             "🤖 <b>BIST Bot Başlatıldı!</b>\n\n"
             f"📊 Takip: {len(config.WATCHLIST)} hisse\n"
             f"⏱️ Tarama: Her {config.SCAN_INTERVAL_MINUTES} dakika\n"
-            f"⏰ Saat: {datetime.now().strftime('%H:%M')}"
+            f"⏰ Saat: {datetime.now(TR).strftime('%H:%M')}"
         )
         return self.send_message(msg)
 

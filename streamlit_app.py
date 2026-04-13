@@ -1,6 +1,8 @@
 import threading
 import re
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+
+TR = timezone(timedelta(hours=3))
 from typing import cast
 
 import pandas as pd
@@ -586,7 +588,7 @@ def map_cached_signals(rows: list[dict]) -> list[Signal]:
         try:
             timestamp = datetime.fromisoformat(row["created_at"])
         except Exception:
-            timestamp = datetime.now()
+            timestamp = datetime.now(TR)
 
         mapped.append(
             Signal(
@@ -614,7 +616,7 @@ def run_scan(force_clear: bool = False):
     else:
         last_scan_time = st.session_state.get("last_scan_time")
         if last_scan_time is not None:
-            age = (datetime.now() - last_scan_time).total_seconds()
+            age = (datetime.now(TR) - last_scan_time).total_seconds()
             if age > 900:
                 fetcher.clear_cache()
 
@@ -640,7 +642,7 @@ def run_scan(force_clear: bool = False):
 
     st.session_state.all_data = all_data
     st.session_state.signals = signals
-    st.session_state.last_scan_time = datetime.now()
+    st.session_state.last_scan_time = datetime.now(TR)
 
 
 def ensure_initial_data():
@@ -1313,7 +1315,7 @@ def render_top_shell(signals, summary):
     positive_count = len([s for s in signals if s.score >= 10])
     analyzed = summary.get("total_analyzed", len(config.WATCHLIST))
     avg_rsi = summary.get("avg_rsi", 50)
-    scan_time = st.session_state.last_scan_time.strftime("%H:%M") if st.session_state.last_scan_time else datetime.now().strftime("%H:%M")
+    scan_time = st.session_state.last_scan_time.strftime("%H:%M") if st.session_state.last_scan_time else datetime.now(TR).strftime("%H:%M")
     st.markdown(
         f"""
         <div class="hero-shell">
@@ -1679,7 +1681,7 @@ def render_settings(signals):
         next_scan = "Kapalı"
         if st.session_state.auto_refresh and st.session_state.last_scan_time:
             elapsed = (
-                datetime.now() - st.session_state.last_scan_time
+                datetime.now(TR) - st.session_state.last_scan_time
             ).total_seconds()
             remaining = max(
                 0, st.session_state.refresh_interval * 60 - elapsed
@@ -1846,7 +1848,7 @@ all_data = st.session_state.get("all_data", {})
 market_summary = get_market_summary(signals, all_data)
 
 if st.session_state.auto_refresh and st.session_state.last_scan_time:
-    elapsed = (datetime.now() - st.session_state.last_scan_time).total_seconds()
+    elapsed = (datetime.now(TR) - st.session_state.last_scan_time).total_seconds()
     if elapsed >= st.session_state.refresh_interval * 60:
         run_scan()
         st.rerun()
@@ -1865,5 +1867,5 @@ else:
     else:
         render_settings(signals)
 
-st.markdown(f"<div class='footer-note'>BIST Bot modern terminal · Son guncelleme {datetime.now().strftime('%d.%m.%Y %H:%M')}</div>", unsafe_allow_html=True)
+st.markdown(f"<div class='footer-note'>BIST Bot modern terminal · Son guncelleme {datetime.now(TR).strftime('%d.%m.%Y %H:%M')}</div>", unsafe_allow_html=True)
 render_navigation()
