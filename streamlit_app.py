@@ -51,7 +51,14 @@ def inject_styles():
     st.markdown(
         """
         <style>
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap');
+            * { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
             section[data-testid="stSidebar"] {display:none !important;}
+            [data-testid="stHeader"] {display:none !important;}
+            [data-testid="stToolbar"] {display:none !important;}
+            footer {display:none !important;}
+            .viewerBadge_container {display:none !important;}
+            #MainMenu {display:none !important;}
             .block-container {max-width:1240px;padding-top:1.2rem;padding-bottom:7rem;}
             .stApp {
                 background:
@@ -106,15 +113,15 @@ def inject_styles():
             .bottom-nav {
                 position: fixed;
                 left: 50%;
-                bottom: 14px;
+                bottom: 10px;
                 transform: translateX(-50%);
-                width: min(760px, calc(100vw - 20px));
-                background: rgba(16,20,26,0.92);
-                border: 1px solid rgba(255,255,255,0.08);
-                border-radius: 22px;
-                backdrop-filter: blur(20px);
-                box-shadow: 0 20px 50px rgba(0,0,0,0.35);
-                padding: 10px;
+                width: min(840px, calc(100vw - 16px));
+                background: linear-gradient(180deg, rgba(20,24,30,0.97), rgba(12,16,22,0.98));
+                border: 1px solid rgba(255,255,255,0.10);
+                border-radius: 24px;
+                backdrop-filter: blur(24px);
+                box-shadow: 0 24px 70px rgba(0,0,0,0.45);
+                padding: 10px 12px max(10px, env(safe-area-inset-bottom));
                 display: grid;
                 grid-template-columns: repeat(4, 1fr);
                 gap: 8px;
@@ -123,35 +130,155 @@ def inject_styles():
             .bottom-nav a {
                 text-decoration: none;
                 color: #9aa4b2;
-                border-radius: 16px;
-                padding: 10px 6px;
+                border-radius: 18px;
+                padding: 12px 6px 10px;
                 text-align: center;
-                font-size: 11px;
+                font-size: 10px;
                 font-weight: 800;
-                letter-spacing: 0.14em;
+                letter-spacing: 0.16em;
                 text-transform: uppercase;
                 transition: all 0.18s ease;
-                border: 1px solid transparent;
+                border: 1px solid rgba(255,255,255,0.04);
                 display: flex;
                 flex-direction: column;
                 align-items: center;
-                gap: 6px;
+                gap: 7px;
+                min-height: 62px;
             }
             .bottom-nav a.active {
-                background: rgba(72,221,188,0.12);
+                background: linear-gradient(180deg, rgba(72,221,188,0.14), rgba(72,221,188,0.08));
                 color: #48ddbc;
-                border-color: rgba(72,221,188,0.18);
+                border-color: rgba(72,221,188,0.22);
+                box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
             }
             .bottom-nav-icon {
-                font-size: 18px;
+                font-size: 20px;
                 line-height: 1;
                 letter-spacing: normal;
+                display: block;
+            }
+            .signal-card-buy {
+                border: 1px solid rgba(72, 221, 188, 0.25);
+                box-shadow: 0 0 24px rgba(72, 221, 188, 0.08), 0 8px 32px rgba(0,0,0,0.20);
+                border-radius: 20px;
+                padding: 20px;
+                background: rgba(72, 221, 188, 0.04);
+                margin-bottom: 12px;
+            }
+            .signal-card-sell {
+                border: 1px solid rgba(255, 121, 108, 0.25);
+                box-shadow: 0 0 24px rgba(255, 121, 108, 0.08), 0 8px 32px rgba(0,0,0,0.20);
+                border-radius: 20px;
+                padding: 20px;
+                background: rgba(255, 121, 108, 0.04);
+                margin-bottom: 12px;
+            }
+            .signal-card-neutral {
+                border: 1px solid rgba(255,255,255,0.07);
+                box-shadow: 0 8px 32px rgba(0,0,0,0.20);
+                border-radius: 20px;
+                padding: 20px;
+                background: rgba(255,255,255,0.02);
+                margin-bottom: 12px;
+            }
+            .score-bar-wrap {
+                background: rgba(255,255,255,0.06);
+                border-radius: 999px;
+                height: 6px;
+                width: 100%;
+                margin-top: 8px;
+                overflow: hidden;
+            }
+            .score-bar-fill {
+                height: 6px;
+                border-radius: 999px;
+                background: linear-gradient(90deg, #48ddbc, #2dd4bf);
+                transition: width 0.4s ease;
+            }
+            .score-bar-fill.negative {
+                background: linear-gradient(90deg, #ff796c, #ef4444);
+            }
+            .reason-chip {
+                display: inline-block;
+                padding: 4px 10px;
+                border-radius: 999px;
+                background: rgba(255,255,255,0.05);
+                border: 1px solid rgba(255,255,255,0.08);
+                color: #a0aabb;
+                font-size: 11px;
+                font-weight: 600;
+                margin: 3px 3px 0 0;
+            }
+            .verdict-card {
+                border-radius: 22px;
+                padding: 24px;
+                text-align: center;
+                margin-bottom: 16px;
+            }
+            .verdict-card.buy {
+                background: linear-gradient(135deg, rgba(72,221,188,0.10), rgba(45,212,191,0.06));
+                border: 1px solid rgba(72,221,188,0.22);
+                box-shadow: 0 0 40px rgba(72,221,188,0.10);
+            }
+            .verdict-card.sell {
+                background: linear-gradient(135deg, rgba(255,121,108,0.10), rgba(239,68,68,0.06));
+                border: 1px solid rgba(255,121,108,0.22);
+                box-shadow: 0 0 40px rgba(255,121,108,0.10);
+            }
+            .verdict-label {
+                font-size: 32px;
+                font-weight: 900;
+                letter-spacing: -0.03em;
+                color: #dfe2eb;
+            }
+            .verdict-score {
+                font-size: 14px;
+                color: #8b90a0;
+                margin-top: 6px;
+            }
+            .indicator-row {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 10px 0;
+                border-bottom: 1px solid rgba(255,255,255,0.04);
+                font-size: 13px;
+            }
+            .indicator-row:last-child { border-bottom: none; }
+            .indicator-name { color: #8b90a0; font-weight: 600; }
+            .indicator-value { color: #dfe2eb; font-weight: 700; }
+            .indicator-badge {
+                padding: 3px 9px;
+                border-radius: 999px;
+                font-size: 10px;
+                font-weight: 800;
+                letter-spacing: 0.10em;
+                text-transform: uppercase;
+            }
+            .indicator-badge.oversold { background: rgba(72,221,188,0.12); color: #48ddbc; }
+            .indicator-badge.overbought { background: rgba(255,121,108,0.12); color: #ff796c; }
+            .indicator-badge.neutral { background: rgba(255,255,255,0.06); color: #8b90a0; }
+            .settings-group {
+                background: rgba(28,32,38,0.92);
+                border: 1px solid rgba(255,255,255,0.06);
+                border-radius: 20px;
+                padding: 20px;
+                margin-bottom: 14px;
+            }
+            .settings-group-title {
+                font-size: 13px;
+                font-weight: 800;
+                letter-spacing: 0.14em;
+                text-transform: uppercase;
+                color: #48ddbc;
+                margin-bottom: 14px;
             }
             @media (max-width: 768px) {
                 .block-container {padding-left:0.8rem;padding-right:0.8rem;}
                 .hero-shell {padding:20px;border-radius:20px;}
                 .hero-title {font-size:32px;}
-                .bottom-nav {bottom: 10px; width: calc(100vw - 16px); border-radius: 18px;}
+                .bottom-nav {bottom: 8px; width: calc(100vw - 12px); border-radius: 20px; padding-left: 8px; padding-right: 8px;}
+                .bottom-nav a {min-height: 58px; padding-top: 10px; font-size: 9px;}
             }
         </style>
         """,
