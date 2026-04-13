@@ -843,7 +843,7 @@ def render_live_insights(signals):
     if not signals:
         return
 
-    top = sorted(signals, key=lambda s: abs(s.score), reverse=True)[:5]
+    top = sorted(signals, key=lambda s: s.score, reverse=False)[:5]
 
     time_str = (
         st.session_state.last_scan_time.strftime("%H:%M")
@@ -1377,7 +1377,7 @@ def render_dashboard(signals, summary):
 
     with left_col:
         st.markdown("<div class='section-title'>Portfolio Pulse</div>", unsafe_allow_html=True)
-        top = strong[:5] if strong else sorted(signals, key=lambda x: x.score, reverse=True)[:5]
+        top = strong[:5] if strong else sorted(signals, key=lambda x: x.score, reverse=False)[:5]
         if not top:
             st.info("Dashboard verisi icin once tarama yapin.")
         else:

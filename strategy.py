@@ -481,7 +481,7 @@ class StrategyEngine:
             if signal:
                 signals.append(signal)
 
-        signals.sort(key=lambda s: s.score, reverse=True)
+        signals.sort(key=lambda s: s.score, reverse=False)
 
         return signals
 
