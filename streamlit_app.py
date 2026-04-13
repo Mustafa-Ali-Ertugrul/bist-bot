@@ -1,5 +1,7 @@
+import threading
 import re
 from datetime import datetime
+from typing import cast
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -7,9 +9,10 @@ import requests
 import streamlit as st
 
 import config
+from db_manager import init_db, save_signal, get_recent_signals
 from data_fetcher import BISTDataFetcher
 from indicators import TechnicalIndicators
-from strategy import StrategyEngine
+from strategy import StrategyEngine, Signal, SignalType
 from streamlit_utils import check_signals, send_signal_notification
 
 st.set_page_config(
@@ -568,16 +571,73 @@ def get_signal_color(signal_type):
     return "blue"
 
 
-def run_scan():
+def map_cached_signals(rows: list[dict]) -> list[Signal]:
+    mapped: list[Signal] = []
+
+    for row in rows:
+        raw_conditions = row.get("conditions", [])
+        reasons = raw_conditions if isinstance(raw_conditions, list) else [str(raw_conditions)]
+
+        try:
+            signal_type = SignalType(row["signal_type"])
+        except Exception:
+            signal_type = SignalType.HOLD
+
+        try:
+            timestamp = datetime.fromisoformat(row["created_at"])
+        except Exception:
+            timestamp = datetime.now()
+
+        mapped.append(
+            Signal(
+                ticker=row["ticker"],
+                signal_type=signal_type,
+                score=float(row.get("score", 0.0) or 0.0),
+                price=float(row.get("price", 0.0) or 0.0),
+                reasons=reasons,
+                stop_loss=float(row.get("stop_loss", 0.0) or 0.0),
+                target_price=float(row.get("target_price", 0.0) or 0.0),
+                timestamp=timestamp,
+                confidence=str(row.get("confidence", "CACHE") or "CACHE"),
+            )
+        )
+
+    return mapped
+
+
+def run_scan(force_clear: bool = False):
     fetcher = st.session_state.data_fetcher
     engine = st.session_state.engine
-    fetcher.clear_cache()
+
+    if force_clear:
+        fetcher.clear_cache()
+    else:
+        last_scan_time = st.session_state.get("last_scan_time")
+        if last_scan_time is not None:
+            age = (datetime.now() - last_scan_time).total_seconds()
+            if age > 900:
+                fetcher.clear_cache()
+
     all_data = fetcher.fetch_all()
     signals = engine.scan_all(all_data)
+
+    for signal in signals:
+        save_signal(
+            ticker=signal.ticker,
+            signal_type=signal.signal_type.value,
+            conditions=signal.reasons,
+            score=signal.score,
+            price=signal.price,
+            stop_loss=signal.stop_loss,
+            target_price=signal.target_price,
+            confidence=signal.confidence,
+        )
+
     for ticker, df in all_data.items():
         signal_type, conditions = check_signals(ticker, df)
         if signal_type:
             send_signal_notification(ticker, signal_type, conditions)
+
     st.session_state.all_data = all_data
     st.session_state.signals = signals
     st.session_state.last_scan_time = datetime.now()
@@ -586,8 +646,21 @@ def run_scan():
 def ensure_initial_data():
     if st.session_state.signals:
         return
+
     try:
-        run_scan()
+        cached = get_recent_signals(limit=50)
+
+        if cached:
+            st.session_state.signals = map_cached_signals(cached)
+
+            threading.Thread(
+                target=run_scan,
+                kwargs={"force_clear": False},
+                daemon=True,
+            ).start()
+            return
+
+        run_scan(force_clear=False)
         st.rerun()
     except Exception as exc:
         st.error(f"Tarama hatasi: {exc}")
@@ -653,17 +726,38 @@ def get_market_summary(signals, all_data):
 def fetch_index_data():
     try:
         import yfinance as yf
-
-        tickers = {"XU100": "XU100.IS", "XU030": "XU030.IS", "USDTRY": "USDTRY=X"}
+        tickers = {
+            "XU100":  "XU100.IS",
+            "XU030":  "XU030.IS",
+            "USDTRY": "USDTRY=X",
+        }
         result = {}
         for name, ticker in tickers.items():
             try:
-                df = yf.download(ticker, period="2d", interval="1d", progress=False, auto_adjust=True)
-                if df is not None and len(df) >= 2:
-                    prev = float(df["Close"].iloc[-2])
-                    last = float(df["Close"].iloc[-1])
-                    chg = ((last - prev) / prev) * 100
+                raw = yf.download(
+                    ticker,
+                    period="5d",
+                    interval="1d",
+                    progress=False,
+                    auto_adjust=True,
+                    group_by="column",
+                )
+                if raw is None or raw.empty:
+                    result[name] = {"value": 0.0, "change_pct": 0.0}
+                    continue
+                raw = cast(pd.DataFrame, raw)
+                raw = raw.dropna(subset=["Close"])
+                if isinstance(raw.columns, pd.MultiIndex):
+                    raw.columns = raw.columns.get_level_values(0)
+
+                if len(raw) >= 2:
+                    prev  = float(raw["Close"].iloc[-2])
+                    last  = float(raw["Close"].iloc[-1])
+                    chg   = ((last - prev) / prev) * 100
                     result[name] = {"value": last, "change_pct": chg}
+                elif len(raw) == 1:
+                    last = float(raw["Close"].iloc[-1])
+                    result[name] = {"value": last, "change_pct": 0.0}
                 else:
                     result[name] = {"value": 0.0, "change_pct": 0.0}
             except Exception:
@@ -727,7 +821,12 @@ def render_index_cards():
         change = data.get("change_pct", 0.0)
         css = "change-up" if change >= 0 else "change-down"
         arrow = "▲" if change >= 0 else "▼"
-        val_str = f"{value:,.0f}" if value > 100 else f"{value:.4f}"
+        if name == "USDTRY":
+            val_str = f"{value:.4f}"
+        elif value > 1000:
+            val_str = f"{value:,.0f}"
+        else:
+            val_str = f"{value:.2f}"
         st.markdown(
             f"""
         <div class="index-card">
@@ -743,34 +842,52 @@ def render_index_cards():
 def render_live_insights(signals):
     if not signals:
         return
+
     top = sorted(signals, key=lambda s: abs(s.score), reverse=True)[:5]
+
+    time_str = (
+        st.session_state.last_scan_time.strftime("%H:%M")
+        if st.session_state.last_scan_time
+        else "—"
+    )
+
     rows = []
     for s in top:
-        name = config.TICKER_NAMES.get(s.ticker, s.ticker)
+        name         = config.TICKER_NAMES.get(s.ticker, s.ticker)
         ticker_short = s.ticker.replace(".IS", "")
+
         if s.score >= 40:
-            dot, action = "green", "Guclu alim sinyali"
+            dot    = "green"
+            action = "Güçlü alım sinyali"
         elif s.score >= 10:
-            dot, action = "blue", "Alim firsati"
+            dot    = "blue"
+            action = "Alım fırsatı"
         else:
-            dot, action = "red", "Satis baskisi"
-        time_str = st.session_state.last_scan_time.strftime("%H:%M") if st.session_state.last_scan_time else "-"
-        rows.append(
-            f"""
-        <div class="live-insights-row">
-          <div class="insight-dot {dot}"></div>
-          <div>
-            <div class="insight-text">
-              <strong>{ticker_short}</strong> - {name}
-              &nbsp;·&nbsp; {action}
-              &nbsp;<span style='color:#8b90a0;'>Skor {s.score:+.0f}</span>
-            </div>
-            <div class="insight-time">{time_str}</div>
-          </div>
-        </div>
-        """
+            dot    = "red"
+            action = "Satış baskısı"
+
+        row = (
+            "<div class='live-insights-row'>"
+            "<div class='insight-dot " + dot + "'></div>"
+            "<div>"
+            "<div class='insight-text'>"
+            "<strong>" + ticker_short + "</strong>"
+            " — " + name +
+            " &nbsp;·&nbsp; " + action +
+            " &nbsp;<span style='color:#8b90a0;'>Skor " + f"{s.score:+.0f}" + "</span>"
+            "</div>"
+            "<div class='insight-time'>" + time_str + "</div>"
+            "</div>"
+            "</div>"
         )
-    st.markdown(f"<div class='surface-shell'>{''.join(rows)}</div>", unsafe_allow_html=True)
+        rows.append(row)
+
+    html = (
+        "<div class='surface-shell'>"
+        + "".join(rows)
+        + "</div>"
+    )
+    st.markdown(html, unsafe_allow_html=True)
 
 
 def render_stock_identity(ticker, snapshot):
@@ -1718,6 +1835,7 @@ def render_settings(signals):
             )
 
 
+init_db()
 bootstrap_state()
 inject_styles()
 ensure_initial_data()

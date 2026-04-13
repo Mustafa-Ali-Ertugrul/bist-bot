@@ -22,7 +22,7 @@ import androidx.appcompat.app.AppCompatActivity;
 public class BistBotActivity extends AppCompatActivity {
 
     private static final String TAG = "BistBotActivity";
-    private static final String HOME_URL = "https://bist-bot-620752985356.europe-west2.run.app";
+    private static final String BIST_BOT_URL = "https://bist-bot-620752985356.europe-west1.run.app";
 
     private WebView webView;
     private ProgressBar loadingIndicator;
@@ -37,8 +37,8 @@ public class BistBotActivity extends AppCompatActivity {
         loadingIndicator = findViewById(R.id.loadingIndicator);
         configureWebView();
 
-        Log.d(TAG, "Startup URL: " + HOME_URL);
-        webView.loadUrl(HOME_URL);
+        Log.d(TAG, "Startup URL: " + BIST_BOT_URL);
+        webView.loadUrl(BIST_BOT_URL);
     }
 
     private void configureWebView() {
@@ -67,7 +67,7 @@ public class BistBotActivity extends AppCompatActivity {
     }
 
     private boolean isInternalUrl(String url) {
-        return url != null && url.startsWith(HOME_URL);
+        return url != null && url.startsWith(BIST_BOT_URL);
     }
 
     private class AppWebViewClient extends WebViewClient {
