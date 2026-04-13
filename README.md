@@ -190,6 +190,36 @@ bist_bot/
 | `PAPER_MODE` | False | Paper trading modu |
 | `SECTOR_LIMIT` | 2 | Ayni sektorden max sinyal |
 
+### Sinyal Esikleri
+
+| Parametre | Varsayilan | Aciklama |
+|---|---|---|
+| `BUY_THRESHOLD` | 15 | Minimum alim sinyali skoru |
+| `SELL_THRESHOLD` | -15 | Minimum satim sinyali skoru |
+| `MIN_REGIME_PERSISTENCE` | 2 | Rejim teyidi icin min bar sayisi |
+| `MOMENTUM_CONFIRMATION` | 4.0 | Dusuk ADX durumunda momentum esigi (%) |
+| `SIDEWAYS_EXTRA_THRESHOLD` | 5 | Yatay piyasada ekstra filtreleme |
+
+### Regime Detection
+
+Strateji piyasa rejimlerini tespit eder ve buna göre sinyal üretimini ayarlar:
+
+```
+ADX >= 20 + DI_crossover → TRENDING (BULL/BEAR)
+ADX >= 15 + momentum onayi → WEAK_TREND
+ADX < 15 veya DI yakin  → SIDEWAYS
+```
+
+**Filtreleme mantigi:**
+- SIDEWAYS rejimde skor *= 0.6 ve abs(score) < BUY_THRESHOLD → sinyal yok
+- Düsük ADX + DI farki < 5 iken momentum < %4 → sinyal reddedilir
+- Rejim tek bar'da degismez; en az 2 bar teyit gerekir
+
+**Sonuçlar (2y backtest, 4 hisse):**
+- 4/4 hissede getiri artisi (ort. +33%)
+- THYAO.IS: 23→26 trade, getiri +17.9%→+24.4%
+- ASELS.IS: 2→22 trade, getiri +9.9%→+33.6%
+
 ### Backtest Ayarlari
 
 | Parametre | Varsayilan | Aciklama |

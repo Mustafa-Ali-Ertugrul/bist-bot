@@ -123,9 +123,9 @@ class Backtester:
             score = self._calculate_score(sub_df)
 
             capital_history.append(
-                capital if position is None
-                else capital + (price - position["entry_price"])
-                     * position["shares"]
+                capital
+                if position is None
+                else capital + position["shares"] * price
             )
 
             if position is None:

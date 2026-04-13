@@ -126,7 +126,7 @@ class RiskManager:
             valid_resistances = [r for r in resistances if r > price]
             if valid_resistances:
                 nearest_resistance = min(valid_resistances)
-                levels.target_resistance = round(nearest_resistance * 0.995, 2)
+                levels.target_resistance = round(nearest_resistance, 2)
 
         return levels
 
@@ -179,27 +179,27 @@ class RiskManager:
     def _calc_swing_levels(
         self, df: pd.DataFrame, price: float, levels: RiskLevels
     ) -> RiskLevels:
-        lookback = min(60, len(df) - 2)
+        lookback = min(60, len(df))
         if lookback < 5:
             return levels
 
-        recent = df.tail(lookback + 2).reset_index(drop=True)
+        recent = df.tail(lookback).copy()
 
-        swing_lows = []
-        swing_highs = []
+        swing_low_mask = (
+            (recent["low"] < recent["low"].shift(1))
+            & (recent["low"] < recent["low"].shift(2))
+            & (recent["low"] < recent["low"].shift(-1))
+            & (recent["low"] < recent["low"].shift(-2))
+        )
+        swing_high_mask = (
+            (recent["high"] > recent["high"].shift(1))
+            & (recent["high"] > recent["high"].shift(2))
+            & (recent["high"] > recent["high"].shift(-1))
+            & (recent["high"] > recent["high"].shift(-2))
+        )
 
-        for i in range(2, len(recent) - 2):
-            if (recent["low"].iloc[i] < recent["low"].iloc[i-1] and
-                recent["low"].iloc[i] < recent["low"].iloc[i-2] and
-                recent["low"].iloc[i] < recent["low"].iloc[i+1] and
-                recent["low"].iloc[i] < recent["low"].iloc[i+2]):
-                swing_lows.append(float(recent["low"].iloc[i]))
-
-            if (recent["high"].iloc[i] > recent["high"].iloc[i-1] and
-                recent["high"].iloc[i] > recent["high"].iloc[i-2] and
-                recent["high"].iloc[i] > recent["high"].iloc[i+1] and
-                recent["high"].iloc[i] > recent["high"].iloc[i+2]):
-                swing_highs.append(float(recent["high"].iloc[i]))
+        swing_lows = recent.loc[swing_low_mask, "low"].dropna().astype(float).tolist()
+        swing_highs = recent.loc[swing_high_mask, "high"].dropna().astype(float).tolist()
 
         valid_lows = [s for s in swing_lows if s < price]
         if valid_lows:
@@ -207,7 +207,7 @@ class RiskManager:
 
         valid_highs = [s for s in swing_highs if s > price]
         if valid_highs:
-            levels.target_swing = round(min(valid_highs) * 0.995, 2)
+            levels.target_swing = round(min(valid_highs), 2)
 
         return levels
 

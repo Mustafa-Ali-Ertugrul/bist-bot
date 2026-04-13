@@ -22,29 +22,34 @@ class MarketRegime(Enum):
 def detect_regime(df: pd.DataFrame, lookback: int = 20) -> MarketRegime:
     if df is None or len(df) < 50:
         return MarketRegime.UNKNOWN
-    
+
     last = df.iloc[-1]
-    prev = df.iloc[-lookback:-1]
-    
     adx = last.get("adx", 0)
-    ema_fast = last.get(f"ema_{config.EMA_FAST}")
-    ema_slow = last.get(f"ema_{config.EMA_SLOW}")
-    sma_20 = last.get(f"sma_{config.SMA_SLOW}")
-    
-    current_price = last["close"]
-    past_price = prev["close"].iloc[0] if len(prev) > 0 else current_price
-    
-    price_above_ma = current_price > sma_20
-    price_change_pct = (current_price - past_price) / past_price * 100
-    
-    if adx > 25:
-        if ema_fast > ema_slow and price_above_ma:
+    plus_di = last.get("plus_di", 0)
+    minus_di = last.get("minus_di", 0)
+    close = float(last["close"])
+
+    TREND_ADX = 20
+    WEAK_ADX = 15
+    DI_RATIO = 1.25
+
+    sma_20 = float(df["close"].tail(20).mean())
+    momentum = (close - sma_20) / sma_20 * 100
+
+    if adx >= TREND_ADX:
+        if plus_di > minus_di * DI_RATIO:
             return MarketRegime.BULL
-        elif ema_fast < ema_slow and not price_above_ma:
+        elif minus_di > plus_di * DI_RATIO:
             return MarketRegime.BEAR
-        elif abs(price_change_pct) > 5:
-            return MarketRegime.BULL if price_change_pct > 0 else MarketRegime.BEAR
-    
+        return MarketRegime.SIDEWAYS
+
+    elif adx >= WEAK_ADX:
+        if momentum > 3 and plus_di > minus_di:
+            return MarketRegime.BULL
+        elif momentum < -3 and minus_di > plus_di:
+            return MarketRegime.BEAR
+        return MarketRegime.SIDEWAYS
+
     return MarketRegime.SIDEWAYS
 
 
@@ -91,22 +96,50 @@ class Signal:
 
 class StrategyEngine:
     STRONG_BUY_THRESHOLD = getattr(config, "STRONG_BUY_THRESHOLD", 40)
-    BUY_THRESHOLD = getattr(config, "BUY_THRESHOLD", 10)
+    BUY_THRESHOLD = 15
     WEAK_BUY_THRESHOLD = getattr(config, "WEAK_BUY_THRESHOLD", 0)
     WEAK_SELL_THRESHOLD = getattr(config, "WEAK_SELL_THRESHOLD", 0)
     SELL_THRESHOLD = getattr(config, "SELL_THRESHOLD", -10)
     STRONG_SELL_THRESHOLD = getattr(config, "STRONG_SELL_THRESHOLD", -40)
+    MIN_REGIME_PERSISTENCE = 2
+    SIDEWAYS_EXTRA_THRESHOLD = 5
+    MOMENTUM_CONFIRMATION = 4.0
 
     def __init__(self):
         self.indicators = TechnicalIndicators()
+        self.risk_manager = RiskManager(capital=getattr(config, "INITIAL_CAPITAL", 8500.0))
         self.STRONG_BUY_THRESHOLD = getattr(config, "STRONG_BUY_THRESHOLD", self.STRONG_BUY_THRESHOLD)
-        self.BUY_THRESHOLD = getattr(config, "BUY_THRESHOLD", self.BUY_THRESHOLD)
+        self.BUY_THRESHOLD = 15
         self.WEAK_BUY_THRESHOLD = getattr(config, "WEAK_BUY_THRESHOLD", self.WEAK_BUY_THRESHOLD)
         self.WEAK_SELL_THRESHOLD = getattr(config, "WEAK_SELL_THRESHOLD", self.WEAK_SELL_THRESHOLD)
         self.SELL_THRESHOLD = getattr(config, "SELL_THRESHOLD", self.SELL_THRESHOLD)
         self.STRONG_SELL_THRESHOLD = getattr(config, "STRONG_SELL_THRESHOLD", self.STRONG_SELL_THRESHOLD)
 
-    def analyze(self, ticker: str, df: pd.DataFrame) -> Optional[Signal]:
+    def _check_regime_persistence(self, df: pd.DataFrame, target_regime: "MarketRegime", min_bars: int = 2) -> bool:
+        if len(df) < min_bars + 1:
+            return False
+        for i in range(len(df) - min_bars, len(df)):
+            sub = df.iloc[: i + 1]
+            if detect_regime(sub) != target_regime:
+                return False
+        return True
+
+    def _check_momentum_confirmation(self, df: pd.DataFrame, threshold: float = 4.0) -> bool:
+        if len(df) < 20:
+            return True
+        last = df.iloc[-1]
+        adx = last.get("adx", 0)
+        plus_di = last.get("plus_di", 0)
+        minus_di = last.get("minus_di", 0)
+        if adx >= 20:
+            return True
+        if abs(plus_di - minus_di) >= 5:
+            return True
+        sma_20 = float(df["close"].tail(20).mean())
+        momentum = (float(last["close"]) - sma_20) / sma_20 * 100
+        return abs(momentum) >= threshold
+
+    def analyze(self, ticker: str, df: pd.DataFrame, enforce_sector_limit: bool = False) -> Optional[Signal]:
         if df is None or len(df) < 30:
             logger.warning(f"  {ticker}: Yetersiz veri ({len(df) if df is not None else 0} mum)")
             return None
@@ -123,6 +156,10 @@ class StrategyEngine:
             if adx < getattr(config, "ADX_THRESHOLD", 20):
                 logger.debug(f"  {ticker}: ADX düşük ({adx:.1f}) - Trend yok, sinyal üretme")
                 return None
+
+        regime = detect_regime(df)
+        if regime == MarketRegime.SIDEWAYS:
+            reasons.append("Piyasa rejimi yatay - skor etkisi azaltıldı")
 
         ema_long = last.get(f"ema_{config.EMA_LONG}")
         if pd.notna(ema_long):
@@ -261,7 +298,6 @@ class StrategyEngine:
                 score -= 3
                 reasons.append(f"MACD Histogram negatif ({macd_hist:.2f})")
 
-        adx = last.get("adx")
         plus_di = last.get("plus_di")
         minus_di = last.get("minus_di")
         if pd.notna(adx) and pd.notna(plus_di) and pd.notna(minus_di):
@@ -368,7 +404,21 @@ class StrategyEngine:
             score -= 12
             reasons.append("🔥 MACD Bearish Divergence → Güçlü dönüş sinyali")
 
+        if regime == MarketRegime.SIDEWAYS:
+            score *= 0.6
+            if abs(score) < self.BUY_THRESHOLD:
+                logger.debug(f"  {ticker}: Yatay piyasada skor zayıf ({score:.1f}) - sinyal yok")
+                return None
+
+        if score > 0 and not self._check_momentum_confirmation(df, self.MOMENTUM_CONFIRMATION):
+            if abs(score) < self.BUY_THRESHOLD + self.SIDEWAYS_EXTRA_THRESHOLD:
+                logger.debug(f"  {ticker}: Momentum onaysiz, sinyal atlandi")
+                return None
+
         score = max(-100, min(100, score))
+
+        if score == 0:
+            return None
 
         if score >= self.STRONG_BUY_THRESHOLD:
             signal_type = SignalType.STRONG_BUY
@@ -376,7 +426,7 @@ class StrategyEngine:
         elif score >= self.BUY_THRESHOLD:
             signal_type = SignalType.BUY
             confidence = "ORTA"
-        elif score >= self.WEAK_BUY_THRESHOLD:
+        elif score > max(0, self.WEAK_BUY_THRESHOLD):
             signal_type = SignalType.WEAK_BUY
             confidence = "DÜŞÜK"
         elif score <= self.STRONG_SELL_THRESHOLD:
@@ -385,17 +435,19 @@ class StrategyEngine:
         elif score <= self.SELL_THRESHOLD:
             signal_type = SignalType.SELL
             confidence = "ORTA"
-        elif score <= self.WEAK_SELL_THRESHOLD:
+        elif score < min(0, self.WEAK_SELL_THRESHOLD):
             signal_type = SignalType.WEAK_SELL
             confidence = "DÜŞÜK"
         else:
-            signal_type = SignalType.HOLD
-            confidence = "—"
+            return None
+
+        if signal_type in {SignalType.STRONG_BUY, SignalType.BUY, SignalType.WEAK_BUY}:
+            if enforce_sector_limit and not self.risk_manager.check_sector_limit(ticker):
+                logger.debug(f"  {ticker}: sektör limiti nedeniyle sinyal atlandı")
+                return None
 
         price = float(last["close"])
-        
-        rm = RiskManager(capital=getattr(config, "INITIAL_CAPITAL", 8500.0))
-        risk_levels = rm.calculate(df)
+        risk_levels = self.risk_manager.calculate(df)
         
         stop_loss = risk_levels.final_stop
         target_price = risk_levels.final_target
@@ -422,9 +474,10 @@ class StrategyEngine:
         data: dict[str, pd.DataFrame]
     ) -> list[Signal]:
         signals = []
+        self.risk_manager.reset_sectors()
 
         for ticker, df in data.items():
-            signal = self.analyze(ticker, df)
+            signal = self.analyze(ticker, df, enforce_sector_limit=True)
             if signal:
                 signals.append(signal)
 
