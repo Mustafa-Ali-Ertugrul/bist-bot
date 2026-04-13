@@ -1,0 +1,17 @@
+.git
+.gitignore
+.gradle/
+.idea/
+.vscode/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+*.db
+.env
+.env.*
+models/
+android_app/.gradle/
+android_app/app/build/
+android_app/build/
