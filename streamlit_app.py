@@ -34,6 +34,22 @@ def bootstrap_state():
         "vol_ratio_filter": 0.0,
         "notify_min_score": 30,
         "notify_telegram": bool(config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID),
+        "ind_rsi_period":    config.RSI_PERIOD,
+        "ind_rsi_oversold":  config.RSI_OVERSOLD,
+        "ind_rsi_overbought":config.RSI_OVERBOUGHT,
+        "ind_sma_fast":      config.SMA_FAST,
+        "ind_sma_slow":      config.SMA_SLOW,
+        "ind_ema_fast":      config.EMA_FAST,
+        "ind_ema_slow":      config.EMA_SLOW,
+        "ind_macd_fast":     config.MACD_FAST,
+        "ind_macd_slow":    config.MACD_SLOW,
+        "ind_macd_signal":  config.MACD_SIGNAL,
+        "ind_bb_period":    config.BOLLINGER_PERIOD,
+        "ind_bb_std":       float(config.BOLLINGER_STD),
+        "ind_adx_threshold": config.ADX_THRESHOLD,
+        "tg_token_input":   config.TELEGRAM_BOT_TOKEN or "",
+        "tg_chat_input":    config.TELEGRAM_CHAT_ID or "",
+        "deploy_confirmed": False,
         "last_scan_time": None,
         "current_view": "dashboard",
         "selected_ticker": config.WATCHLIST[0],
@@ -273,6 +289,263 @@ def inject_styles():
                 color: #48ddbc;
                 margin-bottom: 14px;
             }
+            .portfolio-hero {
+                background: linear-gradient(135deg, rgba(18,22,30,0.97) 0%, rgba(24,28,36,0.95) 100%);
+                border: 1px solid rgba(255,255,255,0.07);
+                border-radius: 26px;
+                padding: 28px 32px;
+                margin-bottom: 20px;
+                position: relative;
+                overflow: hidden;
+            }
+            .portfolio-hero::after {
+                content: "";
+                position: absolute;
+                top: -40px; right: -40px;
+                width: 220px; height: 220px;
+                background: radial-gradient(circle, rgba(72,221,188,0.10), transparent 70%);
+                pointer-events: none;
+            }
+            .portfolio-total {
+                font-size: 48px;
+                font-weight: 900;
+                letter-spacing: -0.05em;
+                color: #dfe2eb;
+                line-height: 1.0;
+            }
+            .portfolio-label {
+                font-size: 11px;
+                font-weight: 800;
+                letter-spacing: 0.20em;
+                text-transform: uppercase;
+                color: #48ddbc;
+                margin-bottom: 8px;
+            }
+            .portfolio-sub {
+                font-size: 13px;
+                color: #8b90a0;
+                margin-top: 8px;
+            }
+            .pnl-positive { color: #48ddbc; font-weight: 800; }
+            .pnl-negative { color: #ff796c; font-weight: 800; }
+
+            .index-card {
+                background: rgba(28,32,40,0.92);
+                border: 1px solid rgba(255,255,255,0.06);
+                border-radius: 18px;
+                padding: 16px 18px;
+                margin-bottom: 10px;
+            }
+            .index-card-name {
+                font-size: 11px;
+                font-weight: 800;
+                letter-spacing: 0.16em;
+                text-transform: uppercase;
+                color: #8b90a0;
+            }
+            .index-card-value {
+                font-size: 22px;
+                font-weight: 900;
+                letter-spacing: -0.03em;
+                color: #dfe2eb;
+                margin-top: 4px;
+            }
+            .index-card-change {
+                font-size: 12px;
+                font-weight: 700;
+                margin-top: 4px;
+            }
+            .change-up { color: #48ddbc; }
+            .change-down { color: #ff796c; }
+
+            .live-insights-row {
+                display: flex;
+                align-items: flex-start;
+                gap: 10px;
+                padding: 12px 0;
+                border-bottom: 1px solid rgba(255,255,255,0.04);
+            }
+            .live-insights-row:last-child { border-bottom: none; }
+            .insight-dot {
+                width: 8px; height: 8px;
+                border-radius: 50%;
+                margin-top: 5px;
+                flex-shrink: 0;
+            }
+            .insight-dot.green { background: #48ddbc; box-shadow: 0 0 8px rgba(72,221,188,0.5); }
+            .insight-dot.red   { background: #ff796c; box-shadow: 0 0 8px rgba(255,121,108,0.5); }
+            .insight-dot.blue  { background: #adc6ff; box-shadow: 0 0 8px rgba(173,198,255,0.4); }
+            .insight-text { font-size: 13px; color: #c1c6d7; line-height: 1.5; }
+            .insight-time { font-size: 10px; color: #5a6270; margin-top: 2px; }
+            .stock-identity {
+                background: rgba(24,28,36,0.95);
+                border: 1px solid rgba(255,255,255,0.07);
+                border-radius: 22px;
+                padding: 22px 24px;
+                margin-bottom: 18px;
+                display: flex;
+                align-items: center;
+                gap: 20px;
+            }
+            .stock-logo-placeholder {
+                width: 52px; height: 52px;
+                border-radius: 14px;
+                background: linear-gradient(135deg, rgba(72,221,188,0.15), rgba(45,212,191,0.08));
+                border: 1px solid rgba(72,221,188,0.20);
+                display: flex; align-items: center; justify-content: center;
+                font-size: 18px; font-weight: 900; color: #48ddbc;
+                flex-shrink: 0;
+            }
+            .stock-identity-name {
+                font-size: 24px; font-weight: 900;
+                letter-spacing: -0.03em; color: #dfe2eb;
+            }
+            .stock-identity-full {
+                font-size: 13px; color: #8b90a0; margin-top: 2px;
+            }
+            .stock-identity-meta {
+                display: flex; gap: 16px; margin-top: 8px; flex-wrap: wrap;
+            }
+            .stock-meta-pill {
+                font-size: 11px; font-weight: 700;
+                color: #99a2b2;
+                background: rgba(255,255,255,0.04);
+                border: 1px solid rgba(255,255,255,0.07);
+                border-radius: 999px;
+                padding: 4px 10px;
+            }
+
+            .mini-info-grid {
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 10px;
+                margin-bottom: 14px;
+            }
+            .mini-info-card {
+                background: rgba(28,32,40,0.92);
+                border: 1px solid rgba(255,255,255,0.06);
+                border-radius: 14px;
+                padding: 12px 14px;
+            }
+            .mini-info-label {
+                font-size: 10px; font-weight: 800;
+                letter-spacing: 0.16em; text-transform: uppercase;
+                color: #5a6270;
+            }
+            .mini-info-value {
+                font-size: 16px; font-weight: 800;
+                color: #dfe2eb; margin-top: 4px;
+            }
+            .mini-info-sub {
+                font-size: 10px; color: #8b90a0; margin-top: 2px;
+            }
+
+            .indicator-table {
+                background: rgba(24,28,36,0.95);
+                border: 1px solid rgba(255,255,255,0.06);
+                border-radius: 18px;
+                padding: 16px 18px;
+            }
+            .indicator-row {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 10px 0;
+                border-bottom: 1px solid rgba(255,255,255,0.04);
+                font-size: 13px;
+            }
+            .indicator-row:last-child { border-bottom: none; }
+            .indicator-name { color: #8b90a0; font-weight: 600; }
+            .indicator-value { color: #dfe2eb; font-weight: 700; }
+            .indicator-badge {
+                padding: 3px 9px; border-radius: 999px;
+                font-size: 10px; font-weight: 800;
+                letter-spacing: 0.10em; text-transform: uppercase;
+            }
+            .indicator-badge.oversold  { background: rgba(72,221,188,0.12); color: #48ddbc; }
+            .indicator-badge.overbought{ background: rgba(255,121,108,0.12); color: #ff796c; }
+            .indicator-badge.neutral   { background: rgba(255,255,255,0.06); color: #8b90a0; }
+            .indicator-badge.bullish   { background: rgba(173,198,255,0.12); color: #adc6ff; }
+            .indicator-badge.bearish   { background: rgba(255,121,108,0.12); color: #ff796c; }
+            .settings-group {
+                background: rgba(24,28,36,0.95);
+                border: 1px solid rgba(255,255,255,0.07);
+                border-radius: 20px;
+                padding: 20px 22px;
+                margin-bottom: 14px;
+            }
+            .settings-group-title {
+                font-size: 11px;
+                font-weight: 800;
+                letter-spacing: 0.20em;
+                text-transform: uppercase;
+                color: #48ddbc;
+                margin-bottom: 16px;
+            }
+            .risk-card {
+                background: rgba(28,32,40,0.92);
+                border: 1px solid rgba(255,255,255,0.06);
+                border-radius: 16px;
+                padding: 16px 18px;
+                margin-bottom: 10px;
+            }
+            .risk-card-title {
+                font-size: 12px;
+                font-weight: 800;
+                letter-spacing: 0.14em;
+                text-transform: uppercase;
+                color: #8b90a0;
+                margin-bottom: 6px;
+            }
+            .risk-card-value {
+                font-size: 22px;
+                font-weight: 900;
+                letter-spacing: -0.03em;
+                color: #dfe2eb;
+            }
+            .risk-card-sub {
+                font-size: 11px;
+                color: #5a6270;
+                margin-top: 4px;
+            }
+            .deploy-btn-wrap {
+                background: linear-gradient(135deg, rgba(72,221,188,0.10), rgba(45,212,191,0.06));
+                border: 1px solid rgba(72,221,188,0.22);
+                border-radius: 18px;
+                padding: 20px;
+                margin-top: 16px;
+                text-align: center;
+            }
+            .deploy-title {
+                font-size: 14px;
+                font-weight: 800;
+                color: #48ddbc;
+                margin-bottom: 6px;
+            }
+            .deploy-sub {
+                font-size: 12px;
+                color: #8b90a0;
+                margin-bottom: 14px;
+            }
+            .param-row {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 8px 0;
+                border-bottom: 1px solid rgba(255,255,255,0.04);
+                font-size: 13px;
+            }
+            .param-row:last-child { border-bottom: none; }
+            .param-name  { color: #8b90a0; font-weight: 600; }
+            .param-value { color: #dfe2eb; font-weight: 800; }
+            .param-changed {
+                font-size: 10px;
+                font-weight: 800;
+                letter-spacing: 0.12em;
+                text-transform: uppercase;
+                color: #48ddbc;
+                margin-left: 8px;
+            }
             @media (max-width: 768px) {
                 .block-container {padding-left:0.8rem;padding-right:0.8rem;}
                 .hero-shell {padding:20px;border-radius:20px;}
@@ -376,6 +649,359 @@ def get_market_summary(signals, all_data):
     }
 
 
+@st.cache_data(ttl=180)
+def fetch_index_data():
+    try:
+        import yfinance as yf
+
+        tickers = {"XU100": "XU100.IS", "XU030": "XU030.IS", "USDTRY": "USDTRY=X"}
+        result = {}
+        for name, ticker in tickers.items():
+            try:
+                df = yf.download(ticker, period="2d", interval="1d", progress=False, auto_adjust=True)
+                if df is not None and len(df) >= 2:
+                    prev = float(df["Close"].iloc[-2])
+                    last = float(df["Close"].iloc[-1])
+                    chg = ((last - prev) / prev) * 100
+                    result[name] = {"value": last, "change_pct": chg}
+                else:
+                    result[name] = {"value": 0.0, "change_pct": 0.0}
+            except Exception:
+                result[name] = {"value": 0.0, "change_pct": 0.0}
+        return result
+    except Exception:
+        return {}
+
+
+def render_portfolio_hero(signals, summary):
+    strong_count = len([s for s in signals if s.score >= 40])
+    buy_count = len([s for s in signals if s.score >= 10])
+    sell_count = len([s for s in signals if s.score < 0])
+    total = len(signals)
+    success_rate = round((buy_count / total * 100) if total > 0 else 0)
+    avg_rsi = summary.get("avg_rsi", 50)
+    analyzed = summary.get("total_analyzed", len(config.WATCHLIST))
+    scan_time = st.session_state.last_scan_time.strftime("%H:%M") if st.session_state.last_scan_time else "-"
+
+    if avg_rsi < 40:
+        mood, mood_color = "Asiri Satim Bolgesi", "#48ddbc"
+    elif avg_rsi > 60:
+        mood, mood_color = "Asiri Alim Bolgesi", "#ff796c"
+    else:
+        mood, mood_color = "Notr Bolge", "#adc6ff"
+
+    st.markdown(
+        f"""
+    <div class="portfolio-hero">
+      <div class="portfolio-label">BIST Bot Terminal</div>
+      <div class="portfolio-total">
+        {total}
+        <span style='font-size:22px;color:#8b90a0;font-weight:600;'>sinyal</span>
+      </div>
+      <div class="portfolio-sub">
+        <span class="pnl-positive">▲ {strong_count} guclu al</span>
+        &nbsp;·&nbsp;
+        <span style="color:#8b90a0;">{buy_count} pozitif</span>
+        &nbsp;·&nbsp;
+        <span class="pnl-negative">▼ {sell_count} satis</span>
+        &nbsp;·&nbsp;
+        <span style="color:{mood_color};">{mood} (RSI {avg_rsi:.0f})</span>
+      </div>
+      <div style="margin-top:16px;display:flex;flex-wrap:wrap;gap:8px;">
+        <span class="pill-stat">📊 {analyzed} hisse tarandi</span>
+        <span class="pill-stat">🎯 Basari orani {success_rate}%</span>
+        <span class="pill-stat">🕐 Son guncelleme {scan_time}</span>
+      </div>
+    </div>
+    """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_index_cards():
+    index_data = fetch_index_data()
+    if not index_data:
+        return
+    for name, data in index_data.items():
+        value = data.get("value", 0.0)
+        change = data.get("change_pct", 0.0)
+        css = "change-up" if change >= 0 else "change-down"
+        arrow = "▲" if change >= 0 else "▼"
+        val_str = f"{value:,.0f}" if value > 100 else f"{value:.4f}"
+        st.markdown(
+            f"""
+        <div class="index-card">
+          <div class="index-card-name">{name}</div>
+          <div class="index-card-value">{val_str}</div>
+          <div class="index-card-change {css}">{arrow} {abs(change):.2f}%</div>
+        </div>
+        """,
+            unsafe_allow_html=True,
+        )
+
+
+def render_live_insights(signals):
+    if not signals:
+        return
+    top = sorted(signals, key=lambda s: abs(s.score), reverse=True)[:5]
+    rows = []
+    for s in top:
+        name = config.TICKER_NAMES.get(s.ticker, s.ticker)
+        ticker_short = s.ticker.replace(".IS", "")
+        if s.score >= 40:
+            dot, action = "green", "Guclu alim sinyali"
+        elif s.score >= 10:
+            dot, action = "blue", "Alim firsati"
+        else:
+            dot, action = "red", "Satis baskisi"
+        time_str = st.session_state.last_scan_time.strftime("%H:%M") if st.session_state.last_scan_time else "-"
+        rows.append(
+            f"""
+        <div class="live-insights-row">
+          <div class="insight-dot {dot}"></div>
+          <div>
+            <div class="insight-text">
+              <strong>{ticker_short}</strong> - {name}
+              &nbsp;·&nbsp; {action}
+              &nbsp;<span style='color:#8b90a0;'>Skor {s.score:+.0f}</span>
+            </div>
+            <div class="insight-time">{time_str}</div>
+          </div>
+        </div>
+        """
+        )
+    st.markdown(f"<div class='surface-shell'>{''.join(rows)}</div>", unsafe_allow_html=True)
+
+
+def render_stock_identity(ticker, snapshot):
+    name = config.TICKER_NAMES.get(ticker, ticker)
+    short = ticker.replace(".IS", "")
+    price = snapshot.get("close", 0)
+    change_pct = snapshot.get("change_pct", 0)
+    volume_ratio = snapshot.get("volume_ratio", 1.0)
+    atr = snapshot.get("atr", 0)
+    support = snapshot.get("support", 0)
+    resistance = snapshot.get("resistance", 0)
+
+    change_color = "#48ddbc" if float(change_pct) >= 0 else "#ff796c"
+    arrow = "▲" if float(change_pct) >= 0 else "▼"
+
+    st.markdown(
+        f"""
+    <div class="stock-identity">
+      <div class="stock-logo-placeholder">{short[:2]}</div>
+      <div style="flex:1;">
+        <div class="stock-identity-name">
+          {short}
+          <span style="font-size:14px;color:{change_color};margin-left:12px;">
+            {arrow} {abs(float(change_pct)):.2f}%
+          </span>
+        </div>
+        <div class="stock-identity-full">{name}</div>
+        <div class="stock-identity-meta">
+          <span class="stock-meta-pill">₺{float(price):.2f} fiyat</span>
+          <span class="stock-meta-pill">Hacim {float(volume_ratio):.1f}x</span>
+          <span class="stock-meta-pill">ATR ₺{float(atr):.2f}</span>
+          <span class="stock-meta-pill">Destek ₺{float(support):.2f}</span>
+          <span class="stock-meta-pill">Direnç ₺{float(resistance):.2f}</span>
+        </div>
+      </div>
+    </div>
+    """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_verdict_card(signal):
+    if signal is None:
+        st.markdown(
+            """
+        <div class="verdict-card" style="background:rgba(255,255,255,0.02);
+          border:1px solid rgba(255,255,255,0.06);border-radius:22px;
+          padding:24px;text-align:center;">
+          <div style="font-size:18px;color:#8b90a0;">Sinyal hesaplanamadı</div>
+        </div>
+        """,
+            unsafe_allow_html=True,
+        )
+        return
+
+    card_class = "buy" if signal.score >= 10 else "sell"
+    score_color = "#48ddbc" if signal.score >= 0 else "#ff796c"
+    bar_width = int((signal.score + 100) / 2)
+    bar_class = "score-bar-fill" if signal.score >= 0 else "score-bar-fill negative"
+
+    reason_chips = "".join(
+        f"<span class='reason-chip'>{r[:55]}</span>"
+        for r in signal.reasons[:5]
+    )
+
+    st.markdown(
+        f"""
+    <div class="verdict-card {card_class}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;
+                  flex-wrap:wrap;gap:16px;">
+        <div>
+          <div style="font-size:11px;font-weight:800;letter-spacing:0.18em;
+                      text-transform:uppercase;color:#8b90a0;margin-bottom:8px;">
+            Oracle Kararı
+          </div>
+          <div class="verdict-label">{signal.signal_type.value}</div>
+          <div class="verdict-score">
+            Güven: {signal.confidence}
+            &nbsp;·&nbsp;
+            Skor: <span style="color:{score_color};font-weight:800;">{signal.score:+.0f}</span>
+          </div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:11px;color:#8b90a0;font-weight:700;
+                      text-transform:uppercase;letter-spacing:0.12em;">Stop-Loss</div>
+          <div style="font-size:22px;font-weight:900;color:#ff796c;">
+            ₺{signal.stop_loss:.2f}
+          </div>
+          <div style="font-size:11px;color:#8b90a0;font-weight:700;
+                      text-transform:uppercase;letter-spacing:0.12em;margin-top:10px;">
+            Hedef
+          </div>
+          <div style="font-size:22px;font-weight:900;color:#48ddbc;">
+            ₺{signal.target_price:.2f}
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:14px;">
+        <div class="score-bar-wrap">
+          <div class="{bar_class}" style="width:{bar_width}%;"></div>
+        </div>
+      </div>
+
+      <div style="margin-top:12px;">
+        {reason_chips}
+      </div>
+    </div>
+    """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_indicator_grid(snapshot, signal):
+    rsi = snapshot.get("rsi", 50)
+    macd = snapshot.get("macd_cross", "NONE")
+    sma = snapshot.get("sma_cross", "NONE")
+    bb = snapshot.get("bb_position", "MIDDLE")
+    vol = snapshot.get("volume_ratio", 1.0)
+    atr = snapshot.get("atr", 0)
+
+    def rsi_badge(v):
+        v = float(v)
+        if v < 30:
+            return "oversold", "Aşırı Satım"
+        if v > 70:
+            return "overbought", "Aşırı Alım"
+        return "neutral", "Nötr"
+
+    def cross_badge(v):
+        if "BULL" in str(v) or "GOLDEN" in str(v):
+            return "bullish", "Yükseliş"
+        if "BEAR" in str(v) or "DEATH" in str(v):
+            return "bearish", "Düşüş"
+        return "neutral", "Nötr"
+
+    def bb_badge(v):
+        if "BELOW" in str(v):
+            return "oversold", "Alt Band"
+        if "ABOVE" in str(v):
+            return "overbought", "Üst Band"
+        return "neutral", "Orta"
+
+    def vol_badge(v):
+        v = float(v)
+        if v >= 2.0:
+            return "bullish", "Yüksek"
+        if v < 0.8:
+            return "bearish", "Düşük"
+        return "neutral", "Normal"
+
+    rsi_cls, rsi_lbl = rsi_badge(rsi)
+    macd_cls, macd_lbl = cross_badge(macd)
+    sma_cls, sma_lbl = cross_badge(sma)
+    bb_cls, bb_lbl = bb_badge(bb)
+    vol_cls, vol_lbl = vol_badge(vol)
+
+    rows_html = f"""
+    <div class="indicator-row">
+      <span class="indicator-name">RSI (14)</span>
+      <span class="indicator-value">{float(rsi):.1f}</span>
+      <span class="indicator-badge {rsi_cls}">{rsi_lbl}</span>
+    </div>
+    <div class="indicator-row">
+      <span class="indicator-name">MACD Cross</span>
+      <span class="indicator-value">{macd}</span>
+      <span class="indicator-badge {macd_cls}">{macd_lbl}</span>
+    </div>
+    <div class="indicator-row">
+      <span class="indicator-name">SMA Cross</span>
+      <span class="indicator-value">{sma}</span>
+      <span class="indicator-badge {sma_cls}">{sma_lbl}</span>
+    </div>
+    <div class="indicator-row">
+      <span class="indicator-name">Bollinger</span>
+      <span class="indicator-value">{bb}</span>
+      <span class="indicator-badge {bb_cls}">{bb_lbl}</span>
+    </div>
+    <div class="indicator-row">
+      <span class="indicator-name">Hacim Oranı</span>
+      <span class="indicator-value">{float(vol):.2f}x</span>
+      <span class="indicator-badge {vol_cls}">{vol_lbl}</span>
+    </div>
+    <div class="indicator-row">
+      <span class="indicator-name">ATR</span>
+      <span class="indicator-value">₺{float(atr):.2f}</span>
+      <span class="indicator-badge neutral">Volatilite</span>
+    </div>
+    """
+
+    st.markdown(f"<div class='indicator-table'>{rows_html}</div>", unsafe_allow_html=True)
+
+
+def render_mini_info_cards(df, snapshot):
+    try:
+        high_52w = float(df["high"].tail(252).max())
+        low_52w = float(df["low"].tail(252).min())
+        avg_vol = int(df["volume"].tail(20).mean())
+        last_close = float(snapshot.get("close", 0))
+        dist_from_high = ((last_close - high_52w) / high_52w * 100) if high_52w else 0
+        dist_from_low = ((last_close - low_52w) / low_52w * 100) if low_52w else 0
+    except Exception:
+        high_52w = low_52w = avg_vol = 0
+        dist_from_high = dist_from_low = 0
+
+    support = snapshot.get("support", 0)
+    resistance = snapshot.get("resistance", 0)
+
+    cards = [
+        ("52H Yüksek", f"₺{high_52w:.2f}", f"{dist_from_high:+.1f}% şimdiden"),
+        ("52H Düşük", f"₺{low_52w:.2f}", f"{dist_from_low:+.1f}% şimdiden"),
+        ("Ort. Hacim", f"{avg_vol:,}", "Son 20 gün"),
+        ("Destek", f"₺{float(support):.2f}", "Yakın destek"),
+        ("Direnç", f"₺{float(resistance):.2f}", "Yakın direnç"),
+        ("ATR", f"₺{float(snapshot.get('atr', 0)):.2f}", "Günlük volatilite"),
+    ]
+
+    items_html = "".join(
+        f"""
+    <div class="mini-info-card">
+      <div class="mini-info-label">{label}</div>
+      <div class="mini-info-value">{value}</div>
+      <div class="mini-info-sub">{sub}</div>
+    </div>
+    """
+        for label, value, sub in cards
+    )
+
+    st.markdown(f"<div class='mini-info-grid'>{items_html}</div>", unsafe_allow_html=True)
+
+
 def plot_candlestick(df, ticker):
     fig = go.Figure(
         data=[
@@ -460,6 +1086,110 @@ def render_signal_card(signal, df_data=None):
                 st.write(f"- {reason}")
 
 
+def render_signal_card_v2(signal, df_data=None):
+    name = config.TICKER_NAMES.get(signal.ticker, signal.ticker)
+    ticker_short = signal.ticker.replace(".IS", "")
+
+    if signal.score >= 10:
+        card_class = "signal-card-buy"
+        bar_class = "score-bar-fill"
+        chip_class = "buy"
+    elif signal.score < 0:
+        card_class = "signal-card-sell"
+        bar_class = "score-bar-fill negative"
+        chip_class = "sell"
+    else:
+        card_class = "signal-card-neutral"
+        bar_class = "score-bar-fill"
+        chip_class = "buy"
+
+    bar_width = int((signal.score + 100) / 2)
+    reason_chips = "".join(
+        f"<span class='reason-chip'>{r[:60]}</span>"
+        for r in signal.reasons[:6]
+    )
+    price_color = "#48ddbc" if signal.score >= 0 else "#ff796c"
+
+    left_html = f"""
+    <div class='{card_class}'>
+      <div style='display:flex;justify-content:space-between;align-items:flex-start;'>
+        <div>
+          <div style='font-size:26px;font-weight:900;letter-spacing:-0.03em;color:#dfe2eb;'>{ticker_short}</div>
+          <div style='font-size:12px;color:#8b90a0;margin-top:2px;'>{name}</div>
+        </div>
+        <span class='signal-chip {chip_class}'>{signal.signal_type.value}</span>
+      </div>
+
+      <div style='margin-top:14px;display:flex;gap:20px;'>
+        <div>
+          <div style='font-size:11px;color:#8b90a0;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;'>Fiyat</div>
+          <div style='font-size:20px;font-weight:800;color:{price_color};'>TL{signal.price:.2f}</div>
+        </div>
+        <div>
+          <div style='font-size:11px;color:#8b90a0;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;'>Stop</div>
+          <div style='font-size:20px;font-weight:800;color:#dfe2eb;'>TL{signal.stop_loss:.2f}</div>
+        </div>
+        <div>
+          <div style='font-size:11px;color:#8b90a0;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;'>Hedef</div>
+          <div style='font-size:20px;font-weight:800;color:#dfe2eb;'>TL{signal.target_price:.2f}</div>
+        </div>
+        <div>
+          <div style='font-size:11px;color:#8b90a0;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;'>Guven</div>
+          <div style='font-size:20px;font-weight:800;color:#dfe2eb;'>{signal.confidence}</div>
+        </div>
+      </div>
+
+      <div style='margin-top:12px;'>
+        <div style='display:flex;justify-content:space-between;font-size:11px;color:#8b90a0;margin-bottom:4px;'>
+          <span>Skor</span><span style='font-weight:800;color:#dfe2eb;'>{signal.score:+.0f}</span>
+        </div>
+        <div class='score-bar-wrap'>
+          <div class='{bar_class}' style='width:{bar_width}%;'></div>
+        </div>
+      </div>
+
+      <div style='margin-top:12px;'>
+        {reason_chips}
+      </div>
+    </div>
+    """
+
+    if df_data is not None:
+        col_left, col_right = st.columns([1.4, 1])
+        with col_left:
+            st.markdown(left_html, unsafe_allow_html=True)
+        with col_right:
+            try:
+                df_chart = TechnicalIndicators().add_all(df_data.tail(60).copy())
+                spark = go.Figure()
+                spark.add_trace(go.Scatter(
+                    x=df_chart.index,
+                    y=df_chart["close"],
+                    mode="lines",
+                    line=dict(
+                        color="#48ddbc" if signal.score >= 0 else "#ff796c",
+                        width=2
+                    ),
+                    fill="tozeroy",
+                    fillcolor="rgba(72,221,188,0.05)" if signal.score >= 0 else "rgba(255,121,108,0.05)"
+                ))
+                spark.update_layout(
+                    template="plotly_dark",
+                    height=180,
+                    margin=dict(l=0, r=0, t=8, b=0),
+                    xaxis=dict(visible=False),
+                    yaxis=dict(visible=False),
+                    showlegend=False,
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)"
+                )
+                st.plotly_chart(spark, use_container_width=True, key=f"spark_{signal.ticker}_{id(signal)}")
+            except Exception:
+                st.markdown(left_html, unsafe_allow_html=True)
+    else:
+        st.markdown(left_html, unsafe_allow_html=True)
+
+
 def render_top_shell(signals, summary):
     strong_count = len([s for s in signals if s.score >= 40])
     positive_count = len([s for s in signals if s.score >= 10])
@@ -504,21 +1234,30 @@ def metric_card(title, value, subtitle=""):
 
 
 def render_dashboard(signals, summary):
+    hero_col, index_col = st.columns([2.4, 1], gap="large")
+    with hero_col:
+        render_portfolio_hero(signals, summary)
+    with index_col:
+        render_index_cards()
+
     strong = [s for s in signals if s.score >= 40]
     buy = [s for s in signals if 10 <= s.score < 40]
-    sell = [s for s in signals if s.score < 10]
+    sell = [s for s in signals if s.score < 0]
+    pos_rate = round(len(strong + buy) / len(signals) * 100) if signals else 0
+
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-        metric_card("Strong buy", str(len(strong)), "Yuksek guvenli sinyaller")
+        metric_card("Guclu Al", str(len(strong)), "Yuksek guvenli")
     with c2:
-        metric_card("Buy flow", str(len(buy)), "Pozitif momentum")
+        metric_card("Al Akisi", str(len(buy)), "Pozitif momentum")
     with c3:
-        metric_card("Sell pressure", str(len(sell)), "Korunma gerekenler")
+        metric_card("Sat Baskisi", str(len(sell)), "Dikkat gereken")
     with c4:
-        metric_card("Avg volume", f"{summary.get('avg_vol_ratio', 1.0):.2f}x", "Normal hacme gore")
+        metric_card("Pozitif Oran", f"{pos_rate}%", "Pozitif sinyal orani")
 
-    left, right = st.columns([1.6, 1], gap="large")
-    with left:
+    left_col, right_col = st.columns([1.6, 1], gap="large")
+
+    with left_col:
         st.markdown("<div class='section-title'>Portfolio Pulse</div>", unsafe_allow_html=True)
         top = strong[:5] if strong else sorted(signals, key=lambda x: x.score, reverse=True)[:5]
         if not top:
@@ -529,16 +1268,21 @@ def render_dashboard(signals, summary):
                 name = config.TICKER_NAMES.get(signal.ticker, signal.ticker)
                 chip = "buy" if signal.score >= 10 else "sell"
                 rows.append(
-                    f"<div class='list-row'><div style='display:flex;justify-content:space-between;gap:12px;align-items:start;'><div><div style='font-size:20px;font-weight:800;color:#dfe2eb;'>{signal.ticker.replace('.IS','')}</div><div style='font-size:12px;color:#8b90a0;'>{name}</div></div><div style='text-align:right;'><span class='signal-chip {chip}'>{signal.signal_type.value}</span><div style='margin-top:8px;font-size:12px;color:#c1c6d7;'>Skor {signal.score:+.0f}</div></div></div></div>"
+                    f"<div class='list-row'>"
+                    f"<div style='display:flex;justify-content:space-between;gap:12px;align-items:center;'>"
+                    f"<div><div style='font-size:20px;font-weight:800;color:#dfe2eb;'>{signal.ticker.replace('.IS','')}</div>"
+                    f"<div style='font-size:12px;color:#8b90a0;'>{name}</div></div>"
+                    f"<div style='text-align:right;'>"
+                    f"<span class='signal-chip {chip}'>{signal.signal_type.value}</span>"
+                    f"<div style='margin-top:6px;font-size:12px;color:#c1c6d7;'>"
+                    f"₺{signal.price:.2f} &nbsp;·&nbsp; Skor {signal.score:+.0f}"
+                    f"</div></div></div></div>"
                 )
             st.markdown(f"<div class='surface-shell'>{''.join(rows)}</div>", unsafe_allow_html=True)
-    with right:
-        st.markdown("<div class='section-title'>Market Breadth</div>", unsafe_allow_html=True)
-        dist = summary.get("sector_dist", {})
-        with st.container(border=True):
-            st.metric("Asiri satim", dist.get("Asırı Satım", 0))
-            st.metric("Notr", dist.get("Nötr", 0))
-            st.metric("Asiri alim", dist.get("Asırı Alım", 0))
+
+    with right_col:
+        st.markdown("<div class='section-title'>Live Insights</div>", unsafe_allow_html=True)
+        render_live_insights(signals)
 
 
 def render_signals(signals, all_data):
@@ -548,85 +1292,94 @@ def render_signals(signals, all_data):
         strong = [s for s in signals if s.score >= 40]
         if strong:
             for signal in strong:
-                render_signal_card(signal, all_data.get(signal.ticker))
+                render_signal_card_v2(signal, all_data.get(signal.ticker))
         else:
             st.info("Guclu alim sinyali yok.")
     with buy_tab:
         buy = [s for s in signals if 10 <= s.score < 40]
         if buy:
             for signal in buy:
-                render_signal_card(signal, all_data.get(signal.ticker))
+                render_signal_card_v2(signal, all_data.get(signal.ticker))
         else:
             st.info("Alim sinyali yok.")
     with sell_tab:
         sell = [s for s in signals if s.score < 10]
         if sell:
             for signal in sell:
-                render_signal_card(signal, all_data.get(signal.ticker))
+                render_signal_card_v2(signal, all_data.get(signal.ticker))
         else:
             st.info("Satis sinyali yok.")
 
 
 def render_analysis(all_data):
-    st.markdown("<div class='section-title'>Technical Analysis</div>", unsafe_allow_html=True)
+    st.markdown(
+        "<div class='section-title'>Technical Analysis</div>",
+        unsafe_allow_html=True,
+    )
+
     ticker_list = list(all_data.keys()) if all_data else config.WATCHLIST
     c1, c2, c3 = st.columns([1.4, 1, 1])
     with c1:
         current_idx = ticker_list.index(st.session_state.selected_ticker) if st.session_state.selected_ticker in ticker_list else 0
-        st.session_state.selected_ticker = st.selectbox("Hisse", ticker_list, index=current_idx, format_func=lambda x: f"{config.TICKER_NAMES.get(x, x)} ({x.replace('.IS', '')})")
+        st.session_state.selected_ticker = st.selectbox(
+            "Hisse",
+            ticker_list,
+            index=current_idx,
+            format_func=lambda x: f"{config.TICKER_NAMES.get(x, x)} ({x.replace('.IS', '')})",
+        )
     with c2:
         period_options = ["1mo", "3mo", "6mo", "1y", "2y", "5y"]
-        st.session_state.analysis_period = st.selectbox("Periyot", period_options, index=period_options.index(st.session_state.analysis_period), format_func=lambda x: {"1mo": "1 Ay", "3mo": "3 Ay", "6mo": "6 Ay", "1y": "1 Yil", "2y": "2 Yil", "5y": "5 Yil"}[x])
+        labels = {"1mo": "1 Ay", "3mo": "3 Ay", "6mo": "6 Ay", "1y": "1 Yıl", "2y": "2 Yıl", "5y": "5 Yıl"}
+        st.session_state.analysis_period = st.selectbox(
+            "Periyot",
+            period_options,
+            index=period_options.index(st.session_state.analysis_period),
+            format_func=lambda x: labels[x],
+        )
     with c3:
         if st.button("Haberleri getir", use_container_width=True):
-            with st.spinner("Haberler aliniyor..."):
+            with st.spinner("Haberler alınıyor..."):
                 st.session_state[f"news_{st.session_state.selected_ticker}"] = fetch_stock_news(st.session_state.selected_ticker)
 
-    df = st.session_state.data_fetcher.fetch_single(st.session_state.selected_ticker, period=st.session_state.analysis_period)
+    df = st.session_state.data_fetcher.fetch_single(
+        st.session_state.selected_ticker,
+        period=st.session_state.analysis_period,
+    )
     if df is None:
-        st.error("Analiz verisi yuklenemedi.")
+        st.error("Analiz verisi yüklenemedi.")
         return
+
     df = TechnicalIndicators().add_all(df)
     snapshot = TechnicalIndicators().get_snapshot(df)
-    signal = st.session_state.engine.analyze(st.session_state.selected_ticker, df)
+    signal = st.session_state.engine.analyze(
+        st.session_state.selected_ticker,
+        df,
+    )
 
-    m1, m2, m3, m4, m5 = st.columns(5)
-    with m1:
-        metric_card("Price", f"₺{snapshot['close']}", f"Gunluk {snapshot['change_pct']}%")
-    with m2:
-        metric_card("RSI", f"{snapshot['rsi']:.0f}", snapshot.get("rsi_zone", "Notr"))
-    with m3:
-        metric_card("Volume", f"{snapshot['volume_ratio']:.1f}x", "Hacim hizi")
-    with m4:
-        metric_card("ATR", f"₺{snapshot['atr']:.2f}", "Volatilite")
-    with m5:
-        metric_card("Signal", signal.signal_type.value if signal else "Yok", f"Skor {signal.score:+.0f}" if signal else "Bekle")
+    render_stock_identity(st.session_state.selected_ticker, snapshot)
 
     chart_col, side_col = st.columns([2.2, 1], gap="large")
     with chart_col:
-        st.plotly_chart(plot_candlestick(df, st.session_state.selected_ticker), use_container_width=True)
-    with side_col:
-        st.plotly_chart(plot_rsi(df), use_container_width=True)
+        st.plotly_chart(
+            plot_candlestick(df, st.session_state.selected_ticker),
+            use_container_width=True,
+        )
         st.plotly_chart(plot_volume(df), use_container_width=True)
+    with side_col:
+        render_verdict_card(signal)
+        st.plotly_chart(plot_rsi(df), use_container_width=True)
+        render_indicator_grid(snapshot, signal)
 
-    info_col, news_col = st.columns([1.3, 1], gap="large")
+    info_col, news_col = st.columns([1.2, 1], gap="large")
     with info_col:
-        with st.container(border=True):
-            st.subheader("Teknik ozet")
-            st.write(f"**SMA Cross:** {snapshot['sma_cross']}")
-            st.write(f"**MACD Cross:** {snapshot['macd_cross']}")
-            st.write(f"**BB Position:** {snapshot['bb_position']}")
-            st.write(f"**Destek:** ₺{snapshot['support']:.2f}")
-            st.write(f"**Direnc:** ₺{snapshot['resistance']:.2f}")
-            if signal:
-                st.write(f"**Stop-Loss:** ₺{signal.stop_loss:.2f}")
-                st.write(f"**Hedef:** ₺{signal.target_price:.2f}")
-                st.markdown("**Nedenler**")
-                for reason in signal.reasons[:5]:
-                    st.write(f"- {reason}")
+        st.markdown(
+            "<div style='font-size:14px;font-weight:800;color:#8b90a0;text-transform:uppercase;letter-spacing:0.14em;margin-bottom:10px;'>Mini Bilgi</div>",
+            unsafe_allow_html=True,
+        )
+        render_mini_info_cards(df, snapshot)
     with news_col:
         with st.container(border=True):
-            st.subheader("Haber akisi")
+            st.subheader("Haber akışı")
             news = st.session_state.get(f"news_{st.session_state.selected_ticker}", [])
             if news:
                 for item in news[:6]:
@@ -638,42 +1391,331 @@ def render_analysis(all_data):
                     else:
                         st.write(f"- {source}: {title}")
             else:
-                st.caption("Haberleri getir butonuyla secili hisse icin baglamsal akis acabilirsiniz.")
+                st.caption("Haberleri getir butonuyla seçili hisse için bağlamsal akış açabilirsiniz.")
 
 
 def render_settings(signals):
-    st.markdown("<div class='section-title'>Bot Settings</div>", unsafe_allow_html=True)
-    left, right = st.columns([1.4, 1], gap="large")
-    with left:
-        with st.container(border=True):
-            st.subheader("Tarama ve filtreler")
-            st.session_state.auto_refresh = st.toggle("Otomatik yenile", value=st.session_state.auto_refresh)
-            st.session_state.refresh_interval = st.select_slider("Tarama araligi", options=[1, 3, 5, 10, 15], value=st.session_state.refresh_interval)
-            st.session_state.min_score_filter = st.slider("Minimum skor", -100, 100, st.session_state.min_score_filter)
+    st.markdown(
+        "<div class='section-title'>Bot Settings</div>",
+        unsafe_allow_html=True
+    )
+
+    col_left, col_right = st.columns([1.5, 1], gap="large")
+
+    with col_left:
+        st.markdown("""
+        <div class='settings-group'>
+          <div class='settings-group-title'>Tarama ve Filtreler</div>
+        </div>
+        """, unsafe_allow_html=True)
+        with st.container(border=False):
+            st.session_state.auto_refresh = st.toggle(
+                "Otomatik yenile", value=st.session_state.auto_refresh
+            )
+            st.session_state.refresh_interval = st.select_slider(
+                "Tarama aralığı (dk)",
+                options=[1, 3, 5, 10, 15],
+                value=st.session_state.refresh_interval
+            )
+            st.session_state.min_score_filter = st.slider(
+                "Minimum skor", -100, 100,
+                st.session_state.min_score_filter
+            )
             r1, r2 = st.columns(2)
             with r1:
-                st.session_state.rsi_min_filter = st.slider("RSI min", 0, 100, st.session_state.rsi_min_filter)
+                st.session_state.rsi_min_filter = st.slider(
+                    "RSI min", 0, 100, st.session_state.rsi_min_filter
+                )
             with r2:
-                st.session_state.rsi_max_filter = st.slider("RSI max", 0, 100, st.session_state.rsi_max_filter)
-            st.session_state.vol_ratio_filter = st.slider("Minimum hacim orani", 0.0, 5.0, st.session_state.vol_ratio_filter, 0.1)
+                st.session_state.rsi_max_filter = st.slider(
+                    "RSI max", 0, 100, st.session_state.rsi_max_filter
+                )
+            st.session_state.vol_ratio_filter = st.slider(
+                "Min hacim oranı", 0.0, 5.0,
+                st.session_state.vol_ratio_filter, 0.1
+            )
+
+        st.divider()
+
+        st.markdown("""
+        <div class='settings-group'>
+          <div class='settings-group-title'>İndikatör Parametreleri</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        with st.expander("RSI Ayarları", expanded=False):
+            st.session_state.ind_rsi_period = st.slider(
+                "RSI Periyot", 5, 30,
+                st.session_state.ind_rsi_period
+            )
+            rc1, rc2 = st.columns(2)
+            with rc1:
+                st.session_state.ind_rsi_oversold = st.slider(
+                    "Aşırı Satım", 10, 40,
+                    st.session_state.ind_rsi_oversold
+                )
+            with rc2:
+                st.session_state.ind_rsi_overbought = st.slider(
+                    "Aşırı Alım", 60, 90,
+                    st.session_state.ind_rsi_overbought
+                )
+
+        with st.expander("MACD Ayarları", expanded=False):
+            mc1, mc2, mc3 = st.columns(3)
+            with mc1:
+                st.session_state.ind_macd_fast = st.slider(
+                    "Hızlı", 5, 20,
+                    st.session_state.ind_macd_fast
+                )
+            with mc2:
+                st.session_state.ind_macd_slow = st.slider(
+                    "Yavaş", 20, 50,
+                    st.session_state.ind_macd_slow
+                )
+            with mc3:
+                st.session_state.ind_macd_signal = st.slider(
+                    "Sinyal", 5, 20,
+                    st.session_state.ind_macd_signal
+                )
+
+        with st.expander("SMA / EMA Ayarları", expanded=False):
+            sc1, sc2 = st.columns(2)
+            with sc1:
+                st.session_state.ind_sma_fast = st.slider(
+                    "SMA Hızlı", 5, 30,
+                    st.session_state.ind_sma_fast
+                )
+                st.session_state.ind_ema_fast = st.slider(
+                    "EMA Hızlı", 5, 30,
+                    st.session_state.ind_ema_fast
+                )
+            with sc2:
+                st.session_state.ind_sma_slow = st.slider(
+                    "SMA Yavaş", 20, 100,
+                    st.session_state.ind_sma_slow
+                )
+                st.session_state.ind_ema_slow = st.slider(
+                    "EMA Yavaş", 20, 100,
+                    st.session_state.ind_ema_slow
+                )
+
+        with st.expander("Bollinger & ADX", expanded=False):
+            bc1, bc2 = st.columns(2)
+            with bc1:
+                st.session_state.ind_bb_period = st.slider(
+                    "BB Periyot", 10, 30,
+                    st.session_state.ind_bb_period
+                )
+            with bc2:
+                st.session_state.ind_bb_std = st.slider(
+                    "BB Std", 1.0, 3.0,
+                    st.session_state.ind_bb_std, 0.1
+                )
+            st.session_state.ind_adx_threshold = st.slider(
+                "ADX Eşiği", 10, 40,
+                st.session_state.ind_adx_threshold
+            )
+
+        st.divider()
+
+        st.markdown("""
+        <div class='settings-group'>
+          <div class='settings-group-title'>Telegram Bildirimleri</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.session_state.tg_token_input = st.text_input(
+            "Bot Token",
+            value=st.session_state.tg_token_input,
+            type="password",
+            placeholder="123456789:AAxxxxxx..."
+        )
+        st.session_state.tg_chat_input = st.text_input(
+            "Chat ID",
+            value=st.session_state.tg_chat_input,
+            placeholder="-100123456789"
+        )
+        st.session_state.notify_min_score = st.slider(
+            "Bildirim min skor", 0, 100,
+            st.session_state.notify_min_score
+        )
+        tg_ready = bool(
+            st.session_state.tg_token_input and
+            st.session_state.tg_chat_input
+        )
+        st.session_state.notify_telegram = st.toggle(
+            "Telegram bildirimi",
+            value=st.session_state.notify_telegram,
+            disabled=not tg_ready
+        )
+        if not tg_ready:
+            st.caption("Token ve Chat ID girilmeden bildirim aktif edilemez.")
+
+    with col_right:
+        st.markdown("""
+        <div class='settings-group'>
+          <div class='settings-group-title'>Canlı Durum</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        next_scan = "Kapalı"
+        if st.session_state.auto_refresh and st.session_state.last_scan_time:
+            elapsed = (
+                datetime.now() - st.session_state.last_scan_time
+            ).total_seconds()
+            remaining = max(
+                0, st.session_state.refresh_interval * 60 - elapsed
+            )
+            next_scan = f"{remaining:.0f}s"
+
+        tg_status = (
+            "✅ Hazır" if tg_ready else "⚠️ Eksik"
+        )
+
         with st.container(border=True):
-            st.subheader("Bildirimler")
-            st.session_state.notify_min_score = st.slider("Bildirim min skor", 0, 100, st.session_state.notify_min_score)
-            st.session_state.notify_telegram = st.toggle("Telegram bildirimi", value=st.session_state.notify_telegram, disabled=not bool(config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID))
-    with right:
-        with st.container(border=True):
-            st.subheader("Canli durum")
-            st.metric("Watchlist", len(config.WATCHLIST))
-            st.metric("Aktif sinyal", len(signals))
-            st.metric("Telegram", "Hazir" if config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID else "Yok")
-            next_scan = "Kapali"
-            if st.session_state.auto_refresh and st.session_state.last_scan_time:
-                elapsed = (datetime.now() - st.session_state.last_scan_time).total_seconds()
-                next_scan = f"{max(0, st.session_state.refresh_interval * 60 - elapsed):.0f}s"
+            st.metric("Watchlist",      len(config.WATCHLIST))
+            st.metric("Aktif sinyal",  len(signals))
+            st.metric("Telegram",      tg_status)
             st.metric("Sonraki tarama", next_scan)
-        if st.button("Taramayi yenile", use_container_width=True, type="primary"):
-            run_scan()
-            st.rerun()
+
+        st.markdown("""
+        <div class='settings-group' style='margin-top:14px;'>
+          <div class='settings-group-title'>Risk Yönetimi</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        strong_count = len([s for s in signals if s.score >= 40])
+        sell_count   = len([s for s in signals if s.score < 0])
+        total        = len(signals)
+        pos_rate     = round(strong_count / total * 100) if total > 0 else 0
+        avg_score    = round(
+            sum(s.score for s in signals) / total
+        ) if total > 0 else 0
+
+        risk_cards = [
+            ("Güçlü Sinyal Oranı", f"{pos_rate}%",
+             f"{strong_count} / {total} güçlü"),
+            ("Ortalama Skor",      f"{avg_score:+d}",
+             "Tüm hisseler ortalaması"),
+            ("Sat Baskısı",        str(sell_count),
+             "Negatif skorlu hisse"),
+            ("Min Skor Filtresi",
+             str(st.session_state.min_score_filter),
+             "Aktif filtre eşiği"),
+        ]
+
+        for title, value, sub in risk_cards:
+            st.markdown(f"""
+            <div class="risk-card">
+              <div class="risk-card-title">{title}</div>
+              <div class="risk-card-value">{value}</div>
+              <div class="risk-card-sub">{sub}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        changed = []
+        param_map = [
+            ("RSI Periyot",   "ind_rsi_period",    config.RSI_PERIOD),
+            ("RSI Satım",     "ind_rsi_oversold",  config.RSI_OVERSOLD),
+            ("RSI Alım",       "ind_rsi_overbought",config.RSI_OVERBOUGHT),
+            ("SMA Hızlı",     "ind_sma_fast",      config.SMA_FAST),
+            ("SMA Yavaş",     "ind_sma_slow",      config.SMA_SLOW),
+            ("EMA Hızlı",     "ind_ema_fast",      config.EMA_FAST),
+            ("EMA Yavaş",     "ind_ema_slow",      config.EMA_SLOW),
+            ("MACD Hızlı",    "ind_macd_fast",    config.MACD_FAST),
+            ("MACD Yavaş",    "ind_macd_slow",    config.MACD_SLOW),
+            ("MACD Sinyal",   "ind_macd_signal",  config.MACD_SIGNAL),
+            ("BB Periyot",    "ind_bb_period",    config.BOLLINGER_PERIOD),
+            ("BB Std",        "ind_bb_std",       float(config.BOLLINGER_STD)),
+            ("ADX Eşiği",     "ind_adx_threshold", config.ADX_THRESHOLD),
+        ]
+        for label, key, default in param_map:
+            current = st.session_state.get(key, default)
+            if current != default:
+                changed.append((label, default, current))
+
+        if changed:
+            rows_html = "".join(f"""
+            <div class="param-row">
+              <span class="param-name">{label}</span>
+              <span class="param-value">
+                {default} → {current}
+                <span class="param-changed">değişti</span>
+              </span>
+            </div>
+            """ for label, default, current in changed)
+
+            st.markdown(f"""
+            <div style='margin-top:12px;'>
+              <div style='font-size:11px;font-weight:800;letter-spacing:0.16em;
+                          text-transform:uppercase;color:#8b90a0;
+                          margin-bottom:8px;'>
+                Değiştirilen Parametreler
+              </div>
+              <div class='indicator-table'>{rows_html}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown("""
+        <div class='deploy-btn-wrap'>
+          <div class='deploy-title'>Deploy Configuration</div>
+          <div class='deploy-sub'>
+            Değiştirilen parametreler bir sonraki taramada aktif olur.
+            Şu an runtime override — config.py yazılmaz.
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        deploy_col1, deploy_col2 = st.columns(2)
+        with deploy_col1:
+            if st.button(
+                "⚡ Taramayı Yenile",
+                use_container_width=True,
+                type="primary"
+            ):
+                config.RSI_PERIOD       = st.session_state.ind_rsi_period
+                config.RSI_OVERSOLD     = st.session_state.ind_rsi_oversold
+                config.RSI_OVERBOUGHT   = st.session_state.ind_rsi_overbought
+                config.SMA_FAST         = st.session_state.ind_sma_fast
+                config.SMA_SLOW         = st.session_state.ind_sma_slow
+                config.EMA_FAST         = st.session_state.ind_ema_fast
+                config.EMA_SLOW         = st.session_state.ind_ema_slow
+                config.MACD_FAST        = st.session_state.ind_macd_fast
+                config.MACD_SLOW        = st.session_state.ind_macd_slow
+                config.MACD_SIGNAL      = st.session_state.ind_macd_signal
+                config.BOLLINGER_PERIOD = st.session_state.ind_bb_period
+                config.BOLLINGER_STD    = st.session_state.ind_bb_std
+                config.ADX_THRESHOLD    = st.session_state.ind_adx_threshold
+                if st.session_state.tg_token_input:
+                    config.TELEGRAM_BOT_TOKEN = st.session_state.tg_token_input
+                if st.session_state.tg_chat_input:
+                    config.TELEGRAM_CHAT_ID = st.session_state.tg_chat_input
+                run_scan()
+                st.session_state.deploy_confirmed = True
+                st.rerun()
+
+        with deploy_col2:
+            if st.button(
+                "↺ Varsayılana Dön",
+                use_container_width=True
+            ):
+                keys_to_reset = [
+                    "ind_rsi_period","ind_rsi_oversold","ind_rsi_overbought",
+                    "ind_sma_fast","ind_sma_slow","ind_ema_fast","ind_ema_slow",
+                    "ind_macd_fast","ind_macd_slow","ind_macd_signal",
+                    "ind_bb_period","ind_bb_std","ind_adx_threshold",
+                    "tg_token_input","tg_chat_input","deploy_confirmed",
+                ]
+                for k in keys_to_reset:
+                    if k in st.session_state:
+                        del st.session_state[k]
+                st.rerun()
+
+        if st.session_state.get("deploy_confirmed"):
+            st.success(
+                "✅ Parametreler uygulandı ve tarama yenilendi.",
+                icon="✅"
+            )
 
 
 bootstrap_state()
