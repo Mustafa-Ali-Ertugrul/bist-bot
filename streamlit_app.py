@@ -961,7 +961,7 @@ def render_verdict_card(signal):
         <div>
           <div style="font-size:11px;font-weight:800;letter-spacing:0.18em;
                       text-transform:uppercase;color:#8b90a0;margin-bottom:8px;">
-            Oracle Kararı
+            Bot Kararı
           </div>
           <div class="verdict-label">{signal.signal_type.value}</div>
           <div class="verdict-score">
@@ -1316,7 +1316,7 @@ def render_top_shell(signals, summary):
     st.markdown(
         f"""
         <div class="hero-shell">
-            <div class="eyebrow">Bist Bot Terminal</div>
+            <div class="eyebrow">BIST Bot Terminal</div>
             <div class="hero-title">Modern trading cockpit for BIST signals</div>
             <div class="hero-copy">Gercek zamanli tarama, teknik sinyal akisi, tekil hisse analizi ve bot ayarlari tek bir mobil uyumlu uygulama kabugunda toplandi.</div>
             <div style="margin-top:18px;">
