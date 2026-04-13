@@ -957,30 +957,31 @@ def render_verdict_card(signal):
         f"""
     <div class="verdict-card {card_class}">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;
-                  flex-wrap:wrap;gap:16px;">
-        <div>
+                  flex-wrap:wrap;gap:12px;overflow:hidden;">
+        <div style="min-width:0;">
           <div style="font-size:11px;font-weight:800;letter-spacing:0.18em;
                       text-transform:uppercase;color:#8b90a0;margin-bottom:8px;">
             Bot Kararı
           </div>
-          <div class="verdict-label">{signal.signal_type.value}</div>
+          <div class="verdict-label" style="white-space:nowrap;">{signal.signal_type.value}</div>
           <div class="verdict-score">
             Güven: {signal.confidence}
             &nbsp;·&nbsp;
             Skor: <span style="color:{score_color};font-weight:800;">{signal.score:+.0f}</span>
           </div>
         </div>
-        <div style="text-align:right;">
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;
+                    min-width:0;overflow:hidden;">
           <div style="font-size:11px;color:#8b90a0;font-weight:700;
                       text-transform:uppercase;letter-spacing:0.12em;">Stop-Loss</div>
-          <div style="font-size:22px;font-weight:900;color:#ff796c;">
+          <div style="font-size:18px;font-weight:900;color:#ff796c;">
             ₺{signal.stop_loss:.2f}
           </div>
           <div style="font-size:11px;color:#8b90a0;font-weight:700;
-                      text-transform:uppercase;letter-spacing:0.12em;margin-top:10px;">
+                      text-transform:uppercase;letter-spacing:0.12em;margin-top:4px;">
             Hedef
           </div>
-          <div style="font-size:22px;font-weight:900;color:#48ddbc;">
+          <div style="font-size:18px;font-weight:900;color:#48ddbc;">
             ₺{signal.target_price:.2f}
           </div>
         </div>
