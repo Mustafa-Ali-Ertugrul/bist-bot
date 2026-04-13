@@ -19,7 +19,7 @@
         android:usesCleartextTraffic="true">
         
         <activity
-            android:name=".MainActivity"
+            android:name=".BistBotActivity"
             android:exported="true"
             android:screenOrientation="portrait">
             <intent-filter>

@@ -1,1344 +1,529 @@
-import streamlit as st
+import re
+from datetime import datetime
+
 import pandas as pd
 import plotly.graph_objects as go
-from datetime import datetime
-import time
-import threading
 import requests
-import re
+import streamlit as st
 
 import config
 from data_fetcher import BISTDataFetcher
 from indicators import TechnicalIndicators
-from strategy import StrategyEngine, SignalType
+from strategy import StrategyEngine
 from streamlit_utils import check_signals, send_signal_notification
 
 st.set_page_config(
     page_title="BIST Bot",
     page_icon="🤖",
     layout="wide",
-    initial_sidebar_state="auto"
+    initial_sidebar_state="collapsed",
 )
 
-st.markdown("""
-<style>
-    section[data-testid="stSidebar"] {
-        width: 200px !important;
-    }
-</style>
-""", unsafe_allow_html=True)
 
-if "data_fetcher" not in st.session_state:
-    st.session_state.data_fetcher = BISTDataFetcher()
-if "engine" not in st.session_state:
-    st.session_state.engine = StrategyEngine()
-
-if "auto_refresh" not in st.session_state:
-    st.session_state.auto_refresh = False
-if "refresh_interval" not in st.session_state:
-    st.session_state.refresh_interval = 5
-if "min_score_filter" not in st.session_state:
-    st.session_state.min_score_filter = -100
-if "rsi_min_filter" not in st.session_state:
-    st.session_state.rsi_min_filter = 0
-if "rsi_max_filter" not in st.session_state:
-    st.session_state.rsi_max_filter = 100
-if "vol_ratio_filter" not in st.session_state:
-    st.session_state.vol_ratio_filter = 0.0
-if "notify_min_score" not in st.session_state:
-    st.session_state.notify_min_score = 30
-if "notify_telegram" not in st.session_state:
-    st.session_state.notify_telegram = bool(config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID)
-if "last_scan_time" not in st.session_state:
-    st.session_state.last_scan_time = None
-
-if "auto_refresh" not in st.session_state:
-    st.session_state.auto_refresh = False
-if "refresh_interval" not in st.session_state:
-    st.session_state.refresh_interval = 5
-if "min_score_filter" not in st.session_state:
-    st.session_state.min_score_filter = -100
-if "rsi_min_filter" not in st.session_state:
-    st.session_state.rsi_min_filter = 0
-if "rsi_max_filter" not in st.session_state:
-    st.session_state.rsi_max_filter = 100
-if "vol_ratio_filter" not in st.session_state:
-    st.session_state.vol_ratio_filter = 0.0
-if "notify_min_score" not in st.session_state:
-    st.session_state.notify_min_score = 30
-if "notify_telegram" not in st.session_state:
-    st.session_state.notify_telegram = bool(config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID)
-if "last_scan_time" not in st.session_state:
-    st.session_state.last_scan_time = None
-
-if "signals" not in st.session_state or len(st.session_state.get("signals", [])) == 0:
-    try:
-        fetcher = st.session_state.data_fetcher
-        engine = st.session_state.engine
-        fetcher.clear_cache()
-        all_data = fetcher.fetch_all()
-        signals = engine.scan_all(all_data)
-        
-        for ticker, df in all_data.items():
-            signal_type, conditions = check_signals(ticker, df)
-            if signal_type:
-                send_signal_notification(ticker, signal_type, conditions)
-        
-        st.session_state.signals = signals
-        st.session_state.all_data = all_data
-        st.rerun()
-    except Exception as e:
-        st.error(f"Tarama hatası: {e}")
-
-st.markdown("""
-<style>
-    /* Global Modern Theme */
-    .stApp {
-        background: linear-gradient(135deg, #0a0e1a 0%, #111827 50%, #0f172a 100%);
+def bootstrap_state():
+    defaults = {
+        "data_fetcher": BISTDataFetcher(),
+        "engine": StrategyEngine(),
+        "signals": [],
+        "all_data": {},
+        "auto_refresh": False,
+        "refresh_interval": 5,
+        "min_score_filter": -100,
+        "rsi_min_filter": 0,
+        "rsi_max_filter": 100,
+        "vol_ratio_filter": 0.0,
+        "notify_min_score": 30,
+        "notify_telegram": bool(config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID),
+        "last_scan_time": None,
+        "current_view": "dashboard",
+        "selected_ticker": config.WATCHLIST[0],
+        "analysis_period": "6mo",
     }
-    
-    /* Sidebar Modern */
-    section[data-testid="stSidebar"] {
-        background: rgba(17, 24, 39, 0.95) !important;
-        backdrop-filter: blur(20px);
-        border-right: 1px solid rgba(255, 255, 255, 0.06) !important;
-    }
-    
-    /* Glassmorphism Cards */
-    div[data-testid="stMetric"] {
-        background: rgba(255, 255, 255, 0.03);
-        backdrop-filter: blur(12px);
-        border: 1px solid rgba(255, 255, 255, 0.06);
-        border-radius: 16px;
-        padding: 20px;
-        transition: all 0.3s ease;
-    }
-    
-    div[data-testid="stMetric"]:hover {
-        border-color: rgba(30, 64, 175, 0.3);
-        box-shadow: 0 4px 20px rgba(30, 64, 175, 0.1);
-    }
-    
-    /* Modern Buttons */
-    .stButton > button {
-        width: 100%;
-        padding: 16px;
-        font-size: 16px;
-        border-radius: 12px;
-        font-weight: 600;
-        letter-spacing: 0.3px;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        border: none;
-        background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%);
-        color: white;
-        box-shadow: 0 4px 15px rgba(30, 64, 175, 0.3);
-    }
-    
-    .stButton > button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 25px rgba(30, 64, 175, 0.45);
-    }
-    
-    /* Typography */
-    h1 {
-        font-size: 32px !important;
-        font-weight: 800 !important;
-        background: linear-gradient(135deg, #1e3a8a, #1e40af, #2563eb);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        letter-spacing: -0.5px;
-    }
-    
-    h2 {
-        font-size: 24px !important;
-        font-weight: 700 !important;
-        color: #f1f5f9;
-    }
-    
-    h3 {
-        font-size: 18px !important;
-        font-weight: 600 !important;
-        color: #e2e8f0;
-    }
-    
-    /* Expander Modern */
-    .streamlit-expanderHeader {
-        background: rgba(255, 255, 255, 0.02);
-        border: 1px solid rgba(255, 255, 255, 0.06);
-        border-radius: 12px;
-        padding: 16px;
-        transition: all 0.2s ease;
-    }
-    
-    .streamlit-expanderHeader:hover {
-        border-color: rgba(30, 64, 175, 0.3);
-    }
-    
-    /* Tabs Modern */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-    }
-    
-    .stTabs [data-baseweb="tab"] {
-        background: rgba(255, 255, 255, 0.03);
-        border: 1px solid rgba(255, 255, 255, 0.06);
-        border-radius: 10px;
-        padding: 10px 20px;
-        transition: all 0.2s ease;
-    }
-    
-    .stTabs [data-baseweb="tab"][aria-selected="true"] {
-        background: linear-gradient(135deg, #1e3a8a, #1e40af);
-        border-color: transparent;
-    }
-    
-    /* Selectbox Modern */
-    .stSelectbox > div > div {
-        background: rgba(255, 255, 255, 0.03);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 10px;
-    }
-    
-    /* Slider Modern */
-    .stSlider > div > div > div > div {
-        background: linear-gradient(135deg, #1e3a8a, #1e40af);
-    }
-    
-    /* Divider */
-    hr {
-        border-color: rgba(255, 255, 255, 0.06);
-    }
-    
-    /* Text */
-    p, li {
-        font-size: 15px;
-        color: #cbd5e1;
-    }
-    
-    /* Dataframe Modern */
-    .dataframe {
-        background: rgba(255, 255, 255, 0.02);
-        border-radius: 12px;
-        overflow: hidden;
-    }
-</style>
-""", unsafe_allow_html=True)
+    for key, value in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = value
 
 
-def get_signal_emoji(signal_type):
-    emojis = {
-        SignalType.STRONG_BUY: "🚀💰",
-        SignalType.BUY: "🟢",
-        SignalType.WEAK_BUY: "🟡",
-        SignalType.HOLD: "⚪",
-        SignalType.WEAK_SELL: "🟠",
-        SignalType.SELL: "🔴",
-        SignalType.STRONG_SELL: "🚨",
-    }
-    return emojis.get(signal_type, "📊")
+def inject_styles():
+    st.markdown(
+        """
+        <style>
+            section[data-testid="stSidebar"] {display:none !important;}
+            .block-container {max-width:1240px;padding-top:1.2rem;padding-bottom:7rem;}
+            .stApp {
+                background:
+                    radial-gradient(circle at top right, rgba(72,221,188,0.08), transparent 22%),
+                    radial-gradient(circle at top left, rgba(173,198,255,0.10), transparent 24%),
+                    linear-gradient(180deg, #0b1016 0%, #10141a 100%);
+            }
+            .hero-shell, .surface-shell, .metric-shell {
+                border:1px solid rgba(255,255,255,0.06);
+                box-shadow:0 24px 80px rgba(0,0,0,0.22);
+            }
+            .hero-shell {
+                background:linear-gradient(135deg, rgba(24,28,34,0.94), rgba(16,20,26,0.98));
+                border-radius:26px;
+                padding:28px;
+                overflow:hidden;
+                position:relative;
+                margin-bottom:18px;
+            }
+            .hero-shell:after {
+                content:"";
+                position:absolute;
+                inset:0;
+                background:radial-gradient(circle at 88% 18%, rgba(72,221,188,0.12), transparent 20%);
+                pointer-events:none;
+            }
+            .surface-shell {
+                background:rgba(28,32,38,0.92);
+                border-radius:22px;
+                padding:20px;
+            }
+            .metric-shell {
+                background:linear-gradient(180deg, rgba(28,32,38,0.96), rgba(20,24,30,0.98));
+                border-radius:22px;
+                padding:18px 20px;
+                min-height:132px;
+            }
+            .eyebrow {color:#48ddbc;font-size:11px;font-weight:800;letter-spacing:0.22em;text-transform:uppercase;}
+            .hero-title {font-size:42px;font-weight:900;letter-spacing:-0.04em;color:#dfe2eb;line-height:1.0;margin:10px 0 8px;}
+            .hero-copy {color:#99a2b2;font-size:14px;line-height:1.7;max-width:620px;}
+            .pill-stat {display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;background:rgba(255,255,255,0.04);color:#c1c6d7;border:1px solid rgba(255,255,255,0.05);font-size:12px;margin-right:8px;margin-top:8px;}
+            .metric-kicker {color:#8b90a0;text-transform:uppercase;letter-spacing:0.18em;font-size:10px;font-weight:800;}
+            .metric-value {font-size:34px;font-weight:900;letter-spacing:-0.04em;color:#dfe2eb;margin-top:8px;}
+            .metric-sub {color:#99a2b2;font-size:12px;margin-top:8px;}
+            .section-title {font-size:24px;font-weight:850;letter-spacing:-0.03em;color:#dfe2eb;margin:12px 0 14px;}
+            .list-row {padding:14px 0;border-bottom:1px solid rgba(255,255,255,0.05);}
+            .list-row:last-child {border-bottom:none;}
+            .signal-chip {display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;font-size:11px;font-weight:800;letter-spacing:0.12em;text-transform:uppercase;}
+            .signal-chip.buy {background:rgba(72,221,188,0.12);color:#48ddbc;}
+            .signal-chip.sell {background:rgba(255,180,170,0.12);color:#ffb4aa;}
+            .footer-note {color:#738091;font-size:12px;text-align:center;margin-top:20px;}
+            @media (max-width: 768px) {
+                .block-container {padding-left:0.8rem;padding-right:0.8rem;}
+                .hero-shell {padding:20px;border-radius:20px;}
+                .hero-title {font-size:32px;}
+            }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def get_signal_color(signal_type):
-    if signal_type in [SignalType.STRONG_BUY, SignalType.BUY]:
+    value = signal_type.value
+    if "AL" in value:
         return "green"
-    elif signal_type in [SignalType.STRONG_SELL, SignalType.SELL]:
+    if "SAT" in value:
         return "red"
-    return "gray"
+    return "blue"
 
 
 def run_scan():
+    fetcher = st.session_state.data_fetcher
+    engine = st.session_state.engine
+    fetcher.clear_cache()
+    all_data = fetcher.fetch_all()
+    signals = engine.scan_all(all_data)
+    for ticker, df in all_data.items():
+        signal_type, conditions = check_signals(ticker, df)
+        if signal_type:
+            send_signal_notification(ticker, signal_type, conditions)
+    st.session_state.all_data = all_data
+    st.session_state.signals = signals
+    st.session_state.last_scan_time = datetime.now()
+
+
+def ensure_initial_data():
+    if st.session_state.signals:
+        return
     try:
-        fetcher = st.session_state.data_fetcher
-        engine = st.session_state.engine
-        
-        with st.spinner("Veriler cekiliyor..."):
-            fetcher.clear_cache()
-            all_data = fetcher.fetch_all()
-        
-        with st.spinner("Analiz yapiliyor..."):
-            signals = engine.scan_all(all_data)
-        
-        return signals, all_data
-    except Exception as e:
-        st.error(f"Hata: {str(e)}")
-        return [], {}
+        run_scan()
+        st.rerun()
+    except Exception as exc:
+        st.error(f"Tarama hatasi: {exc}")
+
+
+def fetch_stock_news(ticker, max_results=5):
+    name = config.TICKER_NAMES.get(ticker, ticker.replace(".IS", ""))
+    all_news = []
+    sources = [
+        ("Google Haberler", f"https://news.google.com/rss/search?q={name}+hisse+senedi&hl=tr&gl=TR&ceid=TR:tr", "google"),
+        ("Investing.com", f"https://tr.investing.com/search/?q={name}", "static"),
+        ("Bloomberg HT", f"https://www.bloomberght.com/search?q={name}", "static"),
+        ("TradingView", f"https://www.tradingview.com/symbols/{ticker.replace('.IS', '')}/ideas/", "static"),
+    ]
+    for source, url, source_type in sources:
+        try:
+            if source_type == "google":
+                response = requests.get(url, timeout=5, headers={"User-Agent": "Mozilla/5.0"})
+                items = re.findall(r"<item>.*?<title>(.*?)</title>.*?<link>(.*?)</link>", response.text, re.DOTALL)
+                for title, link in items[:max_results]:
+                    text = title.replace("&amp;", "&").replace("&#39;", "'").replace("&quot;", '"')
+                    if len(text) > 10:
+                        all_news.append({"title": text, "url": link, "source": source})
+            else:
+                all_news.append({"title": f"{name} - {source} sayfasi", "url": url, "source": source})
+        except Exception:
+            pass
+    return all_news[: max_results + 2]
+
+
+def get_market_summary(signals, all_data):
+    if not signals or not all_data:
+        return {}
+    ti = TechnicalIndicators()
+    sector_data = {}
+    rsi_values = []
+    vol_ratios = []
+    for ticker, df in all_data.items():
+        try:
+            df_ind = ti.add_all(df.copy())
+            last = df_ind.iloc[-1]
+            rsi = last.get("rsi", 50)
+            vol = last.get("volume_ratio", 1.0)
+            rsi_values.append(rsi)
+            vol_ratios.append(vol)
+            if rsi < 30:
+                sector_data["Asırı Satım"] = sector_data.get("Asırı Satım", 0) + 1
+            elif rsi > 70:
+                sector_data["Asırı Alım"] = sector_data.get("Asırı Alım", 0) + 1
+            else:
+                sector_data["Nötr"] = sector_data.get("Nötr", 0) + 1
+        except Exception:
+            pass
+    return {
+        "sector_dist": sector_data,
+        "avg_rsi": sum(rsi_values) / len(rsi_values) if rsi_values else 50,
+        "avg_vol_ratio": sum(vol_ratios) / len(vol_ratios) if vol_ratios else 1.0,
+        "total_analyzed": len(rsi_values),
+    }
 
 
 def plot_candlestick(df, ticker):
-    fig = go.Figure(data=[go.Candlestick(
-        x=df.index,
-        open=df['open'],
-        high=df['high'],
-        low=df['low'],
-        close=df['close'],
-        name=ticker
-    )])
-    
-    if 'bb_upper' in df.columns and 'bb_lower' in df.columns:
-        last = df.iloc[-1]
-        fig.add_trace(go.Scatter(
-            x=df.index, y=df['bb_upper'],
-            mode='lines', name='BB Upper',
-            line=dict(color='red', width=1, dash='dash')
-        ))
-        fig.add_trace(go.Scatter(
-            x=df.index, y=df['bb_lower'],
-            mode='lines', name='BB Lower',
-            line=dict(color='green', width=1, dash='dash')
-        ))
-    
-    if 'sma_5' in df.columns:
-        fig.add_trace(go.Scatter(
-            x=df.index, y=df['sma_5'],
-            mode='lines', name='SMA 5',
-            line=dict(color='yellow', width=1)
-        ))
-    
-    if 'sma_20' in df.columns:
-        fig.add_trace(go.Scatter(
-            x=df.index, y=df['sma_20'],
-            mode='lines', name='SMA 20',
-            line=dict(color='blue', width=1)
-        ))
-    
-    fig.update_layout(
-        template="plotly_dark",
-        height=400,
-        margin=dict(l=10, r=10, t=30, b=10),
-        xaxis_rangeslider_visible=False
+    fig = go.Figure(
+        data=[
+            go.Candlestick(
+                x=df.index,
+                open=df["open"],
+                high=df["high"],
+                low=df["low"],
+                close=df["close"],
+                increasing_line_color="#48ddbc",
+                decreasing_line_color="#ff796c",
+                name=ticker,
+            )
+        ]
     )
+    if "sma_20" in df.columns:
+        fig.add_trace(go.Scatter(x=df.index, y=df["sma_20"], mode="lines", name="SMA 20", line=dict(color="#adc6ff", width=2)))
+    if "ema_50" in df.columns:
+        fig.add_trace(go.Scatter(x=df.index, y=df["ema_50"], mode="lines", name="EMA 50", line=dict(color="#ffb4aa", width=2)))
+    fig.update_layout(template="plotly_dark", height=440, margin=dict(l=10, r=10, t=20, b=10), xaxis_rangeslider_visible=False)
     return fig
 
 
 def plot_volume(df):
-    colors = ['green' if df['close'].iloc[i] >= df['open'].iloc[i] else 'red' 
-              for i in range(len(df))]
-    
-    fig = go.Figure(data=[go.Bar(
-        x=df.index,
-        y=df['volume'],
-        marker_color=colors,
-        name='Volume'
-    )])
-    
-    if 'volume_sma_20' in df.columns:
-        fig.add_trace(go.Scatter(
-            x=df.index, y=df['volume_sma_20'],
-            mode='lines', name='Vol SMA 20',
-            line=dict(color='orange', width=2)
-        ))
-    
-    fig.update_layout(
-        template="plotly_dark",
-        height=150,
-        margin=dict(l=10, r=10, t=10, b=10),
-        showlegend=False
-    )
+    colors = ["#48ddbc" if df["close"].iloc[i] >= df["open"].iloc[i] else "#ff796c" for i in range(len(df))]
+    fig = go.Figure(data=[go.Bar(x=df.index, y=df["volume"], marker_color=colors)])
+    fig.update_layout(template="plotly_dark", height=180, margin=dict(l=10, r=10, t=10, b=10), showlegend=False)
     return fig
 
 
 def plot_rsi(df):
     fig = go.Figure()
-    
-    fig.add_trace(go.Scatter(
-        x=df.index, y=df['rsi'],
-        mode='lines', name='RSI',
-        line=dict(color='purple', width=2)
-    ))
-    
-    fig.add_hrect(y0=0, y1=30, fillcolor="green", opacity=0.1, line_width=0)
-    fig.add_hrect(y0=70, y1=100, fillcolor="red", opacity=0.1, line_width=0)
-    fig.add_hline(y=50, line_dash="dash", line_color="gray")
-    
-    fig.update_layout(
-        template="plotly_dark",
-        height=150,
-        margin=dict(l=10, r=10, t=10, b=10),
-        yaxis=dict(range=[0, 100]),
-        showlegend=False
-    )
+    fig.add_trace(go.Scatter(x=df.index, y=df["rsi"], mode="lines", line=dict(color="#48ddbc", width=2)))
+    fig.add_hrect(y0=0, y1=30, fillcolor="green", opacity=0.08, line_width=0)
+    fig.add_hrect(y0=70, y1=100, fillcolor="red", opacity=0.08, line_width=0)
+    fig.add_hline(y=50, line_dash="dash", line_color="#8b90a0")
+    fig.update_layout(template="plotly_dark", height=180, margin=dict(l=10, r=10, t=10, b=10), yaxis=dict(range=[0, 100]), showlegend=False)
     return fig
 
 
-def render_signal_card(s, is_sell=False):
-    name = config.TICKER_NAMES.get(s.ticker, s.ticker)
-    risk = (s.price - s.stop_loss) / s.price * 100
-    reward = (s.target_price - s.price) / s.price * 100
-    rr = reward / risk if risk > 0 else 0
-    
-    df_data = st.session_state.all_data.get(s.ticker)
-    if df_data is not None and len(df_data) >= 2:
-        prev_price = df_data['close'].iloc[-2]
-        day_change = (s.price - prev_price) / prev_price * 100
-        change_color = "green" if day_change > 0 else "red"
-        change_str = f":{change_color}[{day_change:+.1f}%]"
-    else:
-        day_change = 0
-        change_str = "0%"
-    
-    with st.expander(f"{get_signal_emoji(s.signal_type)} **{name}** ({s.ticker.replace('.IS', '')}) | Skor: {s.score:+.0f} | {change_str}"):
-        if df_data is not None:
-            df_chart = df_data.tail(30).copy()
-            df_chart = df_chart.reset_index()
-            df_chart = df_chart.dropna()
-            
-            fig = go.Figure()
-            
-            fig.add_trace(go.Candlestick(
-                x=df_chart.index,
-                open=df_chart['open'],
-                high=df_chart['high'],
-                low=df_chart['low'],
-                close=df_chart['close'],
-                name='Fiyat',
-                increasing_line_color='#00CC96',
-                decreasing_line_color='#EF553B'
-            ))
-            
-            if not is_sell:
-                fig.add_hline(y=s.price, line_dash="solid", line_color="#3399FF", line_width=2)
-                fig.add_hline(y=s.stop_loss, line_dash="dash", line_color="#EF553B", line_width=2)
-                fig.add_hline(y=s.target_price, line_dash="dash", line_color="#00CC96", line_width=2)
-                fig.add_hrect(y0=s.stop_loss, y1=s.price, fillcolor="#EF553B", opacity=0.15, line_width=0, layer="below")
-                fig.add_hrect(y0=s.price, y1=s.target_price, fillcolor="#00CC96", opacity=0.15, line_width=0, layer="below")
-                fig.add_annotation(x=0, y=s.price, xref="paper", yref="y", text=f"G: {s.price:.2f}", showarrow=False, xanchor="left", bgcolor="#3399FF", font=dict(color="white"))
-                fig.add_annotation(x=0, y=s.stop_loss, xref="paper", yref="y", text=f"S: {s.stop_loss:.2f}", showarrow=False, xanchor="left", bgcolor="#EF553B", font=dict(color="white"))
-                fig.add_annotation(x=0, y=s.target_price, xref="paper", yref="y", text=f"H: {s.target_price:.2f}", showarrow=False, xanchor="left", bgcolor="#00CC96", font=dict(color="white"))
-            else:
-                fig.add_hline(y=s.price, line_dash="solid", line_color="#FF9900", line_width=2)
-                fig.add_hline(y=s.target_price, line_dash="dash", line_color="#EF553B", line_width=2)
-                fig.add_hrect(y0=s.price, y1=s.target_price, fillcolor="#EF553B", opacity=0.15, line_width=0, layer="below")
-                fig.add_annotation(x=0, y=s.price, xref="paper", yref="y", text=f"G: {s.price:.2f}", showarrow=False, xanchor="left", bgcolor="#FF9900", font=dict(color="white"))
-                fig.add_annotation(x=0, y=s.target_price, xref="paper", yref="y", text=f"H: {s.target_price:.2f}", showarrow=False, xanchor="left", bgcolor="#EF553B", font=dict(color="white"))
-            
-            fig.update_layout(height=280, template="plotly_dark", margin=dict(l=60, r=20, t=40, b=40), xaxis_rangeslider_visible=False, showlegend=False, plot_bgcolor="#0d1117", paper_bgcolor="#0d1117")
-            st.plotly_chart(fig, use_container_width=True, key=f"chart_{s.ticker}_{s.signal_type.name}")
-        
-        if not is_sell:
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.metric("Giris", f"₺{s.price:.2f}", delta=f"{day_change:+.1f}%")
-            with col2:
-                st.metric("Stop", f"₺{s.stop_loss:.2f}", delta=f"-{risk:.1f}%", delta_color="inverse")
-            with col3:
-                st.metric("Hedef", f"₺{s.target_price:.2f}", delta=f"+{reward:.1f}%", delta_color="normal")
-            with col4:
-                st.metric("R/R", f"1:{rr:.1f}")
-        else:
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Fiyat", f"₺{s.price:.2f}", delta=f"{day_change:+.1f}%")
-            with col2:
-                st.metric("Hedef", f"₺{s.target_price:.2f}")
-            with col3:
-                st.metric("Güven", s.confidence)
-        
-        if df_data is not None:
-            ti = TechnicalIndicators()
-            df_indicators = ti.add_all(df_data.copy())
-            last = df_indicators.iloc[-1]
-            
-            rsi = last['rsi']
-            rsi_color = "green" if rsi < 30 else "red" if rsi > 70 else "white"
-            rsi_durum = "Asiri Satim" if rsi < 30 else "Asiri Alim" if rsi > 70 else "Nötr"
-            
-            stoch_k = last.get('stoch_k', 50)
-            stoch_d = last.get('stoch_d', 50)
-            stoch_color = "green" if stoch_k < 20 else "red" if stoch_k > 80 else "white"
-            
-            vol_ratio = last['volume_ratio']
-            vol_color = "green" if vol_ratio > 1.5 else "red" if vol_ratio < 0.8 else "white"
-            
-            macd_cross = last['macd_cross']
-            macd_color = "green" if macd_cross == "BULLISH" else "red" if macd_cross == "BEARISH" else "white"
-            
-            sma_cross = last['sma_cross']
-            sma_color = "green" if sma_cross == "GOLDEN_CROSS" else "red" if sma_cross == "DEATH_CROSS" else "white"
-            
-            ema_cross = last.get('ema_cross', 'NONE')
-            ema_color = "green" if ema_cross == "BULLISH" else "red" if ema_cross == "BEARISH" else "white"
-            
-            adx = last.get('adx', 0)
-            adx_str = "Güçlü" if adx > 25 else "Zayıf"
-            
-            cci = last.get('cci', 0)
-            cci_color = "green" if cci < -100 else "red" if cci > 100 else "white"
-            
-            obv_trend = last.get('obv_trend', 'FLAT')
-            obv_color = "green" if obv_trend == "UP" else "red" if obv_trend == "DOWN" else "white"
-            
-            rsi_div = last.get('rsi_divergence', 'NONE')
-            macd_div = last.get('macd_divergence', 'NONE')
-            
-            st.markdown("### Gostergeler")
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.markdown(f"**RSI:** :{rsi_color}[{rsi:.0f}] - {rsi_durum}")
-                st.markdown(f"**Stoch:** :{stoch_color}[K:{stoch_k:.0f}/D:{stoch_d:.0f}]")
-            with col2:
-                st.markdown(f"**Hacim:** :{vol_color}[{vol_ratio:.1f}x]")
-                st.markdown(f"**OBV:** :{obv_color}[{obv_trend}]")
-            with col3:
-                st.markdown(f"**MACD:** :{macd_color}[{macd_cross}]")
-                st.markdown(f"**CCI:** :{cci_color}[{cci:.0f}]")
-            with col4:
-                st.markdown(f"**SMA:** :{sma_color}[{sma_cross}]")
-                st.markdown(f"**ADX:** [{adx:.0f}] {adx_str}")
-            
-            if rsi_div != 'NONE' or macd_div != 'NONE' or ema_cross != 'NONE':
-                st.markdown("### Ek Sinyaller")
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    div_color = "green" if rsi_div == "BULLISH" else "red" if rsi_div == "BEARISH" else "white"
-                    st.markdown(f"**RSI Div:** :{div_color}[{rsi_div}]")
-                with col2:
-                    div_color = "green" if macd_div == "BULLISH" else "red" if macd_div == "BEARISH" else "white"
-                    st.markdown(f"**MACD Div:** :{div_color}[{macd_div}]")
-                with col3:
-                    em_color = "green" if ema_cross == "BULLISH" else "red" if ema_cross == "BEARISH" else "white"
-                    st.markdown(f"**EMA:** :{em_color}[{ema_cross}]")
-        
-        st.markdown("**Nedenler:**")
-        for r in s.reasons[:5]:
-            st.write(f"• {r}")
-
-
-st.title("🤖 BIST Trading Bot")
-
-def fetch_stock_news(ticker, max_results=5):
-    name = config.TICKER_NAMES.get(ticker, ticker.replace('.IS', ''))
-    all_news = []
-    
-    sources = [
-        {
-            'name': 'Google Haberler',
-            'url': f"https://news.google.com/rss/search?q={name}+hisse+senedi&hl=tr&gl=TR&ceid=TR:tr",
-            'type': 'google'
-        },
-        {
-            'name': 'Investing.com',
-            'url': f"https://tr.investing.com/search/?q={name}",
-            'type': 'investing'
-        },
-        {
-            'name': 'Bloomberg HT',
-            'url': f"https://www.bloomberght.com/search?q={name}",
-            'type': 'bloomberght'
-        },
-        {
-            'name': 'TradingView',
-            'url': f"https://www.tradingview.com/symbols/{ticker.replace('.IS', '')}/ideas/",
-            'type': 'tradingview'
-        },
-        {
-            'name': 'Foreks.com',
-            'url': f"https://foreks.com/arama?q={name}",
-            'type': 'foreks'
-        },
-        {
-            'name': 'Bigpara',
-            'url': f"https://www.bigpara.com/arama/?q={name}",
-            'type': 'bigpara'
-        },
-    ]
-    
-    for source in sources:
-        try:
-            if source['type'] == 'google':
-                response = requests.get(source['url'], timeout=5, headers={'User-Agent': 'Mozilla/5.0'})
-                if response.status_code == 200:
-                    items = re.findall(r'<item>.*?<title>(.*?)</title>.*?<link>(.*?)</link>', response.text, re.DOTALL)
-                    for title, link in items[:max_results]:
-                        text = title.replace('&amp;', '&').replace('&#39;', "'").replace('&quot;', '"').replace('&nbsp;', ' ')
-                        if len(text) > 10 and text.lower() not in ['google haberler', 'google news']:
-                            all_news.append({'title': text, 'url': link, 'source': source['name']})
-            
-            elif source['type'] == 'investing':
-                all_news.append({
-                    'title': f'{name} - Investing.com analizleri ve yorumları',
-                    'url': source['url'],
-                    'source': source['name']
-                })
-            
-            elif source['type'] == 'bloomberght':
-                all_news.append({
-                    'title': f'{name} - Bloomberg HT haberleri',
-                    'url': source['url'],
-                    'source': source['name']
-                })
-            
-            elif source['type'] == 'tradingview':
-                all_news.append({
-                    'title': f'{name} - TradingView teknik analiz ve fikirler',
-                    'url': source['url'],
-                    'source': source['name']
-                })
-            
-            elif source['type'] == 'foreks':
-                all_news.append({
-                    'title': f'{name} - Foreks.com haber ve veriler',
-                    'url': source['url'],
-                    'source': source['name']
-                })
-            
-            elif source['type'] == 'bigpara':
-                all_news.append({
-                    'title': f'{name} - Bigpara haber ve analizler',
-                    'url': source['url'],
-                    'source': source['name']
-                })
-        
-        except:
-            pass
-    
-    return all_news[:max_results + 2]
-
-def get_market_summary(signals, all_data):
-    if not signals or not all_data:
-        return {}
-    
+def filter_signals(base_signals, all_data):
+    filtered = [s for s in base_signals if s.score >= st.session_state.min_score_filter]
+    if st.session_state.rsi_min_filter <= 0 and st.session_state.rsi_max_filter >= 100 and st.session_state.vol_ratio_filter <= 0:
+        return filtered
     ti = TechnicalIndicators()
-    sector_data = {}
-    rsi_values = []
-    vol_ratios = []
-    strong_signals = []
-    
-    for ticker, df in all_data.items():
+    result = []
+    for signal in filtered:
+        df = all_data.get(signal.ticker)
+        if df is None:
+            continue
         try:
-            df_ind = ti.add_all(df.copy())
-            last = df_ind.iloc[-1]
-            rsi = last.get('rsi', 50)
-            vol_r = last.get('volume_ratio', 1.0)
-            rsi_values.append(rsi)
-            vol_ratios.append(vol_r)
-            
-            if rsi < 30:
-                sector_data['Asırı Satım'] = sector_data.get('Asırı Satım', 0) + 1
-            elif rsi > 70:
-                sector_data['Asırı Alım'] = sector_data.get('Asırı Alım', 0) + 1
-            else:
-                sector_data['Nötr'] = sector_data.get('Nötr', 0) + 1
-            
-            for s in signals:
-                if s.ticker == ticker and abs(s.score) >= 30:
-                    strong_signals.append({'ticker': ticker, 'score': s.score, 'rsi': rsi, 'vol': vol_r})
-        except:
+            last = ti.add_all(df.copy()).iloc[-1]
+            rsi = last.get("rsi", 50)
+            volume_ratio = last.get("volume_ratio", 1.0)
+            if st.session_state.rsi_min_filter <= rsi <= st.session_state.rsi_max_filter and volume_ratio >= st.session_state.vol_ratio_filter:
+                result.append(signal)
+        except Exception:
             pass
-    
-    avg_rsi = sum(rsi_values) / len(rsi_values) if rsi_values else 50
-    avg_vol = sum(vol_ratios) / len(vol_ratios) if vol_ratios else 1.0
-    
-    return {
-        'sector_dist': sector_data,
-        'avg_rsi': avg_rsi,
-        'avg_vol_ratio': avg_vol,
-        'strong_signals': sorted(strong_signals, key=lambda x: abs(x['score']), reverse=True)[:5],
-        'total_analyzed': len(rsi_values)
-    }
+    return result
 
-with st.sidebar:
-    st.markdown("""
-    <style>
-        section[data-testid="stSidebar"] {
-            background: rgba(17, 24, 39, 0.95);
-            border-right: 1px solid rgba(255, 255, 255, 0.06);
-            padding: 16px 12px;
-        }
-        section[data-testid="stSidebar"] .stSelectbox > div > div > select {
-            font-size: 13px;
-            background: rgba(255, 255, 255, 0.03);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 10px;
-            padding: 8px;
-            color: #f1f5f9;
-        }
-        .sidebar-section-title {
-            color: #60a5fa;
-            font-size: 11px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 1.2px;
-            margin-bottom: 12px;
-            margin-top: 20px;
-            padding-bottom: 6px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-        }
-        .sidebar-divider {
-            border-top: 1px solid rgba(255, 255, 255, 0.06);
-            margin: 16px 0;
-        }
-        .sidebar-metric {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 8px 12px;
-            margin: 4px 0;
-            background: rgba(255, 255, 255, 0.02);
-            border-radius: 8px;
-        }
-        .sidebar-metric-label {
-            color: #64748b;
-            font-size: 12px;
-            font-weight: 500;
-        }
-        .sidebar-metric-value {
-            color: #e2e8f0;
-            font-size: 13px;
-            font-weight: 600;
-        }
-        .news-item {
-            background: rgba(255, 255, 255, 0.02);
-            border-radius: 10px;
-            padding: 10px 12px;
-            margin: 8px 0;
-            border: 1px solid rgba(255, 255, 255, 0.06);
-            font-size: 12px;
-            color: #cbd5e1;
-            line-height: 1.5;
-            cursor: pointer;
-            text-decoration: none;
-            display: block;
-            transition: all 0.2s ease;
-        }
-        .news-item:hover {
-            border-color: rgba(30, 64, 175, 0.4);
-            background: rgba(30, 64, 175, 0.05);
-            text-decoration: none;
-        }
-        .news-source {
-            display: inline-block;
-            background: rgba(30, 64, 175, 0.15);
-            color: #60a5fa;
-            font-size: 10px;
-            padding: 2px 8px;
-            border-radius: 6px;
-            margin-right: 6px;
-            font-weight: 600;
-            letter-spacing: 0.3px;
-        }
-        .news-title {
-            color: #cbd5e1;
-            font-size: 12px;
-            line-height: 1.5;
-        }
-        .signal-mini {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 8px 12px;
-            margin: 4px 0;
-            background: rgba(255, 255, 255, 0.02);
-            border: 1px solid rgba(255, 255, 255, 0.06);
-            border-radius: 8px;
-            font-size: 12px;
-            transition: all 0.2s ease;
-        }
-        .signal-mini:hover {
-            border-color: rgba(30, 64, 175, 0.3);
-        }
-    </style>
-    """, unsafe_allow_html=True)
 
-    # === OTOMATIK YENILEME ===
-    st.markdown('<div class="sidebar-section-title">⚡ Otomatik Yenileme</div>', unsafe_allow_html=True)
-    
-    st.session_state.auto_refresh = st.toggle(
-        "Otomatik Yenile",
-        value=st.session_state.auto_refresh,
-        help="Belirli aralıklarla otomatik tarama yap"
+def render_signal_card(signal, df_data=None):
+    name = config.TICKER_NAMES.get(signal.ticker, signal.ticker)
+    chip_class = "buy" if signal.score >= 10 else "sell"
+    with st.container(border=True):
+        c1, c2 = st.columns([1.2, 1])
+        with c1:
+            st.markdown(f"### {signal.ticker.replace('.IS', '')}")
+            st.caption(name)
+            st.markdown(f"<span class='signal-chip {chip_class}'>{signal.signal_type.value}</span>", unsafe_allow_html=True)
+            st.write(f"**Skor:** {signal.score:+.0f}")
+            st.write(f"**Fiyat:** ₺{signal.price:.2f}")
+            st.write(f"**Stop:** ₺{signal.stop_loss:.2f}")
+            st.write(f"**Hedef:** ₺{signal.target_price:.2f}")
+            st.write(f"**Guven:** {signal.confidence}")
+        with c2:
+            if df_data is not None:
+                st.plotly_chart(plot_candlestick(TechnicalIndicators().add_all(df_data.tail(90).copy()), signal.ticker), use_container_width=True, key=f"card_{signal.ticker}")
+        if signal.reasons:
+            st.markdown("**Nedenler**")
+            for reason in signal.reasons[:5]:
+                st.write(f"- {reason}")
+
+
+def render_top_shell(signals, summary):
+    strong_count = len([s for s in signals if s.score >= 40])
+    positive_count = len([s for s in signals if s.score >= 10])
+    analyzed = summary.get("total_analyzed", len(config.WATCHLIST))
+    avg_rsi = summary.get("avg_rsi", 50)
+    scan_time = st.session_state.last_scan_time.strftime("%H:%M") if st.session_state.last_scan_time else datetime.now().strftime("%H:%M")
+    st.markdown(
+        f"""
+        <div class="hero-shell">
+            <div class="eyebrow">Bist Bot Terminal</div>
+            <div class="hero-title">Modern trading cockpit for BIST signals</div>
+            <div class="hero-copy">Gercek zamanli tarama, teknik sinyal akisi, tekil hisse analizi ve bot ayarlari tek bir mobil uyumlu uygulama kabugunda toplandi.</div>
+            <div style="margin-top:18px;">
+                <span class="pill-stat">Canli tarama: {analyzed} hisse</span>
+                <span class="pill-stat">Guclu sinyal: {strong_count}</span>
+                <span class="pill-stat">Pozitif set: {positive_count}</span>
+                <span class="pill-stat">Ortalama RSI: {avg_rsi:.1f}</span>
+                <span class="pill-stat">Son guncelleme: {scan_time}</span>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
-    
-    if st.session_state.auto_refresh:
-        interval_options = {1: "1 dk", 3: "3 dk", 5: "5 dk", 10: "10 dk", 15: "15 dk"}
-        st.session_state.refresh_interval = st.select_slider(
-            "Aralık",
-            options=[1, 3, 5, 10, 15],
-            value=st.session_state.refresh_interval,
-            format_func=lambda x: interval_options[x]
-        )
-        
-        if st.session_state.last_scan_time:
-            elapsed = (datetime.now() - st.session_state.last_scan_time).total_seconds()
-            remaining = max(0, st.session_state.refresh_interval * 60 - elapsed)
-            if remaining > 0:
-                st.markdown(f'<div class="sidebar-metric"><span class="sidebar-metric-label">Sonraki:</span><span class="sidebar-metric-value">{remaining:.0f}s</span></div>', unsafe_allow_html=True)
 
-    st.markdown('<div class="sidebar-divider"></div>', unsafe_allow_html=True)
 
-    # === HISSE SECIMI ===
-    st.markdown('<div class="sidebar-section-title">📊 Hisse Seç</div>', unsafe_allow_html=True)
-    
-    ticker_options = [f"{config.TICKER_NAMES.get(x, x)} ({x.replace('.IS', '')})" for x in config.WATCHLIST]
-    selected_idx = st.selectbox(
-        "",
-        range(len(config.WATCHLIST)),
-        format_func=lambda i: ticker_options[i],
-        label_visibility="collapsed",
-        key="sidebar_ticker"
-    )
-    selected_ticker = config.WATCHLIST[selected_idx]
-    
-    # Haberleri getir
-    if st.button("📰 Haberleri Getir", use_container_width=True, type="secondary"):
-        with st.spinner("Haberler aranıyor..."):
-            news = fetch_stock_news(selected_ticker)
-            st.session_state[f"news_{selected_ticker}"] = news
-    
-    cached_news = st.session_state.get(f"news_{selected_ticker}", [])
-    if cached_news:
-        st.markdown(f'**{config.TICKER_NAMES.get(selected_ticker, selected_ticker)} Haberleri**')
-        for n in cached_news:
-            if isinstance(n, dict):
-                title = n.get('title', '')
-                url = n.get('url', '')
-                source = n.get('source', '')
-                if url:
-                    st.markdown(f'<a href="{url}" target="_blank" class="news-item" style="text-decoration:none;"><span class="news-source">{source}</span><span class="news-title">{title}</span></a>', unsafe_allow_html=True)
-                else:
-                    st.markdown(f'<div class="news-item"><span class="news-source">{source}</span> {title}</div>', unsafe_allow_html=True)
+def render_navigation():
+    cols = st.columns(4)
+    views = [("Dashboard", "dashboard"), ("Signals", "signals"), ("Analysis", "analysis"), ("Settings", "settings")]
+    for col, (label, view) in zip(cols, views):
+        with col:
+            if st.button(label, use_container_width=True, type="primary" if st.session_state.current_view == view else "secondary"):
+                st.session_state.current_view = view
+                st.rerun()
+
+
+def metric_card(title, value, subtitle=""):
+    st.markdown(f"<div class='metric-shell'><div class='metric-kicker'>{title}</div><div class='metric-value'>{value}</div><div class='metric-sub'>{subtitle}</div></div>", unsafe_allow_html=True)
+
+
+def render_dashboard(signals, summary):
+    strong = [s for s in signals if s.score >= 40]
+    buy = [s for s in signals if 10 <= s.score < 40]
+    sell = [s for s in signals if s.score < 10]
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        metric_card("Strong buy", str(len(strong)), "Yuksek guvenli sinyaller")
+    with c2:
+        metric_card("Buy flow", str(len(buy)), "Pozitif momentum")
+    with c3:
+        metric_card("Sell pressure", str(len(sell)), "Korunma gerekenler")
+    with c4:
+        metric_card("Avg volume", f"{summary.get('avg_vol_ratio', 1.0):.2f}x", "Normal hacme gore")
+
+    left, right = st.columns([1.6, 1], gap="large")
+    with left:
+        st.markdown("<div class='section-title'>Portfolio Pulse</div>", unsafe_allow_html=True)
+        top = strong[:5] if strong else sorted(signals, key=lambda x: x.score, reverse=True)[:5]
+        if not top:
+            st.info("Dashboard verisi icin once tarama yapin.")
+        else:
+            rows = []
+            for signal in top:
+                name = config.TICKER_NAMES.get(signal.ticker, signal.ticker)
+                chip = "buy" if signal.score >= 10 else "sell"
+                rows.append(
+                    f"<div class='list-row'><div style='display:flex;justify-content:space-between;gap:12px;align-items:start;'><div><div style='font-size:20px;font-weight:800;color:#dfe2eb;'>{signal.ticker.replace('.IS','')}</div><div style='font-size:12px;color:#8b90a0;'>{name}</div></div><div style='text-align:right;'><span class='signal-chip {chip}'>{signal.signal_type.value}</span><div style='margin-top:8px;font-size:12px;color:#c1c6d7;'>Skor {signal.score:+.0f}</div></div></div></div>"
+                )
+            st.markdown(f"<div class='surface-shell'>{''.join(rows)}</div>", unsafe_allow_html=True)
+    with right:
+        st.markdown("<div class='section-title'>Market Breadth</div>", unsafe_allow_html=True)
+        dist = summary.get("sector_dist", {})
+        with st.container(border=True):
+            st.metric("Asiri satim", dist.get("Asırı Satım", 0))
+            st.metric("Notr", dist.get("Nötr", 0))
+            st.metric("Asiri alim", dist.get("Asırı Alım", 0))
+
+
+def render_signals(signals, all_data):
+    st.markdown("<div class='section-title'>Active Signals</div>", unsafe_allow_html=True)
+    strong_tab, buy_tab, sell_tab = st.tabs(["Strong Buy", "Buy", "Sell / Neutral"])
+    with strong_tab:
+        strong = [s for s in signals if s.score >= 40]
+        if strong:
+            for signal in strong:
+                render_signal_card(signal, all_data.get(signal.ticker))
+        else:
+            st.info("Guclu alim sinyali yok.")
+    with buy_tab:
+        buy = [s for s in signals if 10 <= s.score < 40]
+        if buy:
+            for signal in buy:
+                render_signal_card(signal, all_data.get(signal.ticker))
+        else:
+            st.info("Alim sinyali yok.")
+    with sell_tab:
+        sell = [s for s in signals if s.score < 10]
+        if sell:
+            for signal in sell:
+                render_signal_card(signal, all_data.get(signal.ticker))
+        else:
+            st.info("Satis sinyali yok.")
+
+
+def render_analysis(all_data):
+    st.markdown("<div class='section-title'>Technical Analysis</div>", unsafe_allow_html=True)
+    ticker_list = list(all_data.keys()) if all_data else config.WATCHLIST
+    c1, c2, c3 = st.columns([1.4, 1, 1])
+    with c1:
+        current_idx = ticker_list.index(st.session_state.selected_ticker) if st.session_state.selected_ticker in ticker_list else 0
+        st.session_state.selected_ticker = st.selectbox("Hisse", ticker_list, index=current_idx, format_func=lambda x: f"{config.TICKER_NAMES.get(x, x)} ({x.replace('.IS', '')})")
+    with c2:
+        period_options = ["1mo", "3mo", "6mo", "1y", "2y", "5y"]
+        st.session_state.analysis_period = st.selectbox("Periyot", period_options, index=period_options.index(st.session_state.analysis_period), format_func=lambda x: {"1mo": "1 Ay", "3mo": "3 Ay", "6mo": "6 Ay", "1y": "1 Yil", "2y": "2 Yil", "5y": "5 Yil"}[x])
+    with c3:
+        if st.button("Haberleri getir", use_container_width=True):
+            with st.spinner("Haberler aliniyor..."):
+                st.session_state[f"news_{st.session_state.selected_ticker}"] = fetch_stock_news(st.session_state.selected_ticker)
+
+    df = st.session_state.data_fetcher.fetch_single(st.session_state.selected_ticker, period=st.session_state.analysis_period)
+    if df is None:
+        st.error("Analiz verisi yuklenemedi.")
+        return
+    df = TechnicalIndicators().add_all(df)
+    snapshot = TechnicalIndicators().get_snapshot(df)
+    signal = st.session_state.engine.analyze(st.session_state.selected_ticker, df)
+
+    m1, m2, m3, m4, m5 = st.columns(5)
+    with m1:
+        metric_card("Price", f"₺{snapshot['close']}", f"Gunluk {snapshot['change_pct']}%")
+    with m2:
+        metric_card("RSI", f"{snapshot['rsi']:.0f}", snapshot.get("rsi_zone", "Notr"))
+    with m3:
+        metric_card("Volume", f"{snapshot['volume_ratio']:.1f}x", "Hacim hizi")
+    with m4:
+        metric_card("ATR", f"₺{snapshot['atr']:.2f}", "Volatilite")
+    with m5:
+        metric_card("Signal", signal.signal_type.value if signal else "Yok", f"Skor {signal.score:+.0f}" if signal else "Bekle")
+
+    chart_col, side_col = st.columns([2.2, 1], gap="large")
+    with chart_col:
+        st.plotly_chart(plot_candlestick(df, st.session_state.selected_ticker), use_container_width=True)
+    with side_col:
+        st.plotly_chart(plot_rsi(df), use_container_width=True)
+        st.plotly_chart(plot_volume(df), use_container_width=True)
+
+    info_col, news_col = st.columns([1.3, 1], gap="large")
+    with info_col:
+        with st.container(border=True):
+            st.subheader("Teknik ozet")
+            st.write(f"**SMA Cross:** {snapshot['sma_cross']}")
+            st.write(f"**MACD Cross:** {snapshot['macd_cross']}")
+            st.write(f"**BB Position:** {snapshot['bb_position']}")
+            st.write(f"**Destek:** ₺{snapshot['support']:.2f}")
+            st.write(f"**Direnc:** ₺{snapshot['resistance']:.2f}")
+            if signal:
+                st.write(f"**Stop-Loss:** ₺{signal.stop_loss:.2f}")
+                st.write(f"**Hedef:** ₺{signal.target_price:.2f}")
+                st.markdown("**Nedenler**")
+                for reason in signal.reasons[:5]:
+                    st.write(f"- {reason}")
+    with news_col:
+        with st.container(border=True):
+            st.subheader("Haber akisi")
+            news = st.session_state.get(f"news_{st.session_state.selected_ticker}", [])
+            if news:
+                for item in news[:6]:
+                    title = item.get("title", "Haber")
+                    url = item.get("url", "")
+                    source = item.get("source", "Kaynak")
+                    if url:
+                        st.markdown(f"- [{source}: {title}]({url})")
+                    else:
+                        st.write(f"- {source}: {title}")
             else:
-                st.markdown(f'<div class="news-item">📌 {n}</div>', unsafe_allow_html=True)
-    
-    st.markdown('<div class="sidebar-divider"></div>', unsafe_allow_html=True)
+                st.caption("Haberleri getir butonuyla secili hisse icin baglamsal akis acabilirsiniz.")
 
-    # === GELISMIS FILTRELER ===
-    st.markdown('<div class="sidebar-section-title">🔍 Gelişmiş Filtreler</div>', unsafe_allow_html=True)
-    
-    st.session_state.min_score_filter = st.slider(
-        "Min Skor",
-        min_value=-100,
-        max_value=100,
-        value=st.session_state.min_score_filter,
-        help="Minimum sinyal skoru"
-    )
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        st.session_state.rsi_min_filter = st.slider(
-            "RSI Min",
-            min_value=0,
-            max_value=100,
-            value=st.session_state.rsi_min_filter,
-            key="rsi_min"
-        )
-    with col2:
-        st.session_state.rsi_max_filter = st.slider(
-            "RSI Max",
-            min_value=0,
-            max_value=100,
-            value=st.session_state.rsi_max_filter,
-            key="rsi_max"
-        )
-    
-    st.session_state.vol_ratio_filter = st.slider(
-        "Min Hacim Oranı",
-        min_value=0.0,
-        max_value=5.0,
-        value=st.session_state.vol_ratio_filter,
-        step=0.1,
-        help="Minimum hacim oranı (1.0 = normal)"
-    )
-    
-    # Aktif filtreleri göster
-    active_filters = []
-    if st.session_state.min_score_filter > -100:
-        active_filters.append(f"Skor ≥ {st.session_state.min_score_filter}")
-    if st.session_state.rsi_min_filter > 0 or st.session_state.rsi_max_filter < 100:
-        active_filters.append(f"RSI {st.session_state.rsi_min_filter}-{st.session_state.rsi_max_filter}")
-    if st.session_state.vol_ratio_filter > 0:
-        active_filters.append(f"Hacim ≥ {st.session_state.vol_ratio_filter}x")
-    
-    if active_filters:
-        st.markdown(f'<div style="color:#58a6ff;font-size:11px;margin-top:6px;">✅ {len(active_filters)} aktif filtre</div>', unsafe_allow_html=True)
-    else:
-        st.markdown('<div style="color:#8b949e;font-size:11px;margin-top:6px;">Filtre yok</div>', unsafe_allow_html=True)
-    
-    st.markdown('<div class="sidebar-divider"></div>', unsafe_allow_html=True)
 
-    # === PIYASA ÖZETI ===
-    signals = st.session_state.get("signals", [])
-    all_data = st.session_state.get("all_data", {})
-    
-    if signals and all_data:
-        st.markdown('<div class="sidebar-section-title">📈 Piyasa Özeti</div>', unsafe_allow_html=True)
-        
-        market_summary = get_market_summary(signals, all_data)
-        
-        buys = len([s for s in signals if s.score > 0])
-        sells = len([s for s in signals if s.score < 0])
-        total = len(all_data)
-        
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Al", buys, delta=f"{buys/total*100:.0f}%" if total else "")
-        with col2:
-            st.metric("Sat", sells, delta=f"{sells/total*100:.0f}%" if total else "")
-        with col3:
-            st.metric("Toplam", total)
-        
-        if market_summary:
-            st.markdown(f'<div class="sidebar-metric"><span class="sidebar-metric-label">Ort. RSI:</span><span class="sidebar-metric-value">{market_summary["avg_rsi"]:.0f}</span></div>', unsafe_allow_html=True)
-            st.markdown(f'<div class="sidebar-metric"><span class="sidebar-metric-label">Ort. Hacim:</span><span class="sidebar-metric-value">{market_summary["avg_vol_ratio"]:.1f}x</span></div>', unsafe_allow_html=True)
-            
-            if market_summary.get('sector_dist'):
-                st.markdown('<div class="sidebar-divider"></div>', unsafe_allow_html=True)
-                st.markdown('<div style="color:#8b949e;font-size:11px;margin-bottom:6px;">RSI Dağılımı</div>', unsafe_allow_html=True)
-                for zone, count in market_summary['sector_dist'].items():
-                    color = "#00CC96" if zone == "Asırı Satım" else "#EF553B" if zone == "Asırı Alım" else "#8b949e"
-                    pct = count / market_summary['total_analyzed'] * 100 if market_summary['total_analyzed'] > 0 else 0
-                    st.markdown(f'<div class="sidebar-metric"><span class="sidebar-metric-label" style="color:{color}">{zone}:</span><span class="sidebar-metric-value">{count} ({pct:.0f}%)</span></div>', unsafe_allow_html=True)
-            
-            if market_summary.get('strong_signals'):
-                st.markdown('<div class="sidebar-divider"></div>', unsafe_allow_html=True)
-                st.markdown('<div style="color:#8b949e;font-size:11px;margin-bottom:6px;">En Güçlü Sinyaller</div>', unsafe_allow_html=True)
-                for sig in market_summary['strong_signals'][:5]:
-                    name = config.TICKER_NAMES.get(sig['ticker'], sig['ticker'].replace('.IS', ''))
-                    sig_color = "#00CC96" if sig['score'] > 0 else "#EF553B"
-                    st.markdown(f'<div class="signal-mini"><span style="color:#c9d1d9">{name}</span><span style="color:{sig_color};font-weight:700">{sig["score"]:+.0f}</span></div>', unsafe_allow_html=True)
-    
-    st.markdown('<div class="sidebar-divider"></div>', unsafe_allow_html=True)
+def render_settings(signals):
+    st.markdown("<div class='section-title'>Bot Settings</div>", unsafe_allow_html=True)
+    left, right = st.columns([1.4, 1], gap="large")
+    with left:
+        with st.container(border=True):
+            st.subheader("Tarama ve filtreler")
+            st.session_state.auto_refresh = st.toggle("Otomatik yenile", value=st.session_state.auto_refresh)
+            st.session_state.refresh_interval = st.select_slider("Tarama araligi", options=[1, 3, 5, 10, 15], value=st.session_state.refresh_interval)
+            st.session_state.min_score_filter = st.slider("Minimum skor", -100, 100, st.session_state.min_score_filter)
+            r1, r2 = st.columns(2)
+            with r1:
+                st.session_state.rsi_min_filter = st.slider("RSI min", 0, 100, st.session_state.rsi_min_filter)
+            with r2:
+                st.session_state.rsi_max_filter = st.slider("RSI max", 0, 100, st.session_state.rsi_max_filter)
+            st.session_state.vol_ratio_filter = st.slider("Minimum hacim orani", 0.0, 5.0, st.session_state.vol_ratio_filter, 0.1)
+        with st.container(border=True):
+            st.subheader("Bildirimler")
+            st.session_state.notify_min_score = st.slider("Bildirim min skor", 0, 100, st.session_state.notify_min_score)
+            st.session_state.notify_telegram = st.toggle("Telegram bildirimi", value=st.session_state.notify_telegram, disabled=not bool(config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID))
+    with right:
+        with st.container(border=True):
+            st.subheader("Canli durum")
+            st.metric("Watchlist", len(config.WATCHLIST))
+            st.metric("Aktif sinyal", len(signals))
+            st.metric("Telegram", "Hazir" if config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID else "Yok")
+            next_scan = "Kapali"
+            if st.session_state.auto_refresh and st.session_state.last_scan_time:
+                elapsed = (datetime.now() - st.session_state.last_scan_time).total_seconds()
+                next_scan = f"{max(0, st.session_state.refresh_interval * 60 - elapsed):.0f}s"
+            st.metric("Sonraki tarama", next_scan)
+        if st.button("Taramayi yenile", use_container_width=True, type="primary"):
+            run_scan()
+            st.rerun()
 
-    # === BILDIRIM AYARLARI ===
-    st.markdown('<div class="sidebar-section-title">🔔 Bildirim Ayarları</div>', unsafe_allow_html=True)
-    
-    st.session_state.notify_telegram = st.toggle(
-        "Telegram Bildirimi",
-        value=st.session_state.notify_telegram,
-        disabled=not (config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID),
-        help="Telegram üzerinden bildirim gönder"
-    )
-    
-    if not config.TELEGRAM_BOT_TOKEN or not config.TELEGRAM_CHAT_ID:
-        st.caption("⚠️ .env dosyasına Telegram ayarlarını ekleyin")
-    
-    st.session_state.notify_min_score = st.slider(
-        "Min Skor (Bildirim)",
-        min_value=0,
-        max_value=100,
-        value=st.session_state.notify_min_score,
-        help="Bu skorun üzerindeki sinyaller için bildirim gönder"
-    )
-    
-    st.markdown(f'<div class="sidebar-metric"><span class="sidebar-metric-label">Bildirim eşiği:</span><span class="sidebar-metric-value">≥ {st.session_state.notify_min_score}</span></div>', unsafe_allow_html=True)
 
-# Otomatik yenileme kontrolü
+bootstrap_state()
+inject_styles()
+ensure_initial_data()
+
+signals = filter_signals(st.session_state.get("signals", []), st.session_state.get("all_data", {}))
+all_data = st.session_state.get("all_data", {})
+market_summary = get_market_summary(signals, all_data)
+
 if st.session_state.auto_refresh and st.session_state.last_scan_time:
     elapsed = (datetime.now() - st.session_state.last_scan_time).total_seconds()
     if elapsed >= st.session_state.refresh_interval * 60:
-        st.session_state.signals, st.session_state.all_data = run_scan()
-        st.session_state.last_scan_time = datetime.now()
+        run_scan()
         st.rerun()
 
-header_col1, header_col2 = st.columns([4, 1])
-with header_col1:
-    pass
-with header_col2:
-    if "signals" not in st.session_state or len(st.session_state.get("signals", [])) == 0:
-        st.session_state.signals, st.session_state.all_data = run_scan()
-        st.session_state.last_scan_time = datetime.now()
-        st.rerun()
-    
-    if st.button("🔄 Yenile", type="primary", use_container_width=True):
-        st.session_state.signals, st.session_state.all_data = run_scan()
-        st.session_state.last_scan_time = datetime.now()
-        st.rerun()
+render_top_shell(signals, market_summary)
+render_navigation()
 
-if not st.session_state.signals:
-    st.info("👆 'Taramayı Yenile' butonuna basarak başlayın!")
-    st.markdown("""
-    ### 📖 Kullanım
-    
-    1. **Taramayı Yenile** butonuna basın
-    2. Tüm hisseler analiz edilir
-    3. Sinyaller skoruna göre sıralanır
-    4. Hisse seçip detaylı grafikleri inceleyin
-    """)
-
+if not signals:
+    st.warning("Sinyal bulunamadi. Tarama tekrarlandiginda ekran otomatik dolacak.")
 else:
-    signals = st.session_state.signals
-    all_data = st.session_state.all_data
-    
-    # Filtreleri uygula
-    filtered_signals = []
-    filtered_out = 0
-    ti = TechnicalIndicators()
-    
-    for s in signals:
-        if s.score < st.session_state.min_score_filter:
-            filtered_out += 1
-            continue
-        
-        if s.ticker in all_data:
-            try:
-                df_ind = ti.add_all(all_data[s.ticker].copy())
-                last = df_ind.iloc[-1]
-                rsi = last.get('rsi', 50)
-                vol_r = last.get('volume_ratio', 1.0)
-                
-                if rsi < st.session_state.rsi_min_filter or rsi > st.session_state.rsi_max_filter:
-                    filtered_out += 1
-                    continue
-                if vol_r > 0 and vol_r < st.session_state.vol_ratio_filter:
-                    filtered_out += 1
-                    continue
-            except:
-                pass
-        
-        filtered_signals.append(s)
-    
-    signals = filtered_signals
-    
-    if filtered_out > 0:
-        st.info(f"🔍 {filtered_out} sinyal filtrelendi, {len(signals)} sinyal gösteriliyor")
-    
-    total = len(st.session_state.all_data)
-    buys = len([s for s in signals if s.score > 0])
-    sells = len([s for s in signals if s.score < 0])
-    neutral = total - buys - sells
-    buy_pct = (buys / total * 100) if total > 0 else 0
-    sell_pct = (sells / total * 100) if total > 0 else 0
-    neutral_pct = (neutral / total * 100) if total > 0 else 0
-    
-    from strategy import SignalType
-    strong_buy_count = len([s for s in signals if s.score >= 40])
-    buy_count = len([s for s in signals if 10 <= s.score < 40])
-    sell_count = len([s for s in signals if s.score < 10])
-    
-    total_score = sum(s.score for s in signals)
-    max_possible = total * 100
-    sentiment = (total_score / max_possible * 100) if max_possible > 0 else 0
-    sentiment_clamped = max(-100, min(100, sentiment))
-    
-    if sentiment_clamped > 20:
-        sentiment_label = "ALIM AGIRLIKLI"
-        sentiment_color = "#00CC96"
-        sentiment_emoji = "🟢"
-    elif sentiment_clamped < -20:
-        sentiment_label = "SATIS AGIRLIKLI"
-        sentiment_color = "#EF553B"
-        sentiment_emoji = "🔴"
+    if st.session_state.current_view == "dashboard":
+        render_dashboard(signals, market_summary)
+    elif st.session_state.current_view == "signals":
+        render_signals(signals, all_data)
+    elif st.session_state.current_view == "analysis":
+        render_analysis(all_data)
     else:
-        sentiment_label = "NOTR"
-        sentiment_color = "#8b949e"
-        sentiment_emoji = "⚪"
-    
-    st.markdown(f"""
-    <style>
-        .signal-card {{
-            background: rgba(255, 255, 255, 0.03);
-            backdrop-filter: blur(16px);
-            border: 1px solid rgba(255, 255, 255, 0.06);
-            border-radius: 20px;
-            padding: 28px;
-            margin: 12px 0;
-            text-align: center;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }}
-        .signal-card:hover {{
-            border-color: rgba(30, 64, 175, 0.3);
-            box-shadow: 0 8px 32px rgba(30, 64, 175, 0.15);
-            transform: translateY(-2px);
-        }}
-        .gauge-container {{
-            position: relative;
-            width: 180px;
-            height: 180px;
-            margin: 0 auto 16px;
-        }}
-        .gauge-ring {{
-            width: 100%;
-            height: 100%;
-            border-radius: 50%;
-            background: conic-gradient(
-                #10b981 0deg {buy_pct * 3.6}deg,
-                #ef4444 {buy_pct * 3.6}deg {buy_pct * 3.6 + sell_pct * 3.6}deg,
-                #94a3b8 {buy_pct * 3.6 + sell_pct * 3.6}deg 360deg
-            );
-            mask: radial-gradient(transparent 55%, black 56%);
-            -webkit-mask: radial-gradient(transparent 55%, black 56%);
-        }}
-        .gauge-center {{
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            text-align: center;
-        }}
-        .gauge-sentiment {{
-            font-size: 14px;
-            font-weight: 700;
-            color: {sentiment_color};
-            letter-spacing: 1.5px;
-            text-transform: uppercase;
-        }}
-        .gauge-score {{
-            font-size: 32px;
-            font-weight: 800;
-            color: #f1f5f9;
-            margin-top: 4px;
-            letter-spacing: -1px;
-        }}
-        .signal-stats {{
-            display: flex;
-            justify-content: space-around;
-            margin-top: 16px;
-        }}
-        .stat-item {{
-            text-align: center;
-        }}
-        .stat-value {{
-            font-size: 24px;
-            font-weight: 700;
-            letter-spacing: -0.5px;
-        }}
-        .stat-label {{
-            font-size: 12px;
-            color: #64748b;
-            margin-top: 4px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            font-weight: 500;
-        }}
-        .scan-time {{
-            text-align: center;
-            color: #64748b;
-            font-size: 13px;
-            margin-top: 16px;
-            padding-top: 16px;
-            border-top: 1px solid rgba(255, 255, 255, 0.06);
-        }}
-    </style>
-    """, unsafe_allow_html=True)
-    
-    st.markdown(f"""
-    <div class="signal-card">
-        <div class="gauge-container">
-            <div class="gauge-ring"></div>
-            <div class="gauge-center">
-                <div class="gauge-sentiment">{sentiment_emoji} {sentiment_label}</div>
-                <div class="gauge-score">{sentiment_clamped:+.0f}</div>
-            </div>
-        </div>
-        <div class="signal-stats">
-            <div class="stat-item">
-                <div class="stat-value" style="color:#00CC96;">{buys}</div>
-                <div class="stat-label">🟢 Alım</div>
-            </div>
-            <div class="stat-item">
-                <div class="stat-value" style="color:#ffffff;">{neutral}</div>
-                <div class="stat-label">⚪ Nötr</div>
-            </div>
-            <div class="stat-item">
-                <div class="stat-value" style="color:#EF553B;">{sells}</div>
-                <div class="stat-label">🔴 Satış</div>
-            </div>
-        </div>
-        <div class="scan-time">🕐 Son Tarama: {datetime.now().strftime("%H:%M")} | Taranan: {total} hisse</div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    st.divider()
-    
-    tab1, tab2, tab3 = st.tabs(["Sinyaller", "📊 Detay", "Tüm Hisseler"])
-    
-    with tab1:
-        sub_strong, sub_buy, sub_sell = st.tabs(["💰 Güçlü Alım", "🟢 Alım", "🔴 Satış"])
-        
-        with sub_strong:
-            strong_buy_signals = [s for s in signals if s.score >= 40]
-            if strong_buy_signals:
-                for s in strong_buy_signals:
-                    render_signal_card(s)
-            else:
-                st.info("Güçlü alım sinyali yok")
-        
-        with sub_buy:
-            buy_signals = [s for s in signals if 10 <= s.score < 40]
-            if buy_signals:
-                for s in buy_signals:
-                    render_signal_card(s)
-            else:
-                st.info("Alım sinyali yok")
-        
-        with sub_sell:
-            sell_signals = [s for s in signals if s.score < 10]
-            if sell_signals:
-                for s in sell_signals:
-                    render_signal_card(s, is_sell=True)
-            else:
-                st.info("Satış sinyali yok")
-    
-    with tab3:
-        st.subheader("Tüm Hisseler Detay")
-        
-        if not st.session_state.all_data:
-            st.warning("Önce tarama yapın!")
-        else:
-            ticker_list = list(st.session_state.all_data.keys())
-            
-            col1, col2 = st.columns([1, 3])
-            with col1:
-                detail_ticker = st.selectbox(
-                    "Hisse seçin",
-                    ticker_list,
-                    format_func=lambda x: f"{config.TICKER_NAMES.get(x, x)} ({x.replace('.IS', '')})"
-                )
-            with col2:
-                period = st.selectbox(
-                    "Periyot",
-                    ["1mo", "3mo", "6mo", "1y", "2y", "5y"],
-                    index=1,
-                    format_func=lambda x: {"1mo": "1 Ay", "3mo": "3 Ay", "6mo": "6 Ay", "1y": "1 Yıl", "2y": "2 Yıl", "5y": "5 Yıl"}[x]
-                )
-            
-            if detail_ticker:
-                fetcher = st.session_state.data_fetcher
-                
-                with st.spinner("Veri yükleniyor..."):
-                    df = fetcher.fetch_single(detail_ticker, period=period)
-                
-                if df is not None:
-                    ti = TechnicalIndicators()
-                    df = ti.add_all(df)
-                    snapshot = ti.get_snapshot(df)
-                    signal = st.session_state.engine.analyze(detail_ticker, df)
-                    
-                    name = config.TICKER_NAMES.get(detail_ticker, detail_ticker)
-                    st.markdown(f"### 📈 {name} ({detail_ticker.replace('.IS', '')})")
-                    
-                    col1, col2, col3, col4, col5 = st.columns(5)
-                    with col1:
-                        st.metric("Fiyat", f"₺{snapshot['close']}", delta=f"{snapshot['change_pct']}%")
-                    with col2:
-                        rsi_color = "green" if snapshot['rsi'] < 30 else "red" if snapshot['rsi'] > 70 else "white"
-                        st.markdown(f"**RSI:** :{rsi_color}[{snapshot['rsi']:.0f}]")
-                    with col3:
-                        vol_color = "green" if snapshot['volume_ratio'] > 1.5 else "red" if snapshot['volume_ratio'] < 0.8 else "white"
-                        st.markdown(f"**Hacim:** :{vol_color}[{snapshot['volume_ratio']:.1f}x]")
-                    with col4:
-                        st.metric("ATR", f"₺{snapshot['atr']:.2f}")
-                    with col5:
-                        st.metric("Destek", f"₺{snapshot['support']:.2f}")
-                    
-                    st.divider()
-                    
-                    col1, col2 = st.columns([3, 1])
-                    with col1:
-                        st.plotly_chart(plot_candlestick(df, detail_ticker), use_container_width=True, key="detail_candlestick")
-                    with col2:
-                        st.plotly_chart(plot_rsi(df), use_container_width=True, key="detail_rsi")
-                        st.plotly_chart(plot_volume(df), use_container_width=True, key="detail_volume")
-                    
-                    st.divider()
-                    
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.markdown("### 📉 Teknik Göstergeler")
-                        rsi_zone = "Aşırı Alım" if snapshot['rsi'] > 70 else "Aşırı Satım" if snapshot['rsi'] < 30 else "Nötr"
-                        st.write(f"**RSI:** {snapshot['rsi']:.1f} ({rsi_zone})")
-                        st.write(f"**SMA Cross:** {snapshot['sma_cross']}")
-                        st.write(f"**MACD Cross:** {snapshot['macd_cross']}")
-                        st.write(f"**BB Position:** {snapshot['bb_position']}")
-                        st.write(f"**Hacim Oranı:** {snapshot['volume_ratio']}x")
-                        st.write(f"**Destek:** ₺{snapshot['support']:.2f}")
-                        st.write(f"**Direnç:** ₺{snapshot['resistance']:.2f}")
-                    
-                    with col2:
-                        st.markdown("### 🎯 Alım/Satım Sinyali")
-                        if signal:
-                            color = get_signal_color(signal.signal_type)
-                            st.markdown(f"**Sinyal:** :{color}[{signal.signal_type.value}]")
-                            st.write(f"**Skor:** {signal.score:+.0f}/100")
-                            st.write(f"**Giriş:** ₺{signal.price:.2f}")
-                            st.write(f"**Stop-Loss:** ₺{signal.stop_loss:.2f}")
-                            st.write(f"**Hedef:** ₺{signal.target_price:.2f}")
-                            
-                            risk = (signal.price - signal.stop_loss) / signal.price * 100
-                            reward = (signal.target_price - signal.price) / signal.price * 100
-                            rr = reward / risk if risk > 0 else 0
-                            st.write(f"**R/R Oranı:** 1:{rr:.1f}")
-                            
-                            st.markdown("**Nedenler:**")
-                            for r in signal.reasons[:5]:
-                                st.write(f"• {r}")
-                        else:
-                            st.info("Sinyal yok")
-                    
-                    st.divider()
-                    
-                    with st.expander("📊 Fiyat Verileri"):
-                        st.dataframe(
-                            df[['open', 'high', 'low', 'close', 'volume']].tail(30),
-                            use_container_width=True
-                        )
-    
-    with tab2:
-        fetcher = st.session_state.data_fetcher
-        
-        with st.spinner("Veri yükleniyor..."):
-            df = fetcher.fetch_single(selected_ticker, period="6mo")
-        
-        if df is not None:
-            ti = TechnicalIndicators()
-            df = ti.add_all(df)
-            snapshot = ti.get_snapshot(df)
-            signal = st.session_state.engine.analyze(selected_ticker, df)
-            
-            col1, col2, col3, col4, col5 = st.columns(5)
-            with col1:
-                st.metric("Fiyat", f"₺{snapshot['close']}", delta=f"{snapshot['change_pct']}%")
-            with col2:
-                st.metric("RSI", f"{snapshot['rsi']:.0f}")
-            with col3:
-                st.metric("Hacim", f"{snapshot['volume']/1_000_000:.1f}M")
-            with col4:
-                st.metric("ATR", f"₺{snapshot['atr']:.2f}")
-            with col5:
-                st.metric("Destek", f"₺{snapshot['support']:.2f}")
-            
-            st.divider()
-            
-            col1, col2 = st.columns([3, 1])
-            with col1:
-                st.plotly_chart(plot_candlestick(df, selected_ticker), use_container_width=True, key="candlestick_chart")
-            with col2:
-                st.plotly_chart(plot_rsi(df), use_container_width=True, key="rsi_chart")
-                st.plotly_chart(plot_volume(df), use_container_width=True, key="volume_chart")
-            
-            st.divider()
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                st.markdown("### 📉 Teknik Göstergeler")
-                st.write(f"**RSI:** {snapshot['rsi']:.1f} ({snapshot['rsi_zone']})")
-                st.write(f"**SMA Cross:** {snapshot['sma_cross']}")
-                st.write(f"**MACD Cross:** {snapshot['macd_cross']}")
-                st.write(f"**BB Position:** {snapshot['bb_position']}")
-                st.write(f"**Hacim Oranı:** {snapshot['volume_ratio']}x")
-            
-            with col2:
-                st.markdown("### 🎯 Alım/Satım")
-                if signal:
-                    color = get_signal_color(signal.signal_type)
-                    st.markdown(f":{color}[**{signal.signal_type.value}**]")
-                    st.write(f"**Skor:** {signal.score:+.0f}/100")
-                    st.write(f"**Stop-Loss:** ₺{signal.stop_loss:.2f}")
-                    st.write(f"**Hedef:** ₺{signal.target_price:.2f}")
-                    
-                    st.markdown("**Nedenler:**")
-                    for r in signal.reasons[:5]:
-                        st.write(f"• {r}")
-            
-            st.divider()
-            
-            with st.expander("📊 Fiyar Verileri"):
-                st.dataframe(
-                    df[['open', 'high', 'low', 'close', 'volume']].tail(30),
-                    use_container_width=True
-                )
-        
-        else:
-            st.error("Veri yüklenemedi!")
+        render_settings(signals)
 
-st.markdown("---")
-st.caption(f"🤖 BIST Bot v1.0 | Son güncelleme: {datetime.now().strftime('%d.%m.%Y %H:%M')}")
+st.markdown(f"<div class='footer-note'>BIST Bot modern terminal · Son guncelleme {datetime.now().strftime('%d.%m.%Y %H:%M')}</div>", unsafe_allow_html=True)

@@ -165,7 +165,7 @@ public class MarketOpenReceiver extends BroadcastReceiver {
             notificationManager.createNotificationChannel(channel);
         }
 
-        Intent openIntent = new Intent(context, MainActivity.class);
+        Intent openIntent = new Intent(context, BistBotActivity.class);
         openIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
         PendingIntent openPendingIntent = PendingIntent.getActivity(
                 context, id, openIntent,
