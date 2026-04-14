@@ -26,6 +26,9 @@ st.set_page_config(
 
 
 def bootstrap_state():
+    if "_initialized" in st.session_state:
+        return
+
     defaults = {
         "data_fetcher": BISTDataFetcher(),
         "engine": StrategyEngine(),
@@ -46,8 +49,7 @@ def bootstrap_state():
         "analysis_period": "6mo",
     }
     for key, value in defaults.items():
-        if key not in st.session_state:
-            st.session_state[key] = value
+        st.session_state[key] = value
 
     stored = config_store.load_settings()
     ind = stored.get("indicator", {})
@@ -83,6 +85,8 @@ def bootstrap_state():
     view_param = st.query_params.get("view", st.session_state.current_view)
     if view_param in {"dashboard", "signals", "analysis", "settings"}:
         st.session_state.current_view = view_param
+
+    st.session_state["_initialized"] = True
 
 
 def inject_styles():
@@ -147,6 +151,7 @@ def inject_styles():
             .signal-chip {display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;font-size:11px;font-weight:800;letter-spacing:0.12em;text-transform:uppercase;}
             .signal-chip.buy {background:rgba(72,221,188,0.12);color:#48ddbc;}
             .signal-chip.sell {background:rgba(255,180,170,0.12);color:#ffb4aa;}
+            .signal-chip.neutral {background:rgba(173,198,255,0.12);color:#adc6ff;}
             .footer-note {color:#738091;font-size:12px;text-align:center;margin-top:20px;}
             .bottom-nav {
                 position: fixed;
@@ -262,6 +267,11 @@ def inject_styles():
                 background: linear-gradient(135deg, rgba(255,121,108,0.10), rgba(239,68,68,0.06));
                 border: 1px solid rgba(255,121,108,0.22);
                 box-shadow: 0 0 40px rgba(255,121,108,0.10);
+            }
+            .verdict-card.neutral {
+                background: linear-gradient(135deg, rgba(173,198,255,0.10), rgba(117,142,196,0.06));
+                border: 1px solid rgba(173,198,255,0.22);
+                box-shadow: 0 0 40px rgba(173,198,255,0.10);
             }
             .verdict-label {
                 font-size: 32px;
@@ -695,7 +705,6 @@ def fetch_stock_news(ticker, max_results=5):
         response = requests.get(url, timeout=8, headers={"User-Agent": "Mozilla/5.0"})
         response.raise_for_status()
         root = ET.fromstring(response.content)
-        ns = {"ns": "http://www.w3.org/2005/Atom"}
         items = root.findall(".//item")
         for item in items[:max_results]:
             title = item.findtext("title", "")
@@ -707,18 +716,10 @@ def fetch_stock_news(ticker, max_results=5):
                     "title": title,
                     "url": link,
                     "source": "Google Haberler",
-                    "published": pub_date[:16] if pub_date else "",
+                    "published_at": pub_date[:16] if pub_date else "",
                 })
     except Exception:
         pass
-
-    if not all_news:
-        all_news.append({
-            "title": f"{name} hakkında güncel haber bulunamadı",
-            "url": "",
-            "source": "Haber kaynağı",
-            "published": "",
-        })
 
     return all_news[:max_results]
 
@@ -978,7 +979,12 @@ def render_verdict_card(signal):
         )
         return
 
-    card_class = "buy" if signal.score >= 10 else "sell"
+    if signal.score >= 10:
+        card_class = "buy"
+    elif signal.score >= 0:
+        card_class = "neutral"
+    else:
+        card_class = "sell"
     score_color = "#48ddbc" if signal.score >= 0 else "#ff796c"
     bar_width = int((signal.score + 100) / 2)
     bar_class = "score-bar-fill" if signal.score >= 0 else "score-bar-fill negative"
@@ -1247,14 +1253,14 @@ def render_signal_card_v2(signal, df_data=None):
         card_class = "signal-card-buy"
         bar_class = "score-bar-fill"
         chip_class = "buy"
-    elif signal.score < 0:
+    elif signal.score >= 0:
+        card_class = "signal-card-neutral"
+        bar_class = "score-bar-fill"
+        chip_class = "neutral"
+    else:
         card_class = "signal-card-sell"
         bar_class = "score-bar-fill negative"
         chip_class = "sell"
-    else:
-        card_class = "signal-card-neutral"
-        bar_class = "score-bar-fill"
-        chip_class = "buy"
 
     bar_width = int((signal.score + 100) / 2)
     reason_chips = "".join(
@@ -1886,6 +1892,7 @@ def render_settings(signals):
             ):
                 config_store.reset_settings()
                 keys_to_reset = [
+                    "_initialized",
                     "ind_rsi_period","ind_rsi_oversold","ind_rsi_overbought",
                     "ind_sma_fast","ind_sma_slow","ind_ema_fast","ind_ema_slow",
                     "ind_macd_fast","ind_macd_slow","ind_macd_signal",

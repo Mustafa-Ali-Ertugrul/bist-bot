@@ -100,8 +100,8 @@ class TelegramNotifier:
         sells = [s for s in signals if s.score < 0]
         holds = [s for s in signals if s.score == 0]
 
-        top_buys = sorted(buys, key=lambda s: s.score)[:3]
-        top_sells = sorted(sells, key=lambda s: s.score, reverse=True)[:3]
+        top_buys = sorted(buys, key=lambda s: s.score, reverse=True)[:3]
+        top_sells = sorted(sells, key=lambda s: s.score)[:3]
 
         top_buys_text = "\n".join([
             f"  🟢 {config.TICKER_NAMES.get(s.ticker, s.ticker)}: "

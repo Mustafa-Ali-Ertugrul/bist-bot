@@ -96,7 +96,7 @@ class Signal:
 
 class StrategyEngine:
     STRONG_BUY_THRESHOLD = getattr(config, "STRONG_BUY_THRESHOLD", 40)
-    BUY_THRESHOLD = 15
+    BUY_THRESHOLD = getattr(config, "BUY_THRESHOLD", 10)
     WEAK_BUY_THRESHOLD = getattr(config, "WEAK_BUY_THRESHOLD", 0)
     WEAK_SELL_THRESHOLD = getattr(config, "WEAK_SELL_THRESHOLD", 0)
     SELL_THRESHOLD = getattr(config, "SELL_THRESHOLD", -10)
@@ -108,12 +108,12 @@ class StrategyEngine:
     def __init__(self):
         self.indicators = TechnicalIndicators()
         self.risk_manager = RiskManager(capital=getattr(config, "INITIAL_CAPITAL", 8500.0))
-        self.STRONG_BUY_THRESHOLD = getattr(config, "STRONG_BUY_THRESHOLD", self.STRONG_BUY_THRESHOLD)
-        self.BUY_THRESHOLD = 15
-        self.WEAK_BUY_THRESHOLD = getattr(config, "WEAK_BUY_THRESHOLD", self.WEAK_BUY_THRESHOLD)
-        self.WEAK_SELL_THRESHOLD = getattr(config, "WEAK_SELL_THRESHOLD", self.WEAK_SELL_THRESHOLD)
-        self.SELL_THRESHOLD = getattr(config, "SELL_THRESHOLD", self.SELL_THRESHOLD)
-        self.STRONG_SELL_THRESHOLD = getattr(config, "STRONG_SELL_THRESHOLD", self.STRONG_SELL_THRESHOLD)
+        self.STRONG_BUY_THRESHOLD = getattr(config, "STRONG_BUY_THRESHOLD", 40)
+        self.BUY_THRESHOLD = getattr(config, "BUY_THRESHOLD", 10)
+        self.WEAK_BUY_THRESHOLD = getattr(config, "WEAK_BUY_THRESHOLD", 0)
+        self.WEAK_SELL_THRESHOLD = getattr(config, "WEAK_SELL_THRESHOLD", 0)
+        self.SELL_THRESHOLD = getattr(config, "SELL_THRESHOLD", -10)
+        self.STRONG_SELL_THRESHOLD = getattr(config, "STRONG_SELL_THRESHOLD", -40)
 
     def _check_regime_persistence(self, df: pd.DataFrame, target_regime: "MarketRegime", min_bars: int = 2) -> bool:
         if len(df) < min_bars + 1:

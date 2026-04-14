@@ -10,7 +10,7 @@ Python 3.10+ onerilir.
 
 ```bash
 # 1. Repoyu klonla
-git clone https://github.com/<kullanici>/bist_bot.git
+git clone https://github.com/Mustafa-Ali-Ertugrul/bist-bot.git
 cd bist_bot
 
 # 2. Sanal ortam olustur
@@ -196,7 +196,7 @@ bist_bot/
 | Parametre | Varsayilan | Aciklama |
 |---|---|---|
 | `BUY_THRESHOLD` | 10 | Minimum alim sinyali skoru |
-| `SELL_THRESHOLD` | -15 | Minimum satim sinyali skoru |
+| `SELL_THRESHOLD` | -10 | Minimum satim sinyali skoru |
 | `MIN_REGIME_PERSISTENCE` | 2 | Rejim teyidi icin min bar sayisi |
 | `MOMENTUM_CONFIRMATION` | 4.0 | Dusuk ADX durumunda momentum esigi (%) |
 | `SIDEWAYS_EXTRA_THRESHOLD` | 5 | Yatay piyasada ekstra filtreleme |
