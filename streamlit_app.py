@@ -1,5 +1,4 @@
 import threading
-import re
 from datetime import datetime, timezone, timedelta
 
 TR = timezone(timedelta(hours=3))
@@ -11,6 +10,7 @@ import requests
 import streamlit as st
 
 import config
+import config_store
 from db_manager import init_db, save_signal, get_recent_signals
 from data_fetcher import BISTDataFetcher
 from indicators import TechnicalIndicators
@@ -39,21 +39,6 @@ def bootstrap_state():
         "vol_ratio_filter": 0.0,
         "notify_min_score": 30,
         "notify_telegram": bool(config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID),
-        "ind_rsi_period":    config.RSI_PERIOD,
-        "ind_rsi_oversold":  config.RSI_OVERSOLD,
-        "ind_rsi_overbought":config.RSI_OVERBOUGHT,
-        "ind_sma_fast":      config.SMA_FAST,
-        "ind_sma_slow":      config.SMA_SLOW,
-        "ind_ema_fast":      config.EMA_FAST,
-        "ind_ema_slow":      config.EMA_SLOW,
-        "ind_macd_fast":     config.MACD_FAST,
-        "ind_macd_slow":    config.MACD_SLOW,
-        "ind_macd_signal":  config.MACD_SIGNAL,
-        "ind_bb_period":    config.BOLLINGER_PERIOD,
-        "ind_bb_std":       float(config.BOLLINGER_STD),
-        "ind_adx_threshold": config.ADX_THRESHOLD,
-        "tg_token_input":   config.TELEGRAM_BOT_TOKEN or "",
-        "tg_chat_input":    config.TELEGRAM_CHAT_ID or "",
         "deploy_confirmed": False,
         "last_scan_time": None,
         "current_view": "dashboard",
@@ -63,6 +48,38 @@ def bootstrap_state():
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
+
+    stored = config_store.load_settings()
+    ind = stored.get("indicator", {})
+    defaults_ind = config_store.DEFAULT_SETTINGS["indicator"]
+    st.session_state["ind_rsi_period"] = ind.get("rsi_period", defaults_ind["rsi_period"])
+    st.session_state["ind_rsi_oversold"] = ind.get("rsi_oversold", defaults_ind["rsi_oversold"])
+    st.session_state["ind_rsi_overbought"] = ind.get("rsi_overbought", defaults_ind["rsi_overbought"])
+    st.session_state["ind_sma_fast"] = ind.get("sma_fast", defaults_ind["sma_fast"])
+    st.session_state["ind_sma_slow"] = ind.get("sma_slow", defaults_ind["sma_slow"])
+    st.session_state["ind_ema_fast"] = ind.get("ema_fast", defaults_ind["ema_fast"])
+    st.session_state["ind_ema_slow"] = ind.get("ema_slow", defaults_ind["ema_slow"])
+    st.session_state["ind_macd_fast"] = ind.get("macd_fast", defaults_ind["macd_fast"])
+    st.session_state["ind_macd_slow"] = ind.get("macd_slow", defaults_ind["macd_slow"])
+    st.session_state["ind_macd_signal"] = ind.get("macd_signal", defaults_ind["macd_signal"])
+    st.session_state["ind_bb_period"] = ind.get("bb_period", defaults_ind["bb_period"])
+    st.session_state["ind_bb_std"] = float(ind.get("bb_std", defaults_ind["bb_std"]))
+    st.session_state["ind_adx_threshold"] = ind.get("adx_threshold", defaults_ind["adx_threshold"])
+
+    tg = stored.get("telegram", {})
+    tg_defaults = config_store.DEFAULT_SETTINGS["telegram"]
+    st.session_state["tg_token_input"] = tg.get("bot_token", tg_defaults["bot_token"]) or config.TELEGRAM_BOT_TOKEN or ""
+    st.session_state["tg_chat_input"] = tg.get("chat_id", tg_defaults["chat_id"]) or config.TELEGRAM_CHAT_ID or ""
+
+    scan = stored.get("scan", {})
+    scan_defaults = config_store.DEFAULT_SETTINGS["scan"]
+    st.session_state["auto_refresh"] = scan.get("auto_refresh", scan_defaults["auto_refresh"])
+    st.session_state["refresh_interval"] = scan.get("refresh_interval", scan_defaults["refresh_interval"])
+    st.session_state["min_score_filter"] = scan.get("min_score_filter", scan_defaults["min_score_filter"])
+    st.session_state["rsi_min_filter"] = scan.get("rsi_min_filter", scan_defaults["rsi_min_filter"])
+    st.session_state["rsi_max_filter"] = scan.get("rsi_max_filter", scan_defaults["rsi_max_filter"])
+    st.session_state["vol_ratio_filter"] = scan.get("vol_ratio_filter", scan_defaults["vol_ratio_filter"])
+
     view_param = st.query_params.get("view", st.session_state.current_view)
     if view_param in {"dashboard", "signals", "analysis", "settings"}:
         st.session_state.current_view = view_param
@@ -671,26 +688,39 @@ def ensure_initial_data():
 def fetch_stock_news(ticker, max_results=5):
     name = config.TICKER_NAMES.get(ticker, ticker.replace(".IS", ""))
     all_news = []
-    sources = [
-        ("Google Haberler", f"https://news.google.com/rss/search?q={name}+hisse+senedi&hl=tr&gl=TR&ceid=TR:tr", "google"),
-        ("Investing.com", f"https://tr.investing.com/search/?q={name}", "static"),
-        ("Bloomberg HT", f"https://www.bloomberght.com/search?q={name}", "static"),
-        ("TradingView", f"https://www.tradingview.com/symbols/{ticker.replace('.IS', '')}/ideas/", "static"),
-    ]
-    for source, url, source_type in sources:
-        try:
-            if source_type == "google":
-                response = requests.get(url, timeout=5, headers={"User-Agent": "Mozilla/5.0"})
-                items = re.findall(r"<item>.*?<title>(.*?)</title>.*?<link>(.*?)</link>", response.text, re.DOTALL)
-                for title, link in items[:max_results]:
-                    text = title.replace("&amp;", "&").replace("&#39;", "'").replace("&quot;", '"')
-                    if len(text) > 10:
-                        all_news.append({"title": text, "url": link, "source": source})
-            else:
-                all_news.append({"title": f"{name} - {source} sayfasi", "url": url, "source": source})
-        except Exception:
-            pass
-    return all_news[: max_results + 2]
+
+    try:
+        import xml.etree.ElementTree as ET
+        url = f"https://news.google.com/rss/search?q={name}+hisse+senedi&hl=tr&gl=TR&ceid=TR:tr"
+        response = requests.get(url, timeout=8, headers={"User-Agent": "Mozilla/5.0"})
+        response.raise_for_status()
+        root = ET.fromstring(response.content)
+        ns = {"ns": "http://www.w3.org/2005/Atom"}
+        items = root.findall(".//item")
+        for item in items[:max_results]:
+            title = item.findtext("title", "")
+            link = item.findtext("link", "")
+            pub_date = item.findtext("pubDate", "")
+            title = title.replace("&amp;", "&").replace("&#39;", "'").replace("&quot;", '"')
+            if len(title) > 10:
+                all_news.append({
+                    "title": title,
+                    "url": link,
+                    "source": "Google Haberler",
+                    "published": pub_date[:16] if pub_date else "",
+                })
+    except Exception:
+        pass
+
+    if not all_news:
+        all_news.append({
+            "title": f"{name} hakkında güncel haber bulunamadı",
+            "url": "",
+            "source": "Haber kaynağı",
+            "published": "",
+        })
+
+    return all_news[:max_results]
 
 
 def get_market_summary(signals, all_data):
@@ -845,7 +875,7 @@ def render_live_insights(signals):
     if not signals:
         return
 
-    top = sorted(signals, key=lambda s: s.score, reverse=False)[:5]
+    top = sorted(signals, key=lambda s: s.score, reverse=True)[:5]
 
     time_str = (
         st.session_state.last_scan_time.strftime("%H:%M")
@@ -864,6 +894,9 @@ def render_live_insights(signals):
         elif s.score >= 10:
             dot    = "blue"
             action = "Alım fırsatı"
+        elif s.score >= 0:
+            dot    = "blue"
+            action = "Nötr"
         else:
             dot    = "red"
             action = "Satış baskısı"
@@ -1379,7 +1412,7 @@ def render_dashboard(signals, summary):
 
     with left_col:
         st.markdown("<div class='section-title'>Portfolio Pulse</div>", unsafe_allow_html=True)
-        top = strong[:5] if strong else sorted(signals, key=lambda x: x.score, reverse=False)[:5]
+        top = strong[:5] if strong else sorted(signals, key=lambda x: x.score, reverse=True)[:5]
         if not top:
             st.info("Dashboard verisi icin once tarama yapin.")
         else:
@@ -1780,8 +1813,8 @@ def render_settings(signals):
         <div class='deploy-btn-wrap'>
           <div class='deploy-title'>Deploy Configuration</div>
           <div class='deploy-sub'>
-            Değiştirilen parametreler bir sonraki taramada aktif olur.
-            Şu an runtime override — config.py yazılmaz.
+            Değiştirilen parametreler kalıcı olarak kaydedilir.
+            Uygulama yeniden başlatıldığında da korunur.
           </div>
         </div>
         """, unsafe_allow_html=True)
@@ -1810,6 +1843,38 @@ def render_settings(signals):
                     config.TELEGRAM_BOT_TOKEN = st.session_state.tg_token_input
                 if st.session_state.tg_chat_input:
                     config.TELEGRAM_CHAT_ID = st.session_state.tg_chat_input
+
+                settings = config_store.load_settings()
+                settings["indicator"] = {
+                    "rsi_period": st.session_state.ind_rsi_period,
+                    "rsi_oversold": st.session_state.ind_rsi_oversold,
+                    "rsi_overbought": st.session_state.ind_rsi_overbought,
+                    "sma_fast": st.session_state.ind_sma_fast,
+                    "sma_slow": st.session_state.ind_sma_slow,
+                    "ema_fast": st.session_state.ind_ema_fast,
+                    "ema_slow": st.session_state.ind_ema_slow,
+                    "macd_fast": st.session_state.ind_macd_fast,
+                    "macd_slow": st.session_state.ind_macd_slow,
+                    "macd_signal": st.session_state.ind_macd_signal,
+                    "bb_period": st.session_state.ind_bb_period,
+                    "bb_std": st.session_state.ind_bb_std,
+                    "adx_threshold": st.session_state.ind_adx_threshold,
+                }
+                settings["telegram"] = {
+                    "bot_token": st.session_state.tg_token_input,
+                    "chat_id": st.session_state.tg_chat_input,
+                    "notify_min_score": st.session_state.notify_min_score,
+                    "enabled": st.session_state.notify_telegram,
+                }
+                settings["scan"] = {
+                    "auto_refresh": st.session_state.auto_refresh,
+                    "refresh_interval": st.session_state.refresh_interval,
+                    "min_score_filter": st.session_state.min_score_filter,
+                    "rsi_min_filter": st.session_state.rsi_min_filter,
+                    "rsi_max_filter": st.session_state.rsi_max_filter,
+                    "vol_ratio_filter": st.session_state.vol_ratio_filter,
+                }
+                config_store.save_settings(settings)
                 run_scan()
                 st.session_state.deploy_confirmed = True
                 st.rerun()
@@ -1819,6 +1884,7 @@ def render_settings(signals):
                 "↺ Varsayılana Dön",
                 use_container_width=True
             ):
+                config_store.reset_settings()
                 keys_to_reset = [
                     "ind_rsi_period","ind_rsi_oversold","ind_rsi_overbought",
                     "ind_sma_fast","ind_sma_slow","ind_ema_fast","ind_ema_slow",

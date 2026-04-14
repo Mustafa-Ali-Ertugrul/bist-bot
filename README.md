@@ -139,6 +139,7 @@ Bu 5 yontemin sonuclari karsilastirilir, en makul (%1-%10 arasi) stop secilir. B
 bist_bot/
 ├── main.py              # Ana bot dongusu + CLI giris noktasi
 ├── config.py            # Tum yapilandirma ve sabitler
+├── config_store.py      # Kalıcı kullanıcı ayarları (JSON)
 ├── data_fetcher.py      # yfinance ile veri cekme + cache
 ├── indicators.py        # 15+ teknik gosterge hesaplamalari
 ├── strategy.py          # Skor bazli sinyal motoru
@@ -194,7 +195,7 @@ bist_bot/
 
 | Parametre | Varsayilan | Aciklama |
 |---|---|---|
-| `BUY_THRESHOLD` | 15 | Minimum alim sinyali skoru |
+| `BUY_THRESHOLD` | 10 | Minimum alim sinyali skoru |
 | `SELL_THRESHOLD` | -15 | Minimum satim sinyali skoru |
 | `MIN_REGIME_PERSISTENCE` | 2 | Rejim teyidi icin min bar sayisi |
 | `MOMENTUM_CONFIRMATION` | 4.0 | Dusuk ADX durumunda momentum esigi (%) |

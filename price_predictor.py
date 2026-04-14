@@ -2,7 +2,8 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.ensemble import GradientBoostingRegressor
-from typing import Optional, List
+from sklearn.metrics import mean_absolute_error, mean_squared_error
+from typing import Optional, List, Dict
 import logging
 import os
 import pickle
@@ -11,7 +12,6 @@ import threading
 import config
 from indicators import TechnicalIndicators
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 _model_lock = threading.Lock()
@@ -33,6 +33,7 @@ class PricePredictor:
         self.scaler = MinMaxScaler()
         self.model = None
         self.models = {}
+        self.metrics = {}
         self.is_trained = False
         self._min_data_points = self.sequence_length + 50
         
@@ -152,10 +153,10 @@ class PricePredictor:
         max_horizon: int = 1
     ) -> bool:
         data = self._normalize_input_data(data)
-        
+
         if not self._validate_data(data):
             return False
-            
+
         try:
             close = self._get_close_values(data)
 
@@ -170,6 +171,7 @@ class PricePredictor:
             scaled_close = self.scaler.transform(full_close).flatten()
             features = self._create_features(data, scaled_close)
             self.models = {}
+            self.metrics = {}
 
             max_horizon = max(1, int(max_horizon))
 
@@ -197,11 +199,23 @@ class PricePredictor:
                 model.fit(X_train, y_train)
                 self.models[horizon] = model
 
+                y_pred = model.predict(X_val)
+                mae = mean_absolute_error(y_val, y_pred)
+                rmse = np.sqrt(mean_squared_error(y_val, y_pred))
+                mape = np.mean(np.abs((y_val - y_pred) / np.where(y_val != 0, y_val, 1))) * 100
+
+                self.metrics[horizon] = {
+                    "mae": round(float(mae), 4),
+                    "rmse": round(float(rmse), 4),
+                    "mape": round(float(mape), 2),
+                }
+                logger.info(f"Horizon {horizon} metrics - MAE: {mae:.4f}, RMSE: {rmse:.4f}, MAPE: {mape:.2f}%")
+
             self.model = self.models.get(1)
-            
+
             self.is_trained = True
             return True
-            
+
         except Exception as e:
             logger.error(f"Training failed: {e}")
             return False
@@ -221,7 +235,7 @@ class PricePredictor:
     def save_model(self, ticker: str) -> bool:
         if not self.models and self.model is None:
             return False
-            
+
         try:
             path = f"{self.model_path}/{ticker}_model.pkl"
             with open(path, "wb") as f:
@@ -230,7 +244,8 @@ class PricePredictor:
                     "models": self.models,
                     "model": self.model,
                     "scaler": self.scaler,
-                    "sequence_length": self.sequence_length
+                    "sequence_length": self.sequence_length,
+                    "metrics": getattr(self, "metrics", {}),
                 }, f)
             return True
         except Exception as e:
@@ -241,7 +256,7 @@ class PricePredictor:
         path = f"{self.model_path}/{ticker}_model.pkl"
         if not os.path.exists(path):
             return False
-            
+
         try:
             with open(path, "rb") as f:
                 data = pickle.load(f)
@@ -255,6 +270,7 @@ class PricePredictor:
                 self.model = self.models[1]
             self.scaler = data["scaler"]
             self.sequence_length = data["sequence_length"]
+            self.metrics = data.get("metrics", {})
             self.is_trained = True
             return True
         except Exception as e:
@@ -264,21 +280,26 @@ class PricePredictor:
 
 def predict_price(ticker: str, data: pd.DataFrame, days_ahead: int = 1) -> Optional[List[float]]:
     if data is None or len(data) < 60:
+        logger.warning(f"Insufficient data for {ticker}: need 60+ rows, got {len(data) if data is not None else 0}")
         return None
-    
+
     predictor = PricePredictor()
-    data = predictor._normalize_input_data(data)
+    normalized = predictor._normalize_input_data(data)
     days_ahead = max(1, int(days_ahead))
-    
+
     with _model_lock:
         loaded = predictor.load_model(ticker)
         has_required_horizons = loaded and all(h in predictor.models for h in range(1, days_ahead + 1))
 
         if not has_required_horizons:
-            if not predictor.train(data, max_horizon=days_ahead):
+            if not predictor.train(normalized, max_horizon=days_ahead):
+                logger.warning(f"Model training failed for {ticker}")
                 return None
-            predictor.save_model(ticker)
-        
+            saved = predictor.save_model(ticker)
+            if saved and predictor.metrics:
+                for h, m in predictor.metrics.items():
+                    logger.info(f"Saved model metrics for {ticker} horizon {h}: MAE={m['mae']}, RMSE={m['rmse']}, MAPE={m['mape']}%")
+
         close = predictor._get_close_values(data).reshape(-1, 1)
         scaled_close = predictor.scaler.transform(close).flatten()
         features = predictor._create_features(data, scaled_close)
@@ -288,9 +309,10 @@ def predict_price(ticker: str, data: pd.DataFrame, days_ahead: int = 1) -> Optio
         for horizon in range(1, days_ahead + 1):
             pred = predictor.predict(last_n, horizon=horizon)
             if pred is None:
+                logger.warning(f"Prediction failed for {ticker} horizon {horizon}")
                 break
             predictions.append(pred)
-    
+
     return predictions if predictions else None
 
 
