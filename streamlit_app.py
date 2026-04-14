@@ -1134,6 +1134,10 @@ def render_mini_info_cards(df, snapshot, signal=None):
     resistance = snapshot.get("resistance", 0)
     atr = float(snapshot.get("atr", 0))
 
+    def _card(label, value, sub, color=""):
+        style = f" style='color:{color};'" if color else ""
+        return f"<div class='mini-info-card'><div class='mini-info-label'>{label}</div><div class='mini-info-value'{style}>{value}</div><div class='mini-info-sub'>{sub}</div></div>"
+
     cards = []
     if signal is not None:
         price_color = "#48ddbc" if signal.score >= 0 else "#ff796c"
@@ -1160,16 +1164,7 @@ def render_mini_info_cards(df, snapshot, signal=None):
         ("Ort. Hacim", f"{avg_vol:,}", "Son 20 gun", ""),
     ]
 
-    items_html = "".join(
-        f"""
-    <div class="mini-info-card">
-      <div class="mini-info-label">{label}</div>
-      <div class="mini-info-value" {"style='color:" + color + ";' " if color else ""}>{value}</div>
-      <div class="mini-info-sub">{sub}</div>
-    </div>
-    """
-        for label, value, sub, color in cards
-    )
+    items_html = "".join(_card(label, value, sub, color) for label, value, sub, color in cards)
 
     st.markdown(f"<div class='mini-info-grid'>{items_html}</div>", unsafe_allow_html=True)
 
