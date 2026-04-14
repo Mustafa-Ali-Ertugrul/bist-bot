@@ -986,6 +986,7 @@ def render_verdict_card(signal):
     else:
         card_class = "sell"
     score_color = "#48ddbc" if signal.score >= 0 else "#ff796c"
+    price_color = score_color
     bar_width = int((signal.score + 100) / 2)
     bar_class = "score-bar-fill" if signal.score >= 0 else "score-bar-fill negative"
 
@@ -997,44 +998,38 @@ def render_verdict_card(signal):
     st.markdown(
         f"""
     <div class="verdict-card {card_class}">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;
-                  flex-wrap:wrap;gap:12px;overflow:hidden;">
-        <div style="min-width:0;">
-          <div style="font-size:11px;font-weight:800;letter-spacing:0.18em;
-                      text-transform:uppercase;color:#8b90a0;margin-bottom:8px;">
-            Bot Kararı
-          </div>
-          <div class="verdict-label" style="white-space:nowrap;">{signal.signal_type.value}</div>
-          <div class="verdict-score">
-            Güven: {signal.confidence}
-            &nbsp;·&nbsp;
-            Skor: <span style="color:{score_color};font-weight:800;">{signal.score:+.0f}</span>
-          </div>
-        </div>
-        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;
-                    min-width:0;overflow:hidden;">
-          <div style="font-size:11px;color:#8b90a0;font-weight:700;
-                      text-transform:uppercase;letter-spacing:0.12em;">Stop-Loss</div>
-          <div style="font-size:18px;font-weight:900;color:#ff796c;">
-            ₺{signal.stop_loss:.2f}
-          </div>
-          <div style="font-size:11px;color:#8b90a0;font-weight:700;
-                      text-transform:uppercase;letter-spacing:0.12em;margin-top:4px;">
-            Hedef
-          </div>
-          <div style="font-size:18px;font-weight:900;color:#48ddbc;">
-            ₺{signal.target_price:.2f}
-          </div>
-        </div>
+      <div style="text-align:center;margin-bottom:14px;">
+        <div style="font-size:10px;font-weight:800;letter-spacing:0.18em;text-transform:uppercase;color:#8b90a0;margin-bottom:6px;">Bot Karari</div>
+        <div class="verdict-label" style="font-size:24px;white-space:nowrap;">{signal.signal_type.value}</div>
       </div>
 
-      <div style="margin-top:14px;">
+      <div style="margin-bottom:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+          <span style="font-size:11px;color:#8b90a0;font-weight:700;">Skor</span>
+          <span style="font-size:14px;font-weight:800;color:{score_color};">{signal.score:+.0f}</span>
+        </div>
         <div class="score-bar-wrap">
           <div class="{bar_class}" style="width:{bar_width}%;"></div>
         </div>
+        <div style="text-align:center;margin-top:4px;font-size:10px;color:#8b90a0;">Guven: <span style="font-weight:700;color:#dfe2eb;">{signal.confidence}</span></div>
       </div>
 
-      <div style="margin-top:12px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-bottom:10px;">
+        <div style="background:rgba(0,0,0,0.2);border-radius:8px;padding:8px 4px;text-align:center;">
+          <div style="font-size:9px;color:#8b90a0;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;">Fiyat</div>
+          <div style="font-size:14px;font-weight:800;color:{price_color};margin-top:2px;">₺{signal.price:.2f}</div>
+        </div>
+        <div style="background:rgba(0,0,0,0.2);border-radius:8px;padding:8px 4px;text-align:center;">
+          <div style="font-size:9px;color:#8b90a0;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;">Stop</div>
+          <div style="font-size:14px;font-weight:800;color:#ff796c;margin-top:2px;">₺{signal.stop_loss:.2f}</div>
+        </div>
+        <div style="background:rgba(0,0,0,0.2);border-radius:8px;padding:8px 4px;text-align:center;">
+          <div style="font-size:9px;color:#8b90a0;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;">Hedef</div>
+          <div style="font-size:14px;font-weight:800;color:#48ddbc;margin-top:2px;">₺{signal.target_price:.2f}</div>
+        </div>
+      </div>
+
+      <div style="margin-top:8px;">
         {reason_chips}
       </div>
     </div>
@@ -1123,7 +1118,7 @@ def render_indicator_grid(snapshot, signal):
     st.markdown(f"<div class='indicator-table'>{rows_html}</div>", unsafe_allow_html=True)
 
 
-def render_mini_info_cards(df, snapshot):
+def render_mini_info_cards(df, snapshot, signal=None):
     try:
         high_52w = float(df["high"].tail(252).max())
         low_52w = float(df["low"].tail(252).min())
@@ -1137,25 +1132,43 @@ def render_mini_info_cards(df, snapshot):
 
     support = snapshot.get("support", 0)
     resistance = snapshot.get("resistance", 0)
+    atr = float(snapshot.get("atr", 0))
 
-    cards = [
-        ("52H Yüksek", f"₺{high_52w:.2f}", f"{dist_from_high:+.1f}% şimdiden"),
-        ("52H Düşük", f"₺{low_52w:.2f}", f"{dist_from_low:+.1f}% şimdiden"),
-        ("Ort. Hacim", f"{avg_vol:,}", "Son 20 gün"),
-        ("Destek", f"₺{float(support):.2f}", "Yakın destek"),
-        ("Direnç", f"₺{float(resistance):.2f}", "Yakın direnç"),
-        ("ATR", f"₺{float(snapshot.get('atr', 0)):.2f}", "Günlük volatilite"),
+    cards = []
+    if signal is not None:
+        price_color = "#48ddbc" if signal.score >= 0 else "#ff796c"
+        cards += [
+            ("Fiyat", f"₺{signal.price:.2f}", "", price_color),
+            ("Stop-Loss", f"₺{signal.stop_loss:.2f}", "", "#ff796c"),
+            ("Hedef", f"₺{signal.target_price:.2f}", "", "#48ddbc"),
+            ("Guven", signal.confidence, "", ""),
+            ("Destek", f"₺{float(support):.2f}", "Yakın destek", ""),
+            ("Direnc", f"₺{float(resistance):.2f}", "Yakın direnc", ""),
+            ("ATR", f"₺{atr:.2f}", "Gunluk volatilite", ""),
+        ]
+    else:
+        cards += [
+            ("Fiyat", f"₺{float(snapshot.get('close', 0)):.2f}", "", ""),
+            ("Destek", f"₺{float(support):.2f}", "Yakın destek", ""),
+            ("Direnc", f"₺{float(resistance):.2f}", "Yakın direnc", ""),
+            ("ATR", f"₺{atr:.2f}", "Gunluk volatilite", ""),
+        ]
+
+    cards += [
+        ("52H Yuksek", f"₺{high_52w:.2f}", f"{dist_from_high:+.1f}%", ""),
+        ("52H Dusuk", f"₺{low_52w:.2f}", f"{dist_from_low:+.1f}%", ""),
+        ("Ort. Hacim", f"{avg_vol:,}", "Son 20 gun", ""),
     ]
 
     items_html = "".join(
         f"""
     <div class="mini-info-card">
       <div class="mini-info-label">{label}</div>
-      <div class="mini-info-value">{value}</div>
+      <div class="mini-info-value" {"style='color:" + color + ";' " if color else ""}>{value}</div>
       <div class="mini-info-sub">{sub}</div>
     </div>
     """
-        for label, value, sub in cards
+        for label, value, sub, color in cards
     )
 
     st.markdown(f"<div class='mini-info-grid'>{items_html}</div>", unsafe_allow_html=True)
@@ -1279,22 +1292,22 @@ def render_signal_card_v2(signal, df_data=None):
         <span class='signal-chip {chip_class}'>{signal.signal_type.value}</span>
       </div>
 
-      <div style='margin-top:14px;display:flex;gap:20px;'>
-        <div>
-          <div style='font-size:11px;color:#8b90a0;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;'>Fiyat</div>
-          <div style='font-size:20px;font-weight:800;color:{price_color};'>TL{signal.price:.2f}</div>
+      <div style='margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:8px;'>
+        <div style='background:rgba(255,255,255,0.03);border-radius:10px;padding:10px 12px;'>
+          <div style='font-size:10px;color:#8b90a0;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;'>Fiyat</div>
+          <div style='font-size:18px;font-weight:800;color:{price_color};margin-top:2px;'>TL{signal.price:.2f}</div>
         </div>
-        <div>
-          <div style='font-size:11px;color:#8b90a0;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;'>Stop</div>
-          <div style='font-size:20px;font-weight:800;color:#dfe2eb;'>TL{signal.stop_loss:.2f}</div>
+        <div style='background:rgba(255,255,255,0.03);border-radius:10px;padding:10px 12px;'>
+          <div style='font-size:10px;color:#8b90a0;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;'>Stop</div>
+          <div style='font-size:18px;font-weight:800;color:#ff796c;margin-top:2px;'>TL{signal.stop_loss:.2f}</div>
         </div>
-        <div>
-          <div style='font-size:11px;color:#8b90a0;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;'>Hedef</div>
-          <div style='font-size:20px;font-weight:800;color:#dfe2eb;'>TL{signal.target_price:.2f}</div>
+        <div style='background:rgba(255,255,255,0.03);border-radius:10px;padding:10px 12px;'>
+          <div style='font-size:10px;color:#8b90a0;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;'>Hedef</div>
+          <div style='font-size:18px;font-weight:800;color:#48ddbc;margin-top:2px;'>TL{signal.target_price:.2f}</div>
         </div>
-        <div>
-          <div style='font-size:11px;color:#8b90a0;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;'>Guven</div>
-          <div style='font-size:20px;font-weight:800;color:#dfe2eb;'>{signal.confidence}</div>
+        <div style='background:rgba(255,255,255,0.03);border-radius:10px;padding:10px 12px;'>
+          <div style='font-size:10px;color:#8b90a0;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;'>Guven</div>
+          <div style='font-size:18px;font-weight:800;color:#dfe2eb;margin-top:2px;'>{signal.confidence}</div>
         </div>
       </div>
 
@@ -1448,21 +1461,21 @@ def render_signals(signals, all_data):
     st.markdown("<div class='section-title'>Active Signals</div>", unsafe_allow_html=True)
     strong_tab, buy_tab, sell_tab = st.tabs(["Strong Buy", "Buy", "Sell / Neutral"])
     with strong_tab:
-        strong = [s for s in signals if s.score >= 40]
+        strong = sorted([s for s in signals if s.score >= 40], key=lambda s: s.score, reverse=True)
         if strong:
             for signal in strong:
                 render_signal_card_v2(signal, all_data.get(signal.ticker))
         else:
             st.info("Guclu alim sinyali yok.")
     with buy_tab:
-        buy = [s for s in signals if 10 <= s.score < 40]
+        buy = sorted([s for s in signals if 10 <= s.score < 40], key=lambda s: s.score, reverse=True)
         if buy:
             for signal in buy:
                 render_signal_card_v2(signal, all_data.get(signal.ticker))
         else:
             st.info("Alim sinyali yok.")
     with sell_tab:
-        sell = [s for s in signals if s.score < 10]
+        sell = sorted([s for s in signals if s.score < 10], key=lambda s: s.score)
         if sell:
             for signal in sell:
                 render_signal_card_v2(signal, all_data.get(signal.ticker))
@@ -1535,7 +1548,7 @@ def render_analysis(all_data):
             "<div style='font-size:14px;font-weight:800;color:#8b90a0;text-transform:uppercase;letter-spacing:0.14em;margin-bottom:10px;'>Mini Bilgi</div>",
             unsafe_allow_html=True,
         )
-        render_mini_info_cards(df, snapshot)
+        render_mini_info_cards(df, snapshot, signal)
     with news_col:
         with st.container(border=True):
             st.subheader("Haber akışı")
