@@ -87,7 +87,7 @@ TICKER_NAMES = {
     "CCOLA.IS": "Coca-Cola İçecek",
     "CIMSA.IS": "Çimsa",
     "CLEBI.IS": "Clebi",
-    "ENJSA.IS": "Enka İnşaat",
+    "ENJSA.IS": "Enerjisa Enerji",
     "ERBOS.IS": "Erbos",
     "FENIS.IS": "Feniş",
     "FMIZP.IS": "Formpi",
@@ -109,7 +109,7 @@ TICKER_NAMES = {
     "PSDTC.IS": "Panda",
     "SEKFK.IS": "Şeker",
     "SEKFS.IS": "Şeker Finans",
-    "SOKM.IS": "Sök",
+    "SOKM.IS": "ŞOK Marketler",
 }
 
 RSI_PERIOD = 14
