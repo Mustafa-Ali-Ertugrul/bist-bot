@@ -101,7 +101,7 @@ def inject_styles():
             footer {display:none !important;}
             .viewerBadge_container {display:none !important;}
             #MainMenu {display:none !important;}
-            .block-container {max-width:1240px;padding-top:1.2rem;padding-bottom:7rem;}
+            .block-container {max-width:1240px;padding-top:1.2rem;padding-bottom:130px;}
             .stApp {
                 background:
                     radial-gradient(circle at top right, rgba(72,221,188,0.08), transparent 22%),
@@ -207,6 +207,9 @@ def inject_styles():
                 padding: 20px;
                 background: rgba(72, 221, 188, 0.04);
                 margin-bottom: 12px;
+                width: 100%;
+                box-sizing: border-box;
+                overflow: hidden;
             }
             .signal-card-sell {
                 border: 1px solid rgba(255, 121, 108, 0.25);
@@ -215,6 +218,9 @@ def inject_styles():
                 padding: 20px;
                 background: rgba(255, 121, 108, 0.04);
                 margin-bottom: 12px;
+                width: 100%;
+                box-sizing: border-box;
+                overflow: hidden;
             }
             .signal-card-neutral {
                 border: 1px solid rgba(255,255,255,0.07);
@@ -223,6 +229,9 @@ def inject_styles():
                 padding: 20px;
                 background: rgba(255,255,255,0.02);
                 margin-bottom: 12px;
+                width: 100%;
+                box-sizing: border-box;
+                overflow: hidden;
             }
             .score-bar-wrap {
                 background: rgba(255,255,255,0.06);
@@ -251,12 +260,16 @@ def inject_styles():
                 font-size: 11px;
                 font-weight: 600;
                 margin: 3px 3px 0 0;
+                word-break: break-word;
             }
             .verdict-card {
                 border-radius: 22px;
                 padding: 24px;
                 text-align: center;
                 margin-bottom: 16px;
+                width: 100%;
+                box-sizing: border-box;
+                overflow: hidden;
             }
             .verdict-card.buy {
                 background: linear-gradient(135deg, rgba(72,221,188,0.10), rgba(45,212,191,0.06));
@@ -452,12 +465,17 @@ def inject_styles():
                 grid-template-columns: repeat(2, 1fr);
                 gap: 10px;
                 margin-bottom: 14px;
+                width: 100%;
+                box-sizing: border-box;
             }
             .mini-info-card {
                 background: rgba(28,32,40,0.92);
                 border: 1px solid rgba(255,255,255,0.06);
                 border-radius: 14px;
                 padding: 12px 14px;
+                width: 100%;
+                box-sizing: border-box;
+                overflow: hidden;
             }
             .mini-info-label {
                 font-size: 10px; font-weight: 800;
@@ -467,9 +485,42 @@ def inject_styles():
             .mini-info-value {
                 font-size: 16px; font-weight: 800;
                 color: #dfe2eb; margin-top: 4px;
+                word-break: break-word;
             }
             .mini-info-sub {
                 font-size: 10px; color: #8b90a0; margin-top: 2px;
+                word-break: break-word;
+            }
+
+            @media (max-width: 640px) {
+                .mini-info-grid {
+                    grid-template-columns: 1fr;
+                }
+                .section-title {
+                    font-size: 18px;
+                }
+                .signal-chip {
+                    font-size: 10px;
+                    padding: 4px 8px;
+                }
+                .reason-chip {
+                    font-size: 10px;
+                    padding: 3px 8px;
+                }
+                .bottom-nav {
+                    padding-bottom: max(14px, env(safe-area-inset-bottom));
+                }
+                .verdict-card {
+                    padding: 16px;
+                }
+                .verdict-label {
+                    font-size: 22px;
+                }
+                .signal-card-buy,
+                .signal-card-sell,
+                .signal-card-neutral {
+                    padding: 14px;
+                }
             }
 
             .indicator-table {
