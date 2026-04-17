@@ -11,16 +11,16 @@ Python 3.10+ onerilir.
 ```bash
 # 1. Repoyu klonla
 git clone https://github.com/Mustafa-Ali-Ertugrul/bist-bot.git
-cd bist_bot
+cd bist-bot
 
 # 2. Sanal ortam olustur
-python -m venv venv
+python -m venv .venv
 
 # Windows:
-venv\Scripts\activate
+.venv\Scripts\activate
 
 # macOS/Linux:
-source venv/bin/activate
+source .venv/bin/activate
 
 # 3. Bagimliliklari yukle
 pip install -r requirements.txt
@@ -29,7 +29,7 @@ pip install -r requirements.txt
 copy .env.example .env          # Windows
 # cp .env.example .env          # macOS/Linux
 
-# .env dosyasini acip Telegram bilgilerini gir
+# .env dosyasini acip gerekli degiskenleri gir
 
 # 5. Calistir
 python main.py
@@ -107,12 +107,12 @@ Toplam skor -100 ile +100 arasinda kesilir.
 
 | Skor | Sinyal |
 |---|---|
-| >= +40 | Guclu Al |
-| >= +10 | Al |
-| >= 0 | Zayif Al |
-| <= -40 | Guclu Sat |
-| <= -10 | Sat |
-| <= 0 | Zayif Sat |
+| >= +48 | Guclu Al |
+| >= +20 | Al |
+| >= +8 | Zayif Al |
+| <= -48 | Guclu Sat |
+| <= -20 | Sat |
+| <= -8 | Zayif Sat |
 | Diger | Bekle |
 
 ### Ek Filtreler
@@ -195,11 +195,12 @@ bist_bot/
 
 | Parametre | Varsayilan | Aciklama |
 |---|---|---|
-| `BUY_THRESHOLD` | 10 | Minimum alim sinyali skoru |
-| `SELL_THRESHOLD` | -10 | Minimum satim sinyali skoru |
-| `MIN_REGIME_PERSISTENCE` | 2 | Rejim teyidi icin min bar sayisi |
-| `MOMENTUM_CONFIRMATION` | 4.0 | Dusuk ADX durumunda momentum esigi (%) |
-| `SIDEWAYS_EXTRA_THRESHOLD` | 5 | Yatay piyasada ekstra filtreleme |
+| `STRONG_BUY_THRESHOLD` | 48 | Guclu alim icin minimum skor |
+| `BUY_THRESHOLD` | 20 | Standart alim sinyali skoru |
+| `WEAK_BUY_THRESHOLD` | 8 | Zayif alim sinyali skoru |
+| `WEAK_SELL_THRESHOLD` | -8 | Zayif satim sinyali skoru |
+| `SELL_THRESHOLD` | -20 | Standart satim sinyali skoru |
+| `STRONG_SELL_THRESHOLD` | -48 | Guclu satim icin minimum skor |
 
 ### Regime Detection
 
@@ -238,12 +239,24 @@ ADX < 15 veya DI yakin  → SIDEWAYS
 ```env
 TELEGRAM_BOT_TOKEN=buraya_bot_token_yaz
 TELEGRAM_CHAT_ID=buraya_chat_id_yaz
+FLASK_DEBUG=0
+FLASK_PORT=5000
 ```
 
 - **TELEGRAM_BOT_TOKEN**: [@BotFather](https://t.me/BotFather)'dan alinir
 - **TELEGRAM_CHAT_ID**: [@userinfobot](https://t.me/userinfobot)'dan alinir
+- **FLASK_DEBUG**: Uretimde `0` birakin; debug sadece gelistirme icin acilmali
+- **FLASK_PORT**: Flask dashboard portu (varsayilan `5000`)
 
 Telegram ayarlanmazsa bot calismaya devam eder, sadece bildirim gondermez.
+
+Not: Telegram token ve chat id sadece `.env` veya ortam degiskenlerinden okunur; Streamlit ayarlar ekranindan kalici olarak kaydedilmez.
+
+## Calistirma
+
+- **Streamlit arayuzu**: `streamlit run streamlit_app.py`
+- **Bot + Flask dashboard**: `python main.py`
+- **Tek seferlik tarama**: `python main.py --once`
 
 ## Ornek Backtest Ciktisi
 

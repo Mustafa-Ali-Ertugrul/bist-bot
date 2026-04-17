@@ -1,4 +1,8 @@
+import html
+import logging
 import threading
+import time
+import uuid
 from datetime import datetime, timezone, timedelta
 
 TR = timezone(timedelta(hours=3))
@@ -25,6 +29,13 @@ st.set_page_config(
 )
 
 
+logger = logging.getLogger(__name__)
+INDEX_DATA_CACHE_VERSION = "v2"
+SCAN_LOCK = threading.Lock()
+PENDING_SCAN_RESULTS = {}
+ACTIVE_SCAN_SESSIONS = set()
+
+
 def bootstrap_state():
     if "_initialized" in st.session_state:
         return
@@ -44,9 +55,12 @@ def bootstrap_state():
         "notify_telegram": bool(config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID),
         "deploy_confirmed": False,
         "last_scan_time": None,
+        "scan_in_progress": False,
+        "scan_error": None,
         "current_view": "dashboard",
         "selected_ticker": config.WATCHLIST[0],
         "analysis_period": "6mo",
+        "_scan_session_key": uuid.uuid4().hex,
     }
     for key, value in defaults.items():
         st.session_state[key] = value
@@ -70,8 +84,14 @@ def bootstrap_state():
 
     tg = stored.get("telegram", {})
     tg_defaults = config_store.DEFAULT_SETTINGS["telegram"]
-    st.session_state["tg_token_input"] = tg.get("bot_token", tg_defaults["bot_token"]) or config.TELEGRAM_BOT_TOKEN or ""
-    st.session_state["tg_chat_input"] = tg.get("chat_id", tg_defaults["chat_id"]) or config.TELEGRAM_CHAT_ID or ""
+    st.session_state["tg_token_input"] = config.TELEGRAM_BOT_TOKEN or tg_defaults["bot_token"]
+    st.session_state["tg_chat_input"] = config.TELEGRAM_CHAT_ID or tg_defaults["chat_id"]
+    st.session_state["notify_min_score"] = tg.get("notify_min_score", tg_defaults["notify_min_score"])
+    st.session_state["notify_telegram"] = bool(
+        tg.get("enabled", tg_defaults["enabled"])
+        and config.TELEGRAM_BOT_TOKEN
+        and config.TELEGRAM_CHAT_ID
+    )
 
     scan = stored.get("scan", {})
     scan_defaults = config_store.DEFAULT_SETTINGS["scan"]
@@ -493,11 +513,29 @@ def inject_styles():
             }
 
             @media (max-width: 640px) {
+                .block-container {
+                    padding-left: 8px !important;
+                    padding-right: 8px !important;
+                }
+                .hero-shell {
+                    padding: 16px;
+                    border-radius: 16px;
+                }
+                .hero-title {
+                    font-size: 28px;
+                }
+                .surface-shell, .metric-shell {
+                    padding: 14px;
+                    border-radius: 14px;
+                }
                 .mini-info-grid {
                     grid-template-columns: 1fr;
                 }
                 .section-title {
                     font-size: 18px;
+                }
+                .metric-value {
+                    font-size: 26px;
                 }
                 .signal-chip {
                     font-size: 10px;
@@ -508,18 +546,67 @@ def inject_styles():
                     padding: 3px 8px;
                 }
                 .bottom-nav {
-                    padding-bottom: max(14px, env(safe-area-inset-bottom));
+                    bottom: 8px;
+                    padding-bottom: max(16px, env(safe-area-inset-bottom));
+                    width: calc(100vw - 16px);
+                    border-radius: 18px;
+                }
+                .bottom-nav a {
+                    padding: 10px 4px 8px;
+                    min-height: 50px;
+                    font-size: 9px;
+                }
+                .bottom-nav-icon {
+                    font-size: 18px;
                 }
                 .verdict-card {
-                    padding: 16px;
+                    padding: 14px;
                 }
                 .verdict-label {
-                    font-size: 22px;
+                    font-size: 20px;
                 }
                 .signal-card-buy,
                 .signal-card-sell,
                 .signal-card-neutral {
                     padding: 14px;
+                }
+                .index-card {
+                    padding: 12px 14px;
+                }
+                .live-insights-row {
+                    padding: 10px 0;
+                }
+                .indicator-table {
+                    padding: 12px;
+                }
+                .indicator-row {
+                    padding: 8px 0;
+                    font-size: 12px;
+                }
+                .stock-identity-meta {
+                    gap: 8px;
+                }
+                .stock-meta-pill {
+                    font-size: 10px;
+                    padding: 3px 8px;
+                }
+                .pill-stat {
+                    font-size: 11px;
+                    padding: 6px 10px;
+                }
+                .portfolio-hero {
+                    padding: 18px;
+                    border-radius: 18px;
+                }
+                .portfolio-total {
+                    font-size: 36px;
+                }
+                .settings-group {
+                    padding: 14px;
+                    border-radius: 14px;
+                }
+                .stColumns {
+                    gap: 6px !important;
                 }
             }
 
@@ -688,13 +775,25 @@ def map_cached_signals(rows: list[dict]) -> list[Signal]:
 def run_scan(force_clear: bool = False):
     fetcher = st.session_state.data_fetcher
     engine = st.session_state.engine
+    last_scan_time = st.session_state.get("last_scan_time")
+
+    scan_result = _collect_scan_result(
+        fetcher=fetcher,
+        engine=engine,
+        last_scan_time=last_scan_time,
+        force_clear=force_clear,
+    )
+    _apply_scan_result(scan_result)
+
+
+def _collect_scan_result(fetcher, engine, last_scan_time=None, force_clear: bool = False):
+    scan_started_at = datetime.now(TR)
 
     if force_clear:
         fetcher.clear_cache()
     else:
-        last_scan_time = st.session_state.get("last_scan_time")
         if last_scan_time is not None:
-            age = (datetime.now(TR) - last_scan_time).total_seconds()
+            age = (scan_started_at - last_scan_time).total_seconds()
             if age > 900:
                 fetcher.clear_cache()
 
@@ -718,26 +817,97 @@ def run_scan(force_clear: bool = False):
         if signal_type:
             send_signal_notification(ticker, signal_type, conditions)
 
-    st.session_state.all_data = all_data
-    st.session_state.signals = signals
-    st.session_state.last_scan_time = datetime.now(TR)
+    return {
+        "all_data": all_data,
+        "signals": signals,
+        "last_scan_time": scan_started_at,
+        "error": None,
+    }
+
+
+def _apply_scan_result(scan_result):
+    st.session_state.all_data = scan_result["all_data"]
+    st.session_state.signals = scan_result["signals"]
+    st.session_state.last_scan_time = scan_result["last_scan_time"]
+    st.session_state.scan_error = scan_result.get("error")
+    st.session_state.scan_in_progress = False
+
+
+def _start_background_scan(force_clear: bool = False) -> bool:
+    session_key = st.session_state.get("_scan_session_key")
+    if not session_key:
+        return False
+
+    with SCAN_LOCK:
+        if session_key in ACTIVE_SCAN_SESSIONS:
+            return False
+        ACTIVE_SCAN_SESSIONS.add(session_key)
+
+    fetcher = st.session_state.data_fetcher
+    engine = st.session_state.engine
+    last_scan_time = st.session_state.get("last_scan_time")
+    st.session_state.scan_in_progress = True
+    st.session_state.scan_error = None
+
+    def worker():
+        try:
+            result = _collect_scan_result(
+                fetcher=fetcher,
+                engine=engine,
+                last_scan_time=last_scan_time,
+                force_clear=force_clear,
+            )
+        except Exception as exc:
+            result = {
+                "all_data": {},
+                "signals": [],
+                "last_scan_time": last_scan_time,
+                "error": str(exc),
+            }
+
+        with SCAN_LOCK:
+            PENDING_SCAN_RESULTS[session_key] = result
+            ACTIVE_SCAN_SESSIONS.discard(session_key)
+
+    threading.Thread(target=worker, daemon=True).start()
+    return True
+
+
+def _apply_pending_scan_result() -> bool:
+    session_key = st.session_state.get("_scan_session_key")
+    if not session_key:
+        return False
+
+    with SCAN_LOCK:
+        pending_result = PENDING_SCAN_RESULTS.pop(session_key, None)
+        is_active = session_key in ACTIVE_SCAN_SESSIONS
+
+    st.session_state.scan_in_progress = is_active
+
+    if pending_result is None:
+        return False
+
+    if pending_result.get("error"):
+        st.session_state.scan_error = pending_result["error"]
+        st.session_state.scan_in_progress = False
+        return True
+
+    _apply_scan_result(pending_result)
+    return True
 
 
 def ensure_initial_data():
+    _apply_pending_scan_result()
+
     if st.session_state.signals:
         return
 
     try:
-        cached = get_recent_signals(limit=50)
+        cached = get_recent_signals(limit=len(config.WATCHLIST))
 
         if cached:
             st.session_state.signals = map_cached_signals(cached)
-
-            threading.Thread(
-                target=run_scan,
-                kwargs={"force_clear": False},
-                daemon=True,
-            ).start()
+            _start_background_scan(force_clear=False)
             return
 
         run_scan(force_clear=False)
@@ -807,7 +977,8 @@ def get_market_summary(signals, all_data):
 
 
 @st.cache_data(ttl=180)
-def fetch_index_data():
+def fetch_index_data(cache_version: str = INDEX_DATA_CACHE_VERSION):
+    _ = cache_version
     try:
         import yfinance as yf
         tickers = {
@@ -818,21 +989,23 @@ def fetch_index_data():
         result = {}
         for name, ticker in tickers.items():
             try:
-                raw = yf.download(
-                    ticker,
-                    period="5d",
-                    interval="1d",
-                    progress=False,
-                    auto_adjust=True,
-                    group_by="column",
-                )
+                raw = yf.Ticker(ticker).history(period="5d", interval="1d", auto_adjust=True)
                 if raw is None or raw.empty:
+                    logger.warning("Index data empty for %s (%s)", name, ticker)
                     result[name] = {"value": 0.0, "change_pct": 0.0}
                     continue
                 raw = cast(pd.DataFrame, raw)
-                raw = raw.dropna(subset=["Close"])
                 if isinstance(raw.columns, pd.MultiIndex):
                     raw.columns = raw.columns.get_level_values(0)
+                if "Close" not in raw.columns:
+                    logger.warning("Index data missing Close column for %s (%s): %s", name, ticker, list(raw.columns))
+                    result[name] = {"value": 0.0, "change_pct": 0.0}
+                    continue
+                raw = raw.dropna(subset=["Close"])
+                if raw.empty:
+                    logger.warning("Index data only contains empty Close values for %s (%s)", name, ticker)
+                    result[name] = {"value": 0.0, "change_pct": 0.0}
+                    continue
 
                 if len(raw) >= 2:
                     prev  = float(raw["Close"].iloc[-2])
@@ -843,11 +1016,14 @@ def fetch_index_data():
                     last = float(raw["Close"].iloc[-1])
                     result[name] = {"value": last, "change_pct": 0.0}
                 else:
+                    logger.warning("Index data has no usable rows for %s (%s)", name, ticker)
                     result[name] = {"value": 0.0, "change_pct": 0.0}
-            except Exception:
+            except Exception as exc:
+                logger.exception("Failed to fetch index data for %s (%s): %s", name, ticker, exc)
                 result[name] = {"value": 0.0, "change_pct": 0.0}
         return result
-    except Exception:
+    except Exception as exc:
+        logger.exception("Failed to initialize index data fetch: %s", exc)
         return {}
 
 
@@ -897,26 +1073,37 @@ def render_portfolio_hero(signals, summary):
 
 
 def render_index_cards():
-    index_data = fetch_index_data()
+    index_data = fetch_index_data(INDEX_DATA_CACHE_VERSION)
     if not index_data:
         return
+    display_names = {
+        "XU100": "BIST100",
+        "XU030": "BIST30",
+        "USDTRY": "USD/TRY",
+    }
     for name, data in index_data.items():
         value = data.get("value", 0.0)
         change = data.get("change_pct", 0.0)
         css = "change-up" if change >= 0 else "change-down"
         arrow = "▲" if change >= 0 else "▼"
-        if name == "USDTRY":
-            val_str = f"{value:.4f}"
-        elif value > 1000:
-            val_str = f"{value:,.0f}"
+        display_name = display_names.get(name, name)
+        if value == 0.0:
+            val_str = "—"
+            change_str = "Veri yok"
         else:
-            val_str = f"{value:.2f}"
+            if name == "USDTRY":
+                val_str = f"{value:.4f}"
+            elif value > 1000:
+                val_str = f"{value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            else:
+                val_str = f"{value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            change_str = f"{arrow} % {abs(change):.2f}".replace(".", ",")
         st.markdown(
             f"""
         <div class="index-card">
-          <div class="index-card-name">{name}</div>
+          <div class="index-card-name">{display_name}</div>
           <div class="index-card-value">{val_str}</div>
-          <div class="index-card-change {css}">{arrow} {abs(change):.2f}%</div>
+          <div class="index-card-change {css}">{change_str}</div>
         </div>
         """,
             unsafe_allow_html=True,
@@ -1185,39 +1372,45 @@ def render_mini_info_cards(df, snapshot, signal=None):
     resistance = snapshot.get("resistance", 0)
     atr = float(snapshot.get("atr", 0))
 
-    def _card(label, value, sub, color=""):
-        style = f" style='color:{color};'" if color else ""
-        return f"<div class='mini-info-card'><div class='mini-info-label'>{label}</div><div class='mini-info-value'{style}>{value}</div><div class='mini-info-sub'>{sub}</div></div>"
+    html_parts = []
 
-    cards = []
     if signal is not None:
         price_color = "#48ddbc" if signal.score >= 0 else "#ff796c"
-        cards += [
-            ("Fiyat", f"₺{signal.price:.2f}", "", price_color),
-            ("Stop-Loss", f"₺{signal.stop_loss:.2f}", "", "#ff796c"),
-            ("Hedef", f"₺{signal.target_price:.2f}", "", "#48ddbc"),
-            ("Guven", signal.confidence, "", ""),
-            ("Destek", f"₺{float(support):.2f}", "Yakın destek", ""),
-            ("Direnc", f"₺{float(resistance):.2f}", "Yakın direnc", ""),
-            ("ATR", f"₺{atr:.2f}", "Gunluk volatilite", ""),
+        rows = [
+            ("Fiyat", "TL" + f"{signal.price:.2f}", "", price_color),
+            ("Stop-Loss", "TL" + f"{signal.stop_loss:.2f}", "", "#ff796c"),
+            ("Hedef", "TL" + f"{signal.target_price:.2f}", "", "#48ddbc"),
+            ("Guven", str(signal.confidence), "", ""),
+            ("Destek", "TL" + f"{float(support):.2f}", "Yakın destek", ""),
+            ("Direnc", "TL" + f"{float(resistance):.2f}", "Yakın direnc", ""),
+            ("ATR", "TL" + f"{atr:.2f}", "Gunluk volatilite", ""),
         ]
     else:
-        cards += [
-            ("Fiyat", f"₺{float(snapshot.get('close', 0)):.2f}", "", ""),
-            ("Destek", f"₺{float(support):.2f}", "Yakın destek", ""),
-            ("Direnc", f"₺{float(resistance):.2f}", "Yakın direnc", ""),
-            ("ATR", f"₺{atr:.2f}", "Gunluk volatilite", ""),
+        rows = [
+            ("Fiyat", "TL" + f"{float(snapshot.get('close', 0)):.2f}", "", ""),
+            ("Destek", "TL" + f"{float(support):.2f}", "Yakın destek", ""),
+            ("Direnc", "TL" + f"{float(resistance):.2f}", "Yakın direnc", ""),
+            ("ATR", "TL" + f"{atr:.2f}", "Gunluk volatilite", ""),
         ]
 
-    cards += [
-        ("52H Yuksek", f"₺{high_52w:.2f}", f"{dist_from_high:+.1f}%", ""),
-        ("52H Dusuk", f"₺{low_52w:.2f}", f"{dist_from_low:+.1f}%", ""),
+    rows += [
+        ("52H Yuksek", "TL" + f"{high_52w:.2f}", f"{dist_from_high:+.1f}%", ""),
+        ("52H Dusuk", "TL" + f"{low_52w:.2f}", f"{dist_from_low:+.1f}%", ""),
         ("Ort. Hacim", f"{avg_vol:,}", "Son 20 gun", ""),
     ]
 
-    items_html = "".join(_card(label, value, sub, color) for label, value, sub, color in cards)
+    for label, value, sub, color in rows:
+        color_style = "" if not color else f" style='color:{color};'"
+        html_parts.append(
+            "<div class='mini-info-card'>"
+            + "<div class='mini-info-label'>" + label + "</div>"
+            + "<div class='mini-info-value'" + color_style + ">" + value + "</div>"
+            + "<div class='mini-info-sub'>" + sub + "</div>"
+            + "</div>"
+        )
 
-    st.markdown(f"<div class='mini-info-grid'>{items_html}</div>", unsafe_allow_html=True)
+    grid_html = "<div class='mini-info-grid'>" + "".join(html_parts) + "</div>"
+    st.markdown(grid_html, unsafe_allow_html=True)
 
 
 def plot_candlestick(df, ticker):
@@ -1448,7 +1641,13 @@ def render_navigation():
 
 
 def metric_card(title, value, subtitle=""):
-    st.markdown(f"<div class='metric-shell'><div class='metric-kicker'>{title}</div><div class='metric-value'>{value}</div><div class='metric-sub'>{subtitle}</div></div>", unsafe_allow_html=True)
+    safe_title = html.escape(str(title))
+    safe_value = html.escape(str(value))
+    safe_subtitle = html.escape(str(subtitle))
+    st.markdown(
+        f"<div class='metric-shell'><div class='metric-kicker'>{safe_title}</div><div class='metric-value'>{safe_value}</div><div class='metric-sub'>{safe_subtitle}</div></div>",
+        unsafe_allow_html=True,
+    )
 
 
 def render_dashboard(signals, summary):
@@ -1746,13 +1945,16 @@ def render_settings(signals):
             "Bot Token",
             value=st.session_state.tg_token_input,
             type="password",
-            placeholder="123456789:AAxxxxxx..."
+            placeholder=".env icinden okunur",
+            disabled=True,
         )
         st.session_state.tg_chat_input = st.text_input(
             "Chat ID",
             value=st.session_state.tg_chat_input,
-            placeholder="-100123456789"
+            placeholder=".env icinden okunur",
+            disabled=True,
         )
+        st.caption("Telegram gizli bilgileri UI yerine sadece `.env` veya ortam degiskenlerinden okunur.")
         st.session_state.notify_min_score = st.slider(
             "Bildirim min skor", 0, 100,
             st.session_state.notify_min_score
@@ -1791,7 +1993,7 @@ def render_settings(signals):
         )
 
         with st.container(border=True):
-            st.metric("Watchlist",      len(config.WATCHLIST))
+            st.metric("BIST 100",      len(config.WATCHLIST))
             st.metric("Aktif sinyal",  len(signals))
             st.metric("Telegram",      tg_status)
             st.metric("Sonraki tarama", next_scan)
@@ -1904,10 +2106,6 @@ def render_settings(signals):
                 config.BOLLINGER_PERIOD = st.session_state.ind_bb_period
                 config.BOLLINGER_STD    = st.session_state.ind_bb_std
                 config.ADX_THRESHOLD    = st.session_state.ind_adx_threshold
-                if st.session_state.tg_token_input:
-                    config.TELEGRAM_BOT_TOKEN = st.session_state.tg_token_input
-                if st.session_state.tg_chat_input:
-                    config.TELEGRAM_CHAT_ID = st.session_state.tg_chat_input
 
                 settings = config_store.load_settings()
                 settings["indicator"] = {
@@ -1926,8 +2124,8 @@ def render_settings(signals):
                     "adx_threshold": st.session_state.ind_adx_threshold,
                 }
                 settings["telegram"] = {
-                    "bot_token": st.session_state.tg_token_input,
-                    "chat_id": st.session_state.tg_chat_input,
+                    "bot_token": "",
+                    "chat_id": "",
                     "notify_min_score": st.session_state.notify_min_score,
                     "enabled": st.session_state.notify_telegram,
                 }
@@ -1974,10 +2172,14 @@ init_db()
 bootstrap_state()
 inject_styles()
 ensure_initial_data()
+_apply_pending_scan_result()
 
 signals = filter_signals(st.session_state.get("signals", []), st.session_state.get("all_data", {}))
 all_data = st.session_state.get("all_data", {})
 market_summary = get_market_summary(signals, all_data)
+
+if st.session_state.get("scan_error"):
+    st.error(f"Arka plan taramasi hatasi: {st.session_state.scan_error}")
 
 if st.session_state.auto_refresh and st.session_state.last_scan_time:
     elapsed = (datetime.now(TR) - st.session_state.last_scan_time).total_seconds()
@@ -1998,6 +2200,11 @@ else:
         render_analysis(all_data)
     else:
         render_settings(signals)
+
+if st.session_state.get("scan_in_progress"):
+    st.caption("Arka planda guncel tarama suruyor; sonuc hazir oldugunda ekran yenilenir.")
+    time.sleep(1)
+    st.rerun()
 
 st.markdown(f"<div class='footer-note'>BIST Bot modern terminal · Son guncelleme {datetime.now(TR).strftime('%d.%m.%Y %H:%M')}</div>", unsafe_allow_html=True)
 render_navigation()

@@ -7,59 +7,67 @@ except ImportError:
     pass
 
 
-WATCHLIST = [
-    "THYAO.IS",
-    "ASELS.IS",
-    "SASA.IS",
-    "KCHOL.IS",
-    "EREGL.IS",
-    "BIMAS.IS",
-    "TUPRS.IS",
-    "SAHOL.IS",
-    "GARAN.IS",
-    "AKBNK.IS",
-    "PGSUS.IS",
-    "SISE.IS",
-    "TAVHL.IS",
-    "TOASO.IS",
-    "FROTO.IS",
-    "PETKM.IS",
-    "KRDMD.IS",
-    "HEKTS.IS",
-    "AYGAZ.IS",
-    "ISCTR.IS",
-    "YKBNK.IS",
-    "HALKB.IS",
-    "VAKBN.IS",
-    "AKSA.IS",
-    "ARCLK.IS",
-    "CCOLA.IS",
-    "CIMSA.IS",
-    "CLEBI.IS",
-    "ENJSA.IS",
-    "ERBOS.IS",
-    "FENIS.IS",
-    "FMIZP.IS",
-    "FORMT.IS",
-    "GENTS.IS",
-    "GLYHO.IS",
-    "IPEKE.IS",
-    "IZMDC.IS",
-    "KARSN.IS",
-    "KAYSE.IS",
-    "KONTR.IS",
-    "KORFM.IS",
-    "LKMNH.IS",
-    "MAKIM.IS",
-    "MGROS.IS",
-    "MRGYO.IS",
-    "ODAS.IS",
-    "PNLSN.IS",
-    "PSDTC.IS",
-    "SEKFK.IS",
-    "SEKFS.IS",
-    "SOKM.IS",
+def _get_bool_env(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
+def _get_int_env(name: str, default: int) -> int:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        return default
+
+
+def _get_str_env(name: str, default: str = "") -> str:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip()
+
+
+DEFAULT_BIST100_WATCHLIST = [
+    "THYAO.IS", "ASELS.IS", "SASA.IS", "KCHOL.IS", "EREGL.IS",
+    "BIMAS.IS", "TUPRS.IS", "SAHOL.IS", "GARAN.IS", "AKBNK.IS",
+    "PGSUS.IS", "SISE.IS", "TAVHL.IS", "TOASO.IS", "FROTO.IS",
+    "PETKM.IS", "KRDMD.IS", "HEKTS.IS", "AYGAZ.IS", "ISCTR.IS",
+    "YKBNK.IS", "HALKB.IS", "VAKBN.IS", "AKSA.IS", "ARCLK.IS",
+    "CCOLA.IS", "CIMSA.IS", "CLEBI.IS", "ENJSA.IS", "ERBOS.IS",
+    "FENIS.IS", "FMIZP.IS", "FORMT.IS", "GENTS.IS", "GLYHO.IS",
+    "IPEKE.IS", "IZMDC.IS", "KARSN.IS", "KAYSE.IS", "KONTR.IS",
+    "KORFM.IS", "LKMNH.IS", "MAKIM.IS", "MGROS.IS", "MRGYO.IS",
+    "ODAS.IS", "PNLSN.IS", "PSDTC.IS", "SEKFK.IS", "SEKFS.IS",
+    "SOKM.IS", "AEFES.IS", "AFYON.IS", "AKSEN.IS", "ALARK.IS",
+    "ALKIM.IS", "ALTNY.IS", "ANACM.IS", "ARENA.IS", "ATAGY.IS",
+    "ATATP.IS", "AVOD.IS", "AYDEM.IS", "BAGFS.IS", "BASGZ.IS",
+    "BAYRK.IS", "BLCOM.IS", "BFRYS.IS", "BKENP.IS", "BKSST.IS",
+    "BOBBR.IS", "BOMSN.IS", "BRISA.IS", "BRSAN.IS", "BRYAT.IS",
+    "BSOKE.IS", "BTCIM.IS", "CANTE.IS", "CEMAS.IS", "CEMTS.IS",
+    "CLDNM.IS", "CMBT.IS", "COSKUN.IS", "CRDFA.IS", "CUSAN.IS",
+    "DAKOL.IS", "DENGE.IS", "DERIM.IS", "DESA.IS", "DEVA.IS",
+    "DGKLB.IS", "DGGYO.IS", "DINBNK.IS", "DKRNK.IS", "DOAS.IS",
+    "DOCO.IS", "DOHOL.IS", "ECZYO.IS", "EENFA.IS", "EGGUB.IS",
+    "EKGYO.IS", "ELITE.IS", "EMKEL.IS", "ENKAI.IS", "ESCOM.IS",
+    "EUPRO.IS", "EUREN.IS", "FADE.IS", "FENER.IS", "FLAP.IS",
+    "FONET.IS", "FRIGO.IS", "GEDIK.IS", "GENIL.IS", "GESAN.IS",
+    "GIPTA.IS", "GOLTS.IS", "GOODY.IS", "GOZDE.IS", "GRTHO.IS",
+    "GSDHO.IS", "GUBRF.IS", "HASAN.IS", "HDFGS.IS", "HURGZ.IS",
+    "HUSEIN.IS", "ICBCT.IS", "ICTURKEY.IS", "IDGIS.IS", "IHEVA.IS",
+    "IHGZ.IS", "INDES.IS", "INFO.IS", "INGRM.IS",
 ]
+
+WATCHLIST = DEFAULT_BIST100_WATCHLIST
 
 TICKER_NAMES = {
     "THYAO.IS": "THY",
@@ -139,8 +147,8 @@ VOLUME_SPIKE_MULTIPLIER = 1.5
 DATA_PERIOD = "3mo"
 DATA_INTERVAL = "1d"
 
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
+TELEGRAM_BOT_TOKEN = _get_str_env("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = _get_str_env("TELEGRAM_CHAT_ID")
 
 SCAN_INTERVAL_MINUTES = 15
 MARKET_OPEN_HOUR = 10
@@ -148,10 +156,10 @@ MARKET_CLOSE_HOUR = 18
 MARKET_WARMUP_MINUTES = 15
 MARKET_HALF_DAY_HOUR = 13
 
-FLASK_PORT = 5000
-FLASK_DEBUG = True
+FLASK_PORT = _get_int_env("FLASK_PORT", 5000)
+FLASK_DEBUG = _get_bool_env("FLASK_DEBUG", False)
 
-DB_PATH = "bist_signals.db"
+DB_PATH = _get_str_env("DB_PATH", "bist_signals.db")
 
 INITIAL_CAPITAL = 8500.0
 
@@ -173,12 +181,13 @@ SLIPPAGE = 0.001
 
 TELEGRAM_MIN_SCORE = 70
 
-STRONG_BUY_THRESHOLD = 40
-BUY_THRESHOLD = 10
-WEAK_BUY_THRESHOLD = 0
-WEAK_SELL_THRESHOLD = 0
-SELL_THRESHOLD = -10
-STRONG_SELL_THRESHOLD = -40
+# Thresholds tuned to reduce over-signaling while keeping directional symmetry.
+STRONG_BUY_THRESHOLD = 48
+BUY_THRESHOLD = 20
+WEAK_BUY_THRESHOLD = 8
+WEAK_SELL_THRESHOLD = -8
+SELL_THRESHOLD = -20
+STRONG_SELL_THRESHOLD = -48
 
 WALKFORWARD_TRAIN_DAYS = 180
 WALKFORWARD_TEST_DAYS = 30

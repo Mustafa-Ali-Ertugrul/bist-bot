@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import cast
 import logging
 import time
+import requests
 
 import config
 
@@ -16,13 +17,89 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def get_bist100_tickers(force_refresh: bool = False) -> list[str]:
+    if not force_refresh:
+        cached = getattr(config, "_bist100_cache", None)
+        cached_time = getattr(config, "_bist100_cache_time", None)
+        if cached and cached_time and (datetime.now() - cached_time).total_seconds() < 3600:
+            logger.info(f"BIST100 cache hit: {len(cached)} tickers")
+            return cached
+
+    tickers = []
+
+    try:
+        url = "https://www.kaggle.com/api/v1/datasets/download/an Evaluation/d/bist-100-stocks-dataset"
+        response = requests.get(
+            "https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved?formatted=true&lang=tr-TR&region=TR&scrIds=day_gainers&start=0&count=10",
+            timeout=10,
+            headers={"User-Agent": "Mozilla/5.0"}
+        )
+        if response.status_code == 200:
+            import json
+            data = response.json()
+            results = data.get("finance", {}).get("result", [])
+            if results:
+                for item in results[0].get("quotes", []):
+                    symbol = item.get("symbol", "")
+                    if symbol and not symbol.endswith(".IS"):
+                        symbol = symbol + ".IS"
+                    if symbol.endswith(".IS"):
+                        tickers.append(symbol)
+    except Exception as e:
+        logger.warning(f"BIST100 dinamik cekme hatasi: {e}")
+
+    tickers = _clean_ticker_list(tickers)
+
+    if len(tickers) >= 50:
+        config._bist100_cache = tickers
+        config._bist100_cache_time = datetime.now()
+        logger.info(f"BIST100 dinamik yuklendi: {len(tickers)} hisse")
+        return tickers
+
+    logger.info(f"BIST100 dinamik yetersiz ({len(tickers)}), fallback kullaniliyor")
+    fallback = getattr(config, "DEFAULT_BIST100_WATCHLIST", None)
+    if fallback:
+        fallback_clean = _clean_ticker_list(fallback)
+        config._bist100_cache = fallback_clean
+        config._bist100_cache_time = datetime.now()
+        return fallback_clean
+
+    config._bist100_cache = []
+    config._bist100_cache_time = datetime.now()
+    return []
+
+
+def _clean_ticker_list(tickers: list[str]) -> list[str]:
+    seen = set()
+    result = []
+    for t in tickers:
+        t = t.strip()
+        if not t:
+            continue
+        if not t.endswith(".IS"):
+            t = t + ".IS"
+        t = t.upper()
+        if t not in seen:
+            seen.add(t)
+            result.append(t)
+    return result
+
+
 class BISTDataFetcher:
     def __init__(self, watchlist: list[str] | None = None):
-        self.watchlist = watchlist or config.WATCHLIST
+        if watchlist is None:
+            tickers = get_bist100_tickers()
+            if len(tickers) < 90:
+                logger.warning(f"⚠️ Watchlist yetersiz ({len(tickers)}), fallback kullaniliyor")
+                tickers = _clean_ticker_list(getattr(config, "DEFAULT_BIST100_WATCHLIST", []))
+            self.watchlist = tickers
+        else:
+            self.watchlist = _clean_ticker_list(watchlist)
         self._cache: dict[str, pd.DataFrame] = {}
         self._last_fetch: dict[str, datetime] = {}
         self._cache_ttl = timedelta(minutes=5)
         self._max_workers = min(8, max(2, len(self.watchlist)))
+        logger.info(f"BISTDataFetcher baslatildi: {len(self.watchlist)} hisse")
 
     def _get_cached_data(self, ticker: str, force: bool = False) -> pd.DataFrame | None:
         if force:

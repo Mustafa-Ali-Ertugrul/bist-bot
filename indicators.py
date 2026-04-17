@@ -367,21 +367,31 @@ class TechnicalIndicators:
         last = df.iloc[-1]
         prev = df.iloc[-2] if len(df) > 1 else last
         
+        cross_values = {
+            "sma_cross": str(last.get("sma_cross", "NONE")),
+            "macd_cross": str(last.get("macd_cross", "NONE")),
+            "bb_position": str(last.get("bb_position", "MIDDLE")),
+        }
+        for key, val in cross_values.items():
+            if val and isinstance(val, str):
+                val = val.replace("<", "↓").replace(">", "↑")
+                cross_values[key] = val
+
         return {
             "close": round(last.get("close", 0), 2),
             "change_pct": round((last["close"] - prev["close"]) / prev["close"] * 100, 2) if "close" in last.index else 0,
             "volume": int(last.get("volume", 0)),
             "rsi": round(last.get("rsi", 50), 2),
             "rsi_zone": str(last.get("rsi_zone", "NÖTR")),
-            "sma_cross": str(last.get("sma_cross", "NONE")),
+            "sma_cross": cross_values["sma_cross"],
             "ema_cross": str(last.get("ema_cross", "NONE")),
-            "macd_cross": str(last.get("macd_cross", "NONE")),
+            "macd_cross": cross_values["macd_cross"],
             "stoch_cross": str(last.get("stoch_cross", "NONE")),
             "stoch_k": round(last.get("stoch_k", 50), 1),
             "stoch_d": round(last.get("stoch_d", 50), 1),
             "adx": round(last.get("adx", 0), 1),
             "cci": round(last.get("cci", 0), 1),
-            "bb_position": str(last.get("bb_position", "MIDDLE")),
+            "bb_position": cross_values["bb_position"],
             "volume_spike": bool(last.get("volume_spike", False)),
             "volume_ratio": round(last.get("volume_ratio", 1), 2),
             "atr": round(last.get("atr", 0), 2),

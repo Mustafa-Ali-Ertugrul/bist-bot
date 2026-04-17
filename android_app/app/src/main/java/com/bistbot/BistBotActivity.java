@@ -22,7 +22,6 @@ import androidx.appcompat.app.AppCompatActivity;
 public class BistBotActivity extends AppCompatActivity {
 
     private static final String TAG = "BistBotActivity";
-    private static final String BIST_BOT_URL = "https://bist-bot-620752985356.europe-west1.run.app";
 
     private WebView webView;
     private ProgressBar loadingIndicator;
@@ -37,8 +36,9 @@ public class BistBotActivity extends AppCompatActivity {
         loadingIndicator = findViewById(R.id.loadingIndicator);
         configureWebView();
 
-        Log.d(TAG, "Startup URL: " + BIST_BOT_URL);
-        webView.loadUrl(BIST_BOT_URL);
+        String startupUrl = Constants.BIST_BOT_URL;
+        Log.d(TAG, "Startup URL: " + startupUrl);
+        webView.loadUrl(startupUrl);
     }
 
     private void configureWebView() {
@@ -67,19 +67,24 @@ public class BistBotActivity extends AppCompatActivity {
     }
 
     private boolean isInternalUrl(String url) {
-        return url != null && url.startsWith(BIST_BOT_URL);
+        return url != null && url.startsWith(Constants.BIST_BOT_URL);
     }
 
     private class AppWebViewClient extends WebViewClient {
         @Override
         public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
             String url = request.getUrl().toString();
+            String safeUrl = Constants.guardWest1Redirect(url);
 
-            if (isInternalUrl(url)) {
+            if (Constants.isWest1Url(url)) {
+                Log.w(TAG, "West1 redirect blocked: " + url + " -> " + safeUrl);
+            }
+
+            if (isInternalUrl(safeUrl)) {
                 return false;
             }
 
-            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(safeUrl)));
             return true;
         }
 
@@ -89,6 +94,7 @@ public class BistBotActivity extends AppCompatActivity {
             if (loadingIndicator != null) {
                 loadingIndicator.setVisibility(android.view.View.VISIBLE);
             }
+            Log.d(TAG, "Page started: " + url);
         }
 
         @Override
@@ -97,7 +103,7 @@ public class BistBotActivity extends AppCompatActivity {
             if (loadingIndicator != null) {
                 loadingIndicator.setVisibility(android.view.View.GONE);
             }
-            Log.d(TAG, "Loaded: " + url);
+            Log.d(TAG, "Page finished: " + url);
         }
 
         @Override

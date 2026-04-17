@@ -15,5 +15,14 @@ __pycache__/
 .venv
 venv/
 
+# SQLite and log files
+*.db
+*.sqlite
+*.sqlite3
+*.log
+bot.log
+bist_signals.db
+NUL
+
 # DS_Store
 .DS_Store

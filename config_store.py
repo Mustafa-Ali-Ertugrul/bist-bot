@@ -54,6 +54,11 @@ def load_settings() -> dict:
                 for key, value in defaults.items():
                     if key not in data[section]:
                         data[section][key] = value
+
+        if "telegram" in data:
+            data["telegram"]["bot_token"] = ""
+            data["telegram"]["chat_id"] = ""
+
         return data
     except Exception as e:
         logger.warning(f"Settings load failed: {e}, using defaults")
@@ -62,6 +67,11 @@ def load_settings() -> dict:
 
 def save_settings(settings: dict) -> bool:
     try:
+        settings = json.loads(json.dumps(settings))
+        telegram = settings.setdefault("telegram", {})
+        telegram["bot_token"] = ""
+        telegram["chat_id"] = ""
+
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             json.dump(settings, f, indent=2, ensure_ascii=False)
         return True
