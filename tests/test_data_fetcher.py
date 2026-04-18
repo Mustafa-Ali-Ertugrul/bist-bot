@@ -54,8 +54,12 @@ def test_rate_limiter_waits_when_called_too_soon(monkeypatch):
 
 def test_clean_ticker_list_normalizes_and_deduplicates():
     """Ticker normalization should append .IS and remove duplicates."""
-    from data_fetcher import _clean_ticker_list
+    from data_fetcher import _clean_ticker_list, normalize_ticker, validate_data
+    import pandas as pd
 
     raw = ["thyao", "THYAO.IS", " asels ", "ASELS.IS", ""]
 
     assert _clean_ticker_list(raw) == ["THYAO.IS", "ASELS.IS"]
+    assert normalize_ticker("garan") == "GARAN.IS"
+    assert normalize_ticker("THYAO.IS") == "THYAO.IS"
+    assert validate_data(pd.DataFrame()) is False

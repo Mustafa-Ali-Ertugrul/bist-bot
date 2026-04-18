@@ -35,6 +35,17 @@ class SignalsRepository:
     def save_signal(self, signal: Signal) -> None:
         created_at = signal.timestamp.isoformat()
         with self.manager.session_scope() as session:
+            existing = session.scalar(
+                select(SignalRecord)
+                .where(
+                    SignalRecord.ticker == signal.ticker,
+                    SignalRecord.signal_type == signal.signal_type.value,
+                    SignalRecord.timestamp == created_at,
+                )
+                .limit(1)
+            )
+            if existing is not None:
+                return
             session.add(
                 SignalRecord(
                     timestamp=created_at,
@@ -73,11 +84,13 @@ class SignalsRepository:
             )
             return self._signal_to_dict(row) if row else None
 
-    def signal_exists(self, ticker: str, signal_type: Optional[str] = None) -> bool:
+    def signal_exists(self, ticker: str, signal_type: Optional[str] = None, timestamp: Optional[str] = None) -> bool:
         with self.manager.session_scope() as session:
             statement = select(func.count()).select_from(SignalRecord).where(SignalRecord.ticker == ticker)
             if signal_type:
                 statement = statement.where(SignalRecord.signal_type == signal_type)
+            if timestamp:
+                statement = statement.where(SignalRecord.timestamp == timestamp)
             return bool(session.scalar(statement))
 
     def save_scan_log(self, total: int, generated: int, buys: int, sells: int) -> None:
@@ -165,6 +178,17 @@ def save_signal(
 
     created_at = datetime.utcnow().isoformat(timespec="seconds")
     with _DEFAULT_REPOSITORY.manager.session_scope() as session:
+        existing = session.scalar(
+            select(SignalRecord)
+            .where(
+                SignalRecord.ticker == ticker,
+                SignalRecord.signal_type == signal_type,
+                SignalRecord.timestamp == created_at,
+            )
+            .limit(1)
+        )
+        if existing is not None:
+            return
         session.add(
             SignalRecord(
                 ticker=ticker,

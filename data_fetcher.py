@@ -13,6 +13,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from config import settings
+from data.bist100 import BIST100_TICKERS
 
 logging.basicConfig(
     level=logging.INFO,
@@ -207,7 +208,7 @@ def get_bist100_tickers(force_refresh: bool = False) -> list[str]:
         return tickers
 
     logger.info(f"Demo/watchlist dynamic yetersiz ({len(tickers)}), fallback kullaniliyor")
-    fallback = settings.DEFAULT_BIST100_WATCHLIST
+    fallback = BIST100_TICKERS
     if fallback:
         fallback_clean = _clean_ticker_list(fallback)
         _BIST100_CACHE = fallback_clean
@@ -219,6 +220,23 @@ def get_bist100_tickers(force_refresh: bool = False) -> list[str]:
     return []
 
 
+def normalize_ticker(ticker: str) -> str:
+    """Normalize a single ticker into uppercase BIST format.
+
+    Args:
+        ticker: Raw symbol such as ``thyao`` or ``THYAO.IS``.
+
+    Returns:
+        Upper-cased ticker with ``.IS`` suffix.
+    """
+    normalized = ticker.strip().upper()
+    if not normalized:
+        return ""
+    if not normalized.endswith(".IS"):
+        normalized = normalized + ".IS"
+    return normalized
+
+
 def _clean_ticker_list(tickers: list[str]) -> list[str]:
     """Normalize ticker symbols and remove duplicates.
 
@@ -226,21 +244,75 @@ def _clean_ticker_list(tickers: list[str]) -> list[str]:
         tickers: Raw ticker list.
 
     Returns:
-        Upper-cased ticker list with ``.IS`` suffixes.
+        Deduplicated normalized ticker list.
     """
     seen = set()
     result = []
-    for t in tickers:
-        t = t.strip()
-        if not t:
+    for raw_ticker in tickers:
+        ticker = normalize_ticker(raw_ticker)
+        if not ticker or ticker in seen:
             continue
-        if not t.endswith(".IS"):
-            t = t + ".IS"
-        t = t.upper()
-        if t not in seen:
-            seen.add(t)
-            result.append(t)
+        seen.add(ticker)
+        result.append(ticker)
     return result
+
+
+def validate_data(df: pd.DataFrame | None, min_rows: int = 5) -> bool:
+    """Validate downloaded OHLCV data before normalization.
+
+    Args:
+        df: Raw dataframe to validate.
+        min_rows: Minimum acceptable row count.
+
+    Returns:
+        ``True`` when the dataframe is usable, otherwise ``False``.
+    """
+    if df is None or df.empty:
+        return False
+    if len(df) < min_rows:
+        return False
+    if df.isnull().all(axis=1).mean() > 0.20:
+        return False
+    return True
+
+
+def fetch_ohlcv(ticker: str, period: str, interval: str) -> pd.DataFrame | None:
+    """Fetch raw OHLCV data from yfinance.
+
+    Args:
+        ticker: Normalized ticker symbol.
+        period: Lookback period.
+        interval: Candle interval.
+
+    Returns:
+        Raw dataframe from yfinance or ``None`` when unavailable.
+    """
+    _rate_limiter.wait_if_needed("yahoo.finance")
+    stock = yf.Ticker(ticker)
+    return stock.history(period=period, interval=interval)
+
+
+def fetch_with_fallback(ticker: str, period: str, interval: str) -> pd.DataFrame | None:
+    """Fetch data safely, logging failures and returning ``None`` on error.
+
+    Args:
+        ticker: Raw or normalized ticker symbol.
+        period: Lookback period.
+        interval: Candle interval.
+
+    Returns:
+        Raw dataframe when available, otherwise ``None``.
+    """
+    normalized_ticker = normalize_ticker(ticker)
+    try:
+        df = fetch_ohlcv(normalized_ticker, period=period, interval=interval)
+        if not validate_data(df):
+            logger.warning("⚠️ %s icin bos veya yetersiz veri dondu", normalized_ticker)
+            return None
+        return df
+    except Exception as exc:
+        logger.error("❌ %s veri cekilemedi: %s", normalized_ticker, exc)
+        return None
 
 
 class BISTDataFetcher:
@@ -265,7 +337,7 @@ class BISTDataFetcher:
             tickers = get_bist100_tickers()
             if len(tickers) < 90:
                 logger.warning(f"⚠️ Watchlist yetersiz ({len(tickers)}), fallback kullaniliyor")
-                tickers = _clean_ticker_list(getattr(settings, "DEFAULT_BIST100_WATCHLIST", []))
+                tickers = _clean_ticker_list(BIST100_TICKERS)
             self.watchlist = tickers
         else:
             self.watchlist = _clean_ticker_list(watchlist)
@@ -381,20 +453,18 @@ class BISTDataFetcher:
             return cached
 
         try:
-            logger.info(f"📥 {ticker} verisi çekiliyor...")
+            normalized_ticker = normalize_ticker(ticker)
+            logger.info(f"📥 {normalized_ticker} verisi çekiliyor...")
 
-            _rate_limiter.wait_if_needed("yahoo.finance")
-            stock = yf.Ticker(ticker)
-            df = stock.history(period=period, interval=interval)
-
-            df = self._normalize_history(ticker, df)
+            raw_df = fetch_with_fallback(normalized_ticker, period=period, interval=interval)
+            df = self._normalize_history(normalized_ticker, raw_df)
             if df is None:
                 return None
 
-            self._store_cache(ticker, period, interval, df)
+            self._store_cache(normalized_ticker, period, interval, df)
 
             logger.info(
-                f"  ✅ {ticker}: {len(df)} mum, "
+                f"  ✅ {normalized_ticker}: {len(df)} mum, "
                 f"Son kapanış: ₺{float(df['close'].iloc[-1]):.2f}"
             )
             return df

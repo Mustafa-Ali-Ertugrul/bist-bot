@@ -51,6 +51,8 @@ class RiskManager:
         fixed_stop_pct: float = 5.0,
         fixed_target_pct: float = 8.0,
     ):
+        if capital is not None and capital <= 0:
+            raise ValueError("capital must be greater than zero")
         self.capital = capital if capital is not None else getattr(settings, "INITIAL_CAPITAL", 8500.0)
         self.max_risk_pct = max_risk_per_trade_pct
         self.atr_stop_mult = atr_stop_multiplier

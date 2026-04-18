@@ -1,4 +1,4 @@
-"""Strategy threshold tests."""
+"""Strategy threshold and signal tests."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ if ROOT_DIR not in sys.path:
 
 from config import settings
 import pandas as pd
+import pytest
 from strategy import StrategyEngine
 from strategy import TrendBias
 
@@ -127,6 +128,33 @@ def build_signal_frame() -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+@pytest.fixture
+def bullish_frame() -> pd.DataFrame:
+    return build_signal_frame()
+
+
+@pytest.fixture
+def bearish_frame() -> pd.DataFrame:
+    df = build_signal_frame()
+    df["rsi"] = 78.0
+    df["stoch_k"] = 88.0
+    df["stoch_d"] = 91.0
+    df["stoch_cross"] = "BEARISH"
+    df["cci"] = 120.0
+    df["sma_cross"] = "DEATH_CROSS"
+    df["ema_cross"] = "BEARISH"
+    df["macd_cross"] = "BEARISH"
+    df["macd_histogram"] = -1.0
+    df["macd_hist_increasing"] = False
+    df["di_cross"] = "BEARISH"
+    df["bb_position"] = "ABOVE_UPPER"
+    df["price_volume_confirm"] = False
+    df["obv_trend"] = "DOWN"
+    df["plus_di"] = 12.0
+    df["minus_di"] = 32.0
+    return df
+
+
 def test_engine_thresholds_match_config():
     engine = StrategyEngine()
 
@@ -189,3 +217,38 @@ def test_multi_timeframe_long_signal_passes_with_daily_long_confluence():
 
     assert signal is not None
     assert any("MTF confluence" in reason for reason in signal.reasons)
+
+
+def test_rsi_low_and_macd_bullish_returns_buy_signal(bullish_frame):
+    engine = BiasControlledStrategyEngine(TrendBias.LONG)
+
+    signal = engine.analyze("TEST.IS", {"trend": bullish_frame, "trigger": bullish_frame})
+
+    assert signal is not None
+    assert signal.signal_type.value in {"🟢 AL", "💰 GÜÇLÜ AL"}
+
+
+def test_rsi_high_and_macd_bearish_returns_sell_signal(bearish_frame):
+    engine = BiasControlledStrategyEngine(TrendBias.SHORT)
+
+    signal = engine.analyze("TEST.IS", {"trend": bearish_frame, "trigger": bearish_frame})
+
+    assert signal is not None
+    assert signal.signal_type.value in {"🔴 SAT", "🚨 GÜÇLÜ SAT"}
+
+
+def test_empty_dataframe_does_not_crash():
+    engine = StrategyEngine()
+
+    signal = engine.analyze("TEST.IS", pd.DataFrame())
+
+    assert signal is None
+
+
+def test_score_stays_within_expected_bounds(bullish_frame):
+    engine = BiasControlledStrategyEngine(TrendBias.LONG)
+
+    signal = engine.analyze("TEST.IS", {"trend": bullish_frame, "trigger": bullish_frame})
+
+    assert signal is not None
+    assert -100.0 <= signal.score <= 100.0

@@ -29,5 +29,26 @@ NUL
 
 # Testing
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 .coverage
 htmlcov/
+
+# Streamlit secrets
+.streamlit/secrets.toml
+
+# OS / editor
+Thumbs.db
+.vscode/
+.idea/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Model and temp files
+models/*.pkl
+tmp/
+cache/
+test.txt

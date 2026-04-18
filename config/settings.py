@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 
+from data.bist100 import BIST100_TICKERS
+
 try:
     from dotenv import load_dotenv
 
@@ -50,35 +52,7 @@ def _get_str_env(name: str, default: str = "") -> str:
     return value.strip()
 
 
-DEFAULT_BIST100_WATCHLIST = [
-    "THYAO.IS", "ASELS.IS", "SASA.IS", "KCHOL.IS", "EREGL.IS",
-    "BIMAS.IS", "TUPRS.IS", "SAHOL.IS", "GARAN.IS", "AKBNK.IS",
-    "PGSUS.IS", "SISE.IS", "TAVHL.IS", "TOASO.IS", "FROTO.IS",
-    "PETKM.IS", "KRDMD.IS", "HEKTS.IS", "AYGAZ.IS", "ISCTR.IS",
-    "YKBNK.IS", "HALKB.IS", "VAKBN.IS", "AKSA.IS", "ARCLK.IS",
-    "CCOLA.IS", "CIMSA.IS", "CLEBI.IS", "ENJSA.IS", "ERBOS.IS",
-    "FENIS.IS", "FMIZP.IS", "FORMT.IS", "GENTS.IS", "GLYHO.IS",
-    "IPEKE.IS", "IZMDC.IS", "KARSN.IS", "KAYSE.IS", "KONTR.IS",
-    "KORFM.IS", "LKMNH.IS", "MAKIM.IS", "MGROS.IS", "MRGYO.IS",
-    "ODAS.IS", "PNLSN.IS", "PSDTC.IS", "SEKFK.IS", "SEKFS.IS",
-    "SOKM.IS", "AEFES.IS", "AFYON.IS", "AKSEN.IS", "ALARK.IS",
-    "ALKIM.IS", "ALTNY.IS", "ANACM.IS", "ARENA.IS", "ATAGY.IS",
-    "ATATP.IS", "AVOD.IS", "AYDEM.IS", "BAGFS.IS", "BASGZ.IS",
-    "BAYRK.IS", "BLCOM.IS", "BFRYS.IS", "BKENP.IS", "BKSST.IS",
-    "BOBBR.IS", "BOMSN.IS", "BRISA.IS", "BRSAN.IS", "BRYAT.IS",
-    "BSOKE.IS", "BTCIM.IS", "CANTE.IS", "CEMAS.IS", "CEMTS.IS",
-    "CLDNM.IS", "CMBT.IS", "COSKUN.IS", "CRDFA.IS", "CUSAN.IS",
-    "DAKOL.IS", "DENGE.IS", "DERIM.IS", "DESA.IS", "DEVA.IS",
-    "DGKLB.IS", "DGGYO.IS", "DINBNK.IS", "DKRNK.IS", "DOAS.IS",
-    "DOCO.IS", "DOHOL.IS", "ECZYO.IS", "EENFA.IS", "EGGUB.IS",
-    "EKGYO.IS", "ELITE.IS", "EMKEL.IS", "ENKAI.IS", "ESCOM.IS",
-    "EUPRO.IS", "EUREN.IS", "FADE.IS", "FENER.IS", "FLAP.IS",
-    "FONET.IS", "FRIGO.IS", "GEDIK.IS", "GENIL.IS", "GESAN.IS",
-    "GIPTA.IS", "GOLTS.IS", "GOODY.IS", "GOZDE.IS", "GRTHO.IS",
-    "GSDHO.IS", "GUBRF.IS", "HASAN.IS", "HDFGS.IS", "HURGZ.IS",
-    "HUSEIN.IS", "ICBCT.IS", "ICTURKEY.IS", "IDGIS.IS", "IHEVA.IS",
-    "IHGZ.IS", "INDES.IS", "INFO.IS", "INGRM.IS",
-]
+DEFAULT_BIST100_WATCHLIST = BIST100_TICKERS
 
 TICKER_NAMES = {
     "THYAO.IS": "THY",

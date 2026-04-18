@@ -6,6 +6,7 @@ import os
 import sys
 
 import pandas as pd
+import pytest
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:
@@ -70,3 +71,24 @@ def test_correlation_cluster_can_block_new_position():
 
     assert levels.blocked_by_correlation is True
     assert levels.position_size == 0
+
+
+def test_position_size_is_never_negative():
+    manager = RiskManager(capital=10000)
+    levels = manager.calculate(build_frame(1.0, atr=2.0))
+
+    assert levels.position_size >= 0
+
+
+def test_stop_loss_is_below_entry_price():
+    manager = RiskManager(capital=10000)
+    df = build_frame(1.0, atr=2.0)
+    entry_price = float(df["close"].iloc[-1])
+    levels = manager.calculate(df)
+
+    assert levels.final_stop < entry_price
+
+
+def test_zero_capital_raises_error():
+    with pytest.raises(ValueError):
+        RiskManager(capital=0)
