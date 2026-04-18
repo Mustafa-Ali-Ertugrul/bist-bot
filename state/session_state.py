@@ -5,6 +5,7 @@ import uuid
 import streamlit as st
 
 from config import settings
+from config.settings import settings as global_settings
 import config_store
 from dependencies import build_app_container
 
@@ -44,7 +45,8 @@ def init_session_state(container=None) -> None:
 
     stored = config_store.load_settings()
     ind = stored.get("indicator", {})
-    defaults_ind = config_store.DEFAULT_SETTINGS["indicator"]
+    from config.settings import DEFAULT_SETTINGS
+    defaults_ind = DEFAULT_SETTINGS["indicator"]
     st.session_state["ind_rsi_period"] = ind.get("rsi_period", defaults_ind["rsi_period"])
     st.session_state["ind_rsi_oversold"] = ind.get("rsi_oversold", defaults_ind["rsi_oversold"])
     st.session_state["ind_rsi_overbought"] = ind.get("rsi_overbought", defaults_ind["rsi_overbought"])
@@ -60,7 +62,7 @@ def init_session_state(container=None) -> None:
     st.session_state["ind_adx_threshold"] = ind.get("adx_threshold", defaults_ind["adx_threshold"])
 
     tg = stored.get("telegram", {})
-    tg_defaults = config_store.DEFAULT_SETTINGS["telegram"]
+    tg_defaults = DEFAULT_SETTINGS["telegram"]
     st.session_state["tg_token_input"] = settings.TELEGRAM_BOT_TOKEN or tg_defaults["bot_token"]
     st.session_state["tg_chat_input"] = settings.TELEGRAM_CHAT_ID or tg_defaults["chat_id"]
     st.session_state["notify_min_score"] = tg.get("notify_min_score", tg_defaults["notify_min_score"])
@@ -71,7 +73,7 @@ def init_session_state(container=None) -> None:
     )
 
     scan = stored.get("scan", {})
-    scan_defaults = config_store.DEFAULT_SETTINGS["scan"]
+    scan_defaults = DEFAULT_SETTINGS["scan"]
     st.session_state["auto_refresh"] = scan.get("auto_refresh", scan_defaults["auto_refresh"])
     st.session_state["refresh_interval"] = scan.get("refresh_interval", scan_defaults["refresh_interval"])
     st.session_state["min_score_filter"] = scan.get("min_score_filter", scan_defaults["min_score_filter"])

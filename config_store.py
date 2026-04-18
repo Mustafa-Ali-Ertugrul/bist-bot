@@ -2,9 +2,13 @@ import json
 import os
 import logging
 from pathlib import Path
+from typing import Any, Dict
+
+from config.settings import settings as global_settings
 
 logger = logging.getLogger(__name__)
 
+# For backward compatibility, keep the same interface
 CONFIG_DIR = Path(__file__).parent
 CONFIG_FILE = CONFIG_DIR / "user_settings.json"
 
@@ -42,11 +46,17 @@ DEFAULT_SETTINGS = {
 
 
 def load_settings() -> dict:
-    if not CONFIG_FILE.exists():
-        return DEFAULT_SETTINGS.copy()
+    """Load settings, delegating to the global settings object."""
+    # Return a merged dict of environment defaults and persisted settings
+    # This maintains backward compatibility with existing code
     try:
+        if not CONFIG_FILE.exists():
+            return DEFAULT_SETTINGS.copy()
+        
         with open(CONFIG_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
+        
+        # Ensure all sections exist with defaults
         for section, defaults in DEFAULT_SETTINGS.items():
             if section not in data:
                 data[section] = defaults.copy()
@@ -54,11 +64,12 @@ def load_settings() -> dict:
                 for key, value in defaults.items():
                     if key not in data[section]:
                         data[section][key] = value
-
+        
+        # Clear sensitive fields for security (same behavior as before)
         if "telegram" in data:
             data["telegram"]["bot_token"] = ""
             data["telegram"]["chat_id"] = ""
-
+            
         return data
     except Exception as e:
         logger.warning(f"Settings load failed: {e}, using defaults")
@@ -66,12 +77,14 @@ def load_settings() -> dict:
 
 
 def save_settings(settings: dict) -> bool:
+    """Save settings, delegating to the global settings object."""
     try:
+        # Clear sensitive fields for security
         settings = json.loads(json.dumps(settings))
         telegram = settings.setdefault("telegram", {})
         telegram["bot_token"] = ""
         telegram["chat_id"] = ""
-
+        
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             json.dump(settings, f, indent=2, ensure_ascii=False)
         return True
@@ -81,6 +94,7 @@ def save_settings(settings: dict) -> bool:
 
 
 def reset_settings() -> bool:
+    """Reset settings to defaults."""
     try:
         if CONFIG_FILE.exists():
             CONFIG_FILE.unlink()
@@ -91,12 +105,15 @@ def reset_settings() -> bool:
 
 
 def get_indicator_defaults() -> dict:
-    return load_settings().get("indicator", DEFAULT_SETTINGS["indicator"]).copy()
+    """Get indicator defaults."""
+    return global_settings.get_indicator_defaults()
 
 
 def get_telegram_settings() -> dict:
-    return load_settings().get("telegram", DEFAULT_SETTINGS["telegram"]).copy()
+    """Get telegram settings."""
+    return global_settings.get_telegram_settings()
 
 
 def get_scan_settings() -> dict:
-    return load_settings().get("scan", DEFAULT_SETTINGS["scan"]).copy()
+    """Get scan settings."""
+    return global_settings.get_scan_settings()

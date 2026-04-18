@@ -72,8 +72,8 @@ def detect_regime(df: pd.DataFrame, lookback: int = 20) -> MarketRegime:
 class StrategyEngine:
     STRONG_BUY_THRESHOLD = getattr(settings, "STRONG_BUY_THRESHOLD", 40)
     BUY_THRESHOLD = getattr(settings, "BUY_THRESHOLD", 10)
-    WEAK_BUY_THRESHOLD = getattr(settings, "WEAK_BUY_THRESHOLD", 0)
-    WEAK_SELL_THRESHOLD = getattr(settings, "WEAK_SELL_THRESHOLD", 0)
+    WEAK_BUY_THRESHOLD = getattr(settings, "WEAK_BUY_THRESHOLD", 8)
+    WEAK_SELL_THRESHOLD = getattr(settings, "WEAK_SELL_THRESHOLD", -8)
     SELL_THRESHOLD = getattr(settings, "SELL_THRESHOLD", -10)
     STRONG_SELL_THRESHOLD = getattr(settings, "STRONG_SELL_THRESHOLD", -40)
     MIN_REGIME_PERSISTENCE = 2
@@ -92,8 +92,8 @@ class StrategyEngine:
         )
         self.STRONG_BUY_THRESHOLD = getattr(settings, "STRONG_BUY_THRESHOLD", 40)
         self.BUY_THRESHOLD = getattr(settings, "BUY_THRESHOLD", 10)
-        self.WEAK_BUY_THRESHOLD = getattr(settings, "WEAK_BUY_THRESHOLD", 0)
-        self.WEAK_SELL_THRESHOLD = getattr(settings, "WEAK_SELL_THRESHOLD", 0)
+        self.WEAK_BUY_THRESHOLD = getattr(settings, "WEAK_BUY_THRESHOLD", 8)
+        self.WEAK_SELL_THRESHOLD = getattr(settings, "WEAK_SELL_THRESHOLD", -8)
         self.SELL_THRESHOLD = getattr(settings, "SELL_THRESHOLD", -10)
         self.STRONG_SELL_THRESHOLD = getattr(settings, "STRONG_SELL_THRESHOLD", -40)
 
@@ -187,69 +187,9 @@ class StrategyEngine:
         momentum = (float(last["close"]) - sma_20) / sma_20 * 100
         return abs(momentum) >= threshold
 
-    def analyze(
-        self,
-        ticker: str,
-        df: pd.DataFrame | dict[str, pd.DataFrame],
-        enforce_sector_limit: bool = False,
-    ) -> Optional[Signal]:
-        """Score a ticker and build a signal when thresholds are met.
-
-        Args:
-            ticker: Stock symbol.
-            df: Historical price dataframe.
-            enforce_sector_limit: Apply sector concentration guard when ``True``.
-
-        Returns:
-            A ``Signal`` instance when a non-hold classification is produced,
-            otherwise ``None``.
-        """
-        trend_df, trigger_df, multi_timeframe = self._extract_timeframes(df)
-
-        if trigger_df is None or len(trigger_df) < 30:
-            logger.warning(f"  {ticker}: Yetersiz veri ({len(trigger_df) if trigger_df is not None else 0} mum)")
-            return None
-
-        df = self.indicators.add_all(trigger_df.copy())
-        trend_bias = self._get_trend_bias(trend_df) if multi_timeframe and getattr(settings, "MTF_ENABLED", True) else TrendBias.NEUTRAL
-
-        last = df.iloc[-1]
-        prev = df.iloc[-2]
+    def _score_momentum(self, last, prev) -> tuple[float, list[str]]:
         score = 0.0
-        reasons = []
-
-        adx = last.get("adx")
-        if pd.notna(adx):
-            if adx < getattr(settings, "ADX_THRESHOLD", 20):
-                logger.debug(f"  {ticker}: ADX düşük ({adx:.1f}) - Trend yok, sinyal üretme")
-                return None
-
-        regime = detect_regime(df)
-        if regime == MarketRegime.SIDEWAYS:
-            reasons.append("Piyasa rejimi yatay - skor etkisi azaltıldı")
-
-        ema_long = last.get(f"ema_{settings.EMA_LONG}")
-        if pd.notna(ema_long):
-            price = last["close"]
-            above_ema = price > ema_long
-            last_above_ema = prev["close"] > prev.get(f"ema_{settings.EMA_LONG}", ema_long)
-            if above_ema and not last_above_ema:
-                reasons.append(f"Fiyat EMA{settings.EMA_LONG}'i kesti (yukarı)")
-            elif above_ema:
-                if adx >= getattr(settings, "ADX_THRESHOLD", 20):
-                    score += 10
-                    reasons.append(f"yükseliş trendi (EMA{settings.EMA_LONG} üzerinde)")
-            elif not above_ema and last_above_ema:
-                reasons.append(f"Fiyat EMA{settings.EMA_LONG}'i kesti (aşağı)")
-
-        volume_sma_20 = last.get("volume_sma_20")
-        volume = last.get("volume")
-        if pd.notna(volume_sma_20) and pd.notna(volume):
-            vol_ratio = volume / volume_sma_20
-            min_vol_ratio = getattr(settings, "VOLUME_CONFIRM_MULTIPLIER", 1.5)
-            if vol_ratio >= min_vol_ratio:
-                score += 8
-                reasons.append(f"Hacim onayı ({vol_ratio:.1f}x ort)")
+        reasons: list[str] = []
 
         rsi = last.get("rsi")
         if pd.notna(rsi):
@@ -284,20 +224,20 @@ class StrategyEngine:
             elif stoch_cross == "BEARISH":
                 score -= 8
                 reasons.append(f"Stochastic Bearish Cross (K:{stoch_k:.0f}, D:{stoch_d:.0f})")
-            
+
             if stoch_k < 20 and stoch_d < 20:
                 score += 6
                 reasons.append(f"Stochastic aşırı satım bölgesi (K:{stoch_k:.0f})")
             elif stoch_k > 80 and stoch_d > 80:
                 score -= 6
                 reasons.append(f"Stochastic aşırı alım bölgesi (K:{stoch_k:.0f})")
-            
+
             if stoch_k > stoch_d and stoch_k < 50:
                 score += 3
-                reasons.append(f"Stochastic yükseliş eğilimi")
+                reasons.append("Stochastic yükseliş eğilimi")
             elif stoch_k < stoch_d and stoch_k > 50:
                 score -= 3
-                reasons.append(f"Stochastic düşüş eğilimi")
+                reasons.append("Stochastic düşüş eğilimi")
 
         cci = last.get("cci")
         if pd.notna(cci):
@@ -314,6 +254,27 @@ class StrategyEngine:
                 score -= 4
                 reasons.append(f"CCI yüksek ({cci:.0f})")
 
+        return score, reasons
+
+    def _score_trend(self, last, prev) -> tuple[float, list[str]]:
+        score = 0.0
+        reasons: list[str] = []
+
+        adx = last.get("adx")
+        ema_long = last.get(f"ema_{settings.EMA_LONG}")
+        if pd.notna(ema_long):
+            price = last["close"]
+            above_ema = price > ema_long
+            last_above_ema = prev["close"] > prev.get(f"ema_{settings.EMA_LONG}", ema_long)
+            if above_ema and not last_above_ema:
+                reasons.append(f"Fiyat EMA{settings.EMA_LONG}'i kesti (yukarı)")
+            elif above_ema:
+                if adx >= getattr(settings, "ADX_THRESHOLD", 20):
+                    score += 10
+                    reasons.append(f"yükseliş trendi (EMA{settings.EMA_LONG} üzerinde)")
+            elif not above_ema and last_above_ema:
+                reasons.append(f"Fiyat EMA{settings.EMA_LONG}'i kesti (aşağı)")
+
         sma_cross = last.get("sma_cross", "NONE")
         if sma_cross == "GOLDEN_CROSS":
             score += 12
@@ -327,10 +288,10 @@ class StrategyEngine:
             if pd.notna(sma_fast) and pd.notna(sma_slow):
                 if sma_fast > sma_slow:
                     score += 3
-                    reasons.append(f"SMA trend yukarı")
+                    reasons.append("SMA trend yukarı")
                 else:
                     score -= 3
-                    reasons.append(f"SMA trend aşağı")
+                    reasons.append("SMA trend aşağı")
 
         ema_cross = last.get("ema_cross", "NONE")
         if ema_cross == "BULLISH":
@@ -391,6 +352,60 @@ class StrategyEngine:
             score -= 6
             reasons.append("+DI/-DI Bearish Cross")
 
+        return score, reasons
+
+    def _score_volume(self, last) -> tuple[float, list[str]]:
+        score = 0.0
+        reasons: list[str] = []
+
+        volume_sma_20 = last.get("volume_sma_20")
+        volume = last.get("volume")
+        if pd.notna(volume_sma_20) and pd.notna(volume):
+            vol_ratio = volume / volume_sma_20
+            min_vol_ratio = getattr(settings, "VOLUME_CONFIRM_MULTIPLIER", 1.5)
+            if vol_ratio >= min_vol_ratio:
+                score += 8
+                reasons.append(f"Hacim onayı ({vol_ratio:.1f}x ort)")
+
+        vol_spike = last.get("volume_spike", False)
+        vol_ratio = last.get("volume_ratio", 1.0)
+        pv_confirm = last.get("price_volume_confirm", False)
+        vol_trend = last.get("volume_trend", "FLAT")
+
+        if vol_spike:
+            price_change = last["close"] - last.get("_prev_close_for_scoring", last["close"])
+            if price_change > 0:
+                score += 8
+                reasons.append(f"Hacim patlaması + yükseliş ({vol_ratio:.1f}x)")
+            else:
+                score -= 8
+                reasons.append(f"Hacim patlaması + düşüş ({vol_ratio:.1f}x)")
+
+        if pv_confirm:
+            score += 2
+            reasons.append("Fiyat-Hacim uyumu ✓")
+
+        if vol_trend == "INCREASING":
+            score += 2
+            reasons.append("Hacim artıyor 📊")
+        elif vol_trend == "DECREASING":
+            score -= 2
+            reasons.append("Hacim azalıyor 📊")
+
+        obv_trend = last.get("obv_trend", "FLAT")
+        if obv_trend == "UP":
+            score += 4
+            reasons.append("OBV yükseliş trendi → Akış var")
+        elif obv_trend == "DOWN":
+            score -= 4
+            reasons.append("OBV düşüş trendi → Çıkış var")
+
+        return score, reasons
+
+    def _score_structure(self, last) -> tuple[float, list[str]]:
+        score = 0.0
+        reasons: list[str] = []
+
         bb_pos = last.get("bb_position", "MIDDLE")
         bb_pct = last.get("bb_percent")
         bb_squeeze = last.get("bb_squeeze", False)
@@ -408,42 +423,9 @@ class StrategyEngine:
             elif bb_pct > 0.8:
                 score -= 5
                 reasons.append(f"Bollinger %B yüksek ({bb_pct:.2f})")
-        
+
         if bb_squeeze:
             reasons.append("Bollinger Squeeze → Patlama bekleniyor ⚠️")
-
-        vol_spike = last.get("volume_spike", False)
-        vol_ratio = last.get("volume_ratio", 1.0)
-        pv_confirm = last.get("price_volume_confirm", False)
-        vol_trend = last.get("volume_trend", "FLAT")
-
-        if vol_spike:
-            price_change = last["close"] - df.iloc[-2]["close"]
-            if price_change > 0:
-                score += 8
-                reasons.append(f"Hacim patlaması + yükseliş ({vol_ratio:.1f}x)")
-            else:
-                score -= 8
-                reasons.append(f"Hacim patlaması + düşüş ({vol_ratio:.1f}x)")
-
-        if pv_confirm:
-            score += 2
-            reasons.append("Fiyat-Hacim uyumu ✓")
-        
-        if vol_trend == "INCREASING":
-            score += 2
-            reasons.append("Hacim artıyor 📊")
-        elif vol_trend == "DECREASING":
-            score -= 2
-            reasons.append("Hacim azalıyor 📊")
-
-        obv_trend = last.get("obv_trend", "FLAT")
-        if obv_trend == "UP":
-            score += 4
-            reasons.append("OBV yükseliş trendi → Akış var")
-        elif obv_trend == "DOWN":
-            score -= 4
-            reasons.append("OBV düşüş trendi → Çıkış var")
 
         dist_support = last.get("dist_to_support_pct", 50)
         dist_resist = last.get("dist_to_resistance_pct", 50)
@@ -471,6 +453,57 @@ class StrategyEngine:
             score -= 12
             reasons.append("🔥 MACD Bearish Divergence → Güçlü dönüş sinyali")
 
+        return score, reasons
+
+    def analyze(
+        self,
+        ticker: str,
+        df: pd.DataFrame | dict[str, pd.DataFrame],
+        enforce_sector_limit: bool = False,
+    ) -> Optional[Signal]:
+        """Score a ticker and build a signal when thresholds are met.
+
+        Args:
+            ticker: Stock symbol.
+            df: Historical price dataframe.
+            enforce_sector_limit: Apply sector concentration guard when ``True``.
+
+        Returns:
+            A ``Signal`` instance when a non-hold classification is produced,
+            otherwise ``None``.
+        """
+        trend_df, trigger_df, multi_timeframe = self._extract_timeframes(df)
+
+        if trigger_df is None or len(trigger_df) < 30:
+            logger.warning(f"  {ticker}: Yetersiz veri ({len(trigger_df) if trigger_df is not None else 0} mum)")
+            return None
+
+        df = self.indicators.add_all(trigger_df.copy())
+        trend_bias = self._get_trend_bias(trend_df) if multi_timeframe and getattr(settings, "MTF_ENABLED", True) else TrendBias.NEUTRAL
+
+        last = df.iloc[-1].copy()
+        prev = df.iloc[-2]
+        last["_prev_close_for_scoring"] = prev["close"]
+        score = 0.0
+        reasons = []
+
+        adx = last.get("adx")
+        if pd.notna(adx):
+            if adx < getattr(settings, "ADX_THRESHOLD", 20):
+                logger.debug(f"  {ticker}: ADX düşük ({adx:.1f}) - Trend yok, sinyal üretme")
+                return None
+
+        regime = detect_regime(df)
+        if regime == MarketRegime.SIDEWAYS:
+            reasons.append("Piyasa rejimi yatay - skor etkisi azaltıldı")
+
+        s1, r1 = self._score_momentum(last, prev)
+        s2, r2 = self._score_trend(last, prev)
+        s3, r3 = self._score_volume(last)
+        s4, r4 = self._score_structure(last)
+        score = s1 + s2 + s3 + s4
+        reasons = reasons + r1 + r2 + r3 + r4
+
         if regime == MarketRegime.SIDEWAYS:
             score *= 0.6
             if abs(score) < self.BUY_THRESHOLD:
@@ -487,26 +520,27 @@ class StrategyEngine:
         if score == 0:
             return None
 
-        if score >= self.STRONG_BUY_THRESHOLD:
+        if score >= 40:
             signal_type = SignalType.STRONG_BUY
             confidence = "YÜKSEK"
-        elif score >= self.BUY_THRESHOLD:
+        elif score >= 15:
             signal_type = SignalType.BUY
             confidence = "ORTA"
-        elif score > max(0, self.WEAK_BUY_THRESHOLD):
+        elif score >= 8:
             signal_type = SignalType.WEAK_BUY
             confidence = "DÜŞÜK"
-        elif score <= self.STRONG_SELL_THRESHOLD:
+        elif score <= -40:
             signal_type = SignalType.STRONG_SELL
             confidence = "YÜKSEK"
-        elif score <= self.SELL_THRESHOLD:
+        elif score <= -15:
             signal_type = SignalType.SELL
             confidence = "ORTA"
-        elif score < min(0, self.WEAK_SELL_THRESHOLD):
+        elif score <= -8:
             signal_type = SignalType.WEAK_SELL
             confidence = "DÜŞÜK"
-        else:
-            return None
+        else:  # -8 ile 8 arası
+            signal_type = SignalType.HOLD
+            confidence = "—"
 
         if signal_type in {SignalType.STRONG_BUY, SignalType.BUY, SignalType.WEAK_BUY}:
             if enforce_sector_limit and not self.risk_manager.check_sector_limit(ticker):

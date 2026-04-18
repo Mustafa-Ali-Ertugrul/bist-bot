@@ -122,7 +122,9 @@ class BISTBot:
             self.db.save_signal(s)
             
             if getattr(settings, "PAPER_MODE", False):
-                regime = "BULL"
+                from strategy import detect_regime, MarketRegime
+                regime_enum = detect_regime(self.fetcher.fetch_single(s.ticker, period="3mo"))
+                regime = regime_enum.value if regime_enum else "UNKNOWN"
                 self.db.add_paper_trade(
                     ticker=s.ticker,
                     signal_type=s.signal_type.value,
@@ -164,7 +166,7 @@ class BISTBot:
         prices = {}
         for trade in open_trades:
             ticker = trade[1]
-            df = self.paper_trade_fetcher.fetch_single(ticker, period="1d")
+            df = self.fetcher.fetch_single(ticker, period="1d")
             if df is not None:
                 prices[ticker] = float(df["close"].iloc[-1])
         
