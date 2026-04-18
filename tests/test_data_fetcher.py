@@ -6,6 +6,7 @@ import os
 import sys
 
 import pytest
+from dataclasses import replace
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:
@@ -41,7 +42,7 @@ def test_rate_limiter_waits_when_called_too_soon(monkeypatch):
     sleep_calls: list[float] = []
     clock = iter([100.0, 100.0, 101.0, 101.0, 103.0])
 
-    monkeypatch.setattr(data_fetcher.config, "RATE_LIMIT_SECONDS", 2.0, raising=False)
+    monkeypatch.setattr(data_fetcher, "settings", replace(data_fetcher.settings, RATE_LIMIT_SECONDS=2.0))
     monkeypatch.setattr(data_fetcher.time, "time", lambda: next(clock))
     monkeypatch.setattr(data_fetcher.time, "sleep", lambda seconds: sleep_calls.append(seconds))
 

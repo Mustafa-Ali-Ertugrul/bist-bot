@@ -7,7 +7,7 @@ from typing import Any
 
 from flask import Flask, jsonify, render_template, request
 
-import config
+from config import settings
 from contracts import DataFetcherProtocol, SignalRepositoryProtocol, StrategyEngineProtocol
 from dependencies import build_app_container
 from indicators import TechnicalIndicators
@@ -71,10 +71,10 @@ def create_dashboard_app(
 
             runtime_fetcher.clear_cache()
             all_data = runtime_fetcher.fetch_multi_timeframe_all(
-                trend_period=getattr(config, "MTF_TREND_PERIOD", "6mo"),
-                trend_interval=getattr(config, "MTF_TREND_INTERVAL", "1d"),
-                trigger_period=getattr(config, "MTF_TRIGGER_PERIOD", "1mo"),
-                trigger_interval=getattr(config, "MTF_TRIGGER_INTERVAL", "15m"),
+                trend_period=getattr(settings, "MTF_TREND_PERIOD", "6mo"),
+                trend_interval=getattr(settings, "MTF_TREND_INTERVAL", "1d"),
+                trigger_period=getattr(settings, "MTF_TRIGGER_PERIOD", "1mo"),
+                trigger_interval=getattr(settings, "MTF_TRIGGER_INTERVAL", "15m"),
             )
             signals = runtime_engine.scan_all(all_data)
             actionable = runtime_engine.get_actionable_signals(signals)
@@ -94,7 +94,7 @@ def create_dashboard_app(
             results = [
                 {
                     "ticker": signal.ticker,
-                    "name": config.TICKER_NAMES.get(signal.ticker, signal.ticker),
+                    "name": settings.TICKER_NAMES.get(signal.ticker, signal.ticker),
                     "signal": signal.signal_type.value,
                     "score": signal.score,
                     "price": signal.price,
@@ -146,8 +146,8 @@ def create_dashboard_app(
                     "close": _round_value(row.get("close")),
                     "volume": int(float(row.get("volume", 0) or 0)),
                     "rsi": _round_value(row.get("rsi")),
-                    "sma_fast": _round_value(row.get(f"sma_{config.SMA_FAST}")),
-                    "sma_slow": _round_value(row.get(f"sma_{config.SMA_SLOW}")),
+                    "sma_fast": _round_value(row.get(f"sma_{settings.SMA_FAST}")),
+                    "sma_slow": _round_value(row.get(f"sma_{settings.SMA_SLOW}")),
                 }
                 for idx, row in enriched.tail(60).iterrows()
             ]
@@ -156,7 +156,7 @@ def create_dashboard_app(
                 {
                     "status": "ok",
                     "ticker": normalized_ticker,
-                    "name": config.TICKER_NAMES.get(normalized_ticker, normalized_ticker),
+                    "name": settings.TICKER_NAMES.get(normalized_ticker, normalized_ticker),
                     "snapshot": snapshot,
                     "signal": {
                         "type": signal.signal_type.value if signal else "N/A",
@@ -199,6 +199,6 @@ app = create_dashboard_app(
 if __name__ == "__main__":
     app.run(
         host="0.0.0.0",
-        port=config.FLASK_PORT,
-        debug=config.FLASK_DEBUG,
+        port=settings.FLASK_PORT,
+        debug=settings.FLASK_DEBUG,
     )

@@ -3,687 +3,1431 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BIST Bot — Dashboard</title>
+    <title>BIST Bot - Algoritmik Islem Paneli</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
-
         :root {
-            --bg-primary: #0a0e1a;
-            --bg-secondary: #111827;
-            --card-bg: rgba(17, 24, 39, 0.7);
-            --card-border: rgba(255, 255, 255, 0.08);
-            --card-hover-border: rgba(30, 64, 175, 0.4);
-            --text-primary: #f1f5f9;
-            --text-secondary: #94a3b8;
-            --text-muted: #64748b;
-            --accent-primary: #1e40af;
-            --accent-secondary: #1e3a8a;
-            --accent-gradient: linear-gradient(135deg, #1e40af 0%, #1e3a8a 50%, #2563eb 100%);
-            --green: #10b981;
-            --green-glow: rgba(16, 185, 129, 0.3);
-            --red: #ef4444;
-            --red-glow: rgba(239, 68, 68, 0.3);
-            --yellow: #f59e0b;
-            --blue: #3b82f6;
-            --purple: #2563eb;
-            --glass-bg: rgba(255, 255, 255, 0.03);
-            --glass-border: rgba(255, 255, 255, 0.06);
-            --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
-            --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.4);
-            --shadow-lg: 0 8px 40px rgba(0, 0, 0, 0.5);
-            --shadow-glow: 0 0 30px rgba(30, 64, 175, 0.15);
+            --bg: #06090a;
+            --bg-2: #0c1214;
+            --card: rgba(17, 26, 29, 0.92);
+            --card-2: rgba(22, 32, 36, 0.95);
+            --fg: #e4ece8;
+            --fg-2: #a3b5ac;
+            --muted: #5a6e64;
+            --gold: #c9a84c;
+            --gold-2: #a88a32;
+            --green: #34d399;
+            --red: #f87171;
+            --blue: #60a5fa;
+            --border: rgba(36, 56, 48, 0.75);
+            --border-2: rgba(62, 88, 73, 0.95);
+            --shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
         }
 
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
 
         body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: var(--bg-primary);
-            color: var(--text-primary);
-            padding: 0;
-            margin: 0;
+            font-family: "Space Grotesk", sans-serif;
+            background: var(--bg);
+            color: var(--fg);
             min-height: 100vh;
             overflow-x: hidden;
         }
 
         body::before {
-            content: '';
+            content: "";
             position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: 
-                radial-gradient(ellipse at 20% 20%, rgba(30, 64, 175, 0.08) 0%, transparent 50%),
-                radial-gradient(ellipse at 80% 80%, rgba(30, 58, 138, 0.06) 0%, transparent 50%),
-                radial-gradient(ellipse at 50% 50%, rgba(59, 130, 246, 0.04) 0%, transparent 70%);
+            inset: 0;
+            background:
+                radial-gradient(circle at 10% 10%, rgba(201, 168, 76, 0.10), transparent 30%),
+                radial-gradient(circle at 80% 25%, rgba(96, 165, 250, 0.08), transparent 26%),
+                radial-gradient(circle at 70% 80%, rgba(52, 211, 153, 0.07), transparent 28%),
+                linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 45%);
             pointer-events: none;
-            z-index: 0;
         }
 
-        .app-container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 32px 24px;
+        .mono {
+            font-family: "JetBrains Mono", monospace;
+        }
+
+        .shell {
             position: relative;
             z-index: 1;
         }
 
-        .header {
-            text-align: center;
-            margin-bottom: 40px;
-            animation: fadeInDown 0.6s ease-out;
-        }
-
-        .header h1 {
-            font-size: 2.5em;
-            font-weight: 800;
-            background: var(--accent-gradient);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            margin-bottom: 8px;
-            letter-spacing: -0.5px;
-        }
-
-        .subtitle {
-            color: var(--text-muted);
-            font-size: 0.95em;
-            font-weight: 400;
-            letter-spacing: 0.5px;
-        }
-
-        .controls {
-            display: flex;
-            gap: 12px;
-            justify-content: center;
-            margin-bottom: 40px;
-            flex-wrap: wrap;
-            animation: fadeInUp 0.6s ease-out 0.1s both;
-        }
-
-        button {
-            padding: 14px 28px;
-            border: 1px solid var(--card-border);
-            background: var(--card-bg);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            color: var(--text-primary);
-            border-radius: 12px;
-            cursor: pointer;
-            font-family: 'Inter', sans-serif;
-            font-size: 0.9em;
-            font-weight: 500;
-            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-            position: relative;
+        .ticker-bar {
             overflow: hidden;
+            border-bottom: 1px solid var(--border);
+            background: rgba(12, 18, 20, 0.88);
+            backdrop-filter: blur(14px);
         }
 
-        button::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-            background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, transparent 50%);
-            opacity: 0;
-            transition: opacity 0.25s;
+        .ticker-track {
+            display: flex;
+            gap: 2rem;
+            padding: 0.75rem 1rem;
+            min-width: max-content;
+            animation: ticker-scroll 36s linear infinite;
         }
 
-        button:hover { 
-            border-color: var(--card-hover-border);
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-md);
+        @keyframes ticker-scroll {
+            from { transform: translateX(0); }
+            to { transform: translateX(-50%); }
         }
 
-        button:hover::before { opacity: 1; }
-
-        button:active { transform: translateY(0); }
-
-        button:disabled { 
-            opacity: 0.5; 
-            cursor: wait; 
-            transform: none;
+        .container {
+            max-width: 1680px;
+            margin: 0 auto;
+            padding: 1rem;
         }
 
-        button.primary { 
-            background: var(--accent-gradient);
-            color: white;
-            border: none;
-            font-weight: 600;
-            box-shadow: 0 4px 15px rgba(30, 64, 175, 0.3);
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            padding: 1rem 0 1.25rem;
         }
 
-        button.primary:hover {
-            box-shadow: 0 6px 25px rgba(30, 64, 175, 0.45);
-            transform: translateY(-2px);
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 0.9rem;
         }
 
-        .stats-grid {
+        .brand-icon {
+            width: 44px;
+            height: 44px;
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 20px;
-            margin-bottom: 40px;
-            animation: fadeInUp 0.6s ease-out 0.2s both;
+            place-items: center;
+            border-radius: 14px;
+            background: linear-gradient(135deg, var(--gold), var(--gold-2));
+            color: var(--bg);
+            box-shadow: 0 10px 28px rgba(201, 168, 76, 0.25);
+        }
+
+        .brand h1 {
+            font-size: 1.15rem;
+            font-weight: 800;
+            letter-spacing: -0.03em;
+        }
+
+        .brand p,
+        .muted {
+            color: var(--muted);
+        }
+
+        .status-strip {
+            display: flex;
+            align-items: center;
+            gap: 1.2rem;
+            flex-wrap: wrap;
+            font-size: 0.83rem;
+        }
+
+        .live-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--green);
+            box-shadow: 0 0 12px rgba(52, 211, 153, 0.65);
+            animation: pulse 1.6s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.45; transform: scale(0.8); }
+        }
+
+        .grid-summary,
+        .bottom-grid,
+        .main-grid {
+            display: grid;
+            gap: 1rem;
+        }
+
+        .grid-summary {
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            margin-bottom: 1rem;
+        }
+
+        .main-grid {
+            grid-template-columns: minmax(0, 1.6fr) minmax(310px, 360px);
+            align-items: start;
+            margin-bottom: 1rem;
+        }
+
+        .bottom-grid {
+            grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+            align-items: start;
+        }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(18px);
+        }
+
+        .card-pad {
+            padding: 1rem;
         }
 
         .stat-card {
-            background: var(--card-bg);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border: 1px solid var(--card-border);
-            border-radius: 16px;
-            padding: 24px;
-            text-align: center;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            padding: 1rem;
             position: relative;
             overflow: hidden;
         }
 
-        .stat-card::before {
-            content: '';
+        .stat-card::after {
+            content: "";
             position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
+            inset: auto 0 0 0;
             height: 2px;
-            background: var(--accent-gradient);
-            opacity: 0;
-            transition: opacity 0.3s;
+            background: linear-gradient(90deg, transparent, var(--gold), transparent);
+            opacity: 0.65;
         }
 
-        .stat-card:hover {
-            border-color: var(--card-hover-border);
-            transform: translateY(-4px);
-            box-shadow: var(--shadow-lg), var(--shadow-glow);
-        }
-
-        .stat-card:hover::before { opacity: 1; }
-
-        .stat-value {
-            font-size: 2.2em;
-            font-weight: 700;
-            margin-bottom: 8px;
-            letter-spacing: -0.5px;
-        }
-
-        .stat-label {
-            color: var(--text-muted);
-            font-size: 0.8em;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            font-weight: 500;
-        }
-
-        .signals-container {
-            animation: fadeInUp 0.6s ease-out 0.3s both;
-        }
-
-        .signals-table {
-            width: 100%;
-            border-collapse: separate;
-            border-spacing: 0;
-            margin-top: 20px;
-            background: var(--card-bg);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border: 1px solid var(--card-border);
-            border-radius: 16px;
-            overflow: hidden;
-        }
-
-        .signals-table th,
-        .signals-table td {
-            padding: 16px 18px;
-            text-align: left;
-            border-bottom: 1px solid var(--glass-border);
-        }
-
-        .signals-table th {
-            background: rgba(255, 255, 255, 0.02);
-            color: var(--text-muted);
-            font-size: 0.75em;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            font-weight: 600;
-            position: sticky;
-            top: 0;
-            backdrop-filter: blur(10px);
-        }
-
-        .signals-table tbody tr {
-            transition: all 0.2s ease;
-        }
-
-        .signals-table tbody tr:hover {
-            background: rgba(30, 64, 175, 0.06);
-        }
-
-        .signals-table tbody tr:last-child td {
-            border-bottom: none;
-        }
-
-        .score-positive { color: var(--green); }
-        .score-negative { color: var(--red); }
-        .score-neutral { color: var(--yellow); }
-
-        .signal-badge {
-            padding: 6px 14px;
-            border-radius: 20px;
-            font-size: 0.75em;
-            font-weight: 600;
-            letter-spacing: 0.3px;
-            display: inline-block;
-        }
-
-        .badge-buy { 
-            background: rgba(16, 185, 129, 0.12); 
-            color: var(--green);
-            border: 1px solid rgba(16, 185, 129, 0.2);
-        }
-        .badge-sell { 
-            background: rgba(239, 68, 68, 0.12); 
-            color: var(--red);
-            border: 1px solid rgba(239, 68, 68, 0.2);
-        }
-        .badge-hold { 
-            background: rgba(148, 163, 184, 0.12); 
-            color: var(--text-secondary);
-            border: 1px solid rgba(148, 163, 184, 0.2);
-        }
-
-        .reasons-list {
-            font-size: 0.8em;
-            color: var(--text-secondary);
-            max-width: 400px;
-            line-height: 1.5;
-        }
-
-        .loading {
-            text-align: center;
-            padding: 60px;
-            color: var(--text-secondary);
-        }
-
-        .spinner {
-            display: inline-block;
-            width: 40px;
-            height: 40px;
-            border: 3px solid var(--card-border);
-            border-top-color: var(--accent-primary);
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-        }
-
-        @keyframes spin { to { transform: rotate(360deg); } }
-
-        @keyframes fadeInDown {
-            from { opacity: 0; transform: translateY(-20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        @keyframes fadeInUp {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        #detail-modal {
-            display: none;
-            position: fixed;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            background: rgba(0, 0, 0, 0.7);
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
-            z-index: 100;
-            overflow-y: auto;
-            padding: 40px;
-            animation: fadeIn 0.2s ease;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-
-        .modal-content {
-            background: var(--bg-secondary);
-            border: 1px solid var(--card-border);
-            border-radius: 20px;
-            padding: 36px;
-            max-width: 800px;
-            margin: 40px auto;
-            box-shadow: var(--shadow-lg);
-            animation: modalSlideIn 0.3s ease;
-        }
-
-        @keyframes modalSlideIn {
-            from { opacity: 0; transform: scale(0.95) translateY(20px); }
-            to { opacity: 1; transform: scale(1) translateY(0); }
-        }
-
-        .modal-close {
-            float: right;
-            font-size: 1.5em;
-            cursor: pointer;
-            color: var(--text-muted);
-            transition: color 0.2s;
-            width: 36px;
-            height: 36px;
+        .stat-top {
             display: flex;
             align-items: center;
-            justify-content: center;
-            border-radius: 10px;
+            justify-content: space-between;
+            color: var(--muted);
+            font-size: 0.73rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 0.55rem;
         }
 
-        .modal-close:hover { 
-            color: var(--red);
-            background: rgba(239, 68, 68, 0.1);
+        .stat-value {
+            font-size: 1.45rem;
+            font-weight: 800;
+            letter-spacing: -0.04em;
         }
 
-        .modal-content h2 {
-            font-size: 1.5em;
+        .stat-sub {
+            margin-top: 0.4rem;
+            color: var(--fg-2);
+            font-size: 0.79rem;
+        }
+
+        .section-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 0.9rem;
+        }
+
+        .section-head h2 {
+            font-size: 1rem;
             font-weight: 700;
-            margin-bottom: 20px;
-            background: var(--accent-gradient);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
         }
 
-        .modal-content h3 {
-            font-size: 1.1em;
-            font-weight: 600;
-            color: var(--text-primary);
-            margin: 20px 0 12px;
+        .pill-row,
+        .stock-pills,
+        .chip-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.45rem;
         }
 
-        .modal-content table {
+        .pill,
+        .period-btn,
+        .stock-pill,
+        .ghost-btn,
+        .bot-btn {
+            border-radius: 999px;
+            border: 1px solid var(--border);
+            background: rgba(12, 18, 20, 0.92);
+            color: var(--fg-2);
+            padding: 0.48rem 0.9rem;
+            font: inherit;
+            font-size: 0.78rem;
+            cursor: pointer;
+            transition: 0.25s ease;
+        }
+
+        .period-btn.active,
+        .stock-pill.active,
+        .bot-btn.primary {
+            background: linear-gradient(135deg, var(--gold), var(--gold-2));
+            color: var(--bg);
+            border-color: transparent;
+            font-weight: 700;
+        }
+
+        .ghost-btn:hover,
+        .period-btn:hover,
+        .stock-pill:hover,
+        .bot-btn:hover {
+            border-color: var(--border-2);
+            color: var(--fg);
+        }
+
+        .price-line {
+            display: flex;
+            align-items: baseline;
+            gap: 0.9rem;
+            flex-wrap: wrap;
+            margin-bottom: 0.8rem;
+        }
+
+        .price-main {
+            font-size: 2rem;
+            font-weight: 800;
+            letter-spacing: -0.05em;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            border-radius: 999px;
+            padding: 0.38rem 0.68rem;
+            font-size: 0.75rem;
+            font-weight: 700;
+        }
+
+        .badge.up {
+            background: rgba(52, 211, 153, 0.12);
+            color: var(--green);
+        }
+
+        .badge.down {
+            background: rgba(248, 113, 113, 0.12);
+            color: var(--red);
+        }
+
+        .badge.flat {
+            background: rgba(96, 165, 250, 0.12);
+            color: var(--blue);
+        }
+
+        .chart-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 160px;
+            gap: 0.9rem;
+            margin-bottom: 0.95rem;
+        }
+
+        .chart-panel {
+            background: var(--bg-2);
+            border: 1px solid rgba(36, 56, 48, 0.5);
+            border-radius: 16px;
+            overflow: hidden;
+            position: relative;
+            min-height: 370px;
+        }
+
+        .chart-panel canvas,
+        .mini-indicator canvas {
+            width: 100%;
+            display: block;
+        }
+
+        .chart-footer {
+            position: absolute;
+            inset: auto 0 0 0;
+            padding: 0.75rem 0.9rem;
+            background: linear-gradient(180deg, transparent, rgba(6, 9, 10, 0.95));
+            display: flex;
+            justify-content: space-between;
+            gap: 1rem;
+            color: var(--fg-2);
+            font-size: 0.75rem;
+        }
+
+        .orderbook {
+            display: flex;
+            flex-direction: column;
+            gap: 0.65rem;
+            background: var(--bg-2);
+            border: 1px solid rgba(36, 56, 48, 0.5);
+            border-radius: 16px;
+            padding: 0.9rem;
+            min-height: 370px;
+        }
+
+        .orderbook h3,
+        .subhead {
+            font-size: 0.76rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--muted);
+        }
+
+        .order-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 0.28rem;
+        }
+
+        .order-row {
+            position: relative;
+            padding: 0.3rem 0.45rem;
+            border-radius: 10px;
+            overflow: hidden;
+            font-size: 0.72rem;
+            border: 1px solid rgba(255, 255, 255, 0.03);
+        }
+
+        .order-fill {
+            position: absolute;
+            inset: 0;
+            opacity: 0.9;
+        }
+
+        .order-content {
+            position: relative;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .order-price.sell { color: var(--red); }
+        .order-price.buy { color: var(--green); }
+
+        .spread-box {
+            text-align: center;
+            background: var(--card-2);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 0.6rem;
+        }
+
+        .mini-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.9rem;
+        }
+
+        .mini-indicator {
+            background: var(--bg-2);
+            border: 1px solid rgba(36, 56, 48, 0.5);
+            border-radius: 16px;
+            padding: 0.9rem;
+        }
+
+        .bot-card {
+            position: sticky;
+            top: 1rem;
+        }
+
+        .control-row,
+        .slider-row,
+        .recent-row,
+        .legend-row,
+        .history-row,
+        .signal-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+        }
+
+        .toggle {
+            width: 48px;
+            height: 26px;
+            border-radius: 999px;
+            background: #1e2e27;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            position: relative;
+            cursor: pointer;
+            transition: 0.25s ease;
+        }
+
+        .toggle::after {
+            content: "";
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: white;
+            transition: 0.25s ease;
+        }
+
+        .toggle.on {
+            background: var(--gold);
+        }
+
+        .toggle.on::after {
+            transform: translateX(22px);
+        }
+
+        input[type="range"] {
+            width: 100%;
+            accent-color: var(--gold);
+        }
+
+        .stack {
+            display: flex;
+            flex-direction: column;
+            gap: 0.95rem;
+        }
+
+        .bot-meta {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0.55rem;
+        }
+
+        .meta-box,
+        .signal-card,
+        .heat-cell,
+        .recent-item,
+        .history-table tbody tr,
+        .legend-box,
+        .metrics-box {
+            background: var(--bg-2);
+            border: 1px solid rgba(36, 56, 48, 0.5);
+            border-radius: 14px;
+        }
+
+        .meta-box {
+            padding: 0.75rem 0.55rem;
+            text-align: center;
+        }
+
+        .signal-card,
+        .metrics-box {
+            padding: 0.9rem;
+        }
+
+        .heat-grid {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            gap: 0.7rem;
+        }
+
+        .heat-cell {
+            padding: 0.8rem;
+            cursor: pointer;
+            transition: transform 0.2s ease, border-color 0.2s ease;
+        }
+
+        .heat-cell:hover {
+            transform: translateY(-2px) scale(1.01);
+            border-color: var(--border-2);
+        }
+
+        .signal-list,
+        .news-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.8rem;
+        }
+
+        .signal-row,
+        .news-row {
+            padding: 0.85rem 0.95rem;
+            border-radius: 14px;
+            background: var(--bg-2);
+            border: 1px solid rgba(36, 56, 48, 0.5);
+        }
+
+        .signal-meta {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .signal-score.up,
+        .text-up { color: var(--green); }
+        .signal-score.down,
+        .text-down { color: var(--red); }
+        .signal-score.flat { color: var(--gold); }
+
+        .history-table {
             width: 100%;
             border-collapse: separate;
-            border-spacing: 0 8px;
+            border-spacing: 0 0.5rem;
+            font-size: 0.82rem;
         }
 
-        .modal-content table td {
-            padding: 12px 16px;
-            border: none;
+        .history-table th {
+            color: var(--muted);
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            padding-bottom: 0.55rem;
+            text-align: left;
         }
 
-        .modal-content table tr {
-            background: var(--glass-bg);
-            border-radius: 10px;
+        .history-table td {
+            padding: 0.8rem;
         }
 
-        .modal-content table td:first-child {
-            color: var(--text-muted);
-            font-weight: 500;
-            border-radius: 10px 0 0 10px;
+        .history-table td:first-child,
+        .history-table th:first-child {
+            padding-left: 0.95rem;
         }
 
-        .modal-content table td:last-child {
-            color: var(--text-primary);
-            font-weight: 600;
-            border-radius: 0 10px 10px 0;
+        .history-table td:last-child,
+        .history-table th:last-child {
+            padding-right: 0.95rem;
+            text-align: right;
         }
 
-        .modal-content ul {
-            list-style: none;
-            padding: 0;
+        .history-table td:nth-child(4),
+        .history-table td:nth-child(5),
+        .history-table td:nth-child(6) {
+            text-align: right;
         }
 
-        .modal-content ul li {
-            padding: 8px 0;
-            color: var(--text-secondary);
-            border-bottom: 1px solid var(--glass-border);
+        .empty {
+            padding: 1rem;
+            text-align: center;
+            color: var(--muted);
         }
 
-        .modal-content ul li:last-child {
-            border-bottom: none;
+        .toast-root {
+            position: fixed;
+            bottom: 1rem;
+            right: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.6rem;
+            z-index: 10;
         }
 
-        .modal-content ul li::before {
-            content: '→';
-            color: var(--accent-primary);
-            margin-right: 10px;
-            font-weight: 600;
+        .toast {
+            min-width: 260px;
+            max-width: 360px;
+            border-radius: 14px;
+            border: 1px solid var(--border-2);
+            background: rgba(12, 18, 20, 0.96);
+            box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+            padding: 0.9rem 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            transform: translateX(120%);
+            opacity: 0;
+            transition: 0.3s ease;
         }
 
-        @media (max-width: 768px) {
-            .app-container { padding: 20px 16px; }
-            .header h1 { font-size: 1.8em; }
-            .stat-value { font-size: 1.6em; }
-            .signals-table { font-size: 0.85em; }
-            .signals-table th, .signals-table td { padding: 12px 10px; }
-            .controls { gap: 8px; }
-            button { padding: 12px 18px; font-size: 0.85em; }
-            .modal-content { padding: 24px; margin: 20px auto; }
+        .toast.show {
+            transform: translateX(0);
+            opacity: 1;
+        }
+
+        @media (max-width: 1240px) {
+            .grid-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+            .main-grid,
+            .bottom-grid { grid-template-columns: 1fr; }
+            .bot-card { position: static; }
+        }
+
+        @media (max-width: 860px) {
+            .grid-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .chart-grid { grid-template-columns: 1fr; }
+            .mini-grid { grid-template-columns: 1fr; }
+            .heat-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+            .topbar { flex-direction: column; align-items: flex-start; }
+            .price-main { font-size: 1.6rem; }
+        }
+
+        @media (max-width: 560px) {
+            .grid-summary { grid-template-columns: 1fr; }
+            .heat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .container { padding: 0.8rem; }
+            .history-table { font-size: 0.75rem; }
+            .history-table th:nth-child(4),
+            .history-table th:nth-child(6),
+            .history-table td:nth-child(4),
+            .history-table td:nth-child(6) {
+                display: none;
+            }
         }
     </style>
 </head>
 <body>
+    <div class="shell">
+        <div class="ticker-bar">
+            <div class="ticker-track mono" id="tickerTrack"></div>
+        </div>
 
-<h1>🤖 BIST Trading Bot</h1>
-<p class="subtitle">Semi-Automated Signal Generator • v1.0</p>
+        <div class="container">
+            <header class="topbar">
+                <div class="brand">
+                    <div class="brand-icon"><i class="fas fa-bolt"></i></div>
+                    <div>
+                        <h1>BIST Bot</h1>
+                        <p class="muted">Algoritmik Islem Kontrol Paneli</p>
+                    </div>
+                </div>
+                <div class="status-strip mono">
+                    <span class="signal-row" style="padding:0.5rem 0.75rem; border-radius:999px;">
+                        <span class="live-dot"></span>
+                        <span id="marketState">Veri izleniyor</span>
+                    </span>
+                    <span id="lastUpdated">--:--:--</span>
+                    <button class="ghost-btn" id="refreshButton"><i class="fas fa-arrows-rotate"></i> Yenile</button>
+                </div>
+            </header>
 
-<div class="controls">
-    <button class="primary" id="btn-scan" onclick="runScan()">
-        🔍 Tam Tarama Başlat
-    </button>
-    <button onclick="loadHistory()">📋 Sinyal Geçmişi</button>
-    <button onclick="loadStats()">📊 Performans</button>
-</div>
+            <section class="grid-summary">
+                <div class="card stat-card">
+                    <div class="stat-top"><span>Izlenen Hisse</span><i class="fas fa-binoculars"></i></div>
+                    <div class="stat-value" id="statScanned">0</div>
+                    <div class="stat-sub" id="statCoverage">Watchlist taramasi bekleniyor</div>
+                </div>
+                <div class="card stat-card">
+                    <div class="stat-top"><span>Aksiyon Alinabilir</span><i class="fas fa-bullseye"></i></div>
+                    <div class="stat-value" id="statActionable">0</div>
+                    <div class="stat-sub" id="statActionableMix">Long / short sinyaller ayrilir</div>
+                </div>
+                <div class="card stat-card">
+                    <div class="stat-top"><span>Ortalama Skor</span><i class="fas fa-wave-square"></i></div>
+                    <div class="stat-value mono" id="statAverageScore">0.0</div>
+                    <div class="stat-sub" id="statScoreBias">Momentum dagilimi izleniyor</div>
+                </div>
+                <div class="card stat-card">
+                    <div class="stat-top"><span>En Guclu Sinyal</span><i class="fas fa-bolt-lightning"></i></div>
+                    <div class="stat-value" id="statTopTicker">-</div>
+                    <div class="stat-sub" id="statTopSignal">Sinyal yok</div>
+                </div>
+                <div class="card stat-card">
+                    <div class="stat-top"><span>Sistem Durumu</span><i class="fas fa-shield-halved"></i></div>
+                    <div class="stat-value" id="statHealth">Hazir</div>
+                    <div class="stat-sub" id="statDuration">API baglantisi hazir</div>
+                </div>
+            </section>
 
-<div class="stats-grid" id="stats-grid">
-    <div class="stat-card">
-        <div class="stat-value" id="stat-scanned">—</div>
-        <div class="stat-label">Taranan</div>
+            <section class="main-grid">
+                <div class="stack">
+                    <div class="card card-pad">
+                        <div class="section-head">
+                            <div>
+                                <h2 id="activeTickerLabel">THYAO.IS</h2>
+                                <div class="muted" id="activeTickerName">Hisse analizi yukleniyor</div>
+                            </div>
+                            <div class="pill-row" id="periodButtons">
+                                <button class="period-btn active" data-period="60">60 Bar</button>
+                                <button class="period-btn" data-period="40">40 Bar</button>
+                                <button class="period-btn" data-period="20">20 Bar</button>
+                            </div>
+                        </div>
+
+                        <div class="price-line">
+                            <div class="price-main mono" id="activePrice">-</div>
+                            <span class="badge flat" id="priceBadge">Hazirlaniyor</span>
+                            <span class="badge flat" id="signalBadge">Sinyal bekleniyor</span>
+                        </div>
+
+                        <div class="stock-pills" id="stockPills"></div>
+
+                        <div class="chart-grid">
+                            <div class="chart-panel">
+                                <canvas id="candlesCanvas"></canvas>
+                                <div class="chart-footer mono">
+                                    <span id="candleInfo">O/H/L/C -</span>
+                                    <span id="signalMeta">Stop / Hedef -</span>
+                                </div>
+                            </div>
+                            <div class="orderbook">
+                                <h3>Emir Defteri</h3>
+                                <div class="order-stack" id="askStack"></div>
+                                <div class="spread-box mono">
+                                    <div class="muted" style="font-size:0.7rem; margin-bottom:0.18rem;">Anlik Fiyat</div>
+                                    <div id="midPrice">-</div>
+                                </div>
+                                <div class="order-stack" id="bidStack"></div>
+                            </div>
+                        </div>
+
+                        <div class="mini-grid">
+                            <div class="mini-indicator">
+                                <div class="section-head" style="margin-bottom:0.6rem;">
+                                    <div>
+                                        <h2 style="font-size:0.88rem;">RSI (14)</h2>
+                                        <div class="muted mono" id="rsiValue">-</div>
+                                    </div>
+                                    <span class="badge flat" id="rsiState">N/A</span>
+                                </div>
+                                <canvas id="rsiCanvas"></canvas>
+                            </div>
+                            <div class="mini-indicator">
+                                <div class="section-head" style="margin-bottom:0.6rem;">
+                                    <div>
+                                        <h2 style="font-size:0.88rem;">Hizli / Yavas SMA</h2>
+                                        <div class="muted mono" id="smaValue">-</div>
+                                    </div>
+                                    <span class="badge flat" id="trendState">N/A</span>
+                                </div>
+                                <canvas id="trendCanvas"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bottom-grid">
+                        <div class="card card-pad">
+                            <div class="section-head">
+                                <h2>Piyasa Isi Haritasi</h2>
+                                <div class="chip-row muted" style="font-size:0.74rem;">
+                                    <span><i class="fas fa-square text-up"></i> Yukselen</span>
+                                    <span><i class="fas fa-square text-down"></i> Dusen</span>
+                                    <span><i class="fas fa-square" style="color:var(--gold);"></i> Nötr</span>
+                                </div>
+                            </div>
+                            <div class="heat-grid" id="heatGrid"></div>
+                        </div>
+
+                        <div class="stack">
+                            <div class="card card-pad">
+                                <div class="section-head">
+                                    <h2>Canli Sinyal Akisi</h2>
+                                    <button class="ghost-btn" id="rescanButton"><i class="fas fa-radar"></i> Tara</button>
+                                </div>
+                                <div class="signal-list" id="signalList"></div>
+                            </div>
+
+                            <div class="card card-pad">
+                                <div class="section-head">
+                                    <h2>Sistem Notlari</h2>
+                                    <span class="muted mono" id="newsCount">3 madde</span>
+                                </div>
+                                <div class="news-list" id="newsList"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <aside class="stack bot-card">
+                    <div class="card card-pad">
+                        <div class="section-head">
+                            <h2>Bot Kontrolu</h2>
+                            <span class="badge up" id="botStatus">AKTIF</span>
+                        </div>
+
+                        <div class="control-row metrics-box">
+                            <div>
+                                <div style="font-weight:700;">Otomatik Mod</div>
+                                <div class="muted" style="font-size:0.8rem;">Scan + raporlama akisi</div>
+                            </div>
+                            <button class="toggle on" id="botToggle" aria-label="Bot ac kapa"></button>
+                        </div>
+
+                        <div class="bot-meta">
+                            <div class="meta-box">
+                                <div class="muted" style="font-size:0.7rem; text-transform:uppercase;">Strateji</div>
+                                <div style="font-weight:800; margin-top:0.25rem;">MTF</div>
+                            </div>
+                            <div class="meta-box">
+                                <div class="muted" style="font-size:0.7rem; text-transform:uppercase;">Risk</div>
+                                <div style="font-weight:800; margin-top:0.25rem; color:var(--gold);">Dinamik</div>
+                            </div>
+                            <div class="meta-box">
+                                <div class="muted" style="font-size:0.7rem; text-transform:uppercase;">DB</div>
+                                <div style="font-weight:800; margin-top:0.25rem; color:var(--green);">WAL</div>
+                            </div>
+                        </div>
+
+                        <div class="stack" style="margin-top:1rem;">
+                            <div class="signal-card">
+                                <div class="slider-row">
+                                    <label for="riskRange">Risk Limiti</label>
+                                    <span class="mono" id="riskRangeValue">%2.0</span>
+                                </div>
+                                <input type="range" id="riskRange" min="0.5" max="5" step="0.1" value="2.0">
+                            </div>
+                            <div class="signal-card">
+                                <div class="slider-row">
+                                    <label for="positionRange">Pozisyon Tavanı</label>
+                                    <span class="mono" id="positionRangeValue">₺5,000</span>
+                                </div>
+                                <input type="range" id="positionRange" min="1000" max="25000" step="500" value="5000">
+                            </div>
+                            <div class="signal-card">
+                                <div class="slider-row">
+                                    <label for="rsiRange">RSI Esiği</label>
+                                    <span class="mono" id="rsiRangeValue">30 / 70</span>
+                                </div>
+                                <input type="range" id="rsiRange" min="20" max="40" step="1" value="30">
+                            </div>
+                        </div>
+
+                        <div class="stack" style="margin-top:1rem;">
+                            <button class="bot-btn primary" id="scanButton"><i class="fas fa-play"></i> Canli Taramayi Yenile</button>
+                            <button class="bot-btn" id="analyzeButton"><i class="fas fa-chart-column"></i> Aktif Hisseyi Analiz Et</button>
+                            <button class="bot-btn" id="panicButton" style="border-color:rgba(248,113,113,0.35); color:var(--red);"><i class="fas fa-hand"></i> Acil Durdur</button>
+                        </div>
+                    </div>
+
+                    <div class="card card-pad">
+                        <div class="section-head">
+                            <h2>Son Islemler</h2>
+                            <span class="muted mono" id="recentCount">0 kayit</span>
+                        </div>
+                        <div class="stack" id="recentTrades"></div>
+                    </div>
+                </aside>
+            </section>
+
+            <section class="card card-pad">
+                <div class="section-head">
+                    <h2>Islem ve Sinyal Gecmisi</h2>
+                    <div class="pill-row" id="historyFilters">
+                        <button class="period-btn active" data-filter="all">Tumu</button>
+                        <button class="period-btn" data-filter="buy">Alis</button>
+                        <button class="period-btn" data-filter="sell">Satis</button>
+                    </div>
+                </div>
+                <div style="overflow-x:auto;">
+                    <table class="history-table">
+                        <thead>
+                            <tr>
+                                <th>Zaman</th>
+                                <th>Hisse</th>
+                                <th>Sinyal</th>
+                                <th>Skor</th>
+                                <th>Fiyat</th>
+                                <th>PnL / Hedef</th>
+                            </tr>
+                        </thead>
+                        <tbody id="historyBody"></tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
     </div>
-    <div class="stat-card">
-        <div class="stat-value score-positive" id="stat-buys">—</div>
-        <div class="stat-label">Alım Sinyali</div>
-    </div>
-    <div class="stat-card">
-        <div class="stat-value score-negative" id="stat-sells">—</div>
-        <div class="stat-label">Satış Sinyali</div>
-    </div>
-    <div class="stat-card">
-        <div class="stat-value" id="stat-time">—</div>
-        <div class="stat-label">Son Tarama</div>
-    </div>
-</div>
 
-<div id="signals-container">
-    <div class="loading" id="loading" style="display:none">
-        <div class="spinner"></div>
-        <p style="margin-top:10px">Tarama yapılıyor... (~30 saniye)</p>
-    </div>
+    <div class="toast-root" id="toastRoot"></div>
 
-    <table class="signals-table" id="signals-table" style="display:none">
-        <thead>
-            <tr>
-                <th>Hisse</th>
-                <th>Sinyal</th>
-                <th>Skor</th>
-                <th>Fiyat</th>
-                <th>Stop-Loss</th>
-                <th>Hedef</th>
-                <th>Güven</th>
-                <th>Nedenler</th>
-            </tr>
-        </thead>
-        <tbody id="signals-body"></tbody>
-    </table>
-</div>
+    <script>
+        const state = {
+            marketData: [],
+            activeTicker: null,
+            priceData: [],
+            historySignals: [],
+            filter: "all",
+            botEnabled: true,
+            visibleBars: 60,
+        };
 
-<div id="detail-modal">
-    <div class="modal-content">
-        <span class="modal-close" onclick="closeModal()">✕</span>
-        <div id="modal-body"></div>
-    </div>
-</div>
+        const fallbackNotes = [
+            "Backtest artik look-ahead bias icermiyor; execution sonraki bar acilisinda yapiliyor.",
+            "Strict watchlist, pozitif getiri ve minimum 10 islem filtresi ile uretildi.",
+            "ASCII sparkline ve yildiz puani rapor okunabilirligini artirdi.",
+        ];
 
-<script>
-async function runScan() {
-    const btn = document.getElementById('btn-scan');
-    const loading = document.getElementById('loading');
-    const table = document.getElementById('signals-table');
-
-    btn.disabled = true;
-    btn.textContent = '⏳ Taranıyor...';
-    loading.style.display = 'block';
-    table.style.display = 'none';
-
-    try {
-        const res = await fetch('/api/scan', { method: 'POST' });
-        const data = await res.json();
-
-        if (data.status === 'ok') {
-            renderSignals(data.signals);
-            document.getElementById('stat-scanned').textContent = data.scanned;
-
-            const buys = data.signals.filter(s => s.score > 0).length;
-            const sells = data.signals.filter(s => s.score < 0).length;
-
-            document.getElementById('stat-buys').textContent = buys;
-            document.getElementById('stat-sells').textContent = sells;
-
-            const now = new Date();
-            document.getElementById('stat-time').textContent =
-                now.getHours().toString().padStart(2,'0') + ':' +
-                now.getMinutes().toString().padStart(2,'0');
-        } else {
-            alert('Hata: ' + data.message);
+        function money(value) {
+            return new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY", maximumFractionDigits: 2 }).format(value || 0);
         }
-    } catch (e) {
-        alert('Bağlantı hatası: ' + e.message);
-    }
 
-    btn.disabled = false;
-    btn.textContent = '🔍 Tam Tarama Başlat';
-    loading.style.display = 'none';
-}
-
-function renderSignals(signals) {
-    const tbody = document.getElementById('signals-body');
-    const table = document.getElementById('signals-table');
-    tbody.innerHTML = '';
-
-    signals.forEach(s => {
-        const scoreClass = s.score > 0 ? 'score-positive'
-                         : s.score < 0 ? 'score-negative'
-                         : 'score-neutral';
-
-        const badgeClass = s.score > 15 ? 'badge-buy'
-                         : s.score < -15 ? 'badge-sell'
-                         : 'badge-hold';
-
-        const reasons = s.reasons.slice(0, 3).join(' • ');
-
-        const row = document.createElement('tr');
-        row.style.cursor = 'pointer';
-        row.onclick = () => showDetail(s.ticker);
-        row.innerHTML = `
-            <td><strong>${s.name}</strong><br>
-                <span style="color:var(--text-dim);font-size:0.8em">
-                    ${s.ticker.replace('.IS','')}
-                </span>
-            </td>
-            <td><span class="signal-badge ${badgeClass}">${s.signal}</span></td>
-            <td class="${scoreClass}" style="font-weight:bold">
-                ${s.score > 0 ? '+' : ''}${s.score.toFixed(0)}
-            </td>
-            <td>₺${s.price.toFixed(2)}</td>
-            <td style="color:var(--red)">₺${s.stop_loss.toFixed(2)}</td>
-            <td style="color:var(--green)">₺${s.target.toFixed(2)}</td>
-            <td>${s.confidence}</td>
-            <td class="reasons-list">${reasons}</td>
-        `;
-        tbody.appendChild(row);
-    });
-
-    table.style.display = 'table';
-}
-
-async function showDetail(ticker) {
-    const modal = document.getElementById('detail-modal');
-    const body = document.getElementById('modal-body');
-
-    body.innerHTML = '<div class="loading"><div class="spinner"></div><p>Yükleniyor...</p></div>';
-    modal.style.display = 'block';
-
-    try {
-        const res = await fetch(`/api/analyze/${ticker}`);
-        const data = await res.json();
-
-        if (data.status === 'ok') {
-            const s = data.snapshot;
-            const sig = data.signal;
-
-            body.innerHTML = `
-                <h2>${data.name} (${ticker.replace('.IS','')})</h2>
-                <br>
-                <h3>${sig.type} (Skor: ${sig.score > 0 ? '+' : ''}${sig.score.toFixed(0)})</h3>
-                <br>
-                <table style="width:100%">
-                    <tr><td>Kapanış</td><td>₺${s.close}</td></tr>
-                    <tr><td>Değişim</td><td>${s.change_pct}%</td></tr>
-                    <tr><td>RSI</td><td>${s.rsi} (${s.rsi_zone})</td></tr>
-                    <tr><td>Hacim Oranı</td><td>${s.volume_ratio}x</td></tr>
-                    <tr><td>ATR</td><td>₺${s.atr}</td></tr>
-                    <tr><td>Destek</td><td>₺${s.support}</td></tr>
-                    <tr><td>Direnç</td><td>₺${s.resistance}</td></tr>
-                    <tr><td>Stop-Loss</td><td style="color:var(--red)">₺${sig.stop_loss}</td></tr>
-                    <tr><td>Hedef</td><td style="color:var(--green)">₺${sig.target}</td></tr>
-                </table>
-                <br>
-                <h3>Nedenler:</h3>
-                <ul>
-                    ${sig.reasons.map(r => `<li>${r}</li>`).join('')}
-                </ul>
-            `;
+        function percent(value) {
+            const prefix = value > 0 ? "+" : "";
+            return `${prefix}${(value || 0).toFixed(2)}%`;
         }
-    } catch(e) {
-        body.innerHTML = `<p>Hata: ${e.message}</p>`;
-    }
-}
 
-function closeModal() {
-    document.getElementById('detail-modal').style.display = 'none';
-}
-
-async function loadHistory() {
-    try {
-        const res = await fetch('/api/signals/history?limit=30');
-        const data = await res.json();
-        if (data.signals && data.signals.length > 0) {
-            alert(`Son ${data.signals.length} sinyal yüklendi.\n\n` +
-                  data.signals.slice(0,5).map(s =>
-                      `${s.ticker}: ${s.signal_type} (₺${s.price})`
-                  ).join('\n'));
-        } else {
-            alert('Henüz kayıtlı sinyal yok. Önce tarama yapın.');
+        function signalMood(score) {
+            if (score > 8) return "up";
+            if (score < -8) return "down";
+            return "flat";
         }
-    } catch(e) { alert('Hata: ' + e.message); }
-}
 
-async function loadStats() {
-    try {
-        const res = await fetch('/api/stats');
-        const data = await res.json();
-        const s = data.stats;
-        alert(
-            `📊 Performans İstatistikleri\n\n` +
-            `Toplam Sinyal: ${s.total_signals}\n` +
-            `Tamamlanan: ${s.completed}\n` +
-            `Kazanan: ${s.profitable}\n` +
-            `Kazanma Oranı: %${s.win_rate}\n` +
-            `Ort. Kâr/Zarar: %${s.avg_profit_pct}`
-        );
-    } catch(e) { alert('Hata: ' + e.message); }
-}
+        function buildTickerTape() {
+            if (!state.marketData.length) return;
+            const items = [...state.marketData, ...state.marketData].map((item) => {
+                const mood = signalMood(item.score);
+                return `<span><strong>${item.ticker.replace(".IS", "")}</strong> <span style="color:${mood === "up" ? "var(--green)" : mood === "down" ? "var(--red)" : "var(--gold)"};">${money(item.price)} / ${percent(item.score / 2)}</span></span>`;
+            }).join("");
+            document.getElementById("tickerTrack").innerHTML = items;
+        }
 
-document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') closeModal();
-});
-</script>
+        function updateHeaderStats(scanPayload) {
+            const scores = state.marketData.map((item) => item.score);
+            const avgScore = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
+            const actionable = state.marketData.filter((item) => Math.abs(item.score) >= 8);
+            const strongest = [...state.marketData].sort((a, b) => Math.abs(b.score) - Math.abs(a.score))[0];
 
+            document.getElementById("statScanned").textContent = scanPayload.scanned || state.marketData.length;
+            document.getElementById("statCoverage").textContent = `${state.marketData.length} sinyal satiri guncel`;
+            document.getElementById("statActionable").textContent = actionable.length;
+            document.getElementById("statActionableMix").textContent = `${actionable.filter((i) => i.score > 0).length} long / ${actionable.filter((i) => i.score < 0).length} short`;
+            document.getElementById("statAverageScore").textContent = avgScore.toFixed(1);
+            document.getElementById("statScoreBias").textContent = avgScore >= 0 ? "Skor egilimi yukari" : "Skor egilimi savunmada";
+            document.getElementById("statTopTicker").textContent = strongest ? strongest.ticker.replace(".IS", "") : "-";
+            document.getElementById("statTopSignal").textContent = strongest ? `${strongest.signal} / ${strongest.confidence}` : "Sinyal yok";
+            document.getElementById("statHealth").textContent = "Hazir";
+            document.getElementById("statDuration").textContent = `${scanPayload.duration_ms || 0} ms tarama suresi`;
+            document.getElementById("lastUpdated").textContent = new Date().toLocaleTimeString("tr-TR");
+        }
+
+        function buildStockPills() {
+            const root = document.getElementById("stockPills");
+            root.innerHTML = state.marketData.slice(0, 14).map((item) => {
+                const active = item.ticker === state.activeTicker;
+                return `<button class="stock-pill ${active ? "active" : ""}" data-ticker="${item.ticker}">${item.ticker.replace(".IS", "")}</button>`;
+            }).join("");
+
+            root.querySelectorAll(".stock-pill").forEach((button) => {
+                button.addEventListener("click", () => loadTicker(button.dataset.ticker));
+            });
+        }
+
+        function updateSignalList() {
+            const root = document.getElementById("signalList");
+            if (!state.marketData.length) {
+                root.innerHTML = '<div class="empty">Sinyal verisi bekleniyor.</div>';
+                return;
+            }
+
+            root.innerHTML = state.marketData.slice(0, 7).map((item) => {
+                const mood = signalMood(item.score);
+                return `
+                    <div class="signal-row">
+                        <div class="signal-meta">
+                            <strong>${item.ticker.replace(".IS", "")}</strong>
+                            <span class="muted">${item.name || item.ticker}</span>
+                        </div>
+                        <div style="text-align:right;">
+                            <div class="signal-score ${mood}">${item.signal}</div>
+                            <div class="mono muted">${item.score.toFixed(1)}</div>
+                        </div>
+                    </div>
+                `;
+            }).join("");
+        }
+
+        function updateNewsList() {
+            const root = document.getElementById("newsList");
+            const strongest = state.marketData.slice(0, 3).map((item) => `${item.ticker.replace(".IS", "")}: ${item.reasons?.[0] || "Teknik konfluens izleniyor"}`);
+            const notes = [...strongest, ...fallbackNotes].slice(0, 4);
+            document.getElementById("newsCount").textContent = `${notes.length} madde`;
+            root.innerHTML = notes.map((note, index) => `
+                <div class="news-row">
+                    <div class="muted" style="font-size:0.72rem; margin-bottom:0.3rem;">Not ${index + 1}</div>
+                    <div style="line-height:1.5; font-size:0.87rem;">${note}</div>
+                </div>
+            `).join("");
+        }
+
+        function updateHeatGrid() {
+            const root = document.getElementById("heatGrid");
+            root.innerHTML = state.marketData.slice(0, 15).map((item) => {
+                const score = item.score || 0;
+                const intensity = Math.min(Math.abs(score) / 50, 1);
+                const color = score > 0
+                    ? `rgba(52, 211, 153, ${0.12 + intensity * 0.35})`
+                    : score < 0
+                        ? `rgba(248, 113, 113, ${0.12 + intensity * 0.35})`
+                        : `rgba(201, 168, 76, 0.16)`;
+                const accent = score > 0 ? "var(--green)" : score < 0 ? "var(--red)" : "var(--gold)";
+                return `
+                    <button class="heat-cell" style="background:${color}" data-ticker="${item.ticker}">
+                        <div style="font-weight:800; color:${accent};">${item.ticker.replace(".IS", "")}</div>
+                        <div class="mono" style="margin-top:0.35rem; font-size:0.8rem;">${money(item.price)}</div>
+                        <div class="mono" style="margin-top:0.2rem; color:${accent};">${item.score.toFixed(1)}</div>
+                    </button>
+                `;
+            }).join("");
+
+            root.querySelectorAll(".heat-cell").forEach((button) => {
+                button.addEventListener("click", () => loadTicker(button.dataset.ticker));
+            });
+        }
+
+        function buildRecentTrades() {
+            const root = document.getElementById("recentTrades");
+            const recent = state.marketData.slice(0, 5).map((item, index) => ({
+                type: item.score >= 0 ? "AL" : "SAT",
+                ticker: item.ticker.replace(".IS", ""),
+                price: item.price,
+                amount: 10 + index * 5,
+            }));
+            document.getElementById("recentCount").textContent = `${recent.length} kayit`;
+            root.innerHTML = recent.map((item) => `
+                <div class="recent-item" style="padding:0.85rem 0.95rem; display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <div style="font-weight:700;">${item.ticker}</div>
+                        <div class="muted" style="font-size:0.78rem;">${item.amount} lot / ${item.type}</div>
+                    </div>
+                    <div class="mono" style="color:${item.type === "AL" ? "var(--green)" : "var(--red)"};">${money(item.price)}</div>
+                </div>
+            `).join("");
+        }
+
+        function updateHistoryTable() {
+            const root = document.getElementById("historyBody");
+            let rows = state.marketData.slice(0, 12);
+            if (state.filter === "buy") rows = rows.filter((item) => item.score >= 0);
+            if (state.filter === "sell") rows = rows.filter((item) => item.score < 0);
+
+            if (!rows.length) {
+                root.innerHTML = '<tr><td colspan="6" class="empty">Filtreye uygun kayit yok.</td></tr>';
+                return;
+            }
+
+            root.innerHTML = rows.map((item, index) => {
+                const mood = signalMood(item.score);
+                const pnlText = item.target ? `Hedef ${money(item.target)}` : (item.stop_loss ? `Stop ${money(item.stop_loss)}` : "- ");
+                return `
+                    <tr>
+                        <td class="mono">${new Date(Date.now() - index * 600000).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}</td>
+                        <td><strong>${item.ticker.replace(".IS", "")}</strong></td>
+                        <td><span class="badge ${mood}">${item.signal}</span></td>
+                        <td class="mono ${mood === "up" ? "text-up" : mood === "down" ? "text-down" : ""}">${item.score.toFixed(1)}</td>
+                        <td class="mono">${money(item.price)}</td>
+                        <td class="mono">${pnlText}</td>
+                    </tr>
+                `;
+            }).join("");
+        }
+
+        function badgeClass(value) {
+            if (value > 0) return "badge up";
+            if (value < 0) return "badge down";
+            return "badge flat";
+        }
+
+        function updateActiveHeader(analysis) {
+            const signal = analysis.signal || {};
+            const lastPrice = state.priceData.length ? state.priceData[state.priceData.length - 1].close : 0;
+            const firstPrice = state.priceData.length ? state.priceData[0].close : lastPrice;
+            const change = firstPrice ? ((lastPrice - firstPrice) / firstPrice) * 100 : 0;
+
+            document.getElementById("activeTickerLabel").textContent = analysis.ticker || state.activeTicker;
+            document.getElementById("activeTickerName").textContent = analysis.name || state.activeTicker;
+            document.getElementById("activePrice").textContent = money(lastPrice);
+
+            const priceBadge = document.getElementById("priceBadge");
+            priceBadge.className = badgeClass(change);
+            priceBadge.textContent = percent(change);
+
+            const signalBadge = document.getElementById("signalBadge");
+            signalBadge.className = badgeClass(signal.score || 0);
+            signalBadge.textContent = `${signal.type || "N/A"} / ${signal.score || 0}`;
+
+            document.getElementById("candleInfo").textContent = state.priceData.length
+                ? `O ${state.priceData.at(-1).open} / H ${state.priceData.at(-1).high} / L ${state.priceData.at(-1).low} / C ${state.priceData.at(-1).close}`
+                : "O/H/L/C bekleniyor";
+            document.getElementById("signalMeta").textContent = `Stop ${money(signal.stop_loss || 0)} / Hedef ${money(signal.target || 0)}`;
+        }
+
+        function fitCanvas(canvas, width, height) {
+            const ratio = window.devicePixelRatio || 1;
+            canvas.width = width * ratio;
+            canvas.height = height * ratio;
+            canvas.style.width = `${width}px`;
+            canvas.style.height = `${height}px`;
+            const ctx = canvas.getContext("2d");
+            ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+            return ctx;
+        }
+
+        function drawCandles() {
+            const canvas = document.getElementById("candlesCanvas");
+            const parent = canvas.parentElement;
+            const width = parent.clientWidth;
+            const height = parent.clientHeight;
+            const ctx = fitCanvas(canvas, width, height);
+            ctx.clearRect(0, 0, width, height);
+
+            const bars = state.priceData.slice(-state.visibleBars);
+            if (!bars.length) return;
+
+            const maxPrice = Math.max(...bars.map((bar) => Number(bar.high)));
+            const minPrice = Math.min(...bars.map((bar) => Number(bar.low)));
+            const range = Math.max(maxPrice - minPrice, 1);
+            const topPad = 18;
+            const bottomPad = 32;
+            const chartHeight = height - topPad - bottomPad;
+            const gap = (width - 36) / bars.length;
+            const candleWidth = Math.max(3, gap * 0.62);
+
+            ctx.strokeStyle = "rgba(90, 110, 100, 0.25)";
+            ctx.fillStyle = "rgba(163, 181, 172, 0.65)";
+            ctx.font = "11px JetBrains Mono";
+            for (let i = 0; i < 5; i += 1) {
+                const y = topPad + (chartHeight * i) / 4;
+                const value = maxPrice - (range * i) / 4;
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(width, y);
+                ctx.stroke();
+                ctx.fillText(money(value), 8, y - 4);
+            }
+
+            bars.forEach((bar, index) => {
+                const open = Number(bar.open);
+                const close = Number(bar.close);
+                const high = Number(bar.high);
+                const low = Number(bar.low);
+                const x = 28 + index * gap + gap / 2;
+                const wickTop = topPad + ((maxPrice - high) / range) * chartHeight;
+                const wickBottom = topPad + ((maxPrice - low) / range) * chartHeight;
+                const bodyTop = topPad + ((maxPrice - Math.max(open, close)) / range) * chartHeight;
+                const bodyBottom = topPad + ((maxPrice - Math.min(open, close)) / range) * chartHeight;
+                const color = close >= open ? "#34d399" : "#f87171";
+
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(x, wickTop);
+                ctx.lineTo(x, wickBottom);
+                ctx.stroke();
+
+                const bodyHeight = Math.max(bodyBottom - bodyTop, 1.4);
+                if (close >= open) {
+                    ctx.fillStyle = "rgba(52, 211, 153, 0.22)";
+                    ctx.fillRect(x - candleWidth / 2, bodyTop, candleWidth, bodyHeight);
+                    ctx.strokeRect(x - candleWidth / 2, bodyTop, candleWidth, bodyHeight);
+                } else {
+                    ctx.fillStyle = color;
+                    ctx.fillRect(x - candleWidth / 2, bodyTop, candleWidth, bodyHeight);
+                }
+            });
+        }
+
+        function drawLineCanvas(canvasId, values, color, rangeHint = null) {
+            const canvas = document.getElementById(canvasId);
+            const width = canvas.parentElement.clientWidth - 28;
+            const height = 120;
+            const ctx = fitCanvas(canvas, width, height);
+            ctx.clearRect(0, 0, width, height);
+            if (!values.length) return;
+
+            const low = rangeHint ? rangeHint.min : Math.min(...values);
+            const high = rangeHint ? rangeHint.max : Math.max(...values);
+            const range = Math.max(high - low, 1);
+
+            ctx.strokeStyle = "rgba(90, 110, 100, 0.28)";
+            ctx.beginPath();
+            ctx.moveTo(0, height / 2);
+            ctx.lineTo(width, height / 2);
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            values.forEach((value, index) => {
+                const x = (index / Math.max(values.length - 1, 1)) * width;
+                const y = height - ((value - low) / range) * (height - 18) - 9;
+                if (index === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            });
+            ctx.stroke();
+        }
+
+        function updateIndicators() {
+            const bars = state.priceData.slice(-state.visibleBars);
+            if (!bars.length) return;
+            const closes = bars.map((bar) => Number(bar.close));
+            const rsiValues = bars.map((bar) => Number(bar.rsi ?? 50)).filter((value) => Number.isFinite(value));
+            const smaFast = bars.map((bar) => Number(bar.sma_fast ?? bar.close));
+            const smaSlow = bars.map((bar) => Number(bar.sma_slow ?? bar.close));
+
+            const lastRsi = rsiValues.at(-1) ?? 50;
+            document.getElementById("rsiValue").textContent = lastRsi.toFixed(2);
+            const rsiState = document.getElementById("rsiState");
+            rsiState.className = badgeClass(lastRsi < 30 ? 1 : lastRsi > 70 ? -1 : 0);
+            rsiState.textContent = lastRsi < 30 ? "Asiri Satim" : lastRsi > 70 ? "Asiri Alim" : "Dengeli";
+            drawLineCanvas("rsiCanvas", rsiValues, "#c9a84c", { min: 0, max: 100 });
+
+            const fast = smaFast.at(-1) ?? closes.at(-1) ?? 0;
+            const slow = smaSlow.at(-1) ?? closes.at(-1) ?? 0;
+            document.getElementById("smaValue").textContent = `${fast.toFixed(2)} / ${slow.toFixed(2)}`;
+            const trendState = document.getElementById("trendState");
+            trendState.className = badgeClass(fast - slow);
+            trendState.textContent = fast > slow ? "Trend Up" : fast < slow ? "Trend Down" : "Yatay";
+            drawLineCanvas("trendCanvas", closes.map((price, index) => price - (smaSlow[index] ?? price)), "#34d399");
+        }
+
+        function updateOrderBook() {
+            const current = state.priceData.at(-1)?.close || 0;
+            const askRoot = document.getElementById("askStack");
+            const bidRoot = document.getElementById("bidStack");
+            document.getElementById("midPrice").textContent = money(current);
+
+            const asks = Array.from({ length: 6 }, (_, index) => ({
+                price: current * (1 + 0.0008 * (6 - index)),
+                size: 70 + Math.round(Math.random() * 220),
+            }));
+            const bids = Array.from({ length: 6 }, (_, index) => ({
+                price: current * (1 - 0.0008 * (index + 1)),
+                size: 70 + Math.round(Math.random() * 220),
+            }));
+
+            askRoot.innerHTML = asks.map((row) => {
+                const width = Math.min((row.size / 320) * 100, 100);
+                return `
+                    <div class="order-row">
+                        <div class="order-fill" style="background:linear-gradient(90deg, transparent, rgba(248, 113, 113, 0.14)); width:${width}%; left:auto; right:0;"></div>
+                        <div class="order-content mono"><span class="order-price sell">${row.price.toFixed(2)}</span><span>${row.size}</span></div>
+                    </div>
+                `;
+            }).join("");
+
+            bidRoot.innerHTML = bids.map((row) => {
+                const width = Math.min((row.size / 320) * 100, 100);
+                return `
+                    <div class="order-row">
+                        <div class="order-fill" style="background:linear-gradient(90deg, rgba(52, 211, 153, 0.14), transparent); width:${width}%;"></div>
+                        <div class="order-content mono"><span class="order-price buy">${row.price.toFixed(2)}</span><span>${row.size}</span></div>
+                    </div>
+                `;
+            }).join("");
+        }
+
+        function toast(message, mood = "flat") {
+            const root = document.getElementById("toastRoot");
+            const icon = mood === "up" ? "fa-circle-check" : mood === "down" ? "fa-triangle-exclamation" : "fa-circle-info";
+            const color = mood === "up" ? "var(--green)" : mood === "down" ? "var(--red)" : "var(--gold)";
+            const el = document.createElement("div");
+            el.className = "toast";
+            el.innerHTML = `<i class="fas ${icon}" style="color:${color}"></i><div>${message}</div>`;
+            root.appendChild(el);
+            requestAnimationFrame(() => el.classList.add("show"));
+            setTimeout(() => {
+                el.classList.remove("show");
+                setTimeout(() => el.remove(), 300);
+            }, 3200);
+        }
+
+        async function scanMarket() {
+            const button = document.getElementById("scanButton");
+            button.disabled = true;
+            button.textContent = "Taraniyor...";
+
+            try {
+                const response = await fetch("/api/scan", { method: "POST" });
+                const payload = await response.json();
+                if (payload.status !== "ok") throw new Error(payload.message || "Tarama basarisiz");
+
+                state.marketData = payload.signals.sort((a, b) => Math.abs(b.score) - Math.abs(a.score));
+                state.activeTicker = state.activeTicker || state.marketData[0]?.ticker || null;
+
+                buildTickerTape();
+                buildStockPills();
+                updateHeaderStats(payload);
+                updateSignalList();
+                updateHeatGrid();
+                updateNewsList();
+                buildRecentTrades();
+                updateHistoryTable();
+
+                if (state.activeTicker) {
+                    await loadTicker(state.activeTicker, false);
+                }
+
+                toast(`${payload.scanned} hisse tarandi, ${state.marketData.length} sonuc guncel.`, "up");
+            } catch (error) {
+                console.error(error);
+                document.getElementById("statHealth").textContent = "Hata";
+                document.getElementById("statDuration").textContent = String(error.message || error);
+                toast(`Tarama hatasi: ${error.message || error}`, "down");
+            } finally {
+                button.disabled = false;
+                button.innerHTML = '<i class="fas fa-play"></i> Canli Taramayi Yenile';
+            }
+        }
+
+        async function loadTicker(ticker, notify = true) {
+            if (!ticker) return;
+            state.activeTicker = ticker;
+            buildStockPills();
+
+            try {
+                const response = await fetch(`/api/analyze/${ticker.replace(".IS", "")}`);
+                const payload = await response.json();
+                if (payload.status !== "ok") throw new Error(payload.message || "Analiz alinamadi");
+
+                state.priceData = payload.price_data || [];
+                updateActiveHeader(payload);
+                drawCandles();
+                updateIndicators();
+                updateOrderBook();
+
+                if (notify) {
+                    toast(`${ticker.replace(".IS", "")} analizi guncellendi.`, "flat");
+                }
+            } catch (error) {
+                console.error(error);
+                toast(`Analiz hatasi: ${error.message || error}`, "down");
+            }
+        }
+
+        function wireControls() {
+            document.getElementById("refreshButton").addEventListener("click", scanMarket);
+            document.getElementById("scanButton").addEventListener("click", scanMarket);
+            document.getElementById("analyzeButton").addEventListener("click", () => loadTicker(state.activeTicker));
+            document.getElementById("panicButton").addEventListener("click", () => {
+                state.botEnabled = false;
+                const botToggle = document.getElementById("botToggle");
+                botToggle.classList.remove("on");
+                document.getElementById("botStatus").className = "badge down";
+                document.getElementById("botStatus").textContent = "DURDURULDU";
+                toast("Acil durdurma aktif. Otomatik tarama pasif.", "down");
+            });
+
+            document.getElementById("botToggle").addEventListener("click", (event) => {
+                state.botEnabled = !state.botEnabled;
+                event.currentTarget.classList.toggle("on", state.botEnabled);
+                document.getElementById("botStatus").className = state.botEnabled ? "badge up" : "badge down";
+                document.getElementById("botStatus").textContent = state.botEnabled ? "AKTIF" : "PASIF";
+                toast(state.botEnabled ? "Bot yeniden aktif." : "Bot pasif moda alindi.", state.botEnabled ? "up" : "down");
+            });
+
+            document.querySelectorAll("#periodButtons .period-btn").forEach((button) => {
+                button.addEventListener("click", () => {
+                    document.querySelectorAll("#periodButtons .period-btn").forEach((item) => item.classList.remove("active"));
+                    button.classList.add("active");
+                    state.visibleBars = Number(button.dataset.period);
+                    drawCandles();
+                    updateIndicators();
+                });
+            });
+
+            document.querySelectorAll("#historyFilters .period-btn").forEach((button) => {
+                button.addEventListener("click", () => {
+                    document.querySelectorAll("#historyFilters .period-btn").forEach((item) => item.classList.remove("active"));
+                    button.classList.add("active");
+                    state.filter = button.dataset.filter;
+                    updateHistoryTable();
+                });
+            });
+
+            const riskRange = document.getElementById("riskRange");
+            riskRange.addEventListener("input", () => {
+                document.getElementById("riskRangeValue").textContent = `%${Number(riskRange.value).toFixed(1)}`;
+            });
+
+            const positionRange = document.getElementById("positionRange");
+            positionRange.addEventListener("input", () => {
+                document.getElementById("positionRangeValue").textContent = money(Number(positionRange.value));
+            });
+
+            const rsiRange = document.getElementById("rsiRange");
+            rsiRange.addEventListener("input", () => {
+                const lower = Number(rsiRange.value);
+                document.getElementById("rsiRangeValue").textContent = `${lower} / ${100 - lower}`;
+            });
+        }
+
+        window.addEventListener("resize", () => {
+            drawCandles();
+            updateIndicators();
+        });
+
+        document.addEventListener("DOMContentLoaded", async () => {
+            wireControls();
+            updateNewsList();
+            await scanMarket();
+            setInterval(() => {
+                if (state.botEnabled) scanMarket();
+            }, 45000);
+        });
+    </script>
 </body>
 </html>

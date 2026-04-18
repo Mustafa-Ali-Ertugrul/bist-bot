@@ -22,7 +22,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-import config
+from config import settings
 from backtest import Backtester, BacktestResult, compare_benchmark
 from contracts import StrategyEngineProtocol
 from data_fetcher import BISTDataFetcher
@@ -103,7 +103,7 @@ class NewEngineBacktester:
 
 def _sideways_pct(df: pd.DataFrame) -> float:
     ti = TechnicalIndicators()
-    df = ti.add_all(df).dropna(subset=["rsi", f"sma_{config.SMA_SLOW}"])
+    df = ti.add_all(df).dropna(subset=["rsi", f"sma_{settings.SMA_SLOW}"])
     start = min(50, len(df))
     regimes = [detect_regime(df.iloc[:i+1]) for i in range(start, len(df))]
     if not regimes:
@@ -168,12 +168,12 @@ def _print_comparison(rows: list[CompareRow]) -> None:
 def run(tickers: list[str], period: str = "1y") -> list[CompareRow]:
     fetcher = BISTDataFetcher()
     old_bt = Backtester(
-        initial_capital=getattr(config, "INITIAL_CAPITAL", 8500.0),
-        buy_threshold=getattr(config, "BUY_THRESHOLD", 10),
-        sell_threshold=getattr(config, "SELL_THRESHOLD", -10),
+        initial_capital=getattr(settings, "INITIAL_CAPITAL", 8500.0),
+        buy_threshold=getattr(settings, "BUY_THRESHOLD", 10),
+        sell_threshold=getattr(settings, "SELL_THRESHOLD", -10),
     )
     new_bt = NewEngineBacktester(
-        initial_capital=getattr(config, "INITIAL_CAPITAL", 8500.0),
+        initial_capital=getattr(settings, "INITIAL_CAPITAL", 8500.0),
     )
 
     rows: list[CompareRow] = []

@@ -9,7 +9,7 @@ import os
 import pickle
 import threading
 
-import config
+from config import settings
 from indicators import TechnicalIndicators
 
 logger = logging.getLogger(__name__)
@@ -28,8 +28,8 @@ class PricePredictor:
         model_path: Optional[str] = None
     ):
         self.feature_version = 2
-        self.sequence_length = sequence_length or getattr(config, "ML_SEQUENCE_LENGTH", 60)
-        self.model_path = model_path or getattr(config, "ML_MODEL_PATH", "models")
+        self.sequence_length = sequence_length or getattr(settings, "ML_SEQUENCE_LENGTH", 60)
+        self.model_path = model_path or getattr(settings, "ML_MODEL_PATH", "models")
         self.scaler = MinMaxScaler()
         self.model = None
         self.models = {}
@@ -98,8 +98,8 @@ class PricePredictor:
         feature_frame["price_range_10"] = (close.rolling(10).max() - close.rolling(10).min()) / close
         feature_frame["price_range_20"] = (close.rolling(20).max() - close.rolling(20).min()) / close
 
-        ema_fast = df.get(f"ema_{config.EMA_FAST}")
-        ema_slow = df.get(f"ema_{config.EMA_SLOW}")
+        ema_fast = df.get(f"ema_{settings.EMA_FAST}")
+        ema_slow = df.get(f"ema_{settings.EMA_SLOW}")
         feature_frame["rsi"] = df.get("rsi")
         feature_frame["macd"] = df.get("macd")
         feature_frame["macd_signal"] = df.get("macd_signal")

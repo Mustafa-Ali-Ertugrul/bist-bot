@@ -13,20 +13,16 @@ if ROOT_DIR not in sys.path:
 
 def test_flask_debug_default_false(monkeypatch):
     monkeypatch.delenv("FLASK_DEBUG", raising=False)
-
-    import config
-
-    importlib.reload(config)
-    assert config.FLASK_DEBUG is False
+    config_settings = importlib.import_module("config.settings")
+    reloaded = importlib.reload(config_settings)
+    assert reloaded.settings.FLASK_DEBUG is False
 
 
 def test_flask_debug_env_override(monkeypatch):
     monkeypatch.setenv("FLASK_DEBUG", "True")
-
-    import config
-
-    importlib.reload(config)
-    assert config.FLASK_DEBUG is True
+    config_settings = importlib.import_module("config.settings")
+    reloaded = importlib.reload(config_settings)
+    assert reloaded.settings.FLASK_DEBUG is True
 
 
 def test_save_settings_strips_telegram_secrets(tmp_path, monkeypatch):

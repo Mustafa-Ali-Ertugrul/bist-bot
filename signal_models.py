@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 
-import config
+from config import settings
 
 
 class SignalType(Enum):
@@ -32,7 +32,7 @@ class Signal:
     confidence: str = "DÜŞÜK"
 
     def __str__(self) -> str:
-        name = config.TICKER_NAMES.get(self.ticker, self.ticker)
+        name = settings.TICKER_NAMES.get(self.ticker, self.ticker)
         reasons_str = "\n    ".join(self.reasons)
         return (
             f"\n{'='*50}\n"

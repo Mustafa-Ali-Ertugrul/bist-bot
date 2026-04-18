@@ -5,7 +5,7 @@ from enum import Enum
 from typing import Any, Optional
 import logging
 
-import config
+from config import settings
 from indicators import TechnicalIndicators
 from risk_manager import RiskManager
 from signal_models import Signal, SignalType
@@ -70,12 +70,12 @@ def detect_regime(df: pd.DataFrame, lookback: int = 20) -> MarketRegime:
 
 
 class StrategyEngine:
-    STRONG_BUY_THRESHOLD = getattr(config, "STRONG_BUY_THRESHOLD", 40)
-    BUY_THRESHOLD = getattr(config, "BUY_THRESHOLD", 10)
-    WEAK_BUY_THRESHOLD = getattr(config, "WEAK_BUY_THRESHOLD", 0)
-    WEAK_SELL_THRESHOLD = getattr(config, "WEAK_SELL_THRESHOLD", 0)
-    SELL_THRESHOLD = getattr(config, "SELL_THRESHOLD", -10)
-    STRONG_SELL_THRESHOLD = getattr(config, "STRONG_SELL_THRESHOLD", -40)
+    STRONG_BUY_THRESHOLD = getattr(settings, "STRONG_BUY_THRESHOLD", 40)
+    BUY_THRESHOLD = getattr(settings, "BUY_THRESHOLD", 10)
+    WEAK_BUY_THRESHOLD = getattr(settings, "WEAK_BUY_THRESHOLD", 0)
+    WEAK_SELL_THRESHOLD = getattr(settings, "WEAK_SELL_THRESHOLD", 0)
+    SELL_THRESHOLD = getattr(settings, "SELL_THRESHOLD", -10)
+    STRONG_SELL_THRESHOLD = getattr(settings, "STRONG_SELL_THRESHOLD", -40)
     MIN_REGIME_PERSISTENCE = 2
     SIDEWAYS_EXTRA_THRESHOLD = 5
     MOMENTUM_CONFIRMATION = 4.0
@@ -88,14 +88,14 @@ class StrategyEngine:
         """Initialize injectable indicator and risk-management dependencies."""
         self.indicators = indicators or TechnicalIndicators()
         self.risk_manager = risk_manager or RiskManager(
-            capital=getattr(config, "INITIAL_CAPITAL", 8500.0)
+            capital=getattr(settings, "INITIAL_CAPITAL", 8500.0)
         )
-        self.STRONG_BUY_THRESHOLD = getattr(config, "STRONG_BUY_THRESHOLD", 40)
-        self.BUY_THRESHOLD = getattr(config, "BUY_THRESHOLD", 10)
-        self.WEAK_BUY_THRESHOLD = getattr(config, "WEAK_BUY_THRESHOLD", 0)
-        self.WEAK_SELL_THRESHOLD = getattr(config, "WEAK_SELL_THRESHOLD", 0)
-        self.SELL_THRESHOLD = getattr(config, "SELL_THRESHOLD", -10)
-        self.STRONG_SELL_THRESHOLD = getattr(config, "STRONG_SELL_THRESHOLD", -40)
+        self.STRONG_BUY_THRESHOLD = getattr(settings, "STRONG_BUY_THRESHOLD", 40)
+        self.BUY_THRESHOLD = getattr(settings, "BUY_THRESHOLD", 10)
+        self.WEAK_BUY_THRESHOLD = getattr(settings, "WEAK_BUY_THRESHOLD", 0)
+        self.WEAK_SELL_THRESHOLD = getattr(settings, "WEAK_SELL_THRESHOLD", 0)
+        self.SELL_THRESHOLD = getattr(settings, "SELL_THRESHOLD", -10)
+        self.STRONG_SELL_THRESHOLD = getattr(settings, "STRONG_SELL_THRESHOLD", -40)
 
     def _extract_timeframes(self, market_data: pd.DataFrame | dict[str, pd.DataFrame]) -> tuple[pd.DataFrame, pd.DataFrame, bool]:
         if isinstance(market_data, dict):
@@ -114,7 +114,7 @@ class StrategyEngine:
         regime = detect_regime(enriched)
         last = enriched.iloc[-1]
         close = float(last["close"])
-        ema_long = last.get(f"ema_{config.EMA_LONG}")
+        ema_long = last.get(f"ema_{settings.EMA_LONG}")
         plus_di = last.get("plus_di", 0)
         minus_di = last.get("minus_di", 0)
 
@@ -211,7 +211,7 @@ class StrategyEngine:
             return None
 
         df = self.indicators.add_all(trigger_df.copy())
-        trend_bias = self._get_trend_bias(trend_df) if multi_timeframe and getattr(config, "MTF_ENABLED", True) else TrendBias.NEUTRAL
+        trend_bias = self._get_trend_bias(trend_df) if multi_timeframe and getattr(settings, "MTF_ENABLED", True) else TrendBias.NEUTRAL
 
         last = df.iloc[-1]
         prev = df.iloc[-2]
@@ -220,7 +220,7 @@ class StrategyEngine:
 
         adx = last.get("adx")
         if pd.notna(adx):
-            if adx < getattr(config, "ADX_THRESHOLD", 20):
+            if adx < getattr(settings, "ADX_THRESHOLD", 20):
                 logger.debug(f"  {ticker}: ADX düşük ({adx:.1f}) - Trend yok, sinyal üretme")
                 return None
 
@@ -228,25 +228,25 @@ class StrategyEngine:
         if regime == MarketRegime.SIDEWAYS:
             reasons.append("Piyasa rejimi yatay - skor etkisi azaltıldı")
 
-        ema_long = last.get(f"ema_{config.EMA_LONG}")
+        ema_long = last.get(f"ema_{settings.EMA_LONG}")
         if pd.notna(ema_long):
             price = last["close"]
             above_ema = price > ema_long
-            last_above_ema = prev["close"] > prev.get(f"ema_{config.EMA_LONG}", ema_long)
+            last_above_ema = prev["close"] > prev.get(f"ema_{settings.EMA_LONG}", ema_long)
             if above_ema and not last_above_ema:
-                reasons.append(f"Fiyat EMA{config.EMA_LONG}'i kesti (yukarı)")
+                reasons.append(f"Fiyat EMA{settings.EMA_LONG}'i kesti (yukarı)")
             elif above_ema:
-                if adx >= getattr(config, "ADX_THRESHOLD", 20):
+                if adx >= getattr(settings, "ADX_THRESHOLD", 20):
                     score += 10
-                    reasons.append(f"yükseliş trendi (EMA{config.EMA_LONG} üzerinde)")
+                    reasons.append(f"yükseliş trendi (EMA{settings.EMA_LONG} üzerinde)")
             elif not above_ema and last_above_ema:
-                reasons.append(f"Fiyat EMA{config.EMA_LONG}'i kesti (aşağı)")
+                reasons.append(f"Fiyat EMA{settings.EMA_LONG}'i kesti (aşağı)")
 
         volume_sma_20 = last.get("volume_sma_20")
         volume = last.get("volume")
         if pd.notna(volume_sma_20) and pd.notna(volume):
             vol_ratio = volume / volume_sma_20
-            min_vol_ratio = getattr(config, "VOLUME_CONFIRM_MULTIPLIER", 1.5)
+            min_vol_ratio = getattr(settings, "VOLUME_CONFIRM_MULTIPLIER", 1.5)
             if vol_ratio >= min_vol_ratio:
                 score += 8
                 reasons.append(f"Hacim onayı ({vol_ratio:.1f}x ort)")
@@ -322,8 +322,8 @@ class StrategyEngine:
             score -= 12
             reasons.append("SMA Death Cross 💀 → Düşüş sinyali")
         else:
-            sma_fast = last.get(f"sma_{config.SMA_FAST}")
-            sma_slow = last.get(f"sma_{config.SMA_SLOW}")
+            sma_fast = last.get(f"sma_{settings.SMA_FAST}")
+            sma_slow = last.get(f"sma_{settings.SMA_SLOW}")
             if pd.notna(sma_fast) and pd.notna(sma_slow):
                 if sma_fast > sma_slow:
                     score += 3
@@ -550,7 +550,7 @@ class StrategyEngine:
                 f"Korelasyon limiti: x{risk_levels.correlation_scale:.2f} | İlişkili: {', '.join(risk_levels.correlated_tickers)}"
             )
 
-        if multi_timeframe and getattr(config, "MTF_ENABLED", True):
+        if multi_timeframe and getattr(settings, "MTF_ENABLED", True):
             if not self._apply_confluence(signal.signal_type, trend_bias, signal.reasons):
                 logger.debug(f"  {ticker}: MTF confluence nedeniyle sinyal atlandı")
                 return None

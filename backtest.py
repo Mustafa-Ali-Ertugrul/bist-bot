@@ -12,7 +12,7 @@ try:
 except ImportError:
     yf = None
 
-import config
+from config import settings
 import strategy as strategy_module
 from contracts import StrategyEngineProtocol
 from indicators import TechnicalIndicators
@@ -110,27 +110,27 @@ class Backtester:
         indicators: Optional[TechnicalIndicators] = None,
     ):
         self.initial_capital = float(
-            initial_capital if initial_capital is not None else getattr(config, "INITIAL_CAPITAL", 8500.0)
+            initial_capital if initial_capital is not None else getattr(settings, "INITIAL_CAPITAL", 8500.0)
         )
-        default_commission = float(getattr(config, "BACKTEST_COMMISSION_PCT", 0.001))
+        default_commission = float(getattr(settings, "BACKTEST_COMMISSION_PCT", 0.001))
         self.commission_buy_pct = float(
             commission_buy_pct
             if commission_buy_pct is not None
-            else getattr(config, "BACKTEST_COMMISSION_BUY_PCT", default_commission)
+            else getattr(settings, "BACKTEST_COMMISSION_BUY_PCT", default_commission)
         )
         self.commission_sell_pct = float(
             commission_sell_pct
             if commission_sell_pct is not None
-            else getattr(config, "BACKTEST_COMMISSION_SELL_PCT", default_commission)
+            else getattr(settings, "BACKTEST_COMMISSION_SELL_PCT", default_commission)
         )
         self.slippage_pct = float(
-            slippage_pct if slippage_pct is not None else getattr(config, "BACKTEST_SLIPPAGE_PCT", 0.0005)
+            slippage_pct if slippage_pct is not None else getattr(settings, "BACKTEST_SLIPPAGE_PCT", 0.0005)
         )
         self.buy_threshold = float(
-            buy_threshold if buy_threshold is not None else getattr(config, "BUY_THRESHOLD", 10)
+            buy_threshold if buy_threshold is not None else getattr(settings, "BUY_THRESHOLD", 10)
         )
         self.sell_threshold = float(
-            sell_threshold if sell_threshold is not None else getattr(config, "SELL_THRESHOLD", -10)
+            sell_threshold if sell_threshold is not None else getattr(settings, "SELL_THRESHOLD", -10)
         )
         self.target_rr = float(target_rr)
         self.indicators = indicators or TechnicalIndicators()
@@ -147,7 +147,7 @@ class Backtester:
             return None
 
         df = self.indicators.add_all(df.copy())
-        df = df.dropna(subset=["rsi", f"sma_{config.SMA_SLOW}"])
+        df = df.dropna(subset=["rsi", f"sma_{settings.SMA_SLOW}"])
         if len(df) < 2:
             return None
 
@@ -436,9 +436,9 @@ class Backtester:
 
         rsi = last.get("rsi")
         if pd.notna(rsi):
-            if rsi < 30:
+            if rsi < settings.RSI_OVERSOLD:
                 score += 20
-            elif rsi > 70:
+            elif rsi > settings.RSI_OVERBOUGHT:
                 score -= 20
 
         sma_cross = last.get("sma_cross", "NONE")
@@ -447,8 +447,8 @@ class Backtester:
         elif sma_cross == "DEATH_CROSS":
             score -= 20
 
-        sma_fast = last.get(f"sma_{config.SMA_FAST}")
-        sma_slow = last.get(f"sma_{config.SMA_SLOW}")
+        sma_fast = last.get(f"sma_{settings.SMA_FAST}")
+        sma_slow = last.get(f"sma_{settings.SMA_SLOW}")
         if pd.notna(sma_fast) and pd.notna(sma_slow):
             score += 5 if float(sma_fast) > float(sma_slow) else -5
 
@@ -518,7 +518,7 @@ if __name__ == "__main__":
 
     fetcher = BISTDataFetcher()
     backtester = StrategyBacktester(
-        initial_capital=getattr(config, "INITIAL_CAPITAL", 8500.0),
+        initial_capital=getattr(settings, "INITIAL_CAPITAL", 8500.0),
         engine=_reload_strategy_dependencies(),
     )
 
@@ -600,7 +600,7 @@ def compare_benchmark(ticker: str, df: pd.DataFrame) -> float:
         if yf is None:
             return 0.0
         bench = yf.download(
-            getattr(config, "BENCHMARK_TICKER", "^XU100"),
+            getattr(settings, "BENCHMARK_TICKER", "^XU100"),
             start=df.index[0],
             end=df.index[-1],
             progress=False,

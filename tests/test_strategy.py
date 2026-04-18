@@ -10,7 +10,7 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
-import config
+from config import settings
 import pandas as pd
 from strategy import StrategyEngine
 from strategy import TrendBias
@@ -98,7 +98,7 @@ def build_signal_frame() -> pd.DataFrame:
                 "adx": 28.0,
                 "plus_di": 30.0,
                 "minus_di": 14.0,
-                f"ema_{config.EMA_LONG}": 90.0,
+                f"ema_{settings.EMA_LONG}": 90.0,
                 "rsi": 24.0,
                 "stoch_k": 15.0,
                 "stoch_d": 12.0,
@@ -130,12 +130,12 @@ def build_signal_frame() -> pd.DataFrame:
 def test_engine_thresholds_match_config():
     engine = StrategyEngine()
 
-    assert engine.STRONG_BUY_THRESHOLD == config.STRONG_BUY_THRESHOLD == 48
-    assert engine.BUY_THRESHOLD == config.BUY_THRESHOLD == 20
-    assert engine.WEAK_BUY_THRESHOLD == config.WEAK_BUY_THRESHOLD == 8
-    assert engine.WEAK_SELL_THRESHOLD == config.WEAK_SELL_THRESHOLD == -8
-    assert engine.SELL_THRESHOLD == config.SELL_THRESHOLD == -20
-    assert engine.STRONG_SELL_THRESHOLD == config.STRONG_SELL_THRESHOLD == -48
+    assert engine.STRONG_BUY_THRESHOLD == settings.STRONG_BUY_THRESHOLD == 48
+    assert engine.BUY_THRESHOLD == settings.BUY_THRESHOLD == 20
+    assert engine.WEAK_BUY_THRESHOLD == settings.WEAK_BUY_THRESHOLD == 8
+    assert engine.WEAK_SELL_THRESHOLD == settings.WEAK_SELL_THRESHOLD == -8
+    assert engine.SELL_THRESHOLD == settings.SELL_THRESHOLD == -20
+    assert engine.STRONG_SELL_THRESHOLD == settings.STRONG_SELL_THRESHOLD == -48
 
 
 def test_score_classification_full_range():

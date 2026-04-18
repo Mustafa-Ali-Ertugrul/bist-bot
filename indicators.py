@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import logging
 
-import config
+from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ class TechnicalIndicators:
 
     @staticmethod
     def add_rsi(df: pd.DataFrame, period: int = None) -> pd.DataFrame:
-        period = period or config.RSI_PERIOD
+        period = period or settings.RSI_PERIOD
         df = df.copy()
         
         delta = df["close"].diff()
@@ -216,8 +216,8 @@ class TechnicalIndicators:
 
     @staticmethod
     def add_sma(df: pd.DataFrame, fast: int = None, slow: int = None) -> pd.DataFrame:
-        fast = fast or config.SMA_FAST
-        slow = slow or config.SMA_SLOW
+        fast = fast or settings.SMA_FAST
+        slow = slow or settings.SMA_SLOW
         df = df.copy()
         
         df[f"sma_{fast}"] = df["close"].rolling(window=fast).mean()
@@ -235,8 +235,8 @@ class TechnicalIndicators:
 
     @staticmethod
     def add_ema(df: pd.DataFrame, fast: int = None, slow: int = None) -> pd.DataFrame:
-        fast = fast or config.EMA_FAST
-        slow = slow or config.EMA_SLOW
+        fast = fast or settings.EMA_FAST
+        slow = slow or settings.EMA_SLOW
         df = df.copy()
         
         df[f"ema_{fast}"] = df["close"].ewm(span=fast, adjust=False).mean()
@@ -275,8 +275,8 @@ class TechnicalIndicators:
 
     @staticmethod
     def add_bollinger(df: pd.DataFrame, period: int = None, std: float = None) -> pd.DataFrame:
-        period = period or config.BOLLINGER_PERIOD
-        std = std or config.BOLLINGER_STD
+        period = period or settings.BOLLINGER_PERIOD
+        std = std or settings.BOLLINGER_STD
         df = df.copy()
         
         df["bb_middle"] = df["close"].rolling(window=period).mean()
@@ -300,7 +300,7 @@ class TechnicalIndicators:
         
         df["volume_sma_20"] = df["volume"].rolling(window=20).mean()
         df["volume_ratio"] = df["volume"] / df["volume_sma_20"]
-        df["volume_spike"] = df["volume_ratio"] >= config.VOLUME_SPIKE_MULTIPLIER
+        df["volume_spike"] = df["volume_ratio"] >= settings.VOLUME_SPIKE_MULTIPLIER
         
         price_up = df["close"] > df["close"].shift(1)
         vol_up = df["volume"] > df["volume"].shift(1)
@@ -321,8 +321,8 @@ class TechnicalIndicators:
         vol_ratio = last.get("volume_ratio", 1.0)
         
         if ticker:
-            base_threshold = getattr(config, "VOLUME_CONFIRM_MULTIPLIER", 1.5)
-            liquidity_factor = config.TICKER_NAMES.get(ticker, "")
+            base_threshold = getattr(settings, "VOLUME_CONFIRM_MULTIPLIER", 1.5)
+            liquidity_factor = settings.TICKER_NAMES.get(ticker, "")
             if liquidity_factor in ("SASA", "EREGL", "KRDMD"):
                 threshold = threshold or 1.2
             elif liquidity_factor in ("THYAO", "GARAN", "AKBNK"):

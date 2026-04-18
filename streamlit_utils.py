@@ -1,4 +1,4 @@
-import config
+from config import settings
 from contracts import NotifierProtocol
 from indicators import TechnicalIndicators
 
@@ -45,7 +45,7 @@ def send_signal_notification(
     conditions,
     notifier: NotifierProtocol,
 ):
-    name = config.TICKER_NAMES.get(ticker, ticker)
+    name = settings.TICKER_NAMES.get(ticker, ticker)
     conditions_text = "\n".join([f"  • {c}" for c in conditions])
 
     if signal_type == "AL":

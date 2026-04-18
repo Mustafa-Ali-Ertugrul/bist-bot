@@ -8,7 +8,7 @@ from threading import Thread
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
-import config
+from config import settings
 from contracts import DataFetcherProtocol, NotifierProtocol, SignalRepositoryProtocol, StrategyEngineProtocol
 from dashboard import create_dashboard_app
 from dependencies import build_app_container
@@ -43,7 +43,7 @@ class BISTBot:
         self.db = db
         self.paper_trade_fetcher = paper_trade_fetcher or fetcher
         self.backtester_factory = backtester_factory or (
-            lambda: Backtester(initial_capital=getattr(config, "INITIAL_CAPITAL", 8500.0))
+            lambda: Backtester(initial_capital=getattr(settings, "INITIAL_CAPITAL", 8500.0))
         )
         self.running = False
 
@@ -81,15 +81,15 @@ class BISTBot:
         logger.info("\n" + "█" * 55)
         logger.info("█  BIST BOT — TARAMA BAŞLIYOR")
         logger.info(f"█  Saat: {datetime.now().strftime('%d.%m.%Y %H:%M')}")
-        logger.info(f"█  Watchlist: {len(config.WATCHLIST)} hisse")
+        logger.info(f"█  Watchlist: {len(settings.WATCHLIST)} hisse")
         logger.info("█" * 55)
 
         self.fetcher.clear_cache()
         all_data = self.fetcher.fetch_multi_timeframe_all(
-            trend_period=getattr(config, "MTF_TREND_PERIOD", "6mo"),
-            trend_interval=getattr(config, "MTF_TREND_INTERVAL", "1d"),
-            trigger_period=getattr(config, "MTF_TRIGGER_PERIOD", "1mo"),
-            trigger_interval=getattr(config, "MTF_TRIGGER_INTERVAL", "15m"),
+            trend_period=getattr(settings, "MTF_TREND_PERIOD", "6mo"),
+            trend_interval=getattr(settings, "MTF_TREND_INTERVAL", "1d"),
+            trigger_period=getattr(settings, "MTF_TRIGGER_PERIOD", "1mo"),
+            trigger_interval=getattr(settings, "MTF_TRIGGER_INTERVAL", "15m"),
         )
 
         if not all_data:
@@ -121,7 +121,7 @@ class BISTBot:
         for s in actionable:
             self.db.save_signal(s)
             
-            if getattr(config, "PAPER_MODE", False):
+            if getattr(settings, "PAPER_MODE", False):
                 regime = "BULL"
                 self.db.add_paper_trade(
                     ticker=s.ticker,
@@ -142,19 +142,19 @@ class BISTBot:
 
             strong = [
                 s for s in actionable
-                if abs(s.score) >= getattr(config, "TELEGRAM_MIN_SCORE", 70)
+                if abs(s.score) >= getattr(settings, "TELEGRAM_MIN_SCORE", 70)
             ]
             for s in strong:
                 self.notifier.send_signal(s)
                 sleep(1)
 
-        if getattr(config, "PAPER_MODE", False):
+        if getattr(settings, "PAPER_MODE", False):
             self.update_paper_trades()
 
         return signals
 
     def update_paper_trades(self):
-        if not getattr(config, "PAPER_MODE", False):
+        if not getattr(settings, "PAPER_MODE", False):
             return
 
         open_trades = self.db.get_open_paper_trades()
@@ -190,33 +190,33 @@ class BISTBot:
                 sleep(3600)
                 continue
 
-            if hour < config.MARKET_OPEN_HOUR:
-                wait = (config.MARKET_OPEN_HOUR - hour) * 3600
+            if hour < settings.MARKET_OPEN_HOUR:
+                wait = (settings.MARKET_OPEN_HOUR - hour) * 3600
                 logger.info(
                     f"⏰ Borsa henüz açılmadı. "
-                    f"{config.MARKET_OPEN_HOUR}:00'da başlayacak..."
+                    f"{settings.MARKET_OPEN_HOUR}:00'da başlayacak..."
                 )
                 sleep(min(wait, 1800))
                 continue
 
-            warmup_minutes = getattr(config, "MARKET_WARMUP_MINUTES", 15)
-            half_day_hour = getattr(config, "MARKET_HALF_DAY_HOUR", 13)
+            warmup_minutes = getattr(settings, "MARKET_WARMUP_MINUTES", 15)
+            half_day_hour = getattr(settings, "MARKET_HALF_DAY_HOUR", 13)
             
-            if hour >= config.MARKET_CLOSE_HOUR:
+            if hour >= settings.MARKET_CLOSE_HOUR:
                 logger.info("🌙 Borsa kapandı. Yarın görüşürüz!")
                 self.scan_once()
                 sleep(3600 * 14)
                 continue
             
-            if hour == config.MARKET_OPEN_HOUR and minute < warmup_minutes:
+            if hour == settings.MARKET_OPEN_HOUR and minute < warmup_minutes:
                 logger.info(f"🌅 Açılış gürültüsü - ilk {warmup_minutes} dakika bekleniyor...")
                 sleep(60)
                 continue
                 
-            if hour >= half_day_hour and hour < config.MARKET_CLOSE_HOUR:
+            if hour >= half_day_hour and hour < settings.MARKET_CLOSE_HOUR:
                 logger.info("🌓 Yarım gün - sadece son saatlerde tarama yapılıyor")
                 self.scan_once()
-                sleep(3600 * (config.MARKET_CLOSE_HOUR - half_day_hour))
+                sleep(3600 * (settings.MARKET_CLOSE_HOUR - half_day_hour))
                 continue
 
             try:
@@ -227,10 +227,10 @@ class BISTBot:
 
             logger.info(
                 f"\n⏳ Sonraki tarama: "
-                f"{config.SCAN_INTERVAL_MINUTES} dakika sonra"
+                f"{settings.SCAN_INTERVAL_MINUTES} dakika sonra"
             )
 
-            for _ in range(config.SCAN_INTERVAL_MINUTES * 6):
+            for _ in range(settings.SCAN_INTERVAL_MINUTES * 6):
                 if not self.running:
                     break
                 sleep(10)
@@ -244,7 +244,7 @@ class BISTBot:
         backtester = self.backtester_factory()
         results = []
 
-        for ticker in config.WATCHLIST:
+        for ticker in settings.WATCHLIST:
             df = self.fetcher.fetch_single(ticker, period="1y")
             if df is not None:
                 result = backtester.run(ticker, df, verbose=False)
@@ -295,25 +295,25 @@ def main():
         bot.run_backtest()
 
     elif "--dashboard" in sys.argv:
-        logger.info(f"🌐 Dashboard: http://localhost:{config.FLASK_PORT}")
+        logger.info(f"🌐 Dashboard: http://localhost:{settings.FLASK_PORT}")
         dashboard_app.run(
             host="0.0.0.0",
-            port=config.FLASK_PORT,
-            debug=config.FLASK_DEBUG
+            port=settings.FLASK_PORT,
+            debug=settings.FLASK_DEBUG
         )
 
     else:
         dashboard_thread = Thread(
             target=lambda: dashboard_app.run(
                 host="0.0.0.0",
-                port=config.FLASK_PORT,
+                port=settings.FLASK_PORT,
                 debug=False,
                 use_reloader=False
             ),
             daemon=True
         )
         dashboard_thread.start()
-        logger.info(f"🌐 Dashboard: http://localhost:{config.FLASK_PORT}")
+        logger.info(f"🌐 Dashboard: http://localhost:{settings.FLASK_PORT}")
 
         bot.run_loop()
 

@@ -12,7 +12,7 @@ import time
 import requests
 from bs4 import BeautifulSoup
 
-import config
+from config import settings
 
 logging.basicConfig(
     level=logging.INFO,
@@ -20,6 +20,9 @@ logging.basicConfig(
     datefmt="%H:%M:%S"
 )
 logger = logging.getLogger(__name__)
+
+_BIST100_CACHE: list[str] | None = None
+_BIST100_CACHE_TIME: datetime | None = None
 
 
 class RateLimiter:
@@ -38,7 +41,7 @@ class RateLimiter:
     def wait_if_needed(self, domain: str) -> None:
         """Domain için yeterli süre geçmediyse bekle."""
         current_time = time.time()
-        min_interval = float(getattr(config, "RATE_LIMIT_SECONDS", 2.0))
+        min_interval = float(getattr(settings, "RATE_LIMIT_SECONDS", 2.0))
         last_request = self.last_request.get(domain)
         if last_request is not None:
             elapsed = current_time - last_request
@@ -163,9 +166,11 @@ def get_bist100_tickers(force_refresh: bool = False) -> list[str]:
         Normalized ticker list.
     """
     # Demo/watchlist: Yahoo Finance screener (day_gainers). Gercek BIST100 endeksi icin BIST-DDS gerekli.
+    global _BIST100_CACHE, _BIST100_CACHE_TIME
+
     if not force_refresh:
-        cached = getattr(config, "_bist100_cache", None)
-        cached_time = getattr(config, "_bist100_cache_time", None)
+        cached = _BIST100_CACHE
+        cached_time = _BIST100_CACHE_TIME
         if cached and cached_time and (datetime.now() - cached_time).total_seconds() < 3600:
             logger.info(f"Demo/watchlist cache hit: {len(cached)} tickers")
             return cached
@@ -196,21 +201,21 @@ def get_bist100_tickers(force_refresh: bool = False) -> list[str]:
     tickers = _clean_ticker_list(tickers)
 
     if len(tickers) >= 50:
-        setattr(config, "_bist100_cache", tickers)
-        setattr(config, "_bist100_cache_time", datetime.now())
+        _BIST100_CACHE = tickers
+        _BIST100_CACHE_TIME = datetime.now()
         logger.info(f"Demo/watchlist dynamic yüklendi: {len(tickers)} hisse")
         return tickers
 
     logger.info(f"Demo/watchlist dynamic yetersiz ({len(tickers)}), fallback kullaniliyor")
-    fallback = getattr(config, "DEFAULT_BIST100_WATCHLIST", None)
+    fallback = settings.DEFAULT_BIST100_WATCHLIST
     if fallback:
         fallback_clean = _clean_ticker_list(fallback)
-        setattr(config, "_bist100_cache", fallback_clean)
-        setattr(config, "_bist100_cache_time", datetime.now())
+        _BIST100_CACHE = fallback_clean
+        _BIST100_CACHE_TIME = datetime.now()
         return fallback_clean
 
-    setattr(config, "_bist100_cache", [])
-    setattr(config, "_bist100_cache_time", datetime.now())
+    _BIST100_CACHE = []
+    _BIST100_CACHE_TIME = datetime.now()
     return []
 
 
@@ -260,7 +265,7 @@ class BISTDataFetcher:
             tickers = get_bist100_tickers()
             if len(tickers) < 90:
                 logger.warning(f"⚠️ Watchlist yetersiz ({len(tickers)}), fallback kullaniliyor")
-                tickers = _clean_ticker_list(getattr(config, "DEFAULT_BIST100_WATCHLIST", []))
+                tickers = _clean_ticker_list(getattr(settings, "DEFAULT_BIST100_WATCHLIST", []))
             self.watchlist = tickers
         else:
             self.watchlist = _clean_ticker_list(watchlist)
@@ -368,8 +373,8 @@ class BISTDataFetcher:
         Returns:
             Normalized price dataframe or ``None`` on failure.
         """
-        period = period or config.DATA_PERIOD
-        interval = interval or config.DATA_INTERVAL
+        period = period or settings.DATA_PERIOD
+        interval = interval or settings.DATA_INTERVAL
 
         cached = self._get_cached_data(ticker, period, interval, force=force)
         if cached is not None:
@@ -412,8 +417,8 @@ class BISTDataFetcher:
         Returns:
             Mapping of ticker symbols to normalized dataframes.
         """
-        period = period or config.DATA_PERIOD
-        interval = interval or config.DATA_INTERVAL
+        period = period or settings.DATA_PERIOD
+        interval = interval or settings.DATA_INTERVAL
 
         results = {}
         total = len(self.watchlist)
@@ -530,7 +535,7 @@ class BISTDataFetcher:
         Returns:
             Latest price if available, otherwise ``None``.
         """
-        if getattr(config, "ENABLE_REALTIME_SCRAPING", True):
+        if getattr(settings, "ENABLE_REALTIME_SCRAPING", True):
             scraped = get_price_from_bist_website(ticker)
             if scraped is not None:
                 logger.info(f"  ⚡ {ticker}: anlik fiyat BIST web sitesinden alindi")
@@ -578,10 +583,10 @@ class BISTDataFetcher:
         trigger_period: str | None = None,
         trigger_interval: str | None = None,
     ) -> dict[str, dict[str, pd.DataFrame]]:
-        trend_period = trend_period or getattr(config, "MTF_TREND_PERIOD", "6mo")
-        trend_interval = trend_interval or getattr(config, "MTF_TREND_INTERVAL", "1d")
-        trigger_period = trigger_period or getattr(config, "MTF_TRIGGER_PERIOD", "1mo")
-        trigger_interval = trigger_interval or getattr(config, "MTF_TRIGGER_INTERVAL", "15m")
+        trend_period = trend_period or getattr(settings, "MTF_TREND_PERIOD", "6mo")
+        trend_interval = trend_interval or getattr(settings, "MTF_TREND_INTERVAL", "1d")
+        trigger_period = trigger_period or getattr(settings, "MTF_TRIGGER_PERIOD", "1mo")
+        trigger_interval = trigger_interval or getattr(settings, "MTF_TRIGGER_INTERVAL", "15m")
 
         trend_data = self.fetch_all(period=trend_period, interval=trend_interval)
         trigger_data = self.fetch_all(period=trigger_period, interval=trigger_interval)

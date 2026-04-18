@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 import logging
 
-import config
+from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +51,7 @@ class RiskManager:
         fixed_stop_pct: float = 5.0,
         fixed_target_pct: float = 8.0,
     ):
-        self.capital = capital if capital is not None else getattr(config, "INITIAL_CAPITAL", 8500.0)
+        self.capital = capital if capital is not None else getattr(settings, "INITIAL_CAPITAL", 8500.0)
         self.max_risk_pct = max_risk_per_trade_pct
         self.atr_stop_mult = atr_stop_multiplier
         self.atr_target_mult = atr_target_multiplier
@@ -61,19 +61,19 @@ class RiskManager:
         self._sector_signal_counts = {}
         self.sector_positions = self._sector_signal_counts
         self._portfolio_history: dict[str, pd.DataFrame] = {}
-        self.correlation_threshold = float(getattr(config, "CORRELATION_THRESHOLD", 0.70))
-        self.correlation_risk_step = float(getattr(config, "CORRELATION_RISK_STEP", 0.35))
-        self.correlation_min_scale = float(getattr(config, "CORRELATION_MIN_SCALE", 0.25))
-        self.correlation_max_cluster = int(getattr(config, "CORRELATION_MAX_CLUSTER", 2))
-        self.atr_baseline_pct = float(getattr(config, "ATR_BASELINE_PCT", 0.025))
-        self.atr_min_risk_scale = float(getattr(config, "ATR_MIN_RISK_SCALE", 0.35))
+        self.correlation_threshold = float(getattr(settings, "CORRELATION_THRESHOLD", 0.70))
+        self.correlation_risk_step = float(getattr(settings, "CORRELATION_RISK_STEP", 0.35))
+        self.correlation_min_scale = float(getattr(settings, "CORRELATION_MIN_SCALE", 0.25))
+        self.correlation_max_cluster = int(getattr(settings, "CORRELATION_MAX_CLUSTER", 2))
+        self.atr_baseline_pct = float(getattr(settings, "ATR_BASELINE_PCT", 0.025))
+        self.atr_min_risk_scale = float(getattr(settings, "ATR_MIN_RISK_SCALE", 0.35))
 
     def check_sector_limit(self, ticker: str) -> bool:
-        sector = getattr(config, "SECTOR_MAP", {}).get(ticker)
+        sector = getattr(settings, "SECTOR_MAP", {}).get(ticker)
         if not sector:
             return True
         
-        sector_limit = getattr(config, "SECTOR_LIMIT", 2)
+        sector_limit = getattr(settings, "SECTOR_LIMIT", 2)
         current = self._sector_signal_counts.get(sector, 0)
         
         if current >= sector_limit:
@@ -436,7 +436,7 @@ if __name__ == "__main__":
 
     fetcher = BISTDataFetcher()
     ti = TechnicalIndicators()
-    rm = RiskManager(capital=getattr(config, "INITIAL_CAPITAL", 8500.0))
+    rm = RiskManager(capital=getattr(settings, "INITIAL_CAPITAL", 8500.0))
 
     test_tickers = ["ASELS.IS", "THYAO.IS", "BIMAS.IS"]
 

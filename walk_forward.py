@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 from dataclasses import dataclass
 
-import config
+from config import settings
 from data_fetcher import BISTDataFetcher
 from backtest import Backtester
 
@@ -20,6 +20,26 @@ class OptimizedParams:
     win_rate: float
 
 
+class OptimizingBacktester(Backtester):
+    def __init__(self, *args, rsi_oversold: int, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.rsi_oversold = rsi_oversold
+
+    def _calculate_score(self, df: pd.DataFrame) -> float:
+        score = super()._calculate_score(df)
+        if len(df) < 2:
+            return score
+
+        last = df.iloc[-1]
+        rsi = last.get("rsi")
+        if pd.notna(rsi):
+            if settings.RSI_OVERSOLD <= rsi < settings.RSI_OVERBOUGHT and rsi < self.rsi_oversold:
+                score += 20
+            elif self.rsi_oversold <= rsi < settings.RSI_OVERSOLD:
+                score -= 20
+        return max(-100.0, min(100.0, score))
+
+
 def find_best_params(
     ticker: str,
     df: pd.DataFrame,
@@ -27,8 +47,8 @@ def find_best_params(
     lookback_days: int = None,
     test_days: int = None,
 ) -> Optional[OptimizedParams]:
-    lookback_days = lookback_days or getattr(config, "WALKFORWARD_TRAIN_DAYS", 180)
-    test_days = test_days or getattr(config, "WALKFORWARD_TEST_DAYS", 30)
+    lookback_days = lookback_days or settings.WALKFORWARD_TRAIN_DAYS
+    test_days = test_days or settings.WALKFORWARD_TEST_DAYS
     if df is None or len(df) < lookback_days + 30:
         logger.warning(f"Yetersiz veri: {len(df) if df is not None else 0}")
         return None
@@ -43,13 +63,11 @@ def find_best_params(
     best_return = float("-inf")
 
     for rsi_oversold in range(rsi_range[0], rsi_range[1] + 1, 1):
-        original_rsi = config.RSI_OVERSOLD
-        config.RSI_OVERSOLD = rsi_oversold
-
-        bt = Backtester(
-            initial_capital=getattr(config, "INITIAL_CAPITAL", 8500.0),
+        bt = OptimizingBacktester(
+            initial_capital=settings.INITIAL_CAPITAL,
             buy_threshold=35,
             sell_threshold=-15,
+            rsi_oversold=rsi_oversold,
         )
 
         result = bt.run(ticker, train_df, verbose=False)
@@ -63,8 +81,6 @@ def find_best_params(
                 total_return=result.total_return_pct,
                 win_rate=result.win_rate,
             )
-
-        config.RSI_OVERSOLD = original_rsi
 
     if best_params:
         logger.info(
@@ -80,7 +96,7 @@ def walk_forward_batch(
     rsi_range: tuple = (25, 35),
     lookback_days: int = 180,
 ) -> dict:
-    tickers = tickers or config.WATCHLIST[:10]
+    tickers = tickers or settings.WATCHLIST[:10]
     fetcher = BISTDataFetcher()
     results = {}
 
@@ -96,8 +112,7 @@ def walk_forward_batch(
 
 
 def apply_optimized_params(ticker: str, params: OptimizedParams) -> bool:
-    config.RSI_OVERSOLD = params.rsi_oversold
     logger.info(
-        f"  {ticker}: RSI eşiği {config.RSI_OVERSOLD} olarak ayarlandı"
+        f"  {ticker}: Önerilen RSI eşiği {params.rsi_oversold}"
     )
     return True

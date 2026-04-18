@@ -10,8 +10,8 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
-from database import SignalDatabase
-from database_manager import DatabaseManager
+from db.database import DatabaseManager
+from db.repositories.signals_repository import SignalsRepository
 from signal_models import Signal, SignalType
 
 
@@ -23,7 +23,7 @@ def test_database_manager_enables_wal_mode(tmp_path):
 
 def test_signal_database_saves_and_reads_signal(tmp_path):
     manager = DatabaseManager(sqlite_path=str(tmp_path / "signals.db"))
-    db = SignalDatabase(manager=manager)
+    db = SignalsRepository(manager=manager)
     signal = Signal(
         ticker="THYAO.IS",
         signal_type=SignalType.BUY,

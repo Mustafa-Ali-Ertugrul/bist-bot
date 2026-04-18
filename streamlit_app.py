@@ -13,10 +13,10 @@ import plotly.graph_objects as go
 import requests
 import streamlit as st
 
-import config
+from config import settings
 import config_store
 from dependencies import build_app_container
-from db_manager import init_db, save_signal, get_recent_signals
+from db.repositories.signals_repository import get_recent_signals, init_db, save_signal
 from indicators import TechnicalIndicators
 from signal_models import Signal, SignalType
 from streamlit_utils import check_signals, send_signal_notification
@@ -56,13 +56,13 @@ def bootstrap_state(container=None):
         "rsi_max_filter": 100,
         "vol_ratio_filter": 0.0,
         "notify_min_score": 30,
-        "notify_telegram": bool(config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID),
+        "notify_telegram": bool(settings.TELEGRAM_BOT_TOKEN and settings.TELEGRAM_CHAT_ID),
         "deploy_confirmed": False,
         "last_scan_time": None,
         "scan_in_progress": False,
         "scan_error": None,
         "current_view": "dashboard",
-        "selected_ticker": config.WATCHLIST[0],
+        "selected_ticker": settings.WATCHLIST[0],
         "analysis_period": "6mo",
         "_scan_session_key": uuid.uuid4().hex,
     }
@@ -88,13 +88,13 @@ def bootstrap_state(container=None):
 
     tg = stored.get("telegram", {})
     tg_defaults = config_store.DEFAULT_SETTINGS["telegram"]
-    st.session_state["tg_token_input"] = config.TELEGRAM_BOT_TOKEN or tg_defaults["bot_token"]
-    st.session_state["tg_chat_input"] = config.TELEGRAM_CHAT_ID or tg_defaults["chat_id"]
+    st.session_state["tg_token_input"] = settings.TELEGRAM_BOT_TOKEN or tg_defaults["bot_token"]
+    st.session_state["tg_chat_input"] = settings.TELEGRAM_CHAT_ID or tg_defaults["chat_id"]
     st.session_state["notify_min_score"] = tg.get("notify_min_score", tg_defaults["notify_min_score"])
     st.session_state["notify_telegram"] = bool(
         tg.get("enabled", tg_defaults["enabled"])
-        and config.TELEGRAM_BOT_TOKEN
-        and config.TELEGRAM_CHAT_ID
+        and settings.TELEGRAM_BOT_TOKEN
+        and settings.TELEGRAM_CHAT_ID
     )
 
     scan = stored.get("scan", {})
@@ -804,10 +804,10 @@ def _collect_scan_result(fetcher, engine, notifier, last_scan_time=None, force_c
                 fetcher.clear_cache()
 
     timeframe_data = fetcher.fetch_multi_timeframe_all(
-        trend_period=getattr(config, "MTF_TREND_PERIOD", "6mo"),
-        trend_interval=getattr(config, "MTF_TREND_INTERVAL", "1d"),
-        trigger_period=getattr(config, "MTF_TRIGGER_PERIOD", "1mo"),
-        trigger_interval=getattr(config, "MTF_TRIGGER_INTERVAL", "15m"),
+        trend_period=getattr(settings, "MTF_TREND_PERIOD", "6mo"),
+        trend_interval=getattr(settings, "MTF_TREND_INTERVAL", "1d"),
+        trigger_period=getattr(settings, "MTF_TRIGGER_PERIOD", "1mo"),
+        trigger_interval=getattr(settings, "MTF_TRIGGER_INTERVAL", "15m"),
     )
     signals = engine.scan_all(timeframe_data)
     all_data = {
@@ -921,7 +921,7 @@ def ensure_initial_data():
         return
 
     try:
-        cached = get_recent_signals(limit=len(config.WATCHLIST))
+        cached = get_recent_signals(limit=len(settings.WATCHLIST))
 
         if cached:
             st.session_state.signals = map_cached_signals(cached)
@@ -935,7 +935,7 @@ def ensure_initial_data():
 
 
 def fetch_stock_news(ticker, max_results=5):
-    name = config.TICKER_NAMES.get(ticker, ticker.replace(".IS", ""))
+    name = settings.TICKER_NAMES.get(ticker, ticker.replace(".IS", ""))
     all_news = []
 
     try:
@@ -1052,7 +1052,7 @@ def render_portfolio_hero(signals, summary):
     total = len(signals)
     success_rate = round((buy_count / total * 100) if total > 0 else 0)
     avg_rsi = summary.get("avg_rsi", 50)
-    analyzed = summary.get("total_analyzed", len(config.WATCHLIST))
+    analyzed = summary.get("total_analyzed", len(settings.WATCHLIST))
     scan_time = st.session_state.last_scan_time.strftime("%H:%M") if st.session_state.last_scan_time else "-"
 
     if avg_rsi < 40:
@@ -1142,7 +1142,7 @@ def render_live_insights(signals):
 
     rows = []
     for s in top:
-        name         = config.TICKER_NAMES.get(s.ticker, s.ticker)
+        name         = settings.TICKER_NAMES.get(s.ticker, s.ticker)
         ticker_short = s.ticker.replace(".IS", "")
 
         if s.score >= 40:
@@ -1183,7 +1183,7 @@ def render_live_insights(signals):
 
 
 def render_stock_identity(ticker, snapshot):
-    name = config.TICKER_NAMES.get(ticker, ticker)
+    name = settings.TICKER_NAMES.get(ticker, ticker)
     short = ticker.replace(".IS", "")
     price = snapshot.get("close", 0)
     change_pct = snapshot.get("change_pct", 0)
@@ -1493,7 +1493,7 @@ def filter_signals(base_signals, all_data):
 
 
 def render_signal_card(signal, df_data=None):
-    name = config.TICKER_NAMES.get(signal.ticker, signal.ticker)
+    name = settings.TICKER_NAMES.get(signal.ticker, signal.ticker)
     chip_class = "buy" if signal.score >= 10 else "sell"
     with st.container(border=True):
         c1, c2 = st.columns([1.2, 1])
@@ -1516,7 +1516,7 @@ def render_signal_card(signal, df_data=None):
 
 
 def render_signal_card_v2(signal, df_data=None):
-    name = config.TICKER_NAMES.get(signal.ticker, signal.ticker)
+    name = settings.TICKER_NAMES.get(signal.ticker, signal.ticker)
     ticker_short = signal.ticker.replace(".IS", "")
 
     if signal.score >= 10:
@@ -1622,7 +1622,7 @@ def render_signal_card_v2(signal, df_data=None):
 def render_top_shell(signals, summary):
     strong_count = len([s for s in signals if s.score >= 40])
     positive_count = len([s for s in signals if s.score >= 10])
-    analyzed = summary.get("total_analyzed", len(config.WATCHLIST))
+    analyzed = summary.get("total_analyzed", len(settings.WATCHLIST))
     avg_rsi = summary.get("avg_rsi", 50)
     scan_time = st.session_state.last_scan_time.strftime("%H:%M") if st.session_state.last_scan_time else datetime.now(TR).strftime("%H:%M")
     st.markdown(
@@ -1700,7 +1700,7 @@ def render_dashboard(signals, summary):
         else:
             rows = []
             for signal in top:
-                name = config.TICKER_NAMES.get(signal.ticker, signal.ticker)
+                name = settings.TICKER_NAMES.get(signal.ticker, signal.ticker)
                 chip = "buy" if signal.score >= 10 else "sell"
                 rows.append(
                     f"<div class='list-row'>"
@@ -1752,7 +1752,7 @@ def render_analysis(all_data):
         unsafe_allow_html=True,
     )
 
-    ticker_list = list(all_data.keys()) if all_data else config.WATCHLIST
+    ticker_list = list(all_data.keys()) if all_data else settings.WATCHLIST
     c1, c2, c3 = st.columns([1.4, 1, 1])
     with c1:
         current_idx = ticker_list.index(st.session_state.selected_ticker) if st.session_state.selected_ticker in ticker_list else 0
@@ -1760,7 +1760,7 @@ def render_analysis(all_data):
             "Hisse",
             ticker_list,
             index=current_idx,
-            format_func=lambda x: f"{config.TICKER_NAMES.get(x, x)} ({x.replace('.IS', '')})",
+            format_func=lambda x: f"{settings.TICKER_NAMES.get(x, x)} ({x.replace('.IS', '')})",
         )
     with c2:
         period_options = ["1mo", "3mo", "6mo", "1y", "2y", "5y"]
@@ -2010,7 +2010,7 @@ def render_settings(signals):
             "✅ Hazır" if tg_ready else "⚠️ Eksik"
         )
 
-        total_scanned = len(st.session_state.get("all_data", {})) or len(config.WATCHLIST)
+        total_scanned = len(st.session_state.get("all_data", {})) or len(settings.WATCHLIST)
         signal_count = len(signals) if signals is not None else 0
         signal_ratio = round((signal_count / total_scanned) * 100) if total_scanned > 0 else 0
 
@@ -2063,19 +2063,19 @@ def render_settings(signals):
 
         changed = []
         param_map = [
-            ("RSI Periyot",   "ind_rsi_period",    config.RSI_PERIOD),
-            ("RSI Satım",     "ind_rsi_oversold",  config.RSI_OVERSOLD),
-            ("RSI Alım",       "ind_rsi_overbought",config.RSI_OVERBOUGHT),
-            ("SMA Hızlı",     "ind_sma_fast",      config.SMA_FAST),
-            ("SMA Yavaş",     "ind_sma_slow",      config.SMA_SLOW),
-            ("EMA Hızlı",     "ind_ema_fast",      config.EMA_FAST),
-            ("EMA Yavaş",     "ind_ema_slow",      config.EMA_SLOW),
-            ("MACD Hızlı",    "ind_macd_fast",    config.MACD_FAST),
-            ("MACD Yavaş",    "ind_macd_slow",    config.MACD_SLOW),
-            ("MACD Sinyal",   "ind_macd_signal",  config.MACD_SIGNAL),
-            ("BB Periyot",    "ind_bb_period",    config.BOLLINGER_PERIOD),
-            ("BB Std",        "ind_bb_std",       float(config.BOLLINGER_STD)),
-            ("ADX Eşiği",     "ind_adx_threshold", config.ADX_THRESHOLD),
+            ("RSI Periyot",   "ind_rsi_period",    settings.RSI_PERIOD),
+            ("RSI Satım",     "ind_rsi_oversold",  settings.RSI_OVERSOLD),
+            ("RSI Alım",       "ind_rsi_overbought",settings.RSI_OVERBOUGHT),
+            ("SMA Hızlı",     "ind_sma_fast",      settings.SMA_FAST),
+            ("SMA Yavaş",     "ind_sma_slow",      settings.SMA_SLOW),
+            ("EMA Hızlı",     "ind_ema_fast",      settings.EMA_FAST),
+            ("EMA Yavaş",     "ind_ema_slow",      settings.EMA_SLOW),
+            ("MACD Hızlı",    "ind_macd_fast",    settings.MACD_FAST),
+            ("MACD Yavaş",    "ind_macd_slow",    settings.MACD_SLOW),
+            ("MACD Sinyal",   "ind_macd_signal",  settings.MACD_SIGNAL),
+            ("BB Periyot",    "ind_bb_period",    settings.BOLLINGER_PERIOD),
+            ("BB Std",        "ind_bb_std",       float(settings.BOLLINGER_STD)),
+            ("ADX Eşiği",     "ind_adx_threshold", settings.ADX_THRESHOLD),
         ]
         for label, key, default in param_map:
             current = st.session_state.get(key, default)
@@ -2121,22 +2121,8 @@ def render_settings(signals):
                 use_container_width=True,
                 type="primary"
             ):
-                config.RSI_PERIOD       = st.session_state.ind_rsi_period
-                config.RSI_OVERSOLD     = st.session_state.ind_rsi_oversold
-                config.RSI_OVERBOUGHT   = st.session_state.ind_rsi_overbought
-                config.SMA_FAST         = st.session_state.ind_sma_fast
-                config.SMA_SLOW         = st.session_state.ind_sma_slow
-                config.EMA_FAST         = st.session_state.ind_ema_fast
-                config.EMA_SLOW         = st.session_state.ind_ema_slow
-                config.MACD_FAST        = st.session_state.ind_macd_fast
-                config.MACD_SLOW        = st.session_state.ind_macd_slow
-                config.MACD_SIGNAL      = st.session_state.ind_macd_signal
-                config.BOLLINGER_PERIOD = st.session_state.ind_bb_period
-                config.BOLLINGER_STD    = st.session_state.ind_bb_std
-                config.ADX_THRESHOLD    = st.session_state.ind_adx_threshold
-
-                settings = config_store.load_settings()
-                settings["indicator"] = {
+                user_settings = config_store.load_settings()
+                user_settings["indicator"] = {
                     "rsi_period": st.session_state.ind_rsi_period,
                     "rsi_oversold": st.session_state.ind_rsi_oversold,
                     "rsi_overbought": st.session_state.ind_rsi_overbought,
@@ -2151,13 +2137,13 @@ def render_settings(signals):
                     "bb_std": st.session_state.ind_bb_std,
                     "adx_threshold": st.session_state.ind_adx_threshold,
                 }
-                settings["telegram"] = {
+                user_settings["telegram"] = {
                     "bot_token": "",
                     "chat_id": "",
                     "notify_min_score": st.session_state.notify_min_score,
                     "enabled": st.session_state.notify_telegram,
                 }
-                settings["scan"] = {
+                user_settings["scan"] = {
                     "auto_refresh": st.session_state.auto_refresh,
                     "refresh_interval": st.session_state.refresh_interval,
                     "min_score_filter": st.session_state.min_score_filter,
@@ -2165,7 +2151,7 @@ def render_settings(signals):
                     "rsi_max_filter": st.session_state.rsi_max_filter,
                     "vol_ratio_filter": st.session_state.vol_ratio_filter,
                 }
-                config_store.save_settings(settings)
+                config_store.save_settings(user_settings)
                 run_scan()
                 st.session_state.deploy_confirmed = True
                 st.rerun()

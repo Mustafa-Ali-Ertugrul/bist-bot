@@ -9,7 +9,7 @@ from sqlalchemy import Float, Integer, String, Text, create_engine, event, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, scoped_session, sessionmaker
 from sqlalchemy.pool import QueuePool
 
-import config
+from config import settings
 
 
 class Base(DeclarativeBase):
@@ -38,7 +38,7 @@ class SignalRecord(Base):
 
 
 class PaperTradeRecord(Base):
-    __tablename__ = config.PAPER_TRADES_TABLE
+    __tablename__ = settings.PAPER_TRADES_TABLE
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     ticker: Mapped[str] = mapped_column(String, nullable=False, index=True)
@@ -66,6 +66,14 @@ class ScanLogRecord(Base):
     sell_signals: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
 
+class ConfigRecord(Base):
+    __tablename__ = "app_settings"
+
+    key: Mapped[str] = mapped_column(String, primary_key=True)
+    value: Mapped[str] = mapped_column(Text, nullable=False)
+    updated_at: Mapped[str] = mapped_column(Text, nullable=False, default="")
+
+
 class DatabaseManager:
     def __init__(
         self,
@@ -75,7 +83,7 @@ class DatabaseManager:
         pool_timeout: int = 30,
         busy_timeout_ms: int = 5000,
     ) -> None:
-        self.sqlite_path = sqlite_path or config.DB_PATH
+        self.sqlite_path = sqlite_path or settings.DB_PATH
         self.busy_timeout_ms = busy_timeout_ms
         self.engine = create_engine(
             f"sqlite:///{Path(self.sqlite_path)}",
@@ -112,34 +120,20 @@ class DatabaseManager:
 
     def _migrate_legacy_schema(self) -> None:
         with self.engine.begin() as conn:
-            signal_columns = {
-                row[1] for row in conn.execute(text("PRAGMA table_info(signals)")).fetchall()
-            }
+            signal_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(signals)")).fetchall()}
             if "conditions" not in signal_columns:
                 conn.execute(text("ALTER TABLE signals ADD COLUMN conditions TEXT NOT NULL DEFAULT '[]'"))
             if "created_at" not in signal_columns:
                 conn.execute(text("ALTER TABLE signals ADD COLUMN created_at TEXT NOT NULL DEFAULT ''"))
 
-            paper_trade_columns = {
-                row[1] for row in conn.execute(text(f"PRAGMA table_info({config.PAPER_TRADES_TABLE})")).fetchall()
-            }
-            if "exit_price" not in paper_trade_columns:
-                conn.execute(text(f"ALTER TABLE {config.PAPER_TRADES_TABLE} ADD COLUMN exit_price REAL"))
-            if "exit_date" not in paper_trade_columns:
-                conn.execute(text(f"ALTER TABLE {config.PAPER_TRADES_TABLE} ADD COLUMN exit_date TEXT"))
+            paper_columns = {row[1] for row in conn.execute(text(f"PRAGMA table_info({settings.PAPER_TRADES_TABLE})")).fetchall()}
+            if "exit_price" not in paper_columns:
+                conn.execute(text(f"ALTER TABLE {settings.PAPER_TRADES_TABLE} ADD COLUMN exit_price REAL"))
+            if "exit_date" not in paper_columns:
+                conn.execute(text(f"ALTER TABLE {settings.PAPER_TRADES_TABLE} ADD COLUMN exit_date TEXT"))
 
-            conn.execute(
-                text(
-                    "CREATE INDEX IF NOT EXISTS idx_signals_created_at "
-                    "ON signals(created_at DESC)"
-                )
-            )
-            conn.execute(
-                text(
-                    "CREATE INDEX IF NOT EXISTS idx_signals_ticker_created_at "
-                    "ON signals(ticker, created_at DESC)"
-                )
-            )
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_signals_created_at ON signals(created_at DESC)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_signals_ticker_created_at ON signals(ticker, created_at DESC)"))
 
     @contextmanager
     def session_scope(self) -> Iterator[Session]:

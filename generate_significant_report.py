@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-import config
+from config import settings
 from backtest import Backtester, _to_datetime, _to_float
 from data_fetcher import BISTDataFetcher
 
@@ -17,7 +17,7 @@ class TraceBacktester(Backtester):
         if df is None or len(df) < 50:
             return None
         df = self.indicators.add_all(df.copy())
-        df = df.dropna(subset=["rsi", f"sma_{config.SMA_SLOW}"])
+        df = df.dropna(subset=["rsi", f"sma_{settings.SMA_SLOW}"])
         if len(df) < 2:
             return None
 
@@ -148,7 +148,7 @@ def build_detail(fetcher, backtester, item):
 
     return {
         "ticker": ticker,
-        "name": config.TICKER_NAMES.get(ticker, ticker.replace(".IS", "")),
+        "name": settings.TICKER_NAMES.get(ticker, ticker.replace(".IS", "")),
         "total_trades": result.total_trades,
         "annual_return_pct": round(result.total_return_pct, 2),
         "max_drawdown_pct": round(result.max_drawdown_pct, 2),
@@ -269,7 +269,7 @@ def write_significant_report(details, false_positives):
             ]
         )
         for row in false_positives:
-            name = config.TICKER_NAMES.get(row["ticker"], row["ticker"].replace(".IS", ""))
+            name = settings.TICKER_NAMES.get(row["ticker"], row["ticker"].replace(".IS", ""))
             lines.append(
                 f"| {name} ({row['ticker']}) | {row['sharpe_ratio']:.2f} | {row['total_trades']} | {row['win_rate']:.1f} | {row['max_drawdown_pct']:.2f} |"
             )
@@ -336,7 +336,7 @@ def main() -> None:
     )
 
     fetcher = BISTDataFetcher()
-    backtester = TraceBacktester(initial_capital=getattr(config, "INITIAL_CAPITAL", 8500.0))
+    backtester = TraceBacktester(initial_capital=getattr(settings, "INITIAL_CAPITAL", 8500.0))
     details = []
 
     for item in top10:
@@ -362,7 +362,7 @@ def main() -> None:
             risky_candidates.append(
                 {
                     "ticker": row["ticker"],
-                    "name": config.TICKER_NAMES.get(row["ticker"], row["ticker"].replace(".IS", "")),
+                    "name": settings.TICKER_NAMES.get(row["ticker"], row["ticker"].replace(".IS", "")),
                     "composite_score": row["composite_score"],
                     "total_trades": row["total_trades"],
                     "annual_return_pct": row["total_return_pct"],

@@ -6,7 +6,7 @@ from typing import Callable
 
 TR = timezone(timedelta(hours=3))
 
-import config
+from config import settings
 from signal_models import Signal, SignalType
 
 logger = logging.getLogger(__name__)
@@ -63,8 +63,8 @@ class TelegramNotifier:
         chat_id: str = None,
         sender: Callable[..., bool] = send_telegram_with_retry,
     ):
-        self.token = token or config.TELEGRAM_BOT_TOKEN
-        self.chat_id = chat_id or config.TELEGRAM_CHAT_ID
+        self.token = token or settings.TELEGRAM_BOT_TOKEN
+        self.chat_id = chat_id or settings.TELEGRAM_CHAT_ID
         self.sender = sender
         self.base_url = f"https://api.telegram.org/bot{self.token}"
         self.enabled = bool(self.token and self.chat_id)
@@ -87,8 +87,8 @@ class TelegramNotifier:
                 chat_id=self.chat_id,
                 text=text,
                 parse_mode=parse_mode,
-                max_retries=getattr(config, "NOTIFICATION_MAX_RETRIES", 3),
-                retry_delay=getattr(config, "NOTIFICATION_RETRY_DELAY", 5),
+                max_retries=getattr(settings, "NOTIFICATION_MAX_RETRIES", 3),
+                retry_delay=getattr(settings, "NOTIFICATION_RETRY_DELAY", 5),
             )
             if sent:
                 logger.info("📨 Telegram mesajı gönderildi")
@@ -100,7 +100,7 @@ class TelegramNotifier:
             return False
 
     def send_signal(self, signal: Signal) -> bool:
-        name = config.TICKER_NAMES.get(signal.ticker, signal.ticker)
+        name = settings.TICKER_NAMES.get(signal.ticker, signal.ticker)
 
         emoji_map = {
             SignalType.STRONG_BUY: "🚀💰",
@@ -151,13 +151,13 @@ class TelegramNotifier:
         top_sells = sorted(sells, key=lambda s: s.score)[:3]
 
         top_buys_text = "\n".join([
-            f"  🟢 {config.TICKER_NAMES.get(s.ticker, s.ticker)}: "
+            f"  🟢 {settings.TICKER_NAMES.get(s.ticker, s.ticker)}: "
             f"₺{s.price:.2f} (Skor: {s.score:+.0f})"
             for s in top_buys
         ]) or "  Yok"
 
         top_sells_text = "\n".join([
-            f"  🔴 {config.TICKER_NAMES.get(s.ticker, s.ticker)}: "
+            f"  🔴 {settings.TICKER_NAMES.get(s.ticker, s.ticker)}: "
             f"₺{s.price:.2f} (Skor: {s.score:+.0f})"
             for s in top_sells
         ]) or "  Yok"
@@ -189,7 +189,7 @@ class TelegramNotifier:
         old_signal: Signal,
         new_signal: Signal
     ) -> bool:
-        name = config.TICKER_NAMES.get(ticker, ticker)
+        name = settings.TICKER_NAMES.get(ticker, ticker)
 
         emoji_map = {
             SignalType.STRONG_BUY: "🚀💰",
@@ -232,8 +232,8 @@ class TelegramNotifier:
     def send_startup_message(self):
         msg = (
             "🤖 <b>BIST Bot Başlatıldı!</b>\n\n"
-            f"📊 Takip: {len(config.WATCHLIST)} hisse\n"
-            f"⏱️ Tarama: Her {config.SCAN_INTERVAL_MINUTES} dakika\n"
+            f"📊 Takip: {len(settings.WATCHLIST)} hisse\n"
+            f"⏱️ Tarama: Her {settings.SCAN_INTERVAL_MINUTES} dakika\n"
             f"⏰ Saat: {datetime.now(TR).strftime('%H:%M')}"
         )
         return self.send_message(msg)
