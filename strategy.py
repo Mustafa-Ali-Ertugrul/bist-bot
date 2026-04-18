@@ -1,13 +1,14 @@
+"""Signal scoring and classification logic for BIST trading ideas."""
+
 import pandas as pd
-from dataclasses import dataclass, field
-from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import Any, Optional
 import logging
 
 import config
 from indicators import TechnicalIndicators
 from risk_manager import RiskManager
+from signal_models import Signal, SignalType
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +20,22 @@ class MarketRegime(Enum):
     UNKNOWN = "UNKNOWN"
 
 
+class TrendBias(Enum):
+    LONG = "LONG"
+    SHORT = "SHORT"
+    NEUTRAL = "NEUTRAL"
+
+
 def detect_regime(df: pd.DataFrame, lookback: int = 20) -> MarketRegime:
+    """Infer the current market regime from trend indicators.
+
+    Args:
+        df: Indicator-enriched price dataframe.
+        lookback: Reserved lookback window size.
+
+    Returns:
+        Detected market regime.
+    """
     if df is None or len(df) < 50:
         return MarketRegime.UNKNOWN
 
@@ -53,47 +69,6 @@ def detect_regime(df: pd.DataFrame, lookback: int = 20) -> MarketRegime:
     return MarketRegime.SIDEWAYS
 
 
-class SignalType(Enum):
-    STRONG_BUY = "💰 GÜÇLÜ AL"
-    BUY = "🟢 AL"
-    WEAK_BUY = "🟡 ZAYIF AL"
-    HOLD = "⚪ BEKLE"
-    WEAK_SELL = "🟠 ZAYIF SAT"
-    SELL = "🔴 SAT"
-    STRONG_SELL = "🚨 GÜÇLÜ SAT"
-
-
-@dataclass
-class Signal:
-    ticker: str
-    signal_type: SignalType
-    score: float
-    price: float
-    reasons: list[str] = field(default_factory=list)
-    stop_loss: float = 0.0
-    target_price: float = 0.0
-    timestamp: datetime = field(default_factory=datetime.now)
-    confidence: str = "DÜŞÜK"
-
-    def __str__(self):
-        name = config.TICKER_NAMES.get(self.ticker, self.ticker)
-        reasons_str = "\n    ".join(self.reasons)
-        return (
-            f"\n{'='*50}\n"
-            f"📊 {name} ({self.ticker})\n"
-            f"{'='*50}\n"
-            f"  Sinyal  : {self.signal_type.value}\n"
-            f"  Skor    : {self.score:+.1f}/100\n"
-            f"  Fiyat   : ₺{self.price:.2f}\n"
-            f"  Güven   : {self.confidence}\n"
-            f"  Stop-Loss: ₺{self.stop_loss:.2f}\n"
-            f"  Hedef   : ₺{self.target_price:.2f}\n"
-            f"  Nedenler:\n    {reasons_str}\n"
-            f"  Zaman   : {self.timestamp.strftime('%d.%m.%Y %H:%M')}\n"
-            f"{'='*50}"
-        )
-
-
 class StrategyEngine:
     STRONG_BUY_THRESHOLD = getattr(config, "STRONG_BUY_THRESHOLD", 40)
     BUY_THRESHOLD = getattr(config, "BUY_THRESHOLD", 10)
@@ -105,9 +80,16 @@ class StrategyEngine:
     SIDEWAYS_EXTRA_THRESHOLD = 5
     MOMENTUM_CONFIRMATION = 4.0
 
-    def __init__(self):
-        self.indicators = TechnicalIndicators()
-        self.risk_manager = RiskManager(capital=getattr(config, "INITIAL_CAPITAL", 8500.0))
+    def __init__(
+        self,
+        indicators: Optional[TechnicalIndicators] = None,
+        risk_manager: Optional[RiskManager] = None,
+    ) -> None:
+        """Initialize injectable indicator and risk-management dependencies."""
+        self.indicators = indicators or TechnicalIndicators()
+        self.risk_manager = risk_manager or RiskManager(
+            capital=getattr(config, "INITIAL_CAPITAL", 8500.0)
+        )
         self.STRONG_BUY_THRESHOLD = getattr(config, "STRONG_BUY_THRESHOLD", 40)
         self.BUY_THRESHOLD = getattr(config, "BUY_THRESHOLD", 10)
         self.WEAK_BUY_THRESHOLD = getattr(config, "WEAK_BUY_THRESHOLD", 0)
@@ -115,7 +97,64 @@ class StrategyEngine:
         self.SELL_THRESHOLD = getattr(config, "SELL_THRESHOLD", -10)
         self.STRONG_SELL_THRESHOLD = getattr(config, "STRONG_SELL_THRESHOLD", -40)
 
+    def _extract_timeframes(self, market_data: pd.DataFrame | dict[str, pd.DataFrame]) -> tuple[pd.DataFrame, pd.DataFrame, bool]:
+        if isinstance(market_data, dict):
+            trend_df = market_data.get("trend")
+            trigger_df = market_data.get("trigger")
+            if trend_df is None or trigger_df is None:
+                raise ValueError("Multi-timeframe veri 'trend' ve 'trigger' anahtarlarını içermeli")
+            return trend_df, trigger_df, True
+        return market_data, market_data, False
+
+    def _get_trend_bias(self, df: pd.DataFrame) -> TrendBias:
+        if df is None or len(df) < 30:
+            return TrendBias.NEUTRAL
+
+        enriched = self.indicators.add_all(df.copy())
+        regime = detect_regime(enriched)
+        last = enriched.iloc[-1]
+        close = float(last["close"])
+        ema_long = last.get(f"ema_{config.EMA_LONG}")
+        plus_di = last.get("plus_di", 0)
+        minus_di = last.get("minus_di", 0)
+
+        if regime == MarketRegime.BULL and pd.notna(ema_long) and close >= float(ema_long) and plus_di >= minus_di:
+            return TrendBias.LONG
+        if regime == MarketRegime.BEAR and pd.notna(ema_long) and close <= float(ema_long) and minus_di >= plus_di:
+            return TrendBias.SHORT
+        return TrendBias.NEUTRAL
+
+    def _apply_confluence(self, signal_type: SignalType, trend_bias: TrendBias, reasons: list[str]) -> bool:
+        long_signals = {SignalType.STRONG_BUY, SignalType.BUY, SignalType.WEAK_BUY}
+        short_signals = {SignalType.STRONG_SELL, SignalType.SELL, SignalType.WEAK_SELL}
+
+        if signal_type in long_signals:
+            if trend_bias != TrendBias.LONG:
+                reasons.append(f"MTF confluence başarısız: üst zaman dilimi {trend_bias.value}")
+                return False
+            reasons.append("MTF confluence: günlük trend LONG, 15dk tetik destekliyor")
+            return True
+
+        if signal_type in short_signals:
+            if trend_bias != TrendBias.SHORT:
+                reasons.append(f"MTF confluence başarısız: üst zaman dilimi {trend_bias.value}")
+                return False
+            reasons.append("MTF confluence: günlük trend SHORT, 15dk tetik destekliyor")
+            return True
+
+        return True
+
     def _check_regime_persistence(self, df: pd.DataFrame, target_regime: "MarketRegime", min_bars: int = 2) -> bool:
+        """Check whether a target regime persisted for the latest bars.
+
+        Args:
+            df: Indicator-enriched price dataframe.
+            target_regime: Regime to verify.
+            min_bars: Minimum number of trailing bars to check.
+
+        Returns:
+            ``True`` when the target regime persisted.
+        """
         if len(df) < min_bars + 1:
             return False
         for i in range(len(df) - min_bars, len(df)):
@@ -125,6 +164,15 @@ class StrategyEngine:
         return True
 
     def _check_momentum_confirmation(self, df: pd.DataFrame, threshold: float = 4.0) -> bool:
+        """Validate momentum when the primary trend signal is weak.
+
+        Args:
+            df: Indicator-enriched price dataframe.
+            threshold: Minimum absolute momentum percentage.
+
+        Returns:
+            ``True`` when momentum confirmation passes.
+        """
         if len(df) < 20:
             return True
         last = df.iloc[-1]
@@ -139,12 +187,31 @@ class StrategyEngine:
         momentum = (float(last["close"]) - sma_20) / sma_20 * 100
         return abs(momentum) >= threshold
 
-    def analyze(self, ticker: str, df: pd.DataFrame, enforce_sector_limit: bool = False) -> Optional[Signal]:
-        if df is None or len(df) < 30:
-            logger.warning(f"  {ticker}: Yetersiz veri ({len(df) if df is not None else 0} mum)")
+    def analyze(
+        self,
+        ticker: str,
+        df: pd.DataFrame | dict[str, pd.DataFrame],
+        enforce_sector_limit: bool = False,
+    ) -> Optional[Signal]:
+        """Score a ticker and build a signal when thresholds are met.
+
+        Args:
+            ticker: Stock symbol.
+            df: Historical price dataframe.
+            enforce_sector_limit: Apply sector concentration guard when ``True``.
+
+        Returns:
+            A ``Signal`` instance when a non-hold classification is produced,
+            otherwise ``None``.
+        """
+        trend_df, trigger_df, multi_timeframe = self._extract_timeframes(df)
+
+        if trigger_df is None or len(trigger_df) < 30:
+            logger.warning(f"  {ticker}: Yetersiz veri ({len(trigger_df) if trigger_df is not None else 0} mum)")
             return None
 
-        df = self.indicators.add_all(df)
+        df = self.indicators.add_all(trigger_df.copy())
+        trend_bias = self._get_trend_bias(trend_df) if multi_timeframe and getattr(config, "MTF_ENABLED", True) else TrendBias.NEUTRAL
 
         last = df.iloc[-1]
         prev = df.iloc[-2]
@@ -448,6 +515,12 @@ class StrategyEngine:
 
         price = float(last["close"])
         risk_levels = self.risk_manager.calculate(df)
+
+        if signal_type in {SignalType.STRONG_BUY, SignalType.BUY, SignalType.WEAK_BUY}:
+            risk_levels = self.risk_manager.apply_portfolio_risk(ticker, df, risk_levels)
+            if risk_levels.blocked_by_correlation or risk_levels.position_size <= 0:
+                logger.debug(f"  {ticker}: portföy riski nedeniyle sinyal atlandı")
+                return None
         
         stop_loss = risk_levels.final_stop
         target_price = risk_levels.final_target
@@ -466,15 +539,42 @@ class StrategyEngine:
         signal.reasons.append(
             f"R/R: 1:{risk_levels.risk_reward_ratio:.1f} | {risk_levels.method_used}"
         )
+        signal.reasons.append(
+            f"Pozisyon: {risk_levels.position_size} lot | Risk Bütçesi: ₺{risk_levels.risk_budget_tl:.2f}"
+        )
+        signal.reasons.append(
+            f"Volatilite throttle: x{risk_levels.volatility_scale:.2f} | ATR%: %{risk_levels.atr_pct*100:.2f}"
+        )
+        if risk_levels.correlated_tickers:
+            signal.reasons.append(
+                f"Korelasyon limiti: x{risk_levels.correlation_scale:.2f} | İlişkili: {', '.join(risk_levels.correlated_tickers)}"
+            )
+
+        if multi_timeframe and getattr(config, "MTF_ENABLED", True):
+            if not self._apply_confluence(signal.signal_type, trend_bias, signal.reasons):
+                logger.debug(f"  {ticker}: MTF confluence nedeniyle sinyal atlandı")
+                return None
+
+        if signal_type in {SignalType.STRONG_BUY, SignalType.BUY, SignalType.WEAK_BUY}:
+            self.risk_manager.register_position(ticker, df)
 
         return signal
 
     def scan_all(
         self,
-        data: dict[str, pd.DataFrame]
+        data: dict[str, pd.DataFrame] | dict[str, dict[str, pd.DataFrame]]
     ) -> list[Signal]:
+        """Analyze all fetched ticker data and return sorted signals.
+
+        Args:
+            data: Mapping of ticker symbols to price dataframes.
+
+        Returns:
+            Sorted list of generated signals.
+        """
         signals = []
         self.risk_manager.reset_sectors()
+        self.risk_manager.reset_portfolio()
 
         for ticker, df in data.items():
             signal = self.analyze(ticker, df, enforce_sector_limit=True)
@@ -489,6 +589,14 @@ class StrategyEngine:
         self,
         signals: list[Signal]
     ) -> list[Signal]:
+        """Filter out hold signals from the signal list.
+
+        Args:
+            signals: Full signal list.
+
+        Returns:
+            Only actionable signals.
+        """
         return [s for s in signals if s.signal_type != SignalType.HOLD]
 
 

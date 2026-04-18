@@ -30,6 +30,12 @@ class RiskLevels:
     reward_pct: float = 0.0
     position_size: int = 0
     max_loss_tl: float = 0.0
+    risk_budget_tl: float = 0.0
+    atr_pct: float = 0.0
+    volatility_scale: float = 1.0
+    correlation_scale: float = 1.0
+    correlated_tickers: list[str] = field(default_factory=list)
+    blocked_by_correlation: bool = False
 
     method_used: str = ""
     confidence: str = "DÜŞÜK"
@@ -54,6 +60,13 @@ class RiskManager:
         # Scan-level guard only; this is not a persistent portfolio ledger.
         self._sector_signal_counts = {}
         self.sector_positions = self._sector_signal_counts
+        self._portfolio_history: dict[str, pd.DataFrame] = {}
+        self.correlation_threshold = float(getattr(config, "CORRELATION_THRESHOLD", 0.70))
+        self.correlation_risk_step = float(getattr(config, "CORRELATION_RISK_STEP", 0.35))
+        self.correlation_min_scale = float(getattr(config, "CORRELATION_MIN_SCALE", 0.25))
+        self.correlation_max_cluster = int(getattr(config, "CORRELATION_MAX_CLUSTER", 2))
+        self.atr_baseline_pct = float(getattr(config, "ATR_BASELINE_PCT", 0.025))
+        self.atr_min_risk_scale = float(getattr(config, "ATR_MIN_RISK_SCALE", 0.35))
 
     def check_sector_limit(self, ticker: str) -> bool:
         sector = getattr(config, "SECTOR_MAP", {}).get(ticker)
@@ -72,6 +85,61 @@ class RiskManager:
 
     def reset_sectors(self):
         self._sector_signal_counts.clear()
+
+    def reset_portfolio(self) -> None:
+        self._portfolio_history.clear()
+
+    def get_correlation_matrix(self) -> pd.DataFrame:
+        if not self._portfolio_history:
+            return pd.DataFrame()
+
+        series_map = {
+            ticker: history["close"].astype(float).rename(ticker)
+            for ticker, history in self._portfolio_history.items()
+            if history is not None and not history.empty and "close" in history.columns
+        }
+        if not series_map:
+            return pd.DataFrame()
+
+        close_frame = pd.concat(series_map.values(), axis=1, join="inner").dropna()
+        if close_frame.empty or close_frame.shape[1] < 2:
+            return pd.DataFrame(index=close_frame.columns, columns=close_frame.columns)
+
+        returns = close_frame.pct_change().dropna()
+        if returns.empty:
+            return pd.DataFrame(index=close_frame.columns, columns=close_frame.columns)
+        return returns.corr()
+
+    def register_position(self, ticker: str, df: pd.DataFrame) -> None:
+        if df is None or df.empty:
+            return
+        self._portfolio_history[ticker] = df[[c for c in ["close", "high", "low", "atr"] if c in df.columns]].copy()
+
+    def apply_portfolio_risk(
+        self,
+        ticker: str,
+        df: pd.DataFrame,
+        levels: RiskLevels,
+    ) -> RiskLevels:
+        correlated = self._get_correlated_positions(ticker, df)
+        levels.correlated_tickers = correlated
+
+        if len(correlated) > self.correlation_max_cluster:
+            levels.blocked_by_correlation = True
+            levels.correlation_scale = 0.0
+            levels.position_size = 0
+            levels.max_loss_tl = 0.0
+            levels.risk_budget_tl = 0.0
+            logger.warning(f"  Korelasyon limiti: {ticker} -> {', '.join(correlated)}")
+            return levels
+
+        correlation_scale = max(
+            self.correlation_min_scale,
+            1.0 - (len(correlated) * self.correlation_risk_step),
+        )
+        levels.correlation_scale = round(correlation_scale, 2)
+        self._apply_position_budget(price=float(df["close"].iloc[-1]), levels=levels)
+        return levels
 
     def calculate(
         self,
@@ -305,16 +373,61 @@ class RiskManager:
             levels.max_loss_tl = 0
             return levels
 
-        max_loss_tl = self.capital * (self.max_risk_pct / 100)
-        position_size = int(max_loss_tl / risk_per_share)
+        levels.atr_pct = self._calculate_atr_pct(levels, price)
+        levels.volatility_scale = round(self._calculate_risk_throttle(levels.atr_pct), 2)
+
+        self._apply_position_budget(price, levels)
+
+        return levels
+
+    def _apply_position_budget(self, price: float, levels: RiskLevels) -> None:
+        risk_per_share = price - levels.final_stop
+        if risk_per_share <= 0:
+            levels.position_size = 0
+            levels.max_loss_tl = 0
+            levels.risk_budget_tl = 0
+            return
+
+        budget_scale = levels.volatility_scale * levels.correlation_scale
+        max_loss_tl = self.capital * (self.max_risk_pct / 100) * budget_scale
+        position_size = int(max_loss_tl / risk_per_share) if risk_per_share > 0 else 0
 
         max_affordable = int(self.capital * 0.9 / price)
         position_size = min(position_size, max_affordable)
 
         levels.position_size = max(0, position_size)
         levels.max_loss_tl = round(position_size * risk_per_share, 2)
+        levels.risk_budget_tl = round(max_loss_tl, 2)
 
-        return levels
+    def _calculate_atr_pct(self, levels: RiskLevels, price: float) -> float:
+        if price <= 0 or levels.stop_atr <= 0:
+            return 0.0
+        atr_distance = abs(price - levels.stop_atr) / max(self.atr_stop_mult, 1e-9)
+        return atr_distance / price
+
+    def _calculate_risk_throttle(self, atr_pct: float) -> float:
+        if atr_pct <= 0:
+            return 1.0
+        if atr_pct <= self.atr_baseline_pct:
+            return 1.0
+        throttle = self.atr_baseline_pct / atr_pct
+        return max(self.atr_min_risk_scale, min(1.0, throttle))
+
+    def _get_correlated_positions(self, ticker: str, candidate_df: pd.DataFrame) -> list[str]:
+        if not self._portfolio_history:
+            return []
+
+        candidate_close = candidate_df[["close"]].rename(columns={"close": ticker}).astype(float)
+        correlated = []
+        for existing_ticker, history in self._portfolio_history.items():
+            existing_close = history[["close"]].rename(columns={"close": existing_ticker}).astype(float)
+            aligned = pd.concat([candidate_close, existing_close], axis=1, join="inner").dropna()
+            if aligned.empty or len(aligned) < 10:
+                continue
+            corr = aligned.pct_change().dropna().corr().iloc[0, 1]
+            if pd.notna(corr) and abs(float(corr)) >= self.correlation_threshold:
+                correlated.append(existing_ticker)
+        return correlated
 
 
 if __name__ == "__main__":

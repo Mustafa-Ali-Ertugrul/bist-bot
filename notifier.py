@@ -1,23 +1,71 @@
 import requests
 import logging
+import time
 from datetime import datetime, timezone, timedelta
+from typing import Callable
 
 TR = timezone(timedelta(hours=3))
 
 import config
-from strategy import Signal, SignalType
+from signal_models import Signal, SignalType
 
 logger = logging.getLogger(__name__)
+
+
+def send_telegram_with_retry(
+    base_url: str,
+    chat_id: str,
+    text: str,
+    parse_mode: str = "HTML",
+    max_retries: int = 3,
+    retry_delay: int = 5,
+) -> bool:
+    """Telegram mesaji gonderir, gecici hatalarda retry yapar."""
+    payload = {
+        "chat_id": chat_id,
+        "text": text,
+        "parse_mode": parse_mode,
+        "disable_web_page_preview": True,
+    }
+
+    for attempt in range(max_retries):
+        try:
+            response = requests.post(
+                f"{base_url}/sendMessage",
+                json=payload,
+                timeout=10,
+            )
+            if response.status_code in {403, 404}:
+                response.raise_for_status()
+            response.raise_for_status()
+            return True
+        except requests.exceptions.HTTPError as e:
+            status_code = getattr(e.response, "status_code", None)
+            if status_code in {403, 404}:
+                raise
+            if attempt < max_retries - 1:
+                time.sleep(retry_delay)
+                continue
+            raise
+        except requests.exceptions.RequestException:
+            if attempt < max_retries - 1:
+                time.sleep(retry_delay)
+                continue
+            raise
+
+    return False
 
 
 class TelegramNotifier:
     def __init__(
         self,
         token: str = None,
-        chat_id: str = None
+        chat_id: str = None,
+        sender: Callable[..., bool] = send_telegram_with_retry,
     ):
         self.token = token or config.TELEGRAM_BOT_TOKEN
         self.chat_id = chat_id or config.TELEGRAM_CHAT_ID
+        self.sender = sender
         self.base_url = f"https://api.telegram.org/bot{self.token}"
         self.enabled = bool(self.token and self.chat_id)
 
@@ -34,19 +82,18 @@ class TelegramNotifier:
             return False
 
         try:
-            response = requests.post(
-                f"{self.base_url}/sendMessage",
-                json={
-                    "chat_id": self.chat_id,
-                    "text": text,
-                    "parse_mode": parse_mode,
-                    "disable_web_page_preview": True,
-                },
-                timeout=10
+            sent = self.sender(
+                base_url=self.base_url,
+                chat_id=self.chat_id,
+                text=text,
+                parse_mode=parse_mode,
+                max_retries=getattr(config, "NOTIFICATION_MAX_RETRIES", 3),
+                retry_delay=getattr(config, "NOTIFICATION_RETRY_DELAY", 5),
             )
-            response.raise_for_status()
-            logger.info("📨 Telegram mesajı gönderildi")
-            return True
+            if sent:
+                logger.info("📨 Telegram mesajı gönderildi")
+                return True
+            return False
 
         except requests.exceptions.RequestException as e:
             logger.error(f"❌ Telegram hatası: {e}")

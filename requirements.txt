@@ -9,3 +9,4 @@ python-dotenv>=1.0.0
 flask>=3.0.0
 scikit-learn>=1.4.0
 pytest>=9.0.0
+SQLAlchemy>=2.0.36

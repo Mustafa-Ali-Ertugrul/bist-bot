@@ -35,6 +35,26 @@ copy .env.example .env          # Windows
 python main.py
 ```
 
+## Docker ile Calistirma (Opsiyonel)
+
+```bash
+# Docker ile baslat
+docker-compose up --build
+
+# Arka planda calistir
+docker-compose up -d
+
+# Loglari takip et
+docker-compose logs -f
+
+# Durdur
+docker-compose down
+```
+
+Gereksinimler:
+- Docker 20.10+
+- Docker Compose 2.0+
+
 ## Giris Noktalari
 
 Bu projede birden fazla calistirma modu var. Amacina gore birini sec:
@@ -312,7 +332,7 @@ Not: Telegram token ve chat id sadece `.env` veya ortam degiskenlerinden okunur;
 
 | Katman | Teknoloji |
 |---|---|
-| Veri | yfinance, pandas, numpy |
+| Veri | BIST web scraping, yfinance, pandas, numpy |
 | ML | scikit-learn (GradientBoosting) |
 | Web UI | Streamlit, Flask |
 | Grafik | Plotly |
@@ -336,7 +356,8 @@ Not: Telegram token ve chat id sadece `.env` veya ortam degiskenlerinden okunur;
 - Bu yazilim **yatirim tavsiyesi degildir**. Tum kararlariniz size aittir.
 - Gecmis performans gelecegi garanti etmez.
 - Paper trading modunu kullanarak once stratejiyi test edin.
-- Bot, yfinance uzerinden veri ceker; API limitlerine dikkat edin.
+- Veri: Web scraping ile ~0-30 sn gecikme (BIST web sitesi). Yahoo Finance fallback: ~15 dakika gecikme.
+- Bot, yfinance ve web scraping kullanir; API limitleri ve hedef sitenin kullanim kosullari izlenmelidir.
 
 ## Gelistirme Notlari
 

@@ -1,11 +1,16 @@
+"""Market data fetching helpers for BIST symbols."""
+
 import yfinance as yf
 import pandas as pd
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from functools import wraps
 from typing import cast
 import logging
+import re
 import time
 import requests
+from bs4 import BeautifulSoup
 
 import config
 
@@ -17,18 +22,158 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+class RateLimiter:
+    """Basit rate limiter.
+
+    Her domain icin son istek zamanini izler ve minimum bekleme suresi
+    uygulanarak ardisik isteklerin cok sik gonderilmesini engeller.
+
+    Attributes:
+        last_request: Domain bazli son istek zamanlarini tutar.
+    """
+
+    def __init__(self):
+        self.last_request: dict[str, float] = {}
+
+    def wait_if_needed(self, domain: str) -> None:
+        """Domain için yeterli süre geçmediyse bekle."""
+        current_time = time.time()
+        min_interval = float(getattr(config, "RATE_LIMIT_SECONDS", 2.0))
+        last_request = self.last_request.get(domain)
+        if last_request is not None:
+            elapsed = current_time - last_request
+            if elapsed < min_interval:
+                time.sleep(min_interval - elapsed)
+        self.last_request[domain] = time.time()
+
+
+_rate_limiter = RateLimiter()
+
+
+def rate_limited(domain: str = "default"):
+    """Wrap a function with domain-based rate limiting.
+
+    Args:
+        domain: Logical domain key used by the shared rate limiter.
+
+    Returns:
+        Decorator function.
+    """
+
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            _rate_limiter.wait_if_needed(domain)
+            return func(*args, **kwargs)
+
+        return wrapper
+
+    return decorator
+
+
+def _parse_tr_number(raw: str) -> float | None:
+    """Parse Turkish-formatted numeric text into a float.
+
+    Args:
+        raw: Raw text value that may contain separators or percent signs.
+
+    Returns:
+        Parsed float value, or ``None`` if parsing fails.
+    """
+    cleaned = raw.strip().replace("%", "").replace("\u00a0", " ")
+    cleaned = cleaned.replace(".", "").replace(",", ".")
+    cleaned = re.sub(r"[^0-9+\-.]", "", cleaned)
+    if not cleaned:
+        return None
+    try:
+        return float(cleaned)
+    except ValueError:
+        return None
+
+
+def get_price_from_bist_website(ticker: str) -> dict[str, float | str] | None:
+    """Fetch a near real-time quote from the Borsa Istanbul website.
+
+    Args:
+        ticker: Stock symbol such as ``THYAO.IS``.
+
+    Returns:
+        Quote payload with ``price``, ``change_percent`` and ``source`` fields,
+        or ``None`` when no parsable quote is found.
+    """
+    symbol = ticker.replace(".IS", "").upper()
+    candidate_urls = [
+        f"https://www.borsaistanbul.com/tr/sirketler/islem-goren-sirketler/sirket-bilgileri?kod={symbol}",
+        f"https://www.borsaistanbul.com/tr/sirketler/sirket-karti?kod={symbol}",
+    ]
+    headers = {"User-Agent": "Mozilla/5.0"}
+
+    for url in candidate_urls:
+        try:
+            _rate_limiter.wait_if_needed("borsaistanbul.com.tr")
+            # Uretimde kullanmadan once robots.txt ve site kullanim kosullari kontrol edilmeli.
+            response = requests.get(url, timeout=10, headers=headers)
+            response.raise_for_status()
+
+            soup = BeautifulSoup(response.text, "html.parser")
+            text_blobs = [soup.get_text(" ", strip=True)]
+            text_blobs.extend(script.get_text(" ", strip=True) for script in soup.find_all("script"))
+
+            price = None
+            change_percent = None
+            for blob in text_blobs:
+                if not blob:
+                    continue
+
+                price_match = re.search(
+                    r"(?:Son(?:\s+Değer|\s+Fiyat)?|LastPrice|price)\D{0,20}([0-9]{1,3}(?:[\.,][0-9]{3})*(?:[\.,][0-9]{2}))",
+                    blob,
+                    re.IGNORECASE,
+                )
+                if price is None and price_match:
+                    price = _parse_tr_number(price_match.group(1))
+
+                change_match = re.search(
+                    r"(?:Değişim%|Degisim%|changePercent|change_percent|Bugün\s*\(%\))\D{0,20}([+-]?[0-9]{1,3}(?:[\.,][0-9]{1,2})?)",
+                    blob,
+                    re.IGNORECASE,
+                )
+                if change_percent is None and change_match:
+                    change_percent = _parse_tr_number(change_match.group(1))
+
+                if price is not None:
+                    return {
+                        "price": price,
+                        "change_percent": change_percent if change_percent is not None else 0.0,
+                        "source": "borsaistanbul.com",
+                    }
+        except Exception as e:
+            logger.warning(f"BIST website fiyat cekme hatasi ({symbol}): {e}")
+
+    return None
+
+
 def get_bist100_tickers(force_refresh: bool = False) -> list[str]:
+    """Build the watchlist ticker set with cache and fallback support.
+
+    Args:
+        force_refresh: Bypass the in-memory cache when ``True``.
+
+    Returns:
+        Normalized ticker list.
+    """
+    # Demo/watchlist: Yahoo Finance screener (day_gainers). Gercek BIST100 endeksi icin BIST-DDS gerekli.
     if not force_refresh:
         cached = getattr(config, "_bist100_cache", None)
         cached_time = getattr(config, "_bist100_cache_time", None)
         if cached and cached_time and (datetime.now() - cached_time).total_seconds() < 3600:
-            logger.info(f"BIST100 cache hit: {len(cached)} tickers")
+            logger.info(f"Demo/watchlist cache hit: {len(cached)} tickers")
             return cached
 
     tickers = []
 
     try:
-        url = "https://www.kaggle.com/api/v1/datasets/download/an Evaluation/d/bist-100-stocks-dataset"
+        _rate_limiter.wait_if_needed("yahoo.finance")
         response = requests.get(
             "https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved?formatted=true&lang=tr-TR&region=TR&scrIds=day_gainers&start=0&count=10",
             timeout=10,
@@ -46,30 +191,38 @@ def get_bist100_tickers(force_refresh: bool = False) -> list[str]:
                     if symbol.endswith(".IS"):
                         tickers.append(symbol)
     except Exception as e:
-        logger.warning(f"BIST100 dinamik cekme hatasi: {e}")
+        logger.warning(f"Demo/watchlist dynamic fetch hatasi: {e}")
 
     tickers = _clean_ticker_list(tickers)
 
     if len(tickers) >= 50:
-        config._bist100_cache = tickers
-        config._bist100_cache_time = datetime.now()
-        logger.info(f"BIST100 dinamik yuklendi: {len(tickers)} hisse")
+        setattr(config, "_bist100_cache", tickers)
+        setattr(config, "_bist100_cache_time", datetime.now())
+        logger.info(f"Demo/watchlist dynamic yüklendi: {len(tickers)} hisse")
         return tickers
 
-    logger.info(f"BIST100 dinamik yetersiz ({len(tickers)}), fallback kullaniliyor")
+    logger.info(f"Demo/watchlist dynamic yetersiz ({len(tickers)}), fallback kullaniliyor")
     fallback = getattr(config, "DEFAULT_BIST100_WATCHLIST", None)
     if fallback:
         fallback_clean = _clean_ticker_list(fallback)
-        config._bist100_cache = fallback_clean
-        config._bist100_cache_time = datetime.now()
+        setattr(config, "_bist100_cache", fallback_clean)
+        setattr(config, "_bist100_cache_time", datetime.now())
         return fallback_clean
 
-    config._bist100_cache = []
-    config._bist100_cache_time = datetime.now()
+    setattr(config, "_bist100_cache", [])
+    setattr(config, "_bist100_cache_time", datetime.now())
     return []
 
 
 def _clean_ticker_list(tickers: list[str]) -> list[str]:
+    """Normalize ticker symbols and remove duplicates.
+
+    Args:
+        tickers: Raw ticker list.
+
+    Returns:
+        Upper-cased ticker list with ``.IS`` suffixes.
+    """
     seen = set()
     result = []
     for t in tickers:
@@ -86,7 +239,23 @@ def _clean_ticker_list(tickers: list[str]) -> list[str]:
 
 
 class BISTDataFetcher:
-    def __init__(self, watchlist: list[str] | None = None):
+    """BIST hisseleri icin veri cekme ve cache yonetimi yapar.
+
+    Watchlist olusturma, toplu veya tekil veri indirme ve kisa sureli bellek
+    ici cache davranisini tek bir servis altinda toplar.
+
+    Attributes:
+        watchlist: Normalize edilmis hisse listesi.
+        _cache: Ticker bazli veri cache'i.
+        _last_fetch: Her ticker icin son veri cekim zamani.
+    """
+
+    def __init__(self, watchlist: list[str] | None = None) -> None:
+        """Initialize the fetcher with a normalized watchlist.
+
+        Args:
+            watchlist: Optional explicit ticker list.
+        """
         if watchlist is None:
             tickers = get_bist100_tickers()
             if len(tickers) < 90:
@@ -95,27 +264,55 @@ class BISTDataFetcher:
             self.watchlist = tickers
         else:
             self.watchlist = _clean_ticker_list(watchlist)
-        self._cache: dict[str, pd.DataFrame] = {}
-        self._last_fetch: dict[str, datetime] = {}
+        self._cache: dict[tuple[str, str, str], pd.DataFrame] = {}
+        self._last_fetch: dict[tuple[str, str, str], datetime] = {}
         self._cache_ttl = timedelta(minutes=5)
         self._max_workers = min(8, max(2, len(self.watchlist)))
         logger.info(f"BISTDataFetcher baslatildi: {len(self.watchlist)} hisse")
 
-    def _get_cached_data(self, ticker: str, force: bool = False) -> pd.DataFrame | None:
+    def _cache_key(self, ticker: str, period: str, interval: str) -> tuple[str, str, str]:
+        return (ticker, period, interval)
+
+    def _get_cached_data(
+        self,
+        ticker: str,
+        period: str,
+        interval: str,
+        force: bool = False,
+    ) -> pd.DataFrame | None:
+        """Return cached data for a ticker when the cache entry is still fresh.
+
+        Args:
+            ticker: Stock symbol.
+            force: Ignore cache when ``True``.
+
+        Returns:
+            Cached price dataframe or ``None``.
+        """
         if force:
             return None
 
-        if ticker not in self._cache:
+        cache_key = self._cache_key(ticker, period, interval)
+        if cache_key not in self._cache:
             return None
 
-        last = self._last_fetch.get(ticker)
+        last = self._last_fetch.get(cache_key)
         if last and datetime.now() - last < self._cache_ttl:
-            logger.debug(f"  {ticker} cache'den döndürüldü")
-            return self._cache[ticker]
+            logger.debug(f"  {ticker} cache'den döndürüldü ({interval}/{period})")
+            return self._cache[cache_key]
 
         return None
 
     def _normalize_history(self, ticker: str, df: pd.DataFrame | None) -> pd.DataFrame | None:
+        """Normalize downloaded price history into the expected schema.
+
+        Args:
+            ticker: Stock symbol.
+            df: Raw dataframe returned by the data source.
+
+        Returns:
+            Cleaned dataframe or ``None`` when the payload is unusable.
+        """
         if df is None or df.empty:
             logger.warning(f"⚠️  {ticker} için veri bulunamadı!")
             return None
@@ -142,9 +339,16 @@ class BISTDataFetcher:
 
         return cast(pd.DataFrame, normalized)
 
-    def _store_cache(self, ticker: str, df: pd.DataFrame):
-        self._cache[ticker] = df
-        self._last_fetch[ticker] = datetime.now()
+    def _store_cache(self, ticker: str, period: str, interval: str, df: pd.DataFrame) -> None:
+        """Store normalized price history in the in-memory cache.
+
+        Args:
+            ticker: Stock symbol.
+            df: Normalized dataframe to cache.
+        """
+        cache_key = self._cache_key(ticker, period, interval)
+        self._cache[cache_key] = df
+        self._last_fetch[cache_key] = datetime.now()
 
     def fetch_single(
         self,
@@ -153,16 +357,28 @@ class BISTDataFetcher:
         interval: str | None = None,
         force: bool = False
     ) -> pd.DataFrame | None:
+        """Fetch price history for a single ticker.
+
+        Args:
+            ticker: Stock symbol.
+            period: Data source lookback period.
+            interval: Candle interval.
+            force: Ignore cache when ``True``.
+
+        Returns:
+            Normalized price dataframe or ``None`` on failure.
+        """
         period = period or config.DATA_PERIOD
         interval = interval or config.DATA_INTERVAL
 
-        cached = self._get_cached_data(ticker, force=force)
+        cached = self._get_cached_data(ticker, period, interval, force=force)
         if cached is not None:
             return cached
 
         try:
             logger.info(f"📥 {ticker} verisi çekiliyor...")
 
+            _rate_limiter.wait_if_needed("yahoo.finance")
             stock = yf.Ticker(ticker)
             df = stock.history(period=period, interval=interval)
 
@@ -170,7 +386,7 @@ class BISTDataFetcher:
             if df is None:
                 return None
 
-            self._store_cache(ticker, df)
+            self._store_cache(ticker, period, interval, df)
 
             logger.info(
                 f"  ✅ {ticker}: {len(df)} mum, "
@@ -187,6 +403,15 @@ class BISTDataFetcher:
         period: str | None = None,
         interval: str | None = None
     ) -> dict[str, pd.DataFrame]:
+        """Fetch price history for the entire watchlist.
+
+        Args:
+            period: Data source lookback period.
+            interval: Candle interval.
+
+        Returns:
+            Mapping of ticker symbols to normalized dataframes.
+        """
         period = period or config.DATA_PERIOD
         interval = interval or config.DATA_INTERVAL
 
@@ -200,7 +425,7 @@ class BISTDataFetcher:
 
         missing_tickers = []
         for ticker in self.watchlist:
-            cached = self._get_cached_data(ticker)
+            cached = self._get_cached_data(ticker, period, interval)
             if cached is not None:
                 results[ticker] = cached
             else:
@@ -215,6 +440,7 @@ class BISTDataFetcher:
             unresolved = list(missing_tickers)
 
             try:
+                _rate_limiter.wait_if_needed("yahoo.finance")
                 raw_data = yf.download(
                     tickers=" ".join(missing_tickers),
                     period=period,
@@ -243,7 +469,7 @@ class BISTDataFetcher:
                             unresolved.append(ticker)
                             continue
 
-                        self._store_cache(ticker, df)
+                        self._store_cache(ticker, period, interval, df)
                         results[ticker] = df
                         logger.info(
                             f"  ✅ {ticker}: {len(df)} mum, "
@@ -296,12 +522,34 @@ class BISTDataFetcher:
         return results
 
     def get_current_price(self, ticker: str) -> float | None:
+        """Return the latest price using realtime scraping with Yahoo fallback.
+
+        Args:
+            ticker: Stock symbol.
+
+        Returns:
+            Latest price if available, otherwise ``None``.
+        """
+        if getattr(config, "ENABLE_REALTIME_SCRAPING", True):
+            scraped = get_price_from_bist_website(ticker)
+            if scraped is not None:
+                logger.info(f"  ⚡ {ticker}: anlik fiyat BIST web sitesinden alindi")
+                return float(scraped["price"])
+
         df = self.fetch_single(ticker, period="5d", interval="1d")
         if df is not None and not df.empty:
             return float(df["close"].iloc[-1])
         return None
 
-    def get_stock_info(self, ticker: str) -> dict:
+    def get_stock_info(self, ticker: str) -> dict[str, str | int | float | None]:
+        """Fetch descriptive stock metadata from Yahoo Finance.
+
+        Args:
+            ticker: Stock symbol.
+
+        Returns:
+            Dictionary of basic company metadata.
+        """
         try:
             stock = yf.Ticker(ticker)
             info = stock.info
@@ -317,10 +565,35 @@ class BISTDataFetcher:
             logger.error(f"Bilgi çekme hatası ({ticker}): {e}")
             return {}
 
-    def clear_cache(self):
+    def clear_cache(self) -> None:
+        """Clear all cached price history entries."""
         self._cache.clear()
         self._last_fetch.clear()
         logger.info("🗑️  Cache temizlendi")
+
+    def fetch_multi_timeframe_all(
+        self,
+        trend_period: str | None = None,
+        trend_interval: str | None = None,
+        trigger_period: str | None = None,
+        trigger_interval: str | None = None,
+    ) -> dict[str, dict[str, pd.DataFrame]]:
+        trend_period = trend_period or getattr(config, "MTF_TREND_PERIOD", "6mo")
+        trend_interval = trend_interval or getattr(config, "MTF_TREND_INTERVAL", "1d")
+        trigger_period = trigger_period or getattr(config, "MTF_TRIGGER_PERIOD", "1mo")
+        trigger_interval = trigger_interval or getattr(config, "MTF_TRIGGER_INTERVAL", "15m")
+
+        trend_data = self.fetch_all(period=trend_period, interval=trend_interval)
+        trigger_data = self.fetch_all(period=trigger_period, interval=trigger_interval)
+
+        combined: dict[str, dict[str, pd.DataFrame]] = {}
+        for ticker in self.watchlist:
+            trend_df = trend_data.get(ticker)
+            trigger_df = trigger_data.get(ticker)
+            if trend_df is None or trigger_df is None:
+                continue
+            combined[ticker] = {"trend": trend_df, "trigger": trigger_df}
+        return combined
 
 
 if __name__ == "__main__":

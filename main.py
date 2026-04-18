@@ -9,10 +9,10 @@ from threading import Thread
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 import config
-from data_fetcher import BISTDataFetcher
-from strategy import StrategyEngine, SignalType, Signal
-from notifier import TelegramNotifier
-from database import SignalDatabase
+from contracts import DataFetcherProtocol, NotifierProtocol, SignalRepositoryProtocol, StrategyEngineProtocol
+from dashboard import create_dashboard_app
+from dependencies import build_app_container
+from signal_models import Signal, SignalType
 from backtest import Backtester
 
 logging.basicConfig(
@@ -28,11 +28,23 @@ logger = logging.getLogger(__name__)
 
 
 class BISTBot:
-    def __init__(self):
-        self.fetcher = BISTDataFetcher()
-        self.engine = StrategyEngine()
-        self.notifier = TelegramNotifier()
-        self.db = SignalDatabase()
+    def __init__(
+        self,
+        fetcher: DataFetcherProtocol,
+        engine: StrategyEngineProtocol,
+        notifier: NotifierProtocol,
+        db: SignalRepositoryProtocol,
+        paper_trade_fetcher: DataFetcherProtocol | None = None,
+        backtester_factory=None,
+    ):
+        self.fetcher = fetcher
+        self.engine = engine
+        self.notifier = notifier
+        self.db = db
+        self.paper_trade_fetcher = paper_trade_fetcher or fetcher
+        self.backtester_factory = backtester_factory or (
+            lambda: Backtester(initial_capital=getattr(config, "INITIAL_CAPITAL", 8500.0))
+        )
         self.running = False
 
         signal.signal(signal.SIGINT, self._shutdown)
@@ -45,8 +57,6 @@ class BISTBot:
         for s in signals:
             prev = self.db.get_latest_signal(s.ticker)
             if prev and prev["signal_type"] != s.signal_type.value:
-                from datetime import datetime as dt
-                
                 old_signal = Signal(
                     ticker=prev["ticker"],
                     signal_type=SignalType(prev["signal_type"]),
@@ -55,7 +65,7 @@ class BISTBot:
                     stop_loss=prev.get("stop_loss", 0) or 0,
                     target_price=prev.get("target_price", 0) or 0,
                     confidence=prev.get("confidence", "DÜŞÜK") or "DÜŞÜK",
-                    timestamp=dt.fromisoformat(prev["timestamp"]),
+                    timestamp=datetime.fromisoformat(prev["timestamp"]),
                 )
                 
                 self.notifier.send_signal_change(
@@ -75,7 +85,12 @@ class BISTBot:
         logger.info("█" * 55)
 
         self.fetcher.clear_cache()
-        all_data = self.fetcher.fetch_all()
+        all_data = self.fetcher.fetch_multi_timeframe_all(
+            trend_period=getattr(config, "MTF_TREND_PERIOD", "6mo"),
+            trend_interval=getattr(config, "MTF_TREND_INTERVAL", "1d"),
+            trigger_period=getattr(config, "MTF_TRIGGER_PERIOD", "1mo"),
+            trigger_interval=getattr(config, "MTF_TRIGGER_INTERVAL", "15m"),
+        )
 
         if not all_data:
             logger.error("❌ Hiçbir veri çekilemedi!")
@@ -141,18 +156,15 @@ class BISTBot:
     def update_paper_trades(self):
         if not getattr(config, "PAPER_MODE", False):
             return
-        
-        from data_fetcher import BISTDataFetcher
-        fetcher = BISTDataFetcher()
-        
+
         open_trades = self.db.get_open_paper_trades()
         if not open_trades:
             return
-        
+
         prices = {}
         for trade in open_trades:
             ticker = trade[1]
-            df = fetcher.fetch_single(ticker, period="1d")
+            df = self.paper_trade_fetcher.fetch_single(ticker, period="1d")
             if df is not None:
                 prices[ticker] = float(df["close"].iloc[-1])
         
@@ -229,7 +241,7 @@ class BISTBot:
         logger.info("\n🧪 BACKTEST BAŞLIYOR")
         logger.info("=" * 55)
 
-        backtester = Backtester(initial_capital=getattr(config, "INITIAL_CAPITAL", 8500.0))
+        backtester = self.backtester_factory()
         results = []
 
         for ticker in config.WATCHLIST:
@@ -261,7 +273,20 @@ class BISTBot:
 
 
 def main():
-    bot = BISTBot()
+    container = build_app_container()
+    bot = BISTBot(
+        fetcher=container.fetcher,
+        engine=container.engine,
+        notifier=container.notifier,
+        db=container.db,
+        paper_trade_fetcher=container.paper_trade_fetcher,
+        backtester_factory=container.backtester_factory,
+    )
+    dashboard_app = create_dashboard_app(
+        fetcher=container.fetcher,
+        engine=container.engine,
+        db=container.db,
+    )
 
     if "--once" in sys.argv:
         bot.scan_once()
@@ -270,19 +295,16 @@ def main():
         bot.run_backtest()
 
     elif "--dashboard" in sys.argv:
-        from dashboard import app
         logger.info(f"🌐 Dashboard: http://localhost:{config.FLASK_PORT}")
-        app.run(
+        dashboard_app.run(
             host="0.0.0.0",
             port=config.FLASK_PORT,
             debug=config.FLASK_DEBUG
         )
 
     else:
-        from dashboard import app
-
         dashboard_thread = Thread(
-            target=lambda: app.run(
+            target=lambda: dashboard_app.run(
                 host="0.0.0.0",
                 port=config.FLASK_PORT,
                 debug=False,

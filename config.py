@@ -1,3 +1,5 @@
+"""Application configuration values and environment helpers."""
+
 import os
 
 try:
@@ -8,6 +10,15 @@ except ImportError:
 
 
 def _get_bool_env(name: str, default: bool = False) -> bool:
+    """Read a boolean environment variable with a safe fallback.
+
+    Args:
+        name: Environment variable name.
+        default: Fallback value when the variable is missing or invalid.
+
+    Returns:
+        Parsed boolean value.
+    """
     value = os.getenv(name)
     if value is None:
         return default
@@ -21,6 +32,15 @@ def _get_bool_env(name: str, default: bool = False) -> bool:
 
 
 def _get_int_env(name: str, default: int) -> int:
+    """Read an integer environment variable with a safe fallback.
+
+    Args:
+        name: Environment variable name.
+        default: Fallback value when the variable is missing or invalid.
+
+    Returns:
+        Parsed integer value.
+    """
     value = os.getenv(name)
     if value is None:
         return default
@@ -31,6 +51,15 @@ def _get_int_env(name: str, default: int) -> int:
 
 
 def _get_str_env(name: str, default: str = "") -> str:
+    """Read a string environment variable and strip whitespace.
+
+    Args:
+        name: Environment variable name.
+        default: Fallback value when the variable is missing.
+
+    Returns:
+        Normalized string value.
+    """
     value = os.getenv(name)
     if value is None:
         return default
@@ -146,6 +175,27 @@ VOLUME_SPIKE_MULTIPLIER = 1.5
 
 DATA_PERIOD = "3mo"
 DATA_INTERVAL = "1d"
+MTF_ENABLED = _get_bool_env("MTF_ENABLED", True)
+MTF_TREND_PERIOD = os.getenv("MTF_TREND_PERIOD", "6mo")
+MTF_TREND_INTERVAL = os.getenv("MTF_TREND_INTERVAL", "1d")
+MTF_TRIGGER_PERIOD = os.getenv("MTF_TRIGGER_PERIOD", "1mo")
+MTF_TRIGGER_INTERVAL = os.getenv("MTF_TRIGGER_INTERVAL", "15m")
+CORRELATION_THRESHOLD = float(os.getenv("CORRELATION_THRESHOLD", "0.70"))
+CORRELATION_RISK_STEP = float(os.getenv("CORRELATION_RISK_STEP", "0.35"))
+CORRELATION_MIN_SCALE = float(os.getenv("CORRELATION_MIN_SCALE", "0.25"))
+CORRELATION_MAX_CLUSTER = _get_int_env("CORRELATION_MAX_CLUSTER", 2)
+ATR_BASELINE_PCT = float(os.getenv("ATR_BASELINE_PCT", "0.025"))
+ATR_MIN_RISK_SCALE = float(os.getenv("ATR_MIN_RISK_SCALE", "0.35"))
+
+# Veri kaynagi: BIST web sitesi (~0-30sn) / Yahoo Finance (~15dk)
+ENABLE_REALTIME_SCRAPING = _get_bool_env("ENABLE_REALTIME_SCRAPING", True)
+
+# Rate limiting
+RATE_LIMIT_SECONDS = float(os.getenv("RATE_LIMIT_SECONDS", "2.0"))
+
+# Notification settings
+NOTIFICATION_MAX_RETRIES = _get_int_env("NOTIFICATION_MAX_RETRIES", 3)
+NOTIFICATION_RETRY_DELAY = _get_int_env("NOTIFICATION_RETRY_DELAY", 5)
 
 TELEGRAM_BOT_TOKEN = _get_str_env("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = _get_str_env("TELEGRAM_CHAT_ID")

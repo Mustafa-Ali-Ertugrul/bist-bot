@@ -24,9 +24,11 @@ import pandas as pd
 
 import config
 from backtest import Backtester, BacktestResult, compare_benchmark
+from contracts import StrategyEngineProtocol
 from data_fetcher import BISTDataFetcher
 from indicators import TechnicalIndicators
-from strategy import StrategyEngine, SignalType
+from signal_models import SignalType
+from strategy import MarketRegime, StrategyEngine, detect_regime
 
 logging.basicConfig(
     level=logging.WARNING,
@@ -59,165 +61,47 @@ class NewEngineBacktester:
     (tekil analiz modu), reset_sectors() her trade döngüsünde yok.
     """
 
-    def __init__(self, initial_capital: float = None):
-        self.initial_capital = initial_capital or getattr(config, "INITIAL_CAPITAL", 8500.0)
-        self.commission_pct = (
-            getattr(config, "COMMISSION_BUY", 0.0002)
-            + getattr(config, "COMMISSION_SELL", 0.0002)
-            + getattr(config, "BSMV", 0.0005)
+    def __init__(
+        self,
+        initial_capital: Optional[float] = None,
+        engine: Optional[StrategyEngineProtocol] = None,
+        backtester: Optional[Backtester] = None,
+    ):
+        self.engine = engine or StrategyEngine()
+        self.backtester = backtester or Backtester(
+            initial_capital=initial_capital,
+            indicators=TechnicalIndicators(),
         )
-        self.slippage_pct = getattr(config, "SLIPPAGE", 0.001)
-        self.sell_threshold = getattr(config, "SELL_THRESHOLD", -10)
-        self.indicators = TechnicalIndicators()
-        self.engine = StrategyEngine()
 
     def run(self, ticker: str, df: pd.DataFrame) -> Optional[BacktestResult]:
-        if df is None or len(df) < 50:
-            return None
+        original_builder = self.backtester._build_signal_context
 
-        df = self.indicators.add_all(df)
-        df = df.dropna(subset=["rsi", f"sma_{config.SMA_SLOW}"])
+        def build_signal_context(ticker: str, history: pd.DataFrame) -> dict[str, float | bool]:
+            signal = self.engine.analyze(ticker, history, enforce_sector_limit=False)
+            if signal is None:
+                return {
+                    "enter": False,
+                    "exit": False,
+                    "score": 0.0,
+                    "stop_loss": 0.0,
+                    "target_price": 0.0,
+                }
+            return {
+                "enter": signal.signal_type in {SignalType.STRONG_BUY, SignalType.BUY},
+                "exit": signal.signal_type in {SignalType.SELL, SignalType.STRONG_SELL},
+                "score": signal.score,
+                "stop_loss": signal.stop_loss,
+                "target_price": signal.target_price,
+            }
 
-        capital = self.initial_capital
-        position = None
-        trades = []
-        capital_history = []
-        last_buy_date = None
-
-        for i in range(len(df)):
-            row = df.iloc[i]
-            date = df.index[i]
-            price = float(row["close"])
-
-            sub_df = df.iloc[: i + 1]
-
-            capital_history.append(
-                capital
-                if position is None
-                else capital + position["shares"] * price
-            )
-
-            signal = self.engine.analyze(ticker, sub_df, enforce_sector_limit=False)
-
-            if position is None:
-                if signal and signal.signal_type in {
-                    SignalType.STRONG_BUY,
-                    SignalType.BUY,
-                }:
-                    if last_buy_date and (date - last_buy_date).days < 1:
-                        continue
-
-                    buy_price = price * (1 + self.slippage_pct)
-                    effective_capital = capital * (1 - self.commission_pct)
-                    shares = int(effective_capital / buy_price)
-
-                    if shares > 0:
-                        cost = shares * buy_price * (1 + self.commission_pct)
-                        last_buy_date = date
-                        stop = signal.stop_loss if signal.stop_loss > 0 else price * 0.95
-                        position = {
-                            "entry_date": date,
-                            "entry_price": price,
-                            "shares": shares,
-                            "cost": cost,
-                            "stop_loss": stop,
-                            "score": signal.score,
-                        }
-                        capital -= cost
-
-            else:
-                sell = False
-                if price <= position["stop_loss"]:
-                    sell = True
-                elif signal and signal.signal_type in {
-                    SignalType.SELL,
-                    SignalType.STRONG_SELL,
-                }:
-                    sell = True
-                elif signal and signal.score <= self.sell_threshold:
-                    sell = True
-
-                if sell:
-                    sell_price = price * (1 - self.slippage_pct)
-                    revenue = position["shares"] * sell_price * (1 - self.commission_pct)
-                    profit_tl = revenue - position["cost"]
-                    profit_pct = (profit_tl / position["cost"]) * 100
-                    holding_days = (date - position["entry_date"]).days
-
-                    from backtest import BacktestTrade
-                    trades.append(
-                        BacktestTrade(
-                            entry_date=position["entry_date"],
-                            exit_date=date,
-                            ticker=ticker,
-                            entry_price=position["entry_price"],
-                            exit_price=price,
-                            signal_score=position["score"],
-                            profit_pct=round(profit_pct, 2),
-                            profit_tl=round(profit_tl, 2),
-                            holding_days=holding_days,
-                        )
-                    )
-                    capital += revenue
-                    position = None
-
-        if position is not None:
-            last_price = float(df.iloc[-1]["close"])
-            revenue = position["shares"] * last_price * (1 - self.commission_pct)
-            profit_tl = revenue - position["cost"]
-            profit_pct = (profit_tl / position["cost"]) * 100
-            from backtest import BacktestTrade
-            trades.append(
-                BacktestTrade(
-                    entry_date=position["entry_date"],
-                    exit_date=df.index[-1],
-                    ticker=ticker,
-                    entry_price=position["entry_price"],
-                    exit_price=last_price,
-                    signal_score=position["score"],
-                    profit_pct=round(profit_pct, 2),
-                    profit_tl=round(profit_tl, 2),
-                    holding_days=(df.index[-1] - position["entry_date"]).days,
-                )
-            )
-            capital += revenue
-
-        total_return = (capital - self.initial_capital) / self.initial_capital * 100
-        winning = [t for t in trades if t.profit_pct > 0]
-        losing = [t for t in trades if t.profit_pct <= 0]
-
-        cap_series = pd.Series(capital_history)
-        rolling_max = cap_series.cummax()
-        drawdown = (cap_series - rolling_max) / rolling_max * 100
-        max_dd = float(drawdown.min())
-
-        sharpe = 0.0
-        if len(trades) > 1:
-            returns = [t.profit_pct for t in trades]
-            std = np.std(returns)
-            if std > 0:
-                sharpe = np.mean(returns) / std * np.sqrt(252)
-
-        return BacktestResult(
-            ticker=ticker,
-            period=f"{df.index[0].strftime('%d.%m.%Y')} → {df.index[-1].strftime('%d.%m.%Y')}",
-            initial_capital=self.initial_capital,
-            final_capital=round(capital, 2),
-            total_return_pct=round(total_return, 2),
-            total_trades=len(trades),
-            winning_trades=len(winning),
-            losing_trades=len(losing),
-            win_rate=round(len(winning) / len(trades) * 100, 1) if trades else 0,
-            avg_profit_pct=round(np.mean([t.profit_pct for t in winning]), 2) if winning else 0,
-            avg_loss_pct=round(np.mean([t.profit_pct for t in losing]), 2) if losing else 0,
-            max_drawdown_pct=round(max_dd, 2),
-            sharpe_ratio=round(sharpe, 2),
-            trades=trades,
-        )
+        self.backtester._build_signal_context = build_signal_context
+        try:
+            return self.backtester.run(ticker, df, verbose=False)
+        finally:
+            self.backtester._build_signal_context = original_builder
 
 
 def _sideways_pct(df: pd.DataFrame) -> float:
-    from strategy import detect_regime, MarketRegime
     ti = TechnicalIndicators()
     df = ti.add_all(df).dropna(subset=["rsi", f"sma_{config.SMA_SLOW}"])
     start = min(50, len(df))

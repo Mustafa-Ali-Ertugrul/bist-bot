@@ -1,6 +1,6 @@
 import config
+from contracts import NotifierProtocol
 from indicators import TechnicalIndicators
-from notifier import TelegramNotifier
 
 
 def check_signals(ticker, df):
@@ -39,7 +39,12 @@ def check_signals(ticker, df):
         return None, conditions
 
 
-def send_signal_notification(ticker, signal_type, conditions):
+def send_signal_notification(
+    ticker,
+    signal_type,
+    conditions,
+    notifier: NotifierProtocol,
+):
     name = config.TICKER_NAMES.get(ticker, ticker)
     conditions_text = "\n".join([f"  • {c}" for c in conditions])
 
@@ -58,5 +63,4 @@ Koşullar ({len(conditions)}/4):
 ━━━━━━━━━━━━━━━━
 ⚠️ <i>Yatırım tavsiyesi değildir!</i>
 """
-    notifier = TelegramNotifier()
     notifier.send_message(message.strip())

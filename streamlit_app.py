@@ -15,10 +15,10 @@ import streamlit as st
 
 import config
 import config_store
+from dependencies import build_app_container
 from db_manager import init_db, save_signal, get_recent_signals
-from data_fetcher import BISTDataFetcher
 from indicators import TechnicalIndicators
-from strategy import StrategyEngine, Signal, SignalType
+from signal_models import Signal, SignalType
 from streamlit_utils import check_signals, send_signal_notification
 
 st.set_page_config(
@@ -34,15 +34,19 @@ INDEX_DATA_CACHE_VERSION = "v2"
 SCAN_LOCK = threading.Lock()
 PENDING_SCAN_RESULTS = {}
 ACTIVE_SCAN_SESSIONS = set()
+DEFAULT_CONTAINER = build_app_container()
 
 
-def bootstrap_state():
+def bootstrap_state(container=None):
     if "_initialized" in st.session_state:
         return
 
+    runtime_container = container or DEFAULT_CONTAINER
+
     defaults = {
-        "data_fetcher": BISTDataFetcher(),
-        "engine": StrategyEngine(),
+        "data_fetcher": runtime_container.fetcher,
+        "engine": runtime_container.engine,
+        "notifier": runtime_container.notifier,
         "signals": [],
         "all_data": {},
         "auto_refresh": False,
@@ -775,18 +779,20 @@ def map_cached_signals(rows: list[dict]) -> list[Signal]:
 def run_scan(force_clear: bool = False):
     fetcher = st.session_state.data_fetcher
     engine = st.session_state.engine
+    notifier = st.session_state.notifier
     last_scan_time = st.session_state.get("last_scan_time")
 
     scan_result = _collect_scan_result(
         fetcher=fetcher,
         engine=engine,
+        notifier=notifier,
         last_scan_time=last_scan_time,
         force_clear=force_clear,
     )
     _apply_scan_result(scan_result)
 
 
-def _collect_scan_result(fetcher, engine, last_scan_time=None, force_clear: bool = False):
+def _collect_scan_result(fetcher, engine, notifier, last_scan_time=None, force_clear: bool = False):
     scan_started_at = datetime.now(TR)
 
     if force_clear:
@@ -797,8 +803,18 @@ def _collect_scan_result(fetcher, engine, last_scan_time=None, force_clear: bool
             if age > 900:
                 fetcher.clear_cache()
 
-    all_data = fetcher.fetch_all()
-    signals = engine.scan_all(all_data)
+    timeframe_data = fetcher.fetch_multi_timeframe_all(
+        trend_period=getattr(config, "MTF_TREND_PERIOD", "6mo"),
+        trend_interval=getattr(config, "MTF_TREND_INTERVAL", "1d"),
+        trigger_period=getattr(config, "MTF_TRIGGER_PERIOD", "1mo"),
+        trigger_interval=getattr(config, "MTF_TRIGGER_INTERVAL", "15m"),
+    )
+    signals = engine.scan_all(timeframe_data)
+    all_data = {
+        ticker: data["trigger"]
+        for ticker, data in timeframe_data.items()
+        if isinstance(data, dict) and "trigger" in data
+    }
 
     for signal in signals:
         save_signal(
@@ -812,10 +828,10 @@ def _collect_scan_result(fetcher, engine, last_scan_time=None, force_clear: bool
             confidence=signal.confidence,
         )
 
-    for ticker, df in all_data.items():
-        signal_type, conditions = check_signals(ticker, df)
+    for ticker, trigger_df in all_data.items():
+        signal_type, conditions = check_signals(ticker, trigger_df)
         if signal_type:
-            send_signal_notification(ticker, signal_type, conditions)
+            send_signal_notification(ticker, signal_type, conditions, notifier)
 
     return {
         "all_data": all_data,
@@ -845,6 +861,7 @@ def _start_background_scan(force_clear: bool = False) -> bool:
 
     fetcher = st.session_state.data_fetcher
     engine = st.session_state.engine
+    notifier = st.session_state.notifier
     last_scan_time = st.session_state.get("last_scan_time")
     st.session_state.scan_in_progress = True
     st.session_state.scan_error = None
@@ -854,6 +871,7 @@ def _start_background_scan(force_clear: bool = False) -> bool:
             result = _collect_scan_result(
                 fetcher=fetcher,
                 engine=engine,
+                notifier=notifier,
                 last_scan_time=last_scan_time,
                 force_clear=force_clear,
             )
@@ -1992,11 +2010,21 @@ def render_settings(signals):
             "✅ Hazır" if tg_ready else "⚠️ Eksik"
         )
 
+        total_scanned = len(st.session_state.get("all_data", {})) or len(config.WATCHLIST)
+        signal_count = len(signals) if signals is not None else 0
+        signal_ratio = round((signal_count / total_scanned) * 100) if total_scanned > 0 else 0
+
         with st.container(border=True):
-            st.metric("BIST 100",      len(config.WATCHLIST))
-            st.metric("Aktif sinyal",  len(signals))
-            st.metric("Telegram",      tg_status)
-            st.metric("Sonraki tarama", next_scan)
+            metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
+            with metric_col1:
+                st.metric("Hisse Tarandi (Toplam)", total_scanned)
+            with metric_col2:
+                st.metric("Aktif Sinyal", signal_count)
+            with metric_col3:
+                st.metric("Sinyal Orani", f"{signal_count}/{total_scanned} ({signal_ratio}%)")
+            with metric_col4:
+                st.metric("Sonraki tarama", next_scan)
+            st.caption(f"Telegram durumu: {tg_status}")
 
         st.markdown("""
         <div class='settings-group' style='margin-top:14px;'>
