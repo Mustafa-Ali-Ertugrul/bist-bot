@@ -9,6 +9,9 @@ from backtest import Backtester, _to_datetime, _to_float
 from data_fetcher import BISTDataFetcher
 
 
+SPARKLINE_CHARS = ".-:=+*#%@"
+
+
 class TraceBacktester(Backtester):
     def run_with_trace(self, ticker, df):
         if df is None or len(df) < 50:
@@ -141,6 +144,8 @@ def build_detail(fetcher, backtester, item):
     gross_loss = abs(sum(trade.profit_tl for trade in result.trades if trade.profit_tl < 0))
     profit_factor = "N/A" if gross_loss == 0 else round(gross_profit / gross_loss, 2)
 
+    close_values = df["close"].astype(float).tolist() if "close" in df.columns else []
+
     return {
         "ticker": ticker,
         "name": config.TICKER_NAMES.get(ticker, ticker.replace(".IS", "")),
@@ -152,6 +157,7 @@ def build_detail(fetcher, backtester, item):
         "avg_loss_pct": round(float(np.mean(losses)), 2) if losses else 0.0,
         "profit_factor": profit_factor,
         "composite_score": item["composite_score"],
+        "sparkline": build_ascii_sparkline(close_values),
     }
 
 
@@ -159,7 +165,46 @@ def profit_factor_value(detail):
     return float(detail["profit_factor"]) if detail["profit_factor"] != "N/A" else 0.0
 
 
+def build_ascii_sparkline(values, width=18):
+    if not values:
+        return "n/a"
+    if len(values) <= width:
+        sample = values
+    else:
+        positions = np.linspace(0, len(values) - 1, width)
+        sample = [values[int(pos)] for pos in positions]
+
+    low = min(sample)
+    high = max(sample)
+    if high <= low:
+        return "-" * len(sample)
+
+    scale = len(SPARKLINE_CHARS) - 1
+    chars = []
+    for value in sample:
+        normalized = (value - low) / (high - low)
+        index = min(scale, max(0, int(round(normalized * scale))))
+        chars.append(SPARKLINE_CHARS[index])
+    return "".join(chars)
+
+
+def add_star_ratings(details):
+    if not details:
+        return details
+    min_score = min(detail["composite_score"] for detail in details)
+    max_score = max(detail["composite_score"] for detail in details)
+    for detail in details:
+        if max_score == min_score:
+            stars = 5
+        else:
+            normalized = (detail["composite_score"] - min_score) / (max_score - min_score)
+            stars = 1 + int(round(normalized * 4))
+        detail["star_rating"] = "*" * stars + "-" * (5 - stars)
+    return details
+
+
 def write_significant_report(details, false_positives):
+    details = add_star_ratings(details)
     avg_return = round(sum(d["annual_return_pct"] for d in details) / len(details), 2)
     avg_drawdown = round(sum(d["max_drawdown_pct"] for d in details) / len(details), 2)
     avg_trades = round(sum(d["total_trades"] for d in details) / len(details), 1)
@@ -180,13 +225,13 @@ def write_significant_report(details, false_positives):
         "",
         "## Filtrelenmis En Iyi 10 Hisse",
         "",
-        "| Hisse | Composite Score | Toplam Islem | Yillik Getiri % | Max DD | Max DD Tarihi | Ort. Kazanan % | Ort. Kaybeden % | Profit Factor |",
-        "| --- | ---: | ---: | ---: | ---: | --- | ---: | ---: | ---: |",
+        "| Hisse | Yildiz | Composite Score | Toplam Islem | Yillik Getiri % | Max DD | Max DD Tarihi | Profit Factor | Trend |",
+        "| --- | --- | ---: | ---: | ---: | ---: | --- | ---: | --- |",
     ]
 
     for detail in details:
         lines.append(
-            f"| {detail['name']} ({detail['ticker']}) | {detail['composite_score']:.2f} | {detail['total_trades']} | {detail['annual_return_pct']:.2f} | {detail['max_drawdown_pct']:.2f} | {detail['max_drawdown_date']} | {detail['avg_win_pct']:.2f} | {detail['avg_loss_pct']:.2f} | {detail['profit_factor']} |"
+            f"| {detail['name']} ({detail['ticker']}) | `{detail['star_rating']}` | {detail['composite_score']:.2f} | {detail['total_trades']} | {detail['annual_return_pct']:.2f} | {detail['max_drawdown_pct']:.2f} | {detail['max_drawdown_date']} | {detail['profit_factor']} | `{detail['sparkline']}` |"
         )
 
     lines.extend(["", "## Hisse Bazli Detaylar", ""])
@@ -201,6 +246,8 @@ def write_significant_report(details, false_positives):
                 f"- Ortalama Kaybeden Islem: %{detail['avg_loss_pct']:.2f}",
                 f"- Profit Factor: `{detail['profit_factor']}`",
                 f"- Kompozit Skor: `{detail['composite_score']:.2f}`",
+                f"- Yildiz Puani: `{detail['star_rating']}`",
+                f"- Mini Trend: `{detail['sparkline']}`",
                 "",
             ]
         )

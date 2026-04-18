@@ -12,18 +12,18 @@ Bu rapor, en az 10 islem yapan hisseler arasinda Kompozit Skor (%40 Sharpe, %30 
 
 ## Filtrelenmis En Iyi 10 Hisse
 
-| Hisse | Composite Score | Toplam Islem | Yillik Getiri % | Max DD | Max DD Tarihi | Ort. Kazanan % | Ort. Kaybeden % | Profit Factor |
-| --- | ---: | ---: | ---: | ---: | --- | ---: | ---: | ---: |
-| ENKAI (ENKAI.IS) | 99.07 | 10 | 48.89 | -10.11 | 29.07.2025 | 6.92 | 6.07 | 4.71 |
-| AFYON (AFYON.IS) | 90.81 | 10 | 24.36 | -8.51 | 13.06.2025 | 5.71 | 2.72 | 3.09 |
-| Yapı Kredi (YKBNK.IS) | 88.72 | 10 | 60.78 | -14.41 | 17.10.2025 | 12.85 | 5.99 | 2.99 |
-| BAYRK (BAYRK.IS) | 87.46 | 10 | 54.31 | -27.07 | 19.11.2025 | 9.79 | 13.59 | 2.15 |
-| ALTNY (ALTNY.IS) | 82.53 | 11 | 25.13 | -16.52 | 23.10.2025 | 8.94 | 5.56 | 1.79 |
-| EUREN (EUREN.IS) | 81.91 | 10 | 41.30 | -21.99 | 20.11.2025 | 13.65 | 9.85 | 1.85 |
-| DERIM (DERIM.IS) | 78.76 | 10 | 2.89 | -15.50 | 13.04.2026 | 5.64 | 4.64 | 1.13 |
-| İş Bankası (ISCTR.IS) | 76.82 | 10 | 4.77 | -19.33 | 11.11.2025 | 7.50 | 6.00 | 1.15 |
-| GENIL (GENIL.IS) | 74.98 | 10 | 18.90 | -24.56 | 04.03.2026 | 13.56 | 8.65 | 1.35 |
-| AVOD (AVOD.IS) | 72.96 | 10 | 1.58 | -18.73 | 05.01.2026 | 9.12 | 5.25 | 1.05 |
+| Hisse | Yildiz | Composite Score | Toplam Islem | Yillik Getiri % | Max DD | Max DD Tarihi | Profit Factor | Trend |
+| --- | --- | ---: | ---: | ---: | ---: | --- | ---: | --- |
+| ENKAI (ENKAI.IS) | `*****` | 99.07 | 10 | 48.89 | -10.11 | 29.07.2025 | 4.71 | `.-..-:::-====+%**@` |
+| AFYON (AFYON.IS) | `****-` | 90.81 | 10 | 24.36 | -8.51 | 13.06.2025 | 3.09 | `::..++=:--::-=**@#` |
+| Yapı Kredi (YKBNK.IS) | `***--` | 88.72 | 10 | 60.78 | -14.41 | 17.10.2025 | 2.99 | `..-:+++*=+***#@#+%` |
+| BAYRK (BAYRK.IS) | `***--` | 87.46 | 10 | 54.31 | -27.07 | 19.11.2025 | 2.15 | `..-:=#+@*@-=::---:` |
+| ALTNY (ALTNY.IS) | `**---` | 82.53 | 11 | 25.13 | -16.52 | 23.10.2025 | 1.79 | `%*:@@***+:--.=:=.:` |
+| EUREN (EUREN.IS) | `**---` | 81.91 | 10 | 41.30 | -21.99 | 20.11.2025 | 1.85 | `:=:-:*#@@@=+=-:..-` |
+| DERIM (DERIM.IS) | `**---` | 78.76 | 10 | 2.89 | -15.50 | 13.04.2026 | 1.13 | `@:==+%*#*#:.::+=.*` |
+| İş Bankası (ISCTR.IS) | `**---` | 76.82 | 10 | 4.77 | -19.33 | 11.11.2025 | 1.15 | `-.--+***::=+++@*=#` |
+| GENIL (GENIL.IS) | `*----` | 74.98 | 10 | 18.90 | -24.56 | 04.03.2026 | 1.35 | `..:=*%%+@##%%:..:=` |
+| AVOD (AVOD.IS) | `*----` | 72.96 | 10 | 1.58 | -18.73 | 05.01.2026 | 1.05 | `:-..-*=*#*+==#@%%#` |
 
 ## Hisse Bazli Detaylar
 
@@ -35,6 +35,8 @@ Bu rapor, en az 10 islem yapan hisseler arasinda Kompozit Skor (%40 Sharpe, %30 
 - Ortalama Kaybeden Islem: %6.07
 - Profit Factor: `4.71`
 - Kompozit Skor: `99.07`
+- Yildiz Puani: `*****`
+- Mini Trend: `.-..-:::-====+%**@`
 
 ### AFYON (AFYON.IS)
 - Toplam Islem Sayisi: 10
@@ -44,6 +46,8 @@ Bu rapor, en az 10 islem yapan hisseler arasinda Kompozit Skor (%40 Sharpe, %30 
 - Ortalama Kaybeden Islem: %2.72
 - Profit Factor: `3.09`
 - Kompozit Skor: `90.81`
+- Yildiz Puani: `****-`
+- Mini Trend: `::..++=:--::-=**@#`
 
 ### Yapı Kredi (YKBNK.IS)
 - Toplam Islem Sayisi: 10
@@ -53,6 +57,8 @@ Bu rapor, en az 10 islem yapan hisseler arasinda Kompozit Skor (%40 Sharpe, %30 
 - Ortalama Kaybeden Islem: %5.99
 - Profit Factor: `2.99`
 - Kompozit Skor: `88.72`
+- Yildiz Puani: `***--`
+- Mini Trend: `..-:+++*=+***#@#+%`
 
 ### BAYRK (BAYRK.IS)
 - Toplam Islem Sayisi: 10
@@ -62,6 +68,8 @@ Bu rapor, en az 10 islem yapan hisseler arasinda Kompozit Skor (%40 Sharpe, %30 
 - Ortalama Kaybeden Islem: %13.59
 - Profit Factor: `2.15`
 - Kompozit Skor: `87.46`
+- Yildiz Puani: `***--`
+- Mini Trend: `..-:=#+@*@-=::---:`
 
 ### ALTNY (ALTNY.IS)
 - Toplam Islem Sayisi: 11
@@ -71,6 +79,8 @@ Bu rapor, en az 10 islem yapan hisseler arasinda Kompozit Skor (%40 Sharpe, %30 
 - Ortalama Kaybeden Islem: %5.56
 - Profit Factor: `1.79`
 - Kompozit Skor: `82.53`
+- Yildiz Puani: `**---`
+- Mini Trend: `%*:@@***+:--.=:=.:`
 
 ### EUREN (EUREN.IS)
 - Toplam Islem Sayisi: 10
@@ -80,6 +90,8 @@ Bu rapor, en az 10 islem yapan hisseler arasinda Kompozit Skor (%40 Sharpe, %30 
 - Ortalama Kaybeden Islem: %9.85
 - Profit Factor: `1.85`
 - Kompozit Skor: `81.91`
+- Yildiz Puani: `**---`
+- Mini Trend: `:=:-:*#@@@=+=-:..-`
 
 ### DERIM (DERIM.IS)
 - Toplam Islem Sayisi: 10
@@ -89,6 +101,8 @@ Bu rapor, en az 10 islem yapan hisseler arasinda Kompozit Skor (%40 Sharpe, %30 
 - Ortalama Kaybeden Islem: %4.64
 - Profit Factor: `1.13`
 - Kompozit Skor: `78.76`
+- Yildiz Puani: `**---`
+- Mini Trend: `@:==+%*#*#:.::+=.*`
 
 ### İş Bankası (ISCTR.IS)
 - Toplam Islem Sayisi: 10
@@ -98,6 +112,8 @@ Bu rapor, en az 10 islem yapan hisseler arasinda Kompozit Skor (%40 Sharpe, %30 
 - Ortalama Kaybeden Islem: %6.00
 - Profit Factor: `1.15`
 - Kompozit Skor: `76.82`
+- Yildiz Puani: `**---`
+- Mini Trend: `-.--+***::=+++@*=#`
 
 ### GENIL (GENIL.IS)
 - Toplam Islem Sayisi: 10
@@ -107,6 +123,8 @@ Bu rapor, en az 10 islem yapan hisseler arasinda Kompozit Skor (%40 Sharpe, %30 
 - Ortalama Kaybeden Islem: %8.65
 - Profit Factor: `1.35`
 - Kompozit Skor: `74.98`
+- Yildiz Puani: `*----`
+- Mini Trend: `..:=*%%+@##%%:..:=`
 
 ### AVOD (AVOD.IS)
 - Toplam Islem Sayisi: 10
@@ -116,6 +134,8 @@ Bu rapor, en az 10 islem yapan hisseler arasinda Kompozit Skor (%40 Sharpe, %30 
 - Ortalama Kaybeden Islem: %5.25
 - Profit Factor: `1.05`
 - Kompozit Skor: `72.96`
+- Yildiz Puani: `*----`
+- Mini Trend: `:-..-*=*#*+==#@%%#`
 
 ## Dikkat: Dusuk Islem Sayili Potansiyel Yalanci Pozitifler
 
