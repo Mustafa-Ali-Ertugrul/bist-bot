@@ -8,6 +8,8 @@ Proje; 60+ hisseyi tarar, teknik gostergeleri puanlar, risk seviyelerini hesapla
 
 Python 3.10+ onerilir.
 
+Windows kullanicilari icin not: Konsolda Unicode/emoji karakterleri ve Markdown raporlarinin dogru uretilmesi icin Python komutlarini mumkun oldugunca `python -X utf8 ...` seklinde calistirin.
+
 ```bash
 # 1. Repoyu klonla
 git clone https://github.com/Mustafa-Ali-Ertugrul/bist-bot.git
@@ -64,6 +66,7 @@ Bu projede birden fazla calistirma modu var. Amacina gore birini sec:
 | `python main.py` | Bot dongusunu baslatir + Flask dashboard (varsayilan mod) |
 | `python main.py --once` | Tek seferlik tarama yapar ve cikar |
 | `python main.py --backtest` | Tum watchlist uzerinde backtest calistirir |
+| `python -X utf8 backtest.py` | Guncel ve look-ahead bias icermeyen referans backtest'i calistirir |
 | `python main.py --dashboard` | Sadece Flask dashboard'u baslatir (port 5000) |
 | `streamlit run streamlit_app.py` | Streamlit dashboard (ana arayuz, port 8501) |
 | `streamlit run mobile_app.py` | Mobil optimize Streamlit arayuzu |
@@ -79,6 +82,7 @@ Bu projede birden fazla calistirma modu var. Amacina gore birini sec:
 - **Coklu sinyal seviyesi** — Guclu Al, Al, Zayif Al, Bekle, Zayif Sat, Sat, Guclu Sat
 - **Risk yonetimi** — ATR, Fibonacci, destek/direnc, swing ve yuzdelik bazli stop-loss/hedef hesabi
 - **Backtest** — Komisyon, BSMV ve kayma dahil gercekci backtest
+- **Durust execution modeli** — Look-ahead bias giderildi; sinyal bir onceki bar kapanisinda, islem sonraki bar acilisinda uygulanir
 - **Walk-forward optimizasyon** — RSI esik degerlerini otomatik optimize eder
 - **ML fiyat tahmini** — GradientBoosting ile kisa vadeli fiyat tahmini
 - **Telegram bildirimleri** — Guclu sinyallerde ve sinyal degisikliklerinde otomatik bildirim
@@ -175,6 +179,7 @@ bist_bot/
 ├── dashboard.py         # Flask REST API + web dashboard
 ├── start_app.py         # Windows icin Streamlit baslatici
 ├── run_app.bat          # Windows batch baslatici
+├── data/                # Backtest raporlari, top listeleri ve analiz ciktilari
 ├── templates/           # Flask HTML sablonlari
 ├── models/              # Kaydedilmis ML modelleri (.pkl)
 ├── android_app/         # Kotlin/Jetpack Compose Android uygulamasi
@@ -277,6 +282,56 @@ Not: Telegram token ve chat id sadece `.env` veya ortam degiskenlerinden okunur;
 - **Streamlit arayuzu**: `streamlit run streamlit_app.py`
 - **Bot + Flask dashboard**: `python main.py`
 - **Tek seferlik tarama**: `python main.py --once`
+
+## Backtest Kullanimi
+
+Backtest motoru artik **look-ahead bias icermeyecek** sekilde calisir. Sinyaller mevcut bar tamamlanmadan uretilmez; karar bir onceki bar kapanisina gore verilir ve islem sonraki bar acilisinda gerceklesir.
+
+Onerilen komutlar:
+
+```bash
+# Tekil referans backtest
+python -X utf8 backtest.py
+
+# Strateji farklarini karsilastirma
+python -X utf8 backtest_compare.py
+
+# Anlamli / strict raporlari yeniden uretme
+python -X utf8 generate_significant_report.py
+```
+
+Olusan raporlar `data/` klasorune kaydedilir.
+
+### Uretilen Raporlar
+
+- `data/watchlist_backtest_results.json` — Tum watchlist icin ham backtest sonuclari
+- `data/watchlist_backtest_results.csv` — Excel/analiz icin tablo formatinda sonuc listesi
+- `data/watchlist_backtest_top5.json` — Sharpe'a gore ilk 5 hisse
+- `data/top10_detailed_report.md` — Kompozit skor oncesi detayli top 10 raporu
+- `data/top10_significant_report.md` — Min 10 islem filtresi + yonetici ozeti + sparkline + yildiz puani
+- `data/strict_profitable_watchlist.md` — Hem anlamli hem pozitif kapanmis en guvenilir havuz
+
+## Strict Watchlist
+
+Canli islem icin en muhafazakar izleme listesi `data/strict_profitable_watchlist.md` icinde uretilir.
+
+Bu listeye giren hisseler su iki kosulu ayni anda saglar:
+
+- `Toplam Islem >= 10`
+- `Yillik Getiri > 0`
+
+Bu nedenle, hem yeterli istatistiksel gozlem sayisina sahip hem de gecmiste karli kapanmis hisseler tek listede toplanir.
+
+## Beklenen Performans
+
+Guncel, filtrelenmis ve istatistiksel olarak anlamli rapora gore sistemin seffaf referans metrikleri su sekildedir:
+
+- Ortalama yillik getiri: `%28.29`
+- Ortalama maksimum drawdown: `%-17.67`
+- Ortalama islem sayisi: `10.1`
+- En yuksek Profit Factor: `4.71` (`ENKAI.IS`)
+
+Bu sayilar, `data/top10_significant_report.md` icindeki yonetici ozetinden alinmistir ve stratejinin daha durust backtest mantigi altindaki beklenen profilini temsil eder.
 
 ## Ornek Backtest Ciktisi
 
