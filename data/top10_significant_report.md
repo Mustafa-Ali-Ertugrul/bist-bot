@@ -1,5 +1,13 @@
 # Top 10 Significant Backtest Report
 
+## Yonetici Ozeti
+
+Bu strateji, filtrelenmis 10 hissede yillik ortalama `%28.29` getiri, ortalama `%-17.67` maksimum dusus ve ortalama `10.1` islem ile calisti. En verimli hisse `ENKAI (ENKAI.IS)` olup Profit Factor degeri `4.71` oldu.
+
+| Ortalama Yillik Getiri % | Ortalama Risk (Max DD %) | Ortalama Islem Sayisi | En Yuksek Profit Factor |
+| ---: | ---: | ---: | --- |
+| 28.29 | -17.67 | 10.1 | ENKAI (ENKAI.IS): 4.71 |
+
 Bu rapor, en az 10 islem yapan hisseler arasinda Kompozit Skor (%40 Sharpe, %30 Win Rate, %30 dusuk Max Drawdown) ile secilen ilk 10 hisseyi ozetler.
 
 ## Filtrelenmis En Iyi 10 Hisse
