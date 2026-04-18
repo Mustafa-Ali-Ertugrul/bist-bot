@@ -22,7 +22,6 @@ from streamlit_app import (
     render_settings,
     render_navigation,
 )
-from config import settings
 from datetime import datetime
 
 st.set_page_config(

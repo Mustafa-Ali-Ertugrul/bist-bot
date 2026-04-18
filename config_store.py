@@ -1,8 +1,6 @@
 import json
-import os
 import logging
 from pathlib import Path
-from typing import Any, Dict
 
 from config.settings import settings as global_settings
 

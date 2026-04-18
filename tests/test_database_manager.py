@@ -10,9 +10,9 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
-from db.database import DatabaseManager
-from db.repositories.signals_repository import SignalsRepository
-from signal_models import Signal, SignalType
+from db.database import DatabaseManager  # noqa: E402
+from db.repositories.signals_repository import SignalsRepository  # noqa: E402
+from signal_models import Signal, SignalType  # noqa: E402
 
 
 def test_database_manager_enables_wal_mode(tmp_path):

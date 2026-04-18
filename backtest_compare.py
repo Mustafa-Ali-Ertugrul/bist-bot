@@ -9,14 +9,11 @@ Kullanim:
     python backtest_compare.py
     python backtest_compare.py --tickers THYAO.IS ASELS.IS --period 1y
 """
-import sys
 import io
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-
 import argparse
 import logging
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
@@ -29,6 +26,8 @@ from data_fetcher import BISTDataFetcher
 from indicators import TechnicalIndicators
 from signal_models import SignalType
 from strategy import MarketRegime, StrategyEngine, detect_regime
+
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
 logging.basicConfig(
     level=logging.WARNING,

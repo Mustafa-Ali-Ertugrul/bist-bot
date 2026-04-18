@@ -2,7 +2,7 @@
 
 import pandas as pd
 from enum import Enum
-from typing import Any, Optional
+from typing import Optional
 import logging
 
 from config import settings

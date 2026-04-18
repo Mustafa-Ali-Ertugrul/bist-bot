@@ -1,7 +1,6 @@
 import logging
 from typing import Optional
 import pandas as pd
-import numpy as np
 from dataclasses import dataclass
 
 from config import settings
@@ -57,7 +56,7 @@ def find_best_params(
     split_idx = len(df) - 30
 
     train_df = df.iloc[:split_idx]
-    test_df = df.iloc[split_idx:]
+    df.iloc[split_idx:]
 
     best_params = None
     best_return = float("-inf")

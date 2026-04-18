@@ -4,10 +4,10 @@ import time
 from datetime import datetime, timezone, timedelta
 from typing import Callable
 
-TR = timezone(timedelta(hours=3))
-
 from config import settings
 from signal_models import Signal, SignalType
+
+TR = timezone(timedelta(hours=3))
 
 logger = logging.getLogger(__name__)
 

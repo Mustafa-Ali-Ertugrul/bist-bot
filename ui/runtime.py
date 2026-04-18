@@ -11,7 +11,6 @@ import pandas as pd
 import requests
 import streamlit as st
 
-import config_store
 from config import settings
 from db.repositories.signals_repository import get_recent_signals, init_db, save_signal
 from indicators import TechnicalIndicators

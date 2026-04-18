@@ -10,11 +10,11 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
-from config import settings
-import pandas as pd
-import pytest
-from strategy import StrategyEngine
-from strategy import TrendBias
+from config import settings  # noqa: E402
+import pandas as pd  # noqa: E402
+import pytest  # noqa: E402
+from strategy import StrategyEngine  # noqa: E402
+from strategy import TrendBias  # noqa: E402
 
 
 class IdentityIndicators:

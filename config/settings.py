@@ -275,21 +275,21 @@ class Settings:
 
     def _apply_indicator_overrides(self, data: dict[str, Any]) -> None:
         """Apply indicator settings from persisted data."""
-        indicator_data = data.get("indicator", {})
+        data.get("indicator", {})
         # Note: Since Settings is frozen, we can't actually override these.
         # The overrides are handled in session_state.py instead.
         pass
 
     def _apply_telegram_overrides(self, data: dict[str, Any]) -> None:
         """Apply telegram settings from persisted data."""
-        telegram_data = data.get("telegram", {})
+        data.get("telegram", {})
         # Note: Since Settings is frozen, we can't actually override these.
         # The overrides are handled in session_state.py instead.
         pass
 
     def _apply_scan_overrides(self, data: dict[str, Any]) -> None:
         """Apply scan settings from persisted data."""
-        scan_data = data.get("scan", {})
+        data.get("scan", {})
         # Note: Since Settings is frozen, we can't actually override these.
         # The overrides are handled in session_state.py instead.
         pass

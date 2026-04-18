@@ -1,19 +1,19 @@
-import sys
-import signal
-import logging
 import io
+import logging
+import signal
+import sys
 from datetime import datetime
-from time import sleep
 from threading import Thread
+from time import sleep
 
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-
+from backtest import Backtester
 from config import settings
 from contracts import DataFetcherProtocol, NotifierProtocol, SignalRepositoryProtocol, StrategyEngineProtocol
 from dashboard import create_dashboard_app
 from dependencies import build_app_container
 from signal_models import Signal, SignalType
-from backtest import Backtester
+
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -105,7 +105,7 @@ class BISTBot:
         sells = [s for s in signals if s.score < 0]
 
         logger.info(f"\n{'─'*55}")
-        logger.info(f"📊 SONUÇLAR:")
+        logger.info("📊 SONUÇLAR:")
         logger.info(f"  Taranan: {len(all_data)} hisse")
         logger.info(f"  Alım sinyali: {len(buys)}")
         logger.info(f"  Satış sinyali: {len(sells)}")
@@ -122,7 +122,7 @@ class BISTBot:
             self.db.save_signal(s)
             
             if getattr(settings, "PAPER_MODE", False):
-                from strategy import detect_regime, MarketRegime
+                from strategy import detect_regime
                 regime_enum = detect_regime(self.fetcher.fetch_single(s.ticker, period="3mo"))
                 regime = regime_enum.value if regime_enum else "UNKNOWN"
                 self.db.add_paper_trade(
@@ -260,7 +260,7 @@ class BISTBot:
             total_trades = sum(r.total_trades for r in results)
 
             print(f"\n{'═'*55}")
-            print(f"📊 GENEL BACKTEST ÖZETİ")
+            print("📊 GENEL BACKTEST ÖZETİ")
             print(f"{'═'*55}")
             print(f"  Test edilen : {len(results)} hisse")
             print(f"  Toplam işlem: {total_trades}")

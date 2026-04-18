@@ -78,7 +78,7 @@ class TechnicalIndicators:
         low_diff = -df["low"].diff()
         
         plus_dm = np.where((high_diff > low_diff) & (high_diff > 0), high_diff, 0)
-        minus_dm = np.where((low_diff > high_diff) & (low_diff > 0), low_diff, 0)
+        np.where((low_diff > high_diff) & (low_diff > 0), low_diff, 0)
         
         df["plus_dm"] = plus_dm
         df["minus_dm"] = low_diff.clip(lower=0)

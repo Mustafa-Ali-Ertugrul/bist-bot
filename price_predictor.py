@@ -3,7 +3,7 @@ import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error
-from typing import Optional, List, Dict
+from typing import Optional, List
 import logging
 import os
 import pickle
@@ -229,7 +229,7 @@ class PricePredictor:
         try:
             X = last_n_features.flatten().reshape(1, -1)
             return float(model.predict(X)[0])
-        except:
+        except Exception:
             return None
 
     def save_model(self, ticker: str) -> bool:

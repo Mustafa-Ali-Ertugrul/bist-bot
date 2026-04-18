@@ -186,7 +186,6 @@ def get_bist100_tickers(force_refresh: bool = False) -> list[str]:
             headers={"User-Agent": "Mozilla/5.0"}
         )
         if response.status_code == 200:
-            import json
             data = response.json()
             results = data.get("finance", {}).get("result", [])
             if results:

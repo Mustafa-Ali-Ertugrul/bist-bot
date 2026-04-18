@@ -5,7 +5,6 @@ import uuid
 import streamlit as st
 
 from config import settings
-from config.settings import settings as global_settings
 import config_store
 from dependencies import build_app_container
 
