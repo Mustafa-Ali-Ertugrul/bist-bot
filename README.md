@@ -1,424 +1,76 @@
-# BIST Bot - Borsa Istanbul Sinyal Botu
+# BIST Bot — Borsa İstanbul Sinyal Botu
 
-Borsa Istanbul (BIST) hisse senetleri icin teknik analiz, skor bazli sinyal uretimi ve izleme akislari sunan otomasyon projesi.
+BIST hisselerini teknik indikatörlerle tarayan, sinyal üreten, Telegram'a bildiren ve paper trade kaydeden otonom bir bot.
 
-Proje; 60+ hisseyi tarar, teknik gostergeleri puanlar, risk seviyelerini hesaplar ve sonuclari dashboard ya da Telegram uzerinden iletir.
+## Özellikler
 
-## Hizli Baslangic
+- RSI, MACD, Bollinger, SMA, EMA, ADX, Stochastic, CCI, OBV, Divergence
+- 7 kademeli sinyal: GÜÇLÜ AL → ZAYIF AL → BEKLE → ZAYIF SAT → GÜÇLÜ SAT
+- Pazar saati farkındalığı (açılış, kapanış, yarım gün, hafta sonu)
+- Telegram bildirimleri ve sinyal değişim uyarıları
+- Paper trade modu
+- Backtest desteği
+- Ruff lint + pytest CI
 
-Python 3.10+ onerilir.
+## Mimari
 
-Windows kullanicilari icin not: Konsolda Unicode/emoji karakterleri ve Markdown raporlarinin dogru uretilmesi icin Python komutlarini mumkun oldugunca `python -X utf8 ...` seklinde calistirin.
-
-```bash
-# 1. Repoyu klonla
-git clone https://github.com/Mustafa-Ali-Ertugrul/bist-bot.git
-cd bist-bot
-
-# 2. Sanal ortam olustur
-python -m venv .venv
-
-# Windows:
-.venv\Scripts\activate
-
-# macOS/Linux:
-source .venv/bin/activate
-
-# 3. Bagimliliklari yukle
-pip install -r requirements.txt
-
-# 4. Ortam degiskenlerini ayarla
-copy .env.example .env          # Windows
-# cp .env.example .env          # macOS/Linux
-
-# .env dosyasini acip gerekli degiskenleri gir
-
-# 5. Calistir
-python main.py
+```mermaid
+#mermaid-r44t{font-family:inherit;font-size:16px;fill:#E5E5E5;}@keyframes edge-animation-frame{from{stroke-dashoffset:0;}}@keyframes dash{to{stroke-dashoffset:0;}}#mermaid-r44t .edge-animation-slow{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}#mermaid-r44t .edge-animation-fast{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}#mermaid-r44t .error-icon{fill:#CC785C;}#mermaid-r44t .error-text{fill:#3387a3;stroke:#3387a3;}#mermaid-r44t .edge-thickness-normal{stroke-width:1px;}#mermaid-r44t .edge-thickness-thick{stroke-width:3.5px;}#mermaid-r44t .edge-pattern-solid{stroke-dasharray:0;}#mermaid-r44t .edge-thickness-invisible{stroke-width:0;fill:none;}#mermaid-r44t .edge-pattern-dashed{stroke-dasharray:3;}#mermaid-r44t .edge-pattern-dotted{stroke-dasharray:2;}#mermaid-r44t .marker{fill:#A1A1A1;stroke:#A1A1A1;}#mermaid-r44t .marker.cross{stroke:#A1A1A1;}#mermaid-r44t svg{font-family:inherit;font-size:16px;}#mermaid-r44t p{margin:0;}#mermaid-r44t .label{font-family:inherit;color:#E5E5E5;}#mermaid-r44t .cluster-label text{fill:#3387a3;}#mermaid-r44t .cluster-label span{color:#3387a3;}#mermaid-r44t .cluster-label span p{background-color:transparent;}#mermaid-r44t .label text,#mermaid-r44t span{fill:#E5E5E5;color:#E5E5E5;}#mermaid-r44t .node rect,#mermaid-r44t .node circle,#mermaid-r44t .node ellipse,#mermaid-r44t .node polygon,#mermaid-r44t .node path{fill:transparent;stroke:#A1A1A1;stroke-width:1px;}#mermaid-r44t .rough-node .label text,#mermaid-r44t .node .label text,#mermaid-r44t .image-shape .label,#mermaid-r44t .icon-shape .label{text-anchor:middle;}#mermaid-r44t .node .katex path{fill:#000;stroke:#000;stroke-width:1px;}#mermaid-r44t .rough-node .label,#mermaid-r44t .node .label,#mermaid-r44t .image-shape .label,#mermaid-r44t .icon-shape .label{text-align:center;}#mermaid-r44t .node.clickable{cursor:pointer;}#mermaid-r44t .root .anchor path{fill:#A1A1A1!important;stroke-width:0;stroke:#A1A1A1;}#mermaid-r44t .arrowheadPath{fill:#0b0b0b;}#mermaid-r44t .edgePath .path{stroke:#A1A1A1;stroke-width:2.0px;}#mermaid-r44t .flowchart-link{stroke:#A1A1A1;fill:none;}#mermaid-r44t .edgeLabel{background-color:transparent;text-align:center;}#mermaid-r44t .edgeLabel p{background-color:transparent;}#mermaid-r44t .edgeLabel rect{opacity:0.5;background-color:transparent;fill:transparent;}#mermaid-r44t .labelBkg{background-color:rgba(0, 0, 0, 0.5);}#mermaid-r44t .cluster rect{fill:#CC785C;stroke:hsl(15, 12.3364485981%, 48.0392156863%);stroke-width:1px;}#mermaid-r44t .cluster text{fill:#3387a3;}#mermaid-r44t .cluster span{color:#3387a3;}#mermaid-r44t div.mermaidTooltip{position:absolute;text-align:center;max-width:200px;padding:2px;font-family:inherit;font-size:12px;background:#CC785C;border:1px solid hsl(15, 12.3364485981%, 48.0392156863%);border-radius:2px;pointer-events:none;z-index:100;}#mermaid-r44t .flowchartTitleText{text-anchor:middle;font-size:18px;fill:#E5E5E5;}#mermaid-r44t rect.text{fill:none;stroke-width:0;}#mermaid-r44t .icon-shape,#mermaid-r44t .image-shape{background-color:transparent;text-align:center;}#mermaid-r44t .icon-shape p,#mermaid-r44t .image-shape p{background-color:transparent;padding:2px;}#mermaid-r44t .icon-shape rect,#mermaid-r44t .image-shape rect{opacity:0.5;background-color:transparent;fill:transparent;}#mermaid-r44t .label-icon{display:inline-block;height:1em;overflow:visible;vertical-align:-0.125em;}#mermaid-r44t .node .label-icon path{fill:currentColor;stroke:revert;stroke-width:revert;}#mermaid-r44t :root{--mermaid-font-family:inherit;}main.py - Wiring & CLIScanServiceMarketSchedulerBacktestRunnerBISTDataFetcherStrategyEngineTelegramNotifierSignalDatabaseTechnicalIndicatorsRiskManager
 ```
 
-## Docker ile Calistirma (Opsiyonel)
+## Proje Yapısı
 
-```bash
-# Docker ile baslat
-docker-compose up --build
-
-# Arka planda calistir
-docker-compose up -d
-
-# Loglari takip et
-docker-compose logs -f
-
-# Durdur
-docker-compose down
-```
-
-Gereksinimler:
-- Docker 20.10+
-- Docker Compose 2.0+
-
-## Giris Noktalari
-
-Bu projede birden fazla calistirma modu var. Amacina gore birini sec:
-
-| Komut | Ne Yapar |
-|---|---|
-| `python main.py` | Bot dongusunu baslatir + Flask dashboard (varsayilan mod) |
-| `python main.py --once` | Tek seferlik tarama yapar ve cikar |
-| `python main.py --backtest` | Tum watchlist uzerinde backtest calistirir |
-| `python -X utf8 backtest.py` | Guncel ve look-ahead bias icermeyen referans backtest'i calistirir |
-| `python main.py --dashboard` | Sadece Flask dashboard'u baslatir (port 5000) |
-| `streamlit run streamlit_app.py` | Streamlit dashboard (ana arayuz, port 8501) |
-| `streamlit run mobile_app.py` | Mobil optimize Streamlit arayuzu |
-| `python start_app.py` | Streamlit'i arka planda baslatir (Windows icin) |
-| `python dashboard.py` | Flask API + dashboard'u tek basina calistirir |
-
-**Onerilen kullanim:** Gunluk takip icin `streamlit run streamlit_app.py`, otomasyon icin `python main.py`.
-
-## Ozellikler
-
-- **Skor bazli sinyal motoru** — Her hisse icin -100 ile +100 arasi toplam skor hesaplanir
-- **15+ teknik gosterge** — RSI, MACD, Bollinger, SMA/EMA, ADX, Stochastic, CCI, OBV, RSI/MACD Divergence, destek/direnc
-- **Coklu sinyal seviyesi** — Guclu Al, Al, Zayif Al, Bekle, Zayif Sat, Sat, Guclu Sat
-- **Risk yonetimi** — ATR, Fibonacci, destek/direnc, swing ve yuzdelik bazli stop-loss/hedef hesabi
-- **Backtest** — Komisyon, BSMV ve kayma dahil gercekci backtest
-- **Durust execution modeli** — Look-ahead bias giderildi; sinyal bir onceki bar kapanisinda, islem sonraki bar acilisinda uygulanir
-- **Walk-forward optimizasyon** — RSI esik degerlerini otomatik optimize eder
-- **ML fiyat tahmini** — GradientBoosting ile kisa vadeli fiyat tahmini
-- **Telegram bildirimleri** — Guclu sinyallerde ve sinyal degisikliklerinde otomatik bildirim
-- **Streamlit dashboard** — Canli tarama, grafik, gostergeler, haberler, filtreler
-- **Flask API** — REST API ile sinyal sorgulama ve tarama
-- **Mobil arayuz** — Mobil optimize edilmis Streamlit sayfasi
-- **Android uygulamasi** — Kotlin/Jetpack Compose ile yerel Android uygulamasi (`android_app/`)
-- **Paper trading** — Sanal islem modu ile strateji testi
-- **Sektor limiti** — Ayni sektorden en fazla N hisse sinyali
-- **SQLite veritabani** — Sinyal gecmisi, tarama loglari, paper trade kayitlari
-
-## Strateji Nasil Calisir
-
-Bot basit bir "RSI < 30 ise al" mantigi **kullanmaz**. Bunun yerine coklu gosterge skorlama sistemi vardir:
-
-### Skorlama Tablosu
-
-| Gosterge | Alim Skoru | Satim Skoru | Aciklama |
-|---|---|---|---|
-| RSI < 25 | +18 | — | Asiri satim |
-| RSI < 30 | +14 | — | Satim bolgesi |
-| RSI > 70 | — | -14 | Asiri alim |
-| RSI > 80 | — | -18 | Guclu asiri alim |
-| SMA Golden Cross | +12 | — | Kisa SMA uzun SMA'yi yukari kesti |
-| SMA Death Cross | — | -12 | Kisa SMA uzun SMA'yi asagi kesti |
-| EMA Bullish Cross | +10 | — | Hizli EMA yavas EMA'yi yukari kesti |
-| EMA Bearish Cross | — | -10 | Hizli EMA yavas EMA'yi asagi kesti |
-| MACD Bullish | +12 | — | MACD sinyal cizgisini yukari kesti |
-| MACD Bearish | — | -12 | MACD sinyal cizgisini asagi kesti |
-| MACD Histogram gucleniyor | +5 | — | Momentum artisi |
-| ADX > 25 + DI yukari | +8 | — | Guclu yukselis trendi |
-| ADX > 25 + DI asagi | — | -8 | Guclu dusus trendi |
-| Bollinger alt bant | +10 | — | Fiyat alt bandin altinda |
-| Bollinger ust bant | — | -10 | Fiyat ust bandin ustunde |
-| Stochastic Bullish Cross | +8 | — | K, D'yi yukari kesti |
-| CCI < -100 | +8 | — | CCI asiri satim |
-| Hacim patlamasi + yukselis | +8 | — | Yuksek hacimle yukselis |
-| RSI Bullish Divergence | +15 | — | Fiyat duser RSI yukselir |
-| MACD Bullish Divergence | +12 | — | Guclu donus sinyali |
-| OBV yukselis | +4 | — | Para girisi |
-| Destek yakinligi (<%2) | +6 | — | Fiyat destek seviyesine yakin |
-
-Toplam skor -100 ile +100 arasinda kesilir.
-
-### Sinyal Esikleri
-
-| Skor | Sinyal |
-|---|---|
-| >= +48 | Guclu Al |
-| >= +20 | Al |
-| >= +8 | Zayif Al |
-| <= -48 | Guclu Sat |
-| <= -20 | Sat |
-| <= -8 | Zayif Sat |
-| Diger | Bekle |
-
-### Ek Filtreler
-
-- **ADX < 20** olan hisseler filtrelenir (trend yok, sinyal uretilmez)
-- **EMA 200** uzerindeki hisselere ek skor verilir (uzun vadeli trend onay)
-- **Hacim onay** — Hacim 20 gunluk ortalamanin 1.5x ustundeyse ek skor
-
-### Risk Yonetimi
-
-Her sinyal icin 5 farkli yontemle stop-loss ve hedef hesaplanir:
-
-1. **ATR bazli** — ATR x 2 stop, ATR x 3 hedef
-2. **Destek/Direnc** — En yakin destek ve direnc seviyeleri
-3. **Fibonacci** — 60 gunluk swing icindeki Fibonacci seviyeleri
-4. **Yuzdelik** — Sabit %5 stop, %8 hedef
-5. **Swing** — Yerel dip ve tepe noktalari
-
-Bu 5 yontemin sonuclari karsilastirilir, en makul (%1-%10 arasi) stop secilir. Birden fazla yontem birbirine yakinsa guven "YUKSEK" olur.
-
-## Proje Yapisi
-
-```
+```text
 bist_bot/
-├── main.py              # Ana bot dongusu + CLI giris noktasi
-├── config.py            # Tum yapilandirma ve sabitler
-├── config_store.py      # Kalıcı kullanıcı ayarları (JSON)
-├── data_fetcher.py      # yfinance ile veri cekme + cache
-├── indicators.py        # 15+ teknik gosterge hesaplamalari
-├── strategy.py          # Skor bazli sinyal motoru
-├── risk_manager.py      # Coklu yontem stop-loss/hedef hesabi
-├── notifier.py          # Telegram bildirim sistemi
-├── database.py          # SQLite: sinyaller, loglar, paper trade
-├── backtest.py          # Gercekci backtest motoru (komisyon + kayma)
-├── walk_forward.py      # Walk-forward parametre optimizasyonu
-├── price_predictor.py   # GradientBoosting fiyat tahmini
-├── streamlit_app.py     # Streamlit dashboard (ana arayuz)
-├── streamlit_utils.py   # Streamlit yardimci fonksiyonlari
-├── mobile_app.py        # Mobil optimize Streamlit arayuzu
-├── dashboard.py         # Flask REST API + web dashboard
-├── start_app.py         # Windows icin Streamlit baslatici
-├── run_app.bat          # Windows batch baslatici
-├── data/                # Backtest raporlari, top listeleri ve analiz ciktilari
-├── templates/           # Flask HTML sablonlari
-├── models/              # Kaydedilmis ML modelleri (.pkl)
-├── android_app/         # Kotlin/Jetpack Compose Android uygulamasi
-├── requirements.txt     # Python bagimliliklari
-├── .env.example         # Ortam degiskenleri sablonu
-└── bist_signals.db      # SQLite veritabani (otomatik olusur)
+├── main.py              # CLI giriş noktası, bağımlılık kurulumu
+├── scanner.py           # ScanService — tarama, sinyal değişim, paper trade
+├── scheduler.py         # MarketScheduler — pazar saati döngüsü
+├── backtest_runner.py   # Backtest akışı
+├── strategy.py          # StrategyEngine — 4 modüler skor metodu
+├── indicators.py        # Teknik indikatör hesaplamaları
+├── risk_manager.py      # Stop-loss, hedef fiyat, pozisyon büyüklüğü
+├── data_fetcher.py      # yfinance veri çekme ve önbellekleme
+├── notifier.py          # Telegram bildirimleri
+├── database.py          # SQLite sinyal ve paper trade kaydı
+├── backtest.py          # Backtester sınıfı
+├── dashboard.py         # Flask web paneli
+├── streamlit_app.py     # Streamlit arayüzü
+├── mobile_app.py        # Mobil Streamlit arayüzü
+├── config.py            # Tüm yapılandırma sabitleri
+├── tests/               # pytest test paketi
+└── requirements.txt
 ```
 
-## Yapilandirma
+## Kurulum
 
-`config.py` dosyasindan ayarlari degistirebilirsiniz:
-
-### Gosterge Parametreleri
-
-| Parametre | Varsayilan | Aciklama |
-|---|---|---|
-| `RSI_PERIOD` | 14 | RSI hesaplama periyodu |
-| `RSI_OVERSOLD` / `RSI_OVERBOUGHT` | 30 / 70 | RSI esik degerleri |
-| `SMA_FAST` / `SMA_SLOW` | 5 / 20 | SMA hareketli ortalama |
-| `EMA_FAST` / `EMA_SLOW` / `EMA_LONG` | 12 / 26 / 200 | EMA hareketli ortalama |
-| `MACD_FAST` / `MACD_SLOW` / `MACD_SIGNAL` | 12 / 26 / 9 | MACD parametreleri |
-| `BOLLINGER_PERIOD` / `BOLLINGER_STD` | 20 / 2 | Bollinger Bantlari |
-| `ADX_THRESHOLD` | 20 | Minimum ADX (trend gucu) |
-| `VOLUME_CONFIRM_MULTIPLIER` | 1.5 | Hacim onay carpani |
-
-### Bot Ayarlari
-
-| Parametre | Varsayilan | Aciklama |
-|---|---|---|
-| `SCAN_INTERVAL_MINUTES` | 15 | Tarama araligi (dakika) |
-| `MARKET_OPEN_HOUR` | 10 | Borsa acilis saati |
-| `MARKET_CLOSE_HOUR` | 18 | Borsa kapanis saati |
-| `TELEGRAM_MIN_SCORE` | 70 | Telegram'a gonderilecek min skor |
-| `PAPER_MODE` | False | Paper trading modu |
-| `SECTOR_LIMIT` | 2 | Ayni sektorden max sinyal |
-
-### Sinyal Esikleri
-
-| Parametre | Varsayilan | Aciklama |
-|---|---|---|
-| `STRONG_BUY_THRESHOLD` | 48 | Guclu alim icin minimum skor |
-| `BUY_THRESHOLD` | 20 | Standart alim sinyali skoru |
-| `WEAK_BUY_THRESHOLD` | 8 | Zayif alim sinyali skoru |
-| `WEAK_SELL_THRESHOLD` | -8 | Zayif satim sinyali skoru |
-| `SELL_THRESHOLD` | -20 | Standart satim sinyali skoru |
-| `STRONG_SELL_THRESHOLD` | -48 | Guclu satim icin minimum skor |
-
-### Regime Detection
-
-Strateji piyasa rejimlerini tespit eder ve buna göre sinyal üretimini ayarlar:
-
-```
-ADX >= 20 + DI_crossover → TRENDING (BULL/BEAR)
-ADX >= 15 + momentum onayi → WEAK_TREND
-ADX < 15 veya DI yakin  → SIDEWAYS
+```bash
+pip install -r requirements.txt
 ```
 
-**Filtreleme mantigi:**
-- SIDEWAYS rejimde skor *= 0.6 ve abs(score) < BUY_THRESHOLD → sinyal yok
-- Düsük ADX + DI farki < 5 iken momentum < %4 → sinyal reddedilir
-- Rejim tek bar'da degismez; en az 2 bar teyit gerekir
-
-**Sonuçlar (2y backtest, 4 hisse):**
-- 4/4 hissede getiri artisi (ort. +33%)
-- THYAO.IS: 23→26 trade, getiri +17.9%→+24.4%
-- ASELS.IS: 2→22 trade, getiri +9.9%→+33.6%
-
-### Backtest Ayarlari
-
-| Parametre | Varsayilan | Aciklama |
-|---|---|---|
-| `COMMISSION_BUY` / `COMMISSION_SELL` | 0.02% | Alim/satim komisyonu |
-| `BSMV` | 0.05% | BSMV vergisi |
-| `SLIPPAGE` | 0.1% | Tahmini kayma |
-| `WALKFORWARD_TRAIN_DAYS` | 180 | Walk-forward egitim suresi |
-| `WALKFORWARD_TEST_DAYS` | 30 | Walk-forward test suresi |
-
-## Ortam Degiskenleri
-
-`.env.example` dosyasini `.env` olarak kopyalayip doldurun:
+`.env` dosyası oluştur:
 
 ```env
-TELEGRAM_BOT_TOKEN=buraya_bot_token_yaz
-TELEGRAM_CHAT_ID=buraya_chat_id_yaz
-FLASK_DEBUG=0
-FLASK_PORT=5000
+TELEGRAM_BOT_TOKEN=...
+TELEGRAM_CHAT_ID=...
 ```
 
-- **TELEGRAM_BOT_TOKEN**: [@BotFather](https://t.me/BotFather)'dan alinir
-- **TELEGRAM_CHAT_ID**: [@userinfobot](https://t.me/userinfobot)'dan alinir
-- **FLASK_DEBUG**: Uretimde `0` birakin; debug sadece gelistirme icin acilmali
-- **FLASK_PORT**: Flask dashboard portu (varsayilan `5000`)
-
-Telegram ayarlanmazsa bot calismaya devam eder, sadece bildirim gondermez.
-
-Not: Telegram token ve chat id sadece `.env` veya ortam degiskenlerinden okunur; Streamlit ayarlar ekranindan kalici olarak kaydedilmez.
-
-## Calistirma
-
-- **Streamlit arayuzu**: `streamlit run streamlit_app.py`
-- **Bot + Flask dashboard**: `python main.py`
-- **Tek seferlik tarama**: `python main.py --once`
-
-## Backtest Kullanimi
-
-Backtest motoru artik **look-ahead bias icermeyecek** sekilde calisir. Sinyaller mevcut bar tamamlanmadan uretilmez; karar bir onceki bar kapanisina gore verilir ve islem sonraki bar acilisinda gerceklesir.
-
-Onerilen komutlar:
+## Kullanım
 
 ```bash
-# Tekil referans backtest
-python -X utf8 backtest.py
-
-# Strateji farklarini karsilastirma
-python -X utf8 backtest_compare.py
-
-# Anlamli / strict raporlari yeniden uretme
-python -X utf8 generate_significant_report.py
+python main.py              # Bot + dashboard
+python main.py --once       # Tek tarama
+python main.py --backtest   # Backtest
+python main.py --dashboard  # Sadece dashboard
+streamlit run streamlit_app.py
 ```
 
-Olusan raporlar `data/` klasorune kaydedilir.
+## Test & Lint
 
-### Uretilen Raporlar
-
-- `data/watchlist_backtest_results.json` — Tum watchlist icin ham backtest sonuclari
-- `data/watchlist_backtest_results.csv` — Excel/analiz icin tablo formatinda sonuc listesi
-- `data/watchlist_backtest_top5.json` — Sharpe'a gore ilk 5 hisse
-- `data/top10_detailed_report.md` — Kompozit skor oncesi detayli top 10 raporu
-- `data/top10_significant_report.md` — Min 10 islem filtresi + yonetici ozeti + sparkline + yildiz puani
-- `data/strict_profitable_watchlist.md` — Hem anlamli hem pozitif kapanmis en guvenilir havuz
-
-## Strict Watchlist
-
-Canli islem icin en muhafazakar izleme listesi `data/strict_profitable_watchlist.md` icinde uretilir.
-
-Bu listeye giren hisseler su iki kosulu ayni anda saglar:
-
-- `Toplam Islem >= 10`
-- `Yillik Getiri > 0`
-
-Bu nedenle, hem yeterli istatistiksel gozlem sayisina sahip hem de gecmiste karli kapanmis hisseler tek listede toplanir.
-
-## Beklenen Performans
-
-Guncel, filtrelenmis ve istatistiksel olarak anlamli rapora gore sistemin seffaf referans metrikleri su sekildedir:
-
-- Ortalama yillik getiri: `%28.29`
-- Ortalama maksimum drawdown: `%-17.67`
-- Ortalama islem sayisi: `10.1`
-- En yuksek Profit Factor: `4.71` (`ENKAI.IS`)
-
-Bu sayilar, `data/top10_significant_report.md` icindeki yonetici ozetinden alinmistir ve stratejinin daha durust backtest mantigi altindaki beklenen profilini temsil eder.
-
-## Ornek Backtest Ciktisi
-
+```bash
+pytest tests/ -v
+ruff check . --isolated
 ```
-═══════════════════════════════════════════════════════
-📊 BACKTEST SONUCU: THYAO.IS
-═══════════════════════════════════════════════════════
-  Periyot         : 15.04.2025 → 12.04.2026
-  Baslangic       : ₺8,500.00
-  Bitis           : ₺9,234.50
-  Toplam Getiri   : %8.64
-  ─────────────────────────────────
-  Toplam Islem    : 12
-  Kazanan         : 8
-  Kaybeden        : 4
-  Kazanma Orani   : %66.7
-  ─────────────────────────────────
-  Ort. Kar        : %3.42
-  Ort. Zarar      : %-1.87
-  Max Drawdown    : %-4.21
-  Sharpe Ratio    : 1.24
-═══════════════════════════════════════════════════════
-```
-
-*Not: Yukaridaki degerler ornektir. Gercek sonuclar piyasa kosullarina gore degisir.*
-
-## Ornek Sinyal Ciktisi
-
-```
-==================================================
-📊 ASELSAN (ASELS.IS)
-==================================================
-  Sinyal  : 💰 GUCLU AL
-  Skor    : +52.0/100
-  Fiyat   : ₺68.45
-  Guven   : YUKSEK
-  Stop-Loss: ₺64.20
-  Hedef   : ₺74.80
-  Nedenler:
-    RSI dusuk (28.3) → Asiri satim
-    MACD Bullish Crossover 📈
-    SMA Golden Cross ✨ → Yukselis sinyali
-    Hacim onay (2.1x ort)
-    Guclu yukselis trendi (ADX:32, +DI>18)
-    R/R: 1:1.5 | Stop: ATR | Hedef: Direnc
-  Zaman   : 12.04.2026 14:30
-==================================================
-```
-
-*Not: Yukaridaki degerler ornektir.*
-
-## Teknolojiler
-
-| Katman | Teknoloji |
-|---|---|
-| Veri | BIST web scraping, yfinance, pandas, numpy |
-| ML | scikit-learn (GradientBoosting) |
-| Web UI | Streamlit, Flask |
-| Grafik | Plotly |
-| Bildirim | Telegram Bot API |
-| Veritabani | SQLite |
-| Mobil | Kotlin, Jetpack Compose (Android) |
-
-## Ekran Goruntuleri
-
-> Streamlit ve Flask arayuzlerinin ekran goruntuleri icin `screenshots/` klasorune bakin.
-> Ornek goruntuler henuz eklenmedi; katkida bulunmak isterseniz PR gonderebilirsiniz.
-
-<!-- Ekran goruntuleri eklendiginde asagidaki satirlarin yorumunu kaldir:
-![Streamlit Dashboard](screenshots/streamlit_dashboard.png)
-![Sinyal Detay](screenshots/sinyal_detay.png)
-![Backtest Sonucu](screenshots/backtest_sonuc.png)
--->
-
-## Uyarilar
-
-- Bu yazilim **yatirim tavsiyesi degildir**. Tum kararlariniz size aittir.
-- Gecmis performans gelecegi garanti etmez.
-- Paper trading modunu kullanarak once stratejiyi test edin.
-- Veri: Web scraping ile ~0-30 sn gecikme (BIST web sitesi). Yahoo Finance fallback: ~15 dakika gecikme.
-- Bot, yfinance ve web scraping kullanir; API limitleri ve hedef sitenin kullanim kosullari izlenmelidir.
-
-## Gelistirme Notlari
-
-- Repoyu temiz tutmak icin gecici build, IDE ve cache dosyalari versiyon kontrolune dahil edilmemelidir.
-- Uygulamayi gelistirmeden once `.env.example` dosyasini kopyalayip kendi `.env` dosyanizi olusturun.
 
 ## Lisans
 
-MIT License — Detaylar icin [LICENSE](LICENSE) dosyasina bakin.
+MIT
