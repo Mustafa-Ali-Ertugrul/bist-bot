@@ -1,0 +1,79 @@
+import logging
+import config
+from datetime import datetime
+from time import sleep
+
+
+logger = logging.getLogger(__name__)
+
+
+class MarketScheduler:
+    def __init__(self, scan_service, notifier):
+        self.scanner = scan_service
+        self.notifier = notifier
+        self.running = False
+
+    def run_loop(self):
+        self.running = True
+
+        logger.info("🚀 BIST Bot başlatılıyor...")
+        self.notifier.send_startup_message()
+
+        while self.running:
+            now = datetime.now()
+            hour = now.hour
+            minute = now.minute
+
+            weekday = now.weekday()
+
+            if weekday >= 5:
+                logger.info("📅 Hafta sonu — tarama yapılmıyor")
+                sleep(3600)
+                continue
+
+            if hour < config.settings.MARKET_OPEN_HOUR:
+                wait = (config.settings.MARKET_OPEN_HOUR - hour) * 3600
+                logger.info(
+                    f"⏰ Borsa henüz açılmadı. "
+                    f"{config.settings.MARKET_OPEN_HOUR}:00'da başlayacak..."
+                )
+                sleep(min(wait, 1800))
+                continue
+
+            warmup_minutes = getattr(config.settings, "MARKET_WARMUP_MINUTES", 15)
+            half_day_hour = getattr(config.settings, "MARKET_HALF_DAY_HOUR", 13)
+
+            if hour >= config.settings.MARKET_CLOSE_HOUR:
+                logger.info("🌙 Borsa kapandı. Yarın görüşürüz!")
+                self.scanner.scan_once()
+                sleep(3600 * 14)
+                continue
+
+            if hour == config.settings.MARKET_OPEN_HOUR and minute < warmup_minutes:
+                logger.info(f"🌅 Açılış gürültüsü - ilk {warmup_minutes} dakika bekleniyor...")
+                sleep(60)
+                continue
+
+            if hour >= half_day_hour and hour < config.settings.MARKET_CLOSE_HOUR:
+                logger.info("🌓 Yarım gün - sadece son saatlerde tarama yapılıyor")
+                self.scanner.scan_once()
+                sleep(3600 * (config.settings.MARKET_CLOSE_HOUR - half_day_hour))
+                continue
+
+            try:
+                self.scanner.scan_once()
+            except Exception as e:
+                logger.error(f"❌ Tarama hatası: {e}")
+                self.notifier.send_message(f"⚠️ Bot hatası: {e}")
+
+            logger.info(
+                f"\n⏳ Sonraki tarama: "
+                f"{config.settings.SCAN_INTERVAL_MINUTES} dakika sonra"
+            )
+
+            for _ in range(config.settings.SCAN_INTERVAL_MINUTES * 6):
+                if not self.running:
+                    break
+                sleep(10)
+
+        logger.info("👋 Bot durduruldu.")
