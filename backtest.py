@@ -1,4 +1,5 @@
 import logging
+import importlib
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Optional, TypedDict, cast
@@ -12,7 +13,10 @@ except ImportError:
     yf = None
 
 import config
+import strategy as strategy_module
+from contracts import StrategyEngineProtocol
 from indicators import TechnicalIndicators
+from signal_models import SignalType
 
 logger = logging.getLogger(__name__)
 
@@ -90,8 +94,6 @@ def _to_datetime(value: Any) -> datetime:
     if isinstance(value, datetime):
         return value
     timestamp = pd.Timestamp(value)
-    if pd.isna(timestamp):
-        raise ValueError(f"Invalid datetime value: {value!r}")
     return cast(datetime, timestamp.to_pydatetime())
 
 
@@ -465,11 +467,60 @@ class Backtester:
         return max(-100.0, min(100.0, score))
 
 
+class StrategyBacktester:
+    def __init__(
+        self,
+        initial_capital: Optional[float] = None,
+        engine: Optional[StrategyEngineProtocol] = None,
+        backtester: Optional[Backtester] = None,
+    ) -> None:
+        self.engine = engine or strategy_module.StrategyEngine()
+        self.backtester = backtester or Backtester(
+            initial_capital=initial_capital,
+            indicators=TechnicalIndicators(),
+        )
+
+    def run(self, ticker: str, df: pd.DataFrame, verbose: bool = False) -> Optional[BacktestResult]:
+        original_builder = self.backtester._build_signal_context
+
+        def build_signal_context(ticker: str, history: pd.DataFrame) -> dict[str, float | bool]:
+            signal = self.engine.analyze(ticker, history, enforce_sector_limit=False)
+            if signal is None:
+                return {
+                    "enter": False,
+                    "exit": False,
+                    "score": 0.0,
+                    "stop_loss": 0.0,
+                    "target_price": 0.0,
+                }
+            return {
+                "enter": signal.signal_type in {SignalType.STRONG_BUY, SignalType.BUY},
+                "exit": signal.signal_type in {SignalType.SELL, SignalType.STRONG_SELL},
+                "score": signal.score,
+                "stop_loss": signal.stop_loss,
+                "target_price": signal.target_price,
+            }
+
+        setattr(self.backtester, "_build_signal_context", build_signal_context)
+        try:
+            return self.backtester.run(ticker, df, verbose=verbose)
+        finally:
+            setattr(self.backtester, "_build_signal_context", original_builder)
+
+
+def _reload_strategy_dependencies() -> StrategyEngineProtocol:
+    reloaded_module = importlib.reload(strategy_module)
+    return reloaded_module.StrategyEngine()
+
+
 if __name__ == "__main__":
     from data_fetcher import BISTDataFetcher
 
     fetcher = BISTDataFetcher()
-    backtester = Backtester(initial_capital=getattr(config, "INITIAL_CAPITAL", 8500.0))
+    backtester = StrategyBacktester(
+        initial_capital=getattr(config, "INITIAL_CAPITAL", 8500.0),
+        engine=_reload_strategy_dependencies(),
+    )
 
     print("🧪 Backtest başlıyor...\n")
 
