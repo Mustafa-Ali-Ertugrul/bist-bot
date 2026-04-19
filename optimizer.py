@@ -20,7 +20,7 @@ class StrategyOptimizer:
         self,
         ticker: str,
         df: pd.DataFrame,
-        initial_capital: float = None,
+        initial_capital: Optional[float] = None,
     ):
         """Initialize optimizer state for a single ticker dataset.
 
@@ -127,6 +127,91 @@ class StrategyOptimizer:
         df_history = df_history.sort_values(by="score", ascending=False).head(n)
         return df_history
 
+    def walk_forward_validation(
+        self,
+        param_grid: Dict[str, List[Any]],
+        train_window_days: int = 180,
+        test_window_days: int = 60,
+        n_iter: int = 20,
+    ) -> pd.DataFrame:
+        """Run rolling walk-forward validation on the current dataset."""
+        logger.info(
+            f"🚶‍♂️ Walk-Forward Başlıyor... (Eğitim: {train_window_days}g, Test: {test_window_days}g)"
+        )
+
+        results = []
+        df_sorted = self.df.sort_index()
+
+        if df_sorted.empty or len(df_sorted) < (train_window_days + test_window_days):
+            logger.error("Veri seti Walk-Forward için çok kısa!")
+            return pd.DataFrame()
+
+        start_date = df_sorted.index[0]
+        end_date = df_sorted.index[-1]
+
+        current_train_start = start_date
+        window_idx = 1
+
+        while True:
+            current_train_end = current_train_start + pd.Timedelta(days=train_window_days)
+            current_test_end = current_train_end + pd.Timedelta(days=test_window_days)
+
+            if current_test_end > end_date:
+                break
+
+            train_df = df_sorted.loc[current_train_start:current_train_end]
+            test_df = df_sorted.loc[current_train_end:current_test_end]
+
+            train_start_str = str(current_train_start)[:10]
+            train_end_str = str(current_train_end)[:10]
+            test_end_str = str(current_test_end)[:10]
+
+            logger.info(f"\n--- Pencere {window_idx} ---")
+            logger.info(
+                f"📖 Eğitim: {train_start_str} -> {train_end_str}"
+            )
+            logger.info(
+                f"🎯 Test (OOS): {train_end_str} -> {test_end_str}"
+            )
+
+            train_optimizer = StrategyOptimizer(self.ticker, train_df, self.initial_capital)
+            best_params, _ = train_optimizer.random_search(param_grid, n_iter=n_iter)
+
+            if best_params is None:
+                logger.warning("Bu pencerede uygun parametre bulunamadı, atlanıyor.")
+                current_train_start += pd.Timedelta(days=test_window_days)
+                window_idx += 1
+                continue
+
+            test_engine = StrategyEngine(params=best_params)
+            test_backtester = StrategyBacktester(initial_capital=self.initial_capital, engine=test_engine)
+            test_result = test_backtester.run(self.ticker, test_df, verbose=False)
+
+            if test_result:
+                results.append(
+                    {
+                        "Window": window_idx,
+                        "OOS_Return_Pct": test_result.total_return_pct,
+                        "OOS_Win_Rate": test_result.win_rate,
+                        "OOS_Sharpe": test_result.sharpe_ratio,
+                        "OOS_Trades": test_result.total_trades,
+                        "Params_Used": {
+                            k: v for k, v in best_params.__dict__.items() if k in param_grid.keys()
+                        },
+                    }
+                )
+                logger.info(
+                    f"✅ OOS Getiri: %{test_result.total_return_pct:.2f} | İşlem: {test_result.total_trades}"
+                )
+            else:
+                logger.info("❌ OOS: Bu dönemde işlem açılmadı.")
+
+            current_train_start += pd.Timedelta(days=test_window_days)
+            window_idx += 1
+
+        logger.info("\n🏁 Walk-Forward Validation Tamamlandı!")
+        return pd.DataFrame(results)
+
 
 if __name__ == "__main__":
     from data_fetcher import BISTDataFetcher
@@ -143,29 +228,23 @@ if __name__ == "__main__":
         optimizer = StrategyOptimizer(ticker=ticker, df=df)
 
         search_space = {
-            "buy_threshold": [8.0, 10.0, 15.0],
-            "sell_threshold": [-8.0, -10.0, -15.0],
-            "rsi_oversold": [25.0, 30.0, 35.0],
+            "buy_threshold": [8.0, 10.0, 12.0, 15.0],
             "score_macd_cross": [8.0, 12.0, 15.0],
-            "score_sma_golden_cross": [10.0, 12.0, 18.0],
+            "score_sma_golden_cross": [10.0, 12.0, 15.0],
         }
 
-        best_params, best_result = optimizer.random_search(search_space, n_iter=20)
+        wf_results = optimizer.walk_forward_validation(
+            search_space,
+            train_window_days=180,
+            test_window_days=60,
+            n_iter=15,
+        )
 
-        print("\n" + "=" * 50)
-        print("🏆 OPTİMİZASYON SONUCU")
-        print("=" * 50)
-        if best_result and best_params:
-            print(best_result)
-            print("\n⚙️ EN İYİ PARAMETRELER:")
-            print(f"  Buy Threshold: {best_params.buy_threshold}")
-            print(f"  Sell Threshold: {best_params.sell_threshold}")
-            print(f"  RSI Oversold: {best_params.rsi_oversold}")
-            print(f"  MACD Skoru: {best_params.score_macd_cross}")
-            print(f"  SMA Skoru: {best_params.score_sma_golden_cross}")
+        if not wf_results.empty:
+            print("\n" + "=" * 60)
+            print("🚀 WALK-FORWARD (OUT-OF-SAMPLE) SONUÇLARI")
+            print("=" * 60)
+            print(wf_results.to_string(index=False))
 
-            print("\n📋 İlk 5 Alternatif Sonuç:")
-            top_5 = optimizer.get_top_n_results(5)
-            print(top_5[["return_pct", "win_rate", "sharpe", "trades", "score"]].to_string(index=False))
-        else:
-            print("Uygun bir sonuç bulunamadı.")
+            mean_return = wf_results["OOS_Return_Pct"].mean()
+            print(f"\nOrtalama OOS Getiri (Aylık/Dönemsel): %{mean_return:.2f}")
