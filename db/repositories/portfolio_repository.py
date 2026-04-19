@@ -1,11 +1,31 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, NamedTuple, Optional
 
 from sqlalchemy import select
 
 from db.database import DatabaseManager, PaperTradeRecord
+
+
+class PaperTrade(NamedTuple):
+    id: int
+    ticker: str
+    signal_type: str
+    signal_price: float
+    signal_time: str
+    stop_loss: Optional[float]
+    target_price: Optional[float]
+    close_price: Optional[float]
+    score: Optional[int]
+    regime: Optional[str]
+    filled_at: Optional[float]
+    outcome: str
+    actual_profit_pct: Optional[float]
+    exit_price: Optional[float]
+    exit_date: Optional[str]
+    close_reason: Optional[str]
+    close_time: Optional[str]
 
 
 class PortfolioRepository:
@@ -67,7 +87,7 @@ class PortfolioRepository:
                 trade.outcome = "CLOSED"
                 trade.actual_profit_pct = (trade.signal_price - close_price) / trade.signal_price * 100
 
-    def get_open_paper_trades(self) -> list[tuple[Any, ...]]:
+    def get_open_paper_trades(self) -> list[PaperTrade]:
         with self.manager.session_scope() as session:
             rows = session.scalars(
                 select(PaperTradeRecord)
@@ -75,24 +95,24 @@ class PortfolioRepository:
                 .order_by(PaperTradeRecord.id.asc())
             ).all()
         return [
-            (
-                row.id,
-                row.ticker,
-                row.signal_type,
-                row.signal_price,
-                row.signal_time,
-                row.stop_loss,
-                row.target_price,
-                row.close_price,
-                row.score,
-                row.regime,
-                row.filled_at,
-                row.outcome,
-                row.actual_profit_pct,
-                row.exit_price,
-                row.exit_date,
-                row.close_reason,
-                row.close_time,
+            PaperTrade(
+                id=row.id,
+                ticker=row.ticker,
+                signal_type=row.signal_type,
+                signal_price=row.signal_price,
+                signal_time=row.signal_time,
+                stop_loss=row.stop_loss,
+                target_price=row.target_price,
+                close_price=row.close_price,
+                score=row.score,
+                regime=row.regime,
+                filled_at=row.filled_at,
+                outcome=row.outcome,
+                actual_profit_pct=row.actual_profit_pct,
+                exit_price=row.exit_price,
+                exit_date=row.exit_date,
+                close_reason=row.close_reason,
+                close_time=row.close_time,
             )
             for row in rows
         ]

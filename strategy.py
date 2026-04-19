@@ -71,12 +71,6 @@ def detect_regime(df: pd.DataFrame, lookback: int = 20) -> MarketRegime:
 
 
 class StrategyEngine:
-    STRONG_BUY_THRESHOLD = getattr(settings, "STRONG_BUY_THRESHOLD", 40)
-    BUY_THRESHOLD = getattr(settings, "BUY_THRESHOLD", 10)
-    WEAK_BUY_THRESHOLD = getattr(settings, "WEAK_BUY_THRESHOLD", 8)
-    WEAK_SELL_THRESHOLD = getattr(settings, "WEAK_SELL_THRESHOLD", -8)
-    SELL_THRESHOLD = getattr(settings, "SELL_THRESHOLD", -10)
-    STRONG_SELL_THRESHOLD = getattr(settings, "STRONG_SELL_THRESHOLD", -40)
     MIN_REGIME_PERSISTENCE = 2
     SIDEWAYS_EXTRA_THRESHOLD = 5
     MOMENTUM_CONFIRMATION = 4.0

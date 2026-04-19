@@ -2,7 +2,7 @@ import logging
 import importlib
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Optional, TypedDict, cast
+from typing import Any, Optional, Protocol, TypedDict, cast
 
 import numpy as np
 import pandas as pd
@@ -24,7 +24,11 @@ logger = logging.getLogger(__name__)
 class IntrabarExit(TypedDict):
     reason: str
     reference_price: float
-    fill_price: float
+
+
+class SignalBuilder(Protocol):
+    def __call__(self, ticker: str, history: pd.DataFrame) -> dict[str, float | bool]:
+        ...
 
 
 @dataclass
@@ -83,6 +87,8 @@ class BacktestResult:
 
 def _to_float(value: Any, default: float = 0.0) -> float:
     try:
+        if isinstance(value, (pd.Series, pd.DataFrame, np.ndarray, list, tuple, pd.Index)):
+            return default
         if pd.isna(value):
             return default
         return float(value)
@@ -135,6 +141,7 @@ class Backtester:
         self.target_rr = float(target_rr)
         self.indicators = indicators or TechnicalIndicators()
         self.avg_holding_days = 0.0
+        self.signal_builder: Optional[SignalBuilder] = None
 
     def _precalculate_signals(self, df: pd.DataFrame) -> pd.DataFrame:
         """Precompute default backtest signals in a vectorized form."""
@@ -175,18 +182,23 @@ class Backtester:
         df["enter_signal"] = df["score"] >= self.buy_threshold
         df["exit_signal"] = df["score"] <= self.sell_threshold
 
-        shifted = df[["score", "calculated_stop", "target_price", "enter_signal", "exit_signal"]].shift(1)
-        df["score"] = shifted["score"].fillna(0.0)
-        df["calculated_stop"] = shifted["calculated_stop"].fillna(df["close"] * 0.95)
-        df["target_price"] = shifted["target_price"].fillna(df["close"])
-        df["enter_signal"] = shifted["enter_signal"].fillna(False).astype(bool)
-        df["exit_signal"] = shifted["exit_signal"].fillna(False).astype(bool)
+        score_series = cast(pd.Series, df["score"])
+        stop_series = cast(pd.Series, df["calculated_stop"])
+        target_series = cast(pd.Series, df["target_price"])
+        enter_series = cast(pd.Series, df["enter_signal"])
+        exit_series = cast(pd.Series, df["exit_signal"])
+        close_series = cast(pd.Series, df["close"])
+
+        df["score"] = score_series.shift(1).fillna(0.0)
+        df["calculated_stop"] = stop_series.shift(1).fillna(close_series * 0.95)
+        df["target_price"] = target_series.shift(1).fillna(close_series)
+        df["enter_signal"] = enter_series.shift(1).fillna(False).astype(bool)
+        df["exit_signal"] = exit_series.shift(1).fillna(False).astype(bool)
 
         return df
 
     def _use_vectorized_path(self) -> bool:
-        signal_builder = getattr(self._build_signal_context, "__func__", None)
-        return signal_builder is Backtester._build_signal_context
+        return self.signal_builder is None
 
     def run(
         self,
@@ -198,7 +210,9 @@ class Backtester:
             logger.warning(f"  Yetersiz veri: {len(df) if df is not None else 0}")
             return None
 
-        df = self.indicators.add_all(df.copy())
+        df = df.copy()
+        if "rsi" not in df.columns or f"sma_{settings.SMA_SLOW}" not in df.columns:
+            df = self.indicators.add_all(df)
         df = df.dropna(subset=["rsi", f"sma_{settings.SMA_SLOW}"])
         if len(df) < 2:
             return None
@@ -221,8 +235,8 @@ class Backtester:
         capital_history: list[float] = [capital]
         last_buy_date: Optional[datetime] = None
 
-        for row in df.itertuples(index=True, name="Bar"):
-            date = _to_datetime(row.Index)
+        for i, row in enumerate(df.itertuples(index=False, name="Bar")):
+            date = _to_datetime(df.index[i])
             open_price = _to_float(getattr(row, "open", getattr(row, "close", 0.0)), _to_float(getattr(row, "close", 0.0)))
             high_price = _to_float(getattr(row, "high", open_price), open_price)
             low_price = _to_float(getattr(row, "low", open_price), open_price)
@@ -288,14 +302,15 @@ class Backtester:
 
         if position is not None:
             last_date = _to_datetime(df.index[-1])
-            last_close = _to_float(df.iloc[-1].get("close"))
+            last_bar = df.iloc[-1]
+            last_close = _to_float(last_bar.get("close"))
             capital = self._close_position(
                 capital=capital,
                 position=position,
                 trades=trades,
                 ticker=ticker,
                 exit_date=last_date,
-                fill_price=self._apply_sell_slippage(last_close),
+                fill_price=self._calculate_dynamic_slippage(last_close, last_bar, is_buy=False),
                 reference_price=last_close,
                 reason="FINAL_CLOSE",
                 verbose=False,
@@ -379,14 +394,15 @@ class Backtester:
 
         if position is not None:
             last_date = _to_datetime(df.index[-1])
-            last_close = _to_float(df.iloc[-1].get("close"))
+            last_bar = df.iloc[-1]
+            last_close = _to_float(last_bar.get("close"))
             capital = self._close_position(
                 capital=capital,
                 position=position,
                 trades=trades,
                 ticker=ticker,
                 exit_date=last_date,
-                fill_price=self._apply_sell_slippage(last_close),
+                fill_price=self._calculate_dynamic_slippage(last_close, last_bar, is_buy=False),
                 reference_price=last_close,
                 reason="FINAL_CLOSE",
                 verbose=False,
@@ -396,6 +412,8 @@ class Backtester:
         return self._build_result(ticker, df, capital, trades, capital_history)
 
     def _build_signal_context(self, ticker: str, history: pd.DataFrame) -> dict[str, float | bool]:
+        if self.signal_builder is not None:
+            return self.signal_builder(ticker, history)
         score = self._calculate_score(history)
         last_close = _to_float(history.iloc[-1].get("close"))
         stop_loss = _to_float(history.iloc[-1].get("stop_loss_atr"), last_close * 0.95)
@@ -417,9 +435,9 @@ class Backtester:
 
     def _calculate_dynamic_slippage(self, price: float, row: Any, is_buy: bool) -> float:
         """Calculate volatility-aware slippage using ATR when available."""
-        base_slippage = float(
-            self.slippage_pct if self.slippage_pct is not None else getattr(settings, "SLIPPAGE_PCT", 0.001)
-        )
+        base_slippage = float(getattr(settings, "SLIPPAGE_PCT", 0.001))
+        penalty_ratio = float(getattr(settings, "SLIPPAGE_PENALTY_RATIO", 0.15))
+        max_cap = float(getattr(settings, "SLIPPAGE_MAX_CAP", 0.02))
 
         atr_val = None
         if hasattr(row, "atr"):
@@ -427,15 +445,15 @@ class Backtester:
         elif isinstance(row, pd.Series) and "atr" in row:
             atr_val = row["atr"]
 
-        if pd.notna(atr_val) and price > 0:
-            atr_float = _to_float(atr_val, 0.0)
+        atr_float = _to_float(atr_val, 0.0)
+        if atr_float > 0 and price > 0:
             volatility_ratio = atr_float / price
-            penalty_pct = volatility_ratio * 0.15
+            penalty_pct = volatility_ratio * penalty_ratio
             dynamic_slippage_pct = base_slippage + penalty_pct
         else:
             dynamic_slippage_pct = base_slippage
 
-        dynamic_slippage_pct = float(min(dynamic_slippage_pct, 0.02))
+        dynamic_slippage_pct = float(min(dynamic_slippage_pct, max_cap))
         if is_buy:
             return price * (1 + dynamic_slippage_pct)
         return price * (1 - dynamic_slippage_pct)
@@ -481,14 +499,12 @@ class Backtester:
             return {
                 "reason": "STOP_GAP",
                 "reference_price": open_price,
-                "fill_price": self._apply_sell_slippage(open_price),
             }
 
         if target_price > 0 and open_price >= target_price:
             return {
                 "reason": "TARGET_GAP",
                 "reference_price": open_price,
-                "fill_price": self._apply_sell_slippage(open_price),
             }
 
         stop_hit = stop_loss > 0 and low_price <= stop_loss
@@ -511,7 +527,6 @@ class Backtester:
         return {
             "reason": first_reason,
             "reference_price": first_price,
-            "fill_price": self._apply_sell_slippage(first_price),
         }
 
     def _close_position(
@@ -555,12 +570,6 @@ class Backtester:
             )
 
         return capital + revenue
-
-    def _apply_buy_slippage(self, price: float) -> float:
-        return price * (1 + self.slippage_pct)
-
-    def _apply_sell_slippage(self, price: float) -> float:
-        return price * (1 - self.slippage_pct)
 
     def _build_result(
         self,
@@ -667,20 +676,30 @@ class StrategyBacktester:
             initial_capital=initial_capital,
             indicators=TechnicalIndicators(),
         )
+        self._enriched_cache: Optional[pd.DataFrame] = None
+
+    @staticmethod
+    def _empty_signal_context() -> dict[str, float | bool]:
+        return {
+            "enter": False,
+            "exit": False,
+            "score": 0.0,
+            "stop_loss": 0.0,
+            "target_price": 0.0,
+        }
 
     def run(self, ticker: str, df: pd.DataFrame, verbose: bool = False) -> Optional[BacktestResult]:
-        original_builder = self.backtester._build_signal_context
+        self._enriched_cache = TechnicalIndicators().add_all(df.copy())
 
-        def build_signal_context(ticker: str, history: pd.DataFrame) -> dict[str, float | bool]:
-            signal = self.engine.analyze(ticker, history, enforce_sector_limit=False)
+        def signal_builder(ticker: str, history: pd.DataFrame) -> dict[str, float | bool]:
+            idx = len(history) - 1
+            if self._enriched_cache is None or idx < 0 or idx >= len(self._enriched_cache):
+                return self._empty_signal_context()
+
+            enriched_slice = self._enriched_cache.iloc[: idx + 1]
+            signal = self.engine.analyze(ticker, enriched_slice, enforce_sector_limit=False)
             if signal is None:
-                return {
-                    "enter": False,
-                    "exit": False,
-                    "score": 0.0,
-                    "stop_loss": 0.0,
-                    "target_price": 0.0,
-                }
+                return self._empty_signal_context()
             return {
                 "enter": signal.signal_type in {SignalType.STRONG_BUY, SignalType.BUY},
                 "exit": signal.signal_type in {SignalType.SELL, SignalType.STRONG_SELL},
@@ -689,11 +708,12 @@ class StrategyBacktester:
                 "target_price": signal.target_price,
             }
 
-        setattr(self.backtester, "_build_signal_context", build_signal_context)
+        self.backtester.signal_builder = signal_builder
         try:
-            return self.backtester.run(ticker, df, verbose=verbose)
+            return self.backtester.run(ticker, self._enriched_cache, verbose=verbose)
         finally:
-            setattr(self.backtester, "_build_signal_context", original_builder)
+            self.backtester.signal_builder = None
+            self._enriched_cache = None
 
 
 def _reload_strategy_dependencies() -> StrategyEngineProtocol:

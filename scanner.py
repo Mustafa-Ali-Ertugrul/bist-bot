@@ -129,7 +129,7 @@ class ScanService:
 
         prices = {}
         for trade in open_trades:
-            ticker = trade[1]
+            ticker = trade.ticker
             df = self.fetcher.fetch_single(ticker, period="1d")
             if df is not None:
                 prices[ticker] = float(df["close"].iloc[-1])
@@ -138,17 +138,17 @@ class ScanService:
             self.db.update_all_paper_close(prices)
 
             for trade in open_trades:
-                ticker = trade[1]
-                stop_loss = trade[5]
-                target = trade[6]
+                ticker = trade.ticker
+                stop_loss = trade.stop_loss
+                target = trade.target_price
                 current = prices.get(ticker)
                 if current is None:
                     continue
                 if stop_loss and current <= stop_loss:
-                    self.db.close_paper_trade(trade[0], current, "STOP_HIT")
+                    self.db.close_paper_trade(trade.id, current, "STOP_HIT")
                     logger.info(f"🛑 Stop tetiklendi: {ticker} @ {current:.2f}")
                 elif target and current >= target:
-                    self.db.close_paper_trade(trade[0], current, "TARGET_HIT")
+                    self.db.close_paper_trade(trade.id, current, "TARGET_HIT")
                     logger.info(f"🎯 Hedef tuttu: {ticker} @ {current:.2f}")
 
             logger.info(f"  📊 Paper trade güncellendi: {len(prices)} hisse")

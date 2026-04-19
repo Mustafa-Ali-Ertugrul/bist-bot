@@ -105,22 +105,16 @@ class TechnicalIndicators:
     @staticmethod
     def add_obv(df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
-        
-        obv = np.zeros(len(df))
-        for i in range(1, len(df)):
-            if df["close"].iloc[i] > df["close"].iloc[i - 1]:
-                obv[i] = obv[i - 1] + df["volume"].iloc[i]
-            elif df["close"].iloc[i] < df["close"].iloc[i - 1]:
-                obv[i] = obv[i - 1] - df["volume"].iloc[i]
-            else:
-                obv[i] = obv[i - 1]
-        
-        df["obv"] = obv
+        close = df["close"].to_numpy()
+        volume = df["volume"].to_numpy()
+        direction = np.sign(np.diff(close, prepend=close[0]))
+        signed_volume = direction * volume
+        signed_volume[0] = 0
+        df["obv"] = np.cumsum(signed_volume)
         df["obv_sma"] = df["obv"].rolling(window=20).mean()
         df["obv_trend"] = "FLAT"
         df.loc[df["obv"] > df["obv_sma"], "obv_trend"] = "UP"
         df.loc[df["obv"] < df["obv_sma"], "obv_trend"] = "DOWN"
-        
         return df
 
     @staticmethod
