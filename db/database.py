@@ -45,6 +45,8 @@ class PaperTradeRecord(Base):
     signal_type: Mapped[str] = mapped_column(String, nullable=False)
     signal_price: Mapped[float] = mapped_column(Float, nullable=False)
     signal_time: Mapped[str] = mapped_column(Text, nullable=False)
+    stop_loss: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    target_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     close_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     score: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     regime: Mapped[Optional[str]] = mapped_column(String, nullable=True)
@@ -53,6 +55,8 @@ class PaperTradeRecord(Base):
     actual_profit_pct: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     exit_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     exit_date: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    close_reason: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    close_time: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
 
 class ScanLogRecord(Base):
@@ -127,10 +131,18 @@ class DatabaseManager:
                 conn.execute(text("ALTER TABLE signals ADD COLUMN created_at TEXT NOT NULL DEFAULT ''"))
 
             paper_columns = {row[1] for row in conn.execute(text(f"PRAGMA table_info({settings.PAPER_TRADES_TABLE})")).fetchall()}
+            if "stop_loss" not in paper_columns:
+                conn.execute(text(f"ALTER TABLE {settings.PAPER_TRADES_TABLE} ADD COLUMN stop_loss REAL"))
+            if "target_price" not in paper_columns:
+                conn.execute(text(f"ALTER TABLE {settings.PAPER_TRADES_TABLE} ADD COLUMN target_price REAL"))
             if "exit_price" not in paper_columns:
                 conn.execute(text(f"ALTER TABLE {settings.PAPER_TRADES_TABLE} ADD COLUMN exit_price REAL"))
             if "exit_date" not in paper_columns:
                 conn.execute(text(f"ALTER TABLE {settings.PAPER_TRADES_TABLE} ADD COLUMN exit_date TEXT"))
+            if "close_reason" not in paper_columns:
+                conn.execute(text(f"ALTER TABLE {settings.PAPER_TRADES_TABLE} ADD COLUMN close_reason TEXT"))
+            if "close_time" not in paper_columns:
+                conn.execute(text(f"ALTER TABLE {settings.PAPER_TRADES_TABLE} ADD COLUMN close_time TEXT"))
 
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_signals_created_at ON signals(created_at DESC)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_signals_ticker_created_at ON signals(ticker, created_at DESC)"))

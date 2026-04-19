@@ -92,6 +92,8 @@ class ScanService:
                     signal_type=s.signal_type.value,
                     signal_price=s.price,
                     signal_time=s.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+                    stop_loss=s.stop_loss,
+                    target_price=s.target_price,
                     score=int(s.score),
                     regime=regime,
                 )
@@ -134,4 +136,19 @@ class ScanService:
 
         if prices:
             self.db.update_all_paper_close(prices)
+
+            for trade in open_trades:
+                ticker = trade[1]
+                stop_loss = trade[5]
+                target = trade[6]
+                current = prices.get(ticker)
+                if current is None:
+                    continue
+                if stop_loss and current <= stop_loss:
+                    self.db.close_paper_trade(trade[0], current, "STOP_HIT")
+                    logger.info(f"🛑 Stop tetiklendi: {ticker} @ {current:.2f}")
+                elif target and current >= target:
+                    self.db.close_paper_trade(trade[0], current, "TARGET_HIT")
+                    logger.info(f"🎯 Hedef tuttu: {ticker} @ {current:.2f}")
+
             logger.info(f"  📊 Paper trade güncellendi: {len(prices)} hisse")

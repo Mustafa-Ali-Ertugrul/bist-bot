@@ -18,6 +18,8 @@ class PortfolioRepository:
         signal_type: str,
         signal_price: float,
         signal_time: Optional[str] = None,
+        stop_loss: Optional[float] = None,
+        target_price: Optional[float] = None,
         score: int = 0,
         regime: str = "UNKNOWN",
     ) -> None:
@@ -28,6 +30,8 @@ class PortfolioRepository:
                     signal_type=signal_type,
                     signal_price=signal_price,
                     signal_time=signal_time or datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    stop_loss=stop_loss,
+                    target_price=target_price,
                     score=score,
                     regime=regime,
                     outcome="OPEN",
@@ -77,6 +81,8 @@ class PortfolioRepository:
                 row.signal_type,
                 row.signal_price,
                 row.signal_time,
+                row.stop_loss,
+                row.target_price,
                 row.close_price,
                 row.score,
                 row.regime,
@@ -85,6 +91,8 @@ class PortfolioRepository:
                 row.actual_profit_pct,
                 row.exit_price,
                 row.exit_date,
+                row.close_reason,
+                row.close_time,
             )
             for row in rows
         ]

@@ -1,18 +1,18 @@
 import io
 import logging
 import sys
+from logging.handlers import RotatingFileHandler
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%H:%M:%S",
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler("bot.log", encoding="utf-8"),
-    ]
+handler_file = RotatingFileHandler(
+    "bot.log", maxBytes=5 * 1024 * 1024, backupCount=3, encoding="utf-8"
 )
+handler_console = logging.StreamHandler()
+fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S")
+handler_file.setFormatter(fmt)
+handler_console.setFormatter(fmt)
+logging.basicConfig(level=logging.INFO, handlers=[handler_file, handler_console])
 logger = logging.getLogger(__name__)
 
 

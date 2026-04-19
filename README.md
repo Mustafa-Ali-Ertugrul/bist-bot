@@ -12,6 +12,16 @@ BIST hisselerini teknik indikatörlerle tarayan, sinyal üreten, Telegram'a bild
 - Backtest desteği
 - Ruff lint + pytest CI
 
+### Sinyal Türleri
+
+- 💰 GÜÇLÜ AL : Skor ≥ 40
+- 🟢 AL        : Skor ≥ 15
+- 🟡 ZAYIF AL  : Skor ≥ 8
+- ⚪ BEKLE     : -8 < Skor < 8
+- 🟠 ZAYIF SAT : Skor ≤ -8
+- 🔴 SAT       : Skor ≤ -15
+- 🚨 GÜÇLÜ SAT : Skor ≤ -40
+
 ## Mimari
 
 ```mermaid
