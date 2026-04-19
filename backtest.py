@@ -198,7 +198,10 @@ class Backtester:
         return df
 
     def _use_vectorized_path(self) -> bool:
-        return self.signal_builder is None
+        if self.signal_builder is not None:
+            return False
+        signal_context_builder = getattr(self._build_signal_context, "__func__", None)
+        return signal_context_builder is Backtester._build_signal_context
 
     def run(
         self,
