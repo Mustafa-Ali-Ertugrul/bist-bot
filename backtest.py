@@ -221,7 +221,7 @@ class Backtester:
         capital_history: list[float] = [capital]
         last_buy_date: Optional[datetime] = None
 
-        for row in df.itertuples():
+        for row in df.itertuples(index=True, name="Bar"):
             date = _to_datetime(row.Index)
             open_price = _to_float(getattr(row, "open", getattr(row, "close", 0.0)), _to_float(getattr(row, "close", 0.0)))
             high_price = _to_float(getattr(row, "high", open_price), open_price)
@@ -237,13 +237,14 @@ class Backtester:
             }
 
             if position is not None and self._should_exit_on_open(signal):
+                exit_fill_price = self._calculate_dynamic_slippage(open_price, row, is_buy=False)
                 capital = self._close_position(
                     capital=capital,
                     position=position,
                     trades=trades,
                     ticker=ticker,
                     exit_date=date,
-                    fill_price=self._apply_sell_slippage(open_price),
+                    fill_price=exit_fill_price,
                     reference_price=open_price,
                     reason="SIGNAL_OPEN",
                     verbose=verbose,
@@ -252,7 +253,8 @@ class Backtester:
 
             if position is None and self._should_enter_on_open(signal):
                 if last_buy_date is None or (date - last_buy_date).days >= 1:
-                    position = self._open_position(signal, open_price, date, capital)
+                    entry_fill_price = self._calculate_dynamic_slippage(open_price, row, is_buy=True)
+                    position = self._open_position(signal, entry_fill_price, date, capital)
                     if position is not None:
                         capital -= position["cost"]
                         last_buy_date = date
@@ -266,14 +268,16 @@ class Backtester:
             if position is not None:
                 intrabar_exit = self._simulate_intrabar_exit(position, open_price, high_price, low_price, close_price)
                 if intrabar_exit is not None:
+                    ref_price = intrabar_exit["reference_price"]
+                    exit_fill_price = self._calculate_dynamic_slippage(ref_price, row, is_buy=False)
                     capital = self._close_position(
                         capital=capital,
                         position=position,
                         trades=trades,
                         ticker=ticker,
                         exit_date=date,
-                        fill_price=intrabar_exit["fill_price"],
-                        reference_price=intrabar_exit["reference_price"],
+                        fill_price=exit_fill_price,
+                        reference_price=ref_price,
                         reason=intrabar_exit["reason"],
                         verbose=verbose,
                     )
@@ -324,13 +328,14 @@ class Backtester:
             signal = self._build_signal_context(ticker, history)
 
             if position is not None and self._should_exit_on_open(signal):
+                exit_fill_price = self._calculate_dynamic_slippage(open_price, bar, is_buy=False)
                 capital = self._close_position(
                     capital=capital,
                     position=position,
                     trades=trades,
                     ticker=ticker,
                     exit_date=date,
-                    fill_price=self._apply_sell_slippage(open_price),
+                    fill_price=exit_fill_price,
                     reference_price=open_price,
                     reason="SIGNAL_OPEN",
                     verbose=verbose,
@@ -339,7 +344,8 @@ class Backtester:
 
             if position is None and self._should_enter_on_open(signal):
                 if last_buy_date is None or (date - last_buy_date).days >= 1:
-                    position = self._open_position(signal, open_price, date, capital)
+                    entry_fill_price = self._calculate_dynamic_slippage(open_price, bar, is_buy=True)
+                    position = self._open_position(signal, entry_fill_price, date, capital)
                     if position is not None:
                         capital -= position["cost"]
                         last_buy_date = date
@@ -353,14 +359,16 @@ class Backtester:
             if position is not None:
                 intrabar_exit = self._simulate_intrabar_exit(position, open_price, high_price, low_price, close_price)
                 if intrabar_exit is not None:
+                    ref_price = intrabar_exit["reference_price"]
+                    exit_fill_price = self._calculate_dynamic_slippage(ref_price, bar, is_buy=False)
                     capital = self._close_position(
                         capital=capital,
                         position=position,
                         trades=trades,
                         ticker=ticker,
                         exit_date=date,
-                        fill_price=intrabar_exit["fill_price"],
-                        reference_price=intrabar_exit["reference_price"],
+                        fill_price=exit_fill_price,
+                        reference_price=ref_price,
                         reason=intrabar_exit["reason"],
                         verbose=verbose,
                     )
@@ -407,14 +415,39 @@ class Backtester:
     def _should_exit_on_open(self, signal: dict[str, float | bool]) -> bool:
         return bool(signal.get("exit"))
 
+    def _calculate_dynamic_slippage(self, price: float, row: Any, is_buy: bool) -> float:
+        """Calculate volatility-aware slippage using ATR when available."""
+        base_slippage = float(
+            self.slippage_pct if self.slippage_pct is not None else getattr(settings, "SLIPPAGE_PCT", 0.001)
+        )
+
+        atr_val = None
+        if hasattr(row, "atr"):
+            atr_val = row.atr
+        elif isinstance(row, pd.Series) and "atr" in row:
+            atr_val = row["atr"]
+
+        if pd.notna(atr_val) and price > 0:
+            atr_float = _to_float(atr_val, 0.0)
+            volatility_ratio = atr_float / price
+            penalty_pct = volatility_ratio * 0.15
+            dynamic_slippage_pct = base_slippage + penalty_pct
+        else:
+            dynamic_slippage_pct = base_slippage
+
+        dynamic_slippage_pct = float(min(dynamic_slippage_pct, 0.02))
+        if is_buy:
+            return price * (1 + dynamic_slippage_pct)
+        return price * (1 - dynamic_slippage_pct)
+
     def _open_position(
         self,
         signal: dict[str, float | bool],
-        open_price: float,
+        fill_price: float,
         entry_date: datetime,
         capital: float,
     ) -> Optional[dict[str, Any]]:
-        entry_price = self._apply_buy_slippage(open_price)
+        entry_price = fill_price
         unit_cost = entry_price * (1 + self.commission_buy_pct)
         shares = int(capital / unit_cost) if unit_cost > 0 else 0
         if shares <= 0:
