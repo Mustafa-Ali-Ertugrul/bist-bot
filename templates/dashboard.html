@@ -604,7 +604,7 @@
                         <div class="signal-card">
                             <div class="slider-row">
                                 <label for="positionRange">Pozisyon Tavani</label>
-                                <span class="mono" id="positionRangeValue">TL5,000</span>
+                                <span class="mono" id="positionRangeValue">₺5,000</span>
                             </div>
                             <input type="range" id="positionRange" min="1000" max="25000" step="500" value="5000" aria-label="Pozisyon tavani">
                         </div>
@@ -1084,9 +1084,12 @@
     }
 
     async function scanMarket() {
-        const btn = document.getElementById("scanButton");
-        btn.disabled = true;
-        btn.textContent = "Taraniyor...";
+        const scanButton = document.getElementById("scanButton");
+        const rescanButton = document.getElementById("rescanButton");
+
+        scanButton.disabled = true;
+        if (rescanButton) rescanButton.disabled = true;
+        scanButton.textContent = "Taraniyor...";
 
         try {
             const res = await fetch("/api/scan", { method: "POST" });
@@ -1116,8 +1119,9 @@
             document.getElementById("statDuration").textContent = String(err.message || err);
             toast(`Tarama hatasi: ${err.message || err}`, "down");
         } finally {
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-play" aria-hidden="true"></i> Canli Taramayi Yenile';
+            scanButton.disabled = false;
+            if (rescanButton) rescanButton.disabled = false;
+            scanButton.innerHTML = '<i class="fas fa-play" aria-hidden="true"></i> Canli Taramayi Yenile';
         }
     }
 
