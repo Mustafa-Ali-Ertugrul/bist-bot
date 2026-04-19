@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 from dataclasses import dataclass, field
 import logging
+from typing import Optional
 
 from config import settings
 
@@ -62,6 +63,7 @@ class RiskManager:
         self._sector_signal_counts = {}
         self.sector_positions = self._sector_signal_counts
         self._portfolio_history: dict[str, pd.DataFrame] = {}
+        self._global_corr_cache: Optional[pd.DataFrame] = None
         self.correlation_threshold = float(getattr(settings, "CORRELATION_THRESHOLD", 0.70))
         self.correlation_risk_step = float(getattr(settings, "CORRELATION_RISK_STEP", 0.35))
         self.correlation_min_scale = float(getattr(settings, "CORRELATION_MIN_SCALE", 0.25))
@@ -89,6 +91,30 @@ class RiskManager:
 
     def reset_portfolio(self) -> None:
         self._portfolio_history.clear()
+        self._global_corr_cache = None
+
+    def build_global_correlation_cache(self, data: dict) -> None:
+        """Precompute a global correlation matrix before scan starts."""
+        closes = {}
+        for ticker, df_or_dict in data.items():
+            if isinstance(df_or_dict, dict) and "trend" in df_or_dict:
+                df = df_or_dict["trend"]
+            else:
+                df = df_or_dict
+
+            if df is not None and not df.empty and "close" in df.columns:
+                closes[ticker] = df["close"].astype(float).rename(ticker)
+
+        if closes:
+            close_frame = pd.concat(closes.values(), axis=1, join="inner").dropna()
+            if not close_frame.empty:
+                self._global_corr_cache = close_frame.pct_change().dropna().corr()
+                logger.info(
+                    f"🚀 Global korelasyon önbelleği hazırlandı. Matris boyutu: {self._global_corr_cache.shape}"
+                )
+                return
+
+        self._global_corr_cache = None
 
     def get_correlation_matrix(self) -> pd.DataFrame:
         if not self._portfolio_history:
@@ -418,8 +444,17 @@ class RiskManager:
         if not self._portfolio_history:
             return []
 
-        candidate_close = candidate_df[["close"]].rename(columns={"close": ticker}).astype(float)
         correlated = []
+
+        if self._global_corr_cache is not None and ticker in self._global_corr_cache.columns:
+            for existing_ticker in self._portfolio_history.keys():
+                if existing_ticker in self._global_corr_cache.columns:
+                    corr = self._global_corr_cache.loc[ticker, existing_ticker]
+                    if pd.notna(corr) and abs(float(corr)) >= self.correlation_threshold:
+                        correlated.append(existing_ticker)
+            return correlated
+
+        candidate_close = candidate_df[["close"]].rename(columns={"close": ticker}).astype(float)
         for existing_ticker, history in self._portfolio_history.items():
             existing_close = history[["close"]].rename(columns={"close": existing_ticker}).astype(float)
             aligned = pd.concat([candidate_close, existing_close], axis=1, join="inner").dropna()

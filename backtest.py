@@ -136,6 +136,58 @@ class Backtester:
         self.indicators = indicators or TechnicalIndicators()
         self.avg_holding_days = 0.0
 
+    def _precalculate_signals(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Precompute default backtest signals in a vectorized form."""
+        df = df.copy()
+        df["score"] = 0.0
+
+        if "rsi" in df.columns:
+            df.loc[df["rsi"] < settings.RSI_OVERSOLD, "score"] += 20
+            df.loc[df["rsi"] > settings.RSI_OVERBOUGHT, "score"] -= 20
+
+        if "sma_cross" in df.columns:
+            df.loc[df["sma_cross"] == "GOLDEN_CROSS", "score"] += 20
+            df.loc[df["sma_cross"] == "DEATH_CROSS", "score"] -= 20
+
+        sma_fast_col = f"sma_{settings.SMA_FAST}"
+        sma_slow_col = f"sma_{settings.SMA_SLOW}"
+        if sma_fast_col in df.columns and sma_slow_col in df.columns:
+            df.loc[df[sma_fast_col] > df[sma_slow_col], "score"] += 5
+            df.loc[df[sma_fast_col] <= df[sma_slow_col], "score"] -= 5
+
+        if "macd_cross" in df.columns:
+            df.loc[df["macd_cross"] == "BULLISH", "score"] += 15
+            df.loc[df["macd_cross"] == "BEARISH", "score"] -= 15
+
+        if "bb_position" in df.columns:
+            df.loc[df["bb_position"] == "BELOW_LOWER", "score"] += 10
+            df.loc[df["bb_position"] == "ABOVE_UPPER", "score"] -= 10
+
+        df["score"] = df["score"].clip(lower=-100.0, upper=100.0)
+
+        if "stop_loss_atr" in df.columns:
+            df["calculated_stop"] = df["stop_loss_atr"].fillna(df["close"] * 0.95)
+        else:
+            df["calculated_stop"] = df["close"] * 0.95
+
+        df["risk_per_share"] = np.maximum(df["close"] - df["calculated_stop"], df["close"] * 0.01)
+        df["target_price"] = np.maximum(df["close"] + (df["risk_per_share"] * self.target_rr), df["close"])
+        df["enter_signal"] = df["score"] >= self.buy_threshold
+        df["exit_signal"] = df["score"] <= self.sell_threshold
+
+        shifted = df[["score", "calculated_stop", "target_price", "enter_signal", "exit_signal"]].shift(1)
+        df["score"] = shifted["score"].fillna(0.0)
+        df["calculated_stop"] = shifted["calculated_stop"].fillna(df["close"] * 0.95)
+        df["target_price"] = shifted["target_price"].fillna(df["close"])
+        df["enter_signal"] = shifted["enter_signal"].fillna(False).astype(bool)
+        df["exit_signal"] = shifted["exit_signal"].fillna(False).astype(bool)
+
+        return df
+
+    def _use_vectorized_path(self) -> bool:
+        signal_builder = getattr(self._build_signal_context, "__func__", None)
+        return signal_builder is Backtester._build_signal_context
+
     def run(
         self,
         ticker: str,
@@ -151,6 +203,109 @@ class Backtester:
         if len(df) < 2:
             return None
 
+        if self._use_vectorized_path():
+            return self._run_vectorized(ticker, df, verbose)
+        return self._run_iterative(ticker, df, verbose)
+
+    def _run_vectorized(
+        self,
+        ticker: str,
+        df: pd.DataFrame,
+        verbose: bool,
+    ) -> Optional[BacktestResult]:
+        df = self._precalculate_signals(df)
+
+        capital = self.initial_capital
+        position: Optional[dict[str, Any]] = None
+        trades: list[BacktestTrade] = []
+        capital_history: list[float] = [capital]
+        last_buy_date: Optional[datetime] = None
+
+        for row in df.itertuples():
+            date = _to_datetime(row.Index)
+            open_price = _to_float(getattr(row, "open", getattr(row, "close", 0.0)), _to_float(getattr(row, "close", 0.0)))
+            high_price = _to_float(getattr(row, "high", open_price), open_price)
+            low_price = _to_float(getattr(row, "low", open_price), open_price)
+            close_price = _to_float(getattr(row, "close", open_price), open_price)
+
+            signal = {
+                "enter": bool(getattr(row, "enter_signal", False)),
+                "exit": bool(getattr(row, "exit_signal", False)),
+                "score": _to_float(getattr(row, "score", 0.0), 0.0),
+                "stop_loss": _to_float(getattr(row, "calculated_stop", close_price * 0.95), close_price * 0.95),
+                "target_price": _to_float(getattr(row, "target_price", close_price), close_price),
+            }
+
+            if position is not None and self._should_exit_on_open(signal):
+                capital = self._close_position(
+                    capital=capital,
+                    position=position,
+                    trades=trades,
+                    ticker=ticker,
+                    exit_date=date,
+                    fill_price=self._apply_sell_slippage(open_price),
+                    reference_price=open_price,
+                    reason="SIGNAL_OPEN",
+                    verbose=verbose,
+                )
+                position = None
+
+            if position is None and self._should_enter_on_open(signal):
+                if last_buy_date is None or (date - last_buy_date).days >= 1:
+                    position = self._open_position(signal, open_price, date, capital)
+                    if position is not None:
+                        capital -= position["cost"]
+                        last_buy_date = date
+                        if verbose:
+                            logger.info(
+                                f"  🟢 AL: {date.strftime('%d.%m')} | "
+                                f"₺{position['entry_price']:.2f} x {position['shares']} lot | "
+                                f"Skor: {position['score']:+.0f}"
+                            )
+
+            if position is not None:
+                intrabar_exit = self._simulate_intrabar_exit(position, open_price, high_price, low_price, close_price)
+                if intrabar_exit is not None:
+                    capital = self._close_position(
+                        capital=capital,
+                        position=position,
+                        trades=trades,
+                        ticker=ticker,
+                        exit_date=date,
+                        fill_price=intrabar_exit["fill_price"],
+                        reference_price=intrabar_exit["reference_price"],
+                        reason=intrabar_exit["reason"],
+                        verbose=verbose,
+                    )
+                    position = None
+
+            equity = capital if position is None else capital + position["shares"] * close_price
+            capital_history.append(equity)
+
+        if position is not None:
+            last_date = _to_datetime(df.index[-1])
+            last_close = _to_float(df.iloc[-1].get("close"))
+            capital = self._close_position(
+                capital=capital,
+                position=position,
+                trades=trades,
+                ticker=ticker,
+                exit_date=last_date,
+                fill_price=self._apply_sell_slippage(last_close),
+                reference_price=last_close,
+                reason="FINAL_CLOSE",
+                verbose=False,
+            )
+            capital_history[-1] = capital
+
+        return self._build_result(ticker, df, capital, trades, capital_history)
+
+    def _run_iterative(
+        self,
+        ticker: str,
+        df: pd.DataFrame,
+        verbose: bool,
+    ) -> Optional[BacktestResult]:
         capital = self.initial_capital
         position: Optional[dict[str, Any]] = None
         trades: list[BacktestTrade] = []

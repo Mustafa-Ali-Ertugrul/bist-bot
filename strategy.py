@@ -9,6 +9,7 @@ from config import settings
 from indicators import TechnicalIndicators
 from risk_manager import RiskManager
 from signal_models import Signal, SignalType
+from strategy_params import StrategyParams
 
 logger = logging.getLogger(__name__)
 
@@ -84,18 +85,20 @@ class StrategyEngine:
         self,
         indicators: Optional[TechnicalIndicators] = None,
         risk_manager: Optional[RiskManager] = None,
+        params: Optional[StrategyParams] = None,
     ) -> None:
         """Initialize injectable indicator and risk-management dependencies."""
         self.indicators = indicators or TechnicalIndicators()
         self.risk_manager = risk_manager or RiskManager(
             capital=getattr(settings, "INITIAL_CAPITAL", 8500.0)
         )
-        self.STRONG_BUY_THRESHOLD = getattr(settings, "STRONG_BUY_THRESHOLD", 40)
-        self.BUY_THRESHOLD = getattr(settings, "BUY_THRESHOLD", 10)
-        self.WEAK_BUY_THRESHOLD = getattr(settings, "WEAK_BUY_THRESHOLD", 8)
-        self.WEAK_SELL_THRESHOLD = getattr(settings, "WEAK_SELL_THRESHOLD", -8)
-        self.SELL_THRESHOLD = getattr(settings, "SELL_THRESHOLD", -10)
-        self.STRONG_SELL_THRESHOLD = getattr(settings, "STRONG_SELL_THRESHOLD", -40)
+        self.params = params or StrategyParams()
+        self.STRONG_BUY_THRESHOLD = self.params.strong_buy_threshold
+        self.BUY_THRESHOLD = self.params.buy_threshold
+        self.WEAK_BUY_THRESHOLD = self.params.weak_buy_threshold
+        self.WEAK_SELL_THRESHOLD = self.params.weak_sell_threshold
+        self.SELL_THRESHOLD = self.params.sell_threshold
+        self.STRONG_SELL_THRESHOLD = self.params.strong_sell_threshold
 
     def _extract_timeframes(self, market_data: pd.DataFrame | dict[str, pd.DataFrame]) -> tuple[pd.DataFrame, pd.DataFrame, bool]:
         if isinstance(market_data, dict):
@@ -193,23 +196,23 @@ class StrategyEngine:
 
         rsi = last.get("rsi")
         if pd.notna(rsi):
-            if rsi < 25:
-                score += 18
+            if rsi < self.params.rsi_oversold_extreme:
+                score += self.params.score_rsi_extreme
                 reasons.append(f"RSI çok düşük ({rsi:.1f}) → Aşırı satım")
-            elif rsi < 30:
-                score += 14
+            elif rsi < self.params.rsi_oversold:
+                score += self.params.score_rsi_normal
                 reasons.append(f"RSI düşük ({rsi:.1f}) → Satım bölgesi")
-            elif rsi < 40:
-                score += 7
+            elif rsi < self.params.rsi_neutral_low:
+                score += self.params.score_rsi_weak_low
                 reasons.append(f"RSI düşük-nötr ({rsi:.1f})")
-            elif rsi > 80:
-                score -= 18
+            elif rsi > self.params.rsi_overbought_extreme:
+                score -= self.params.score_rsi_extreme
                 reasons.append(f"RSI çok yüksek ({rsi:.1f}) → Aşırı alım")
-            elif rsi > 70:
-                score -= 14
+            elif rsi > self.params.rsi_overbought:
+                score -= self.params.score_rsi_normal
                 reasons.append(f"RSI yüksek ({rsi:.1f}) → Alım bölgesi")
-            elif rsi > 60:
-                score -= 4
+            elif rsi > self.params.rsi_neutral_high:
+                score -= self.params.score_rsi_weak_high
                 reasons.append(f"RSI yüksek-nötr ({rsi:.1f})")
             else:
                 reasons.append(f"RSI nötr ({rsi:.1f})")
@@ -219,39 +222,39 @@ class StrategyEngine:
         if pd.notna(stoch_k) and pd.notna(stoch_d):
             stoch_cross = last.get("stoch_cross", "NONE")
             if stoch_cross == "BULLISH":
-                score += 8
+                score += self.params.score_stoch_cross
                 reasons.append(f"Stochastic Bullish Cross (K:{stoch_k:.0f}, D:{stoch_d:.0f})")
             elif stoch_cross == "BEARISH":
-                score -= 8
+                score -= self.params.score_stoch_cross
                 reasons.append(f"Stochastic Bearish Cross (K:{stoch_k:.0f}, D:{stoch_d:.0f})")
 
             if stoch_k < 20 and stoch_d < 20:
-                score += 6
+                score += self.params.score_stoch_extreme
                 reasons.append(f"Stochastic aşırı satım bölgesi (K:{stoch_k:.0f})")
             elif stoch_k > 80 and stoch_d > 80:
-                score -= 6
+                score -= self.params.score_stoch_extreme
                 reasons.append(f"Stochastic aşırı alım bölgesi (K:{stoch_k:.0f})")
 
             if stoch_k > stoch_d and stoch_k < 50:
-                score += 3
+                score += self.params.score_stoch_trend
                 reasons.append("Stochastic yükseliş eğilimi")
             elif stoch_k < stoch_d and stoch_k > 50:
-                score -= 3
+                score -= self.params.score_stoch_trend
                 reasons.append("Stochastic düşüş eğilimi")
 
         cci = last.get("cci")
         if pd.notna(cci):
             if cci < -100:
-                score += 8
+                score += self.params.score_cci_extreme
                 reasons.append(f"CCI aşırı satım ({cci:.0f})")
             elif cci < -50:
-                score += 4
+                score += self.params.score_cci_normal
                 reasons.append(f"CCI düşük ({cci:.0f})")
             elif cci > 100:
-                score -= 8
+                score -= self.params.score_cci_extreme
                 reasons.append(f"CCI aşırı alım ({cci:.0f})")
             elif cci > 50:
-                score -= 4
+                score -= self.params.score_cci_normal
                 reasons.append(f"CCI yüksek ({cci:.0f})")
 
         return score, reasons
@@ -270,35 +273,35 @@ class StrategyEngine:
                 reasons.append(f"Fiyat EMA{settings.EMA_LONG}'i kesti (yukarı)")
             elif above_ema:
                 if adx >= getattr(settings, "ADX_THRESHOLD", 20):
-                    score += 10
+                    score += self.params.score_ema_cross
                     reasons.append(f"yükseliş trendi (EMA{settings.EMA_LONG} üzerinde)")
             elif not above_ema and last_above_ema:
                 reasons.append(f"Fiyat EMA{settings.EMA_LONG}'i kesti (aşağı)")
 
         sma_cross = last.get("sma_cross", "NONE")
         if sma_cross == "GOLDEN_CROSS":
-            score += 12
+            score += self.params.score_sma_golden_cross
             reasons.append("SMA Golden Cross ✨ → Yükseliş sinyali")
         elif sma_cross == "DEATH_CROSS":
-            score -= 12
+            score -= self.params.score_sma_golden_cross
             reasons.append("SMA Death Cross 💀 → Düşüş sinyali")
         else:
             sma_fast = last.get(f"sma_{settings.SMA_FAST}")
             sma_slow = last.get(f"sma_{settings.SMA_SLOW}")
             if pd.notna(sma_fast) and pd.notna(sma_slow):
                 if sma_fast > sma_slow:
-                    score += 3
+                    score += self.params.score_sma_trend
                     reasons.append("SMA trend yukarı")
                 else:
-                    score -= 3
+                    score -= self.params.score_sma_trend
                     reasons.append("SMA trend aşağı")
 
         ema_cross = last.get("ema_cross", "NONE")
         if ema_cross == "BULLISH":
-            score += 10
+            score += self.params.score_ema_cross
             reasons.append("EMA Bullish Cross ⚡ → Hızlı yükseliş")
         elif ema_cross == "BEARISH":
-            score -= 10
+            score -= self.params.score_ema_cross
             reasons.append("EMA Bearish Cross ⚡ → Hızlı düşüş")
 
         macd_cross = last.get("macd_cross", "NONE")
@@ -306,24 +309,24 @@ class StrategyEngine:
         macd_hist_inc = last.get("macd_hist_increasing", False)
 
         if macd_cross == "BULLISH":
-            score += 12
+            score += self.params.score_macd_cross
             reasons.append("MACD Bullish Crossover 📈")
         elif macd_cross == "BEARISH":
-            score -= 12
+            score -= self.params.score_macd_cross
             reasons.append("MACD Bearish Crossover 📉")
 
         if pd.notna(macd_hist):
             if macd_hist > 0 and macd_hist_inc:
-                score += 5
+                score += self.params.score_macd_hist_strong
                 reasons.append(f"MACD Histogram güçleniyor ({macd_hist:.2f})")
             elif macd_hist > 0:
-                score += 3
+                score += self.params.score_macd_hist_weak
                 reasons.append(f"MACD Histogram pozitif ({macd_hist:.2f})")
             elif macd_hist < 0 and not macd_hist_inc:
-                score -= 5
+                score -= self.params.score_macd_hist_strong
                 reasons.append(f"MACD Histogram zayıflıyor ({macd_hist:.2f})")
             else:
-                score -= 3
+                score -= self.params.score_macd_hist_weak
                 reasons.append(f"MACD Histogram negatif ({macd_hist:.2f})")
 
         plus_di = last.get("plus_di")
@@ -331,25 +334,25 @@ class StrategyEngine:
         if pd.notna(adx) and pd.notna(plus_di) and pd.notna(minus_di):
             if adx > 25:
                 if plus_di > minus_di:
-                    score += 8
+                    score += self.params.score_adx_strong
                     reasons.append(f"Güçlü yükseliş trendi (ADX:{adx:.0f}, +DI>{minus_di:.0f})")
                 else:
-                    score -= 8
+                    score -= self.params.score_adx_strong
                     reasons.append(f"Güçlü düşüş trendi (ADX:{adx:.0f}, -DI>{plus_di:.0f})")
             else:
                 if plus_di > minus_di:
-                    score += 3
+                    score += self.params.score_adx_weak
                     reasons.append(f"Zayıf yükseliş trendi (ADX:{adx:.0f})")
                 else:
-                    score -= 3
+                    score -= self.params.score_adx_weak
                     reasons.append(f"Zayıf düşüş trendi (ADX:{adx:.0f})")
 
         di_cross = last.get("di_cross", "NONE")
         if di_cross == "BULLISH":
-            score += 6
+            score += self.params.score_di_cross
             reasons.append("+DI/-DI Bullish Cross")
         elif di_cross == "BEARISH":
-            score -= 6
+            score -= self.params.score_di_cross
             reasons.append("+DI/-DI Bearish Cross")
 
         return score, reasons
@@ -364,7 +367,7 @@ class StrategyEngine:
             vol_ratio = volume / volume_sma_20
             min_vol_ratio = getattr(settings, "VOLUME_CONFIRM_MULTIPLIER", 1.5)
             if vol_ratio >= min_vol_ratio:
-                score += 8
+                score += self.params.score_volume_confirm
                 reasons.append(f"Hacim onayı ({vol_ratio:.1f}x ort)")
 
         vol_spike = last.get("volume_spike", False)
@@ -375,29 +378,29 @@ class StrategyEngine:
         if vol_spike:
             price_change = last["close"] - last.get("_prev_close_for_scoring", last["close"])
             if price_change > 0:
-                score += 8
+                score += self.params.score_volume_spike
                 reasons.append(f"Hacim patlaması + yükseliş ({vol_ratio:.1f}x)")
             else:
-                score -= 8
+                score -= self.params.score_volume_spike
                 reasons.append(f"Hacim patlaması + düşüş ({vol_ratio:.1f}x)")
 
         if pv_confirm:
-            score += 2
+            score += self.params.score_price_volume_confirm
             reasons.append("Fiyat-Hacim uyumu ✓")
 
         if vol_trend == "INCREASING":
-            score += 2
+            score += self.params.score_volume_trend
             reasons.append("Hacim artıyor 📊")
         elif vol_trend == "DECREASING":
-            score -= 2
+            score -= self.params.score_volume_trend
             reasons.append("Hacim azalıyor 📊")
 
         obv_trend = last.get("obv_trend", "FLAT")
         if obv_trend == "UP":
-            score += 4
+            score += self.params.score_obv_trend
             reasons.append("OBV yükseliş trendi → Akış var")
         elif obv_trend == "DOWN":
-            score -= 4
+            score -= self.params.score_obv_trend
             reasons.append("OBV düşüş trendi → Çıkış var")
 
         return score, reasons
@@ -411,17 +414,17 @@ class StrategyEngine:
         bb_squeeze = last.get("bb_squeeze", False)
 
         if bb_pos == "BELOW_LOWER":
-            score += 10
+            score += self.params.score_bollinger_extreme
             reasons.append("Fiyat Bollinger alt bandının altında → Alım fırsatı")
         elif bb_pos == "ABOVE_UPPER":
-            score -= 10
+            score -= self.params.score_bollinger_extreme
             reasons.append("Fiyat Bollinger üst bandının üstünde → Aşırı uzamış")
         elif pd.notna(bb_pct):
             if bb_pct < 0.2:
-                score += 5
+                score += self.params.score_bollinger_percent
                 reasons.append(f"Bollinger %B düşük ({bb_pct:.2f})")
             elif bb_pct > 0.8:
-                score -= 5
+                score -= self.params.score_bollinger_percent
                 reasons.append(f"Bollinger %B yüksek ({bb_pct:.2f})")
 
         if bb_squeeze:
@@ -431,26 +434,26 @@ class StrategyEngine:
         dist_resist = last.get("dist_to_resistance_pct", 50)
 
         if pd.notna(dist_support) and dist_support < 2:
-            score += 6
+            score += self.params.score_sr_distance
             reasons.append(f"Fiyat desteğe yakın (%{dist_support:.1f})")
         elif pd.notna(dist_resist) and dist_resist < 2:
-            score -= 6
+            score -= self.params.score_sr_distance
             reasons.append(f"Fiyat dirence yakın (%{dist_resist:.1f})")
 
         rsi_div = last.get("rsi_divergence", "NONE")
         if rsi_div == "BULLISH":
-            score += 15
+            score += self.params.score_rsi_divergence
             reasons.append("🔥 RSI Bullish Divergence → Güçlü dönüş sinyali")
         elif rsi_div == "BEARISH":
-            score -= 15
+            score -= self.params.score_rsi_divergence
             reasons.append("🔥 RSI Bearish Divergence → Güçlü dönüş sinyali")
 
         macd_div = last.get("macd_divergence", "NONE")
         if macd_div == "BULLISH":
-            score += 12
+            score += self.params.score_macd_divergence
             reasons.append("🔥 MACD Bullish Divergence → Güçlü dönüş sinyali")
         elif macd_div == "BEARISH":
-            score -= 12
+            score -= self.params.score_macd_divergence
             reasons.append("🔥 MACD Bearish Divergence → Güçlü dönüş sinyali")
 
         return score, reasons
@@ -520,22 +523,22 @@ class StrategyEngine:
         if score == 0:
             return None
 
-        if score >= 40:
+        if score >= self.STRONG_BUY_THRESHOLD:
             signal_type = SignalType.STRONG_BUY
             confidence = "YÜKSEK"
-        elif score >= 15:
+        elif score >= self.BUY_THRESHOLD:
             signal_type = SignalType.BUY
             confidence = "ORTA"
-        elif score >= 8:
+        elif score >= self.WEAK_BUY_THRESHOLD:
             signal_type = SignalType.WEAK_BUY
             confidence = "DÜŞÜK"
-        elif score <= -40:
+        elif score <= self.STRONG_SELL_THRESHOLD:
             signal_type = SignalType.STRONG_SELL
             confidence = "YÜKSEK"
-        elif score <= -15:
+        elif score <= self.SELL_THRESHOLD:
             signal_type = SignalType.SELL
             confidence = "ORTA"
-        elif score <= -8:
+        elif score <= self.WEAK_SELL_THRESHOLD:
             signal_type = SignalType.WEAK_SELL
             confidence = "DÜŞÜK"
         else:  # -8 ile 8 arası
@@ -609,6 +612,7 @@ class StrategyEngine:
         signals = []
         self.risk_manager.reset_sectors()
         self.risk_manager.reset_portfolio()
+        self.risk_manager.build_global_correlation_cache(data)
 
         for ticker, df in data.items():
             signal = self.analyze(ticker, df, enforce_sector_limit=True)
