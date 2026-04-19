@@ -27,11 +27,7 @@
             --shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
         }
 
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
 
         body {
             font-family: "Space Grotesk", sans-serif;
@@ -53,22 +49,16 @@
             pointer-events: none;
         }
 
-        .mono {
-            font-family: "JetBrains Mono", monospace;
-        }
+        .mono { font-family: "JetBrains Mono", monospace; }
+        .shell { position: relative; z-index: 1; }
 
-        .shell {
-            position: relative;
-            z-index: 1;
-        }
-
+        /* -- Ticker Bar -- */
         .ticker-bar {
             overflow: hidden;
             border-bottom: 1px solid var(--border);
             background: rgba(12, 18, 20, 0.88);
             backdrop-filter: blur(14px);
         }
-
         .ticker-track {
             display: flex;
             gap: 2rem;
@@ -76,17 +66,13 @@
             min-width: max-content;
             animation: ticker-scroll 36s linear infinite;
         }
-
         @keyframes ticker-scroll {
             from { transform: translateX(0); }
-            to { transform: translateX(-50%); }
+            to   { transform: translateX(-50%); }
         }
 
-        .container {
-            max-width: 1680px;
-            margin: 0 auto;
-            padding: 1rem;
-        }
+        /* -- Layout -- */
+        .container { max-width: 1680px; margin: 0 auto; padding: 1rem; }
 
         .topbar {
             display: flex;
@@ -96,33 +82,17 @@
             padding: 1rem 0 1.25rem;
         }
 
-        .brand {
-            display: flex;
-            align-items: center;
-            gap: 0.9rem;
-        }
-
+        .brand { display: flex; align-items: center; gap: 0.9rem; }
         .brand-icon {
-            width: 44px;
-            height: 44px;
-            display: grid;
-            place-items: center;
+            width: 44px; height: 44px;
+            display: grid; place-items: center;
             border-radius: 14px;
             background: linear-gradient(135deg, var(--gold), var(--gold-2));
             color: var(--bg);
             box-shadow: 0 10px 28px rgba(201, 168, 76, 0.25);
         }
-
-        .brand h1 {
-            font-size: 1.15rem;
-            font-weight: 800;
-            letter-spacing: -0.03em;
-        }
-
-        .brand p,
-        .muted {
-            color: var(--muted);
-        }
+        .brand h1 { font-size: 1.15rem; font-weight: 800; letter-spacing: -0.03em; }
+        .brand p, .muted { color: var(--muted); }
 
         .status-strip {
             display: flex;
@@ -131,44 +101,25 @@
             flex-wrap: wrap;
             font-size: 0.83rem;
         }
-
         .live-dot {
-            width: 8px;
-            height: 8px;
+            width: 8px; height: 8px;
             border-radius: 50%;
             background: var(--green);
             box-shadow: 0 0 12px rgba(52, 211, 153, 0.65);
             animation: pulse 1.6s ease-in-out infinite;
         }
-
         @keyframes pulse {
             0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.45; transform: scale(0.8); }
+            50%       { opacity: 0.45; transform: scale(0.8); }
         }
 
-        .grid-summary,
-        .bottom-grid,
-        .main-grid {
-            display: grid;
-            gap: 1rem;
-        }
+        /* -- Grids -- */
+        .grid-summary, .bottom-grid, .main-grid { display: grid; gap: 1rem; }
+        .grid-summary  { grid-template-columns: repeat(5, minmax(0, 1fr)); margin-bottom: 1rem; }
+        .main-grid     { grid-template-columns: minmax(0, 1.6fr) minmax(310px, 360px); align-items: start; margin-bottom: 1rem; }
+        .bottom-grid   { grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr); align-items: start; }
 
-        .grid-summary {
-            grid-template-columns: repeat(5, minmax(0, 1fr));
-            margin-bottom: 1rem;
-        }
-
-        .main-grid {
-            grid-template-columns: minmax(0, 1.6fr) minmax(310px, 360px);
-            align-items: start;
-            margin-bottom: 1rem;
-        }
-
-        .bottom-grid {
-            grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
-            align-items: start;
-        }
-
+        /* -- Card -- */
         .card {
             background: var(--card);
             border: 1px solid var(--border);
@@ -176,17 +127,9 @@
             box-shadow: var(--shadow);
             backdrop-filter: blur(18px);
         }
+        .card-pad { padding: 1rem; }
 
-        .card-pad {
-            padding: 1rem;
-        }
-
-        .stat-card {
-            padding: 1rem;
-            position: relative;
-            overflow: hidden;
-        }
-
+        .stat-card { padding: 1rem; position: relative; overflow: hidden; }
         .stat-card::after {
             content: "";
             position: absolute;
@@ -195,56 +138,26 @@
             background: linear-gradient(90deg, transparent, var(--gold), transparent);
             opacity: 0.65;
         }
-
         .stat-top {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            color: var(--muted);
-            font-size: 0.73rem;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
+            display: flex; align-items: center; justify-content: space-between;
+            color: var(--muted); font-size: 0.73rem;
+            text-transform: uppercase; letter-spacing: 0.08em;
             margin-bottom: 0.55rem;
         }
+        .stat-value { font-size: 1.45rem; font-weight: 800; letter-spacing: -0.04em; }
+        .stat-sub   { margin-top: 0.4rem; color: var(--fg-2); font-size: 0.79rem; }
 
-        .stat-value {
-            font-size: 1.45rem;
-            font-weight: 800;
-            letter-spacing: -0.04em;
-        }
-
-        .stat-sub {
-            margin-top: 0.4rem;
-            color: var(--fg-2);
-            font-size: 0.79rem;
-        }
-
+        /* -- Section head -- */
         .section-head {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 0.75rem;
-            margin-bottom: 0.9rem;
+            display: flex; justify-content: space-between; align-items: center;
+            gap: 0.75rem; margin-bottom: 0.9rem;
         }
+        .section-head h2 { font-size: 1rem; font-weight: 700; }
 
-        .section-head h2 {
-            font-size: 1rem;
-            font-weight: 700;
-        }
+        /* -- Buttons / Pills -- */
+        .pill-row, .stock-pills, .chip-row { display: flex; flex-wrap: wrap; gap: 0.45rem; }
 
-        .pill-row,
-        .stock-pills,
-        .chip-row {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.45rem;
-        }
-
-        .pill,
-        .period-btn,
-        .stock-pill,
-        .ghost-btn,
-        .bot-btn {
+        .pill, .period-btn, .stock-pill, .ghost-btn, .bot-btn {
             border-radius: 999px;
             border: 1px solid var(--border);
             background: rgba(12, 18, 20, 0.92);
@@ -255,70 +168,43 @@
             cursor: pointer;
             transition: 0.25s ease;
         }
-
-        .period-btn.active,
-        .stock-pill.active,
-        .bot-btn.primary {
+        .period-btn.active, .stock-pill.active, .bot-btn.primary {
             background: linear-gradient(135deg, var(--gold), var(--gold-2));
             color: var(--bg);
             border-color: transparent;
             font-weight: 700;
         }
-
-        .ghost-btn:hover,
-        .period-btn:hover,
-        .stock-pill:hover,
-        .bot-btn:hover {
+        .ghost-btn:hover, .period-btn:hover, .stock-pill:hover, .bot-btn:hover {
             border-color: var(--border-2);
             color: var(--fg);
         }
+        button:disabled { opacity: 0.55; cursor: not-allowed; }
 
+        /* -- Price / Badge -- */
         .price-line {
-            display: flex;
-            align-items: baseline;
-            gap: 0.9rem;
-            flex-wrap: wrap;
+            display: flex; align-items: baseline;
+            gap: 0.9rem; flex-wrap: wrap;
             margin-bottom: 0.8rem;
         }
-
-        .price-main {
-            font-size: 2rem;
-            font-weight: 800;
-            letter-spacing: -0.05em;
-        }
+        .price-main { font-size: 2rem; font-weight: 800; letter-spacing: -0.05em; }
 
         .badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.4rem;
+            display: inline-flex; align-items: center; gap: 0.4rem;
             border-radius: 999px;
             padding: 0.38rem 0.68rem;
-            font-size: 0.75rem;
-            font-weight: 700;
+            font-size: 0.75rem; font-weight: 700;
         }
+        .badge.up   { background: rgba(52, 211, 153, 0.12); color: var(--green); }
+        .badge.down { background: rgba(248, 113, 113, 0.12); color: var(--red); }
+        .badge.flat { background: rgba(96, 165, 250, 0.12);  color: var(--blue); }
 
-        .badge.up {
-            background: rgba(52, 211, 153, 0.12);
-            color: var(--green);
-        }
-
-        .badge.down {
-            background: rgba(248, 113, 113, 0.12);
-            color: var(--red);
-        }
-
-        .badge.flat {
-            background: rgba(96, 165, 250, 0.12);
-            color: var(--blue);
-        }
-
+        /* -- Chart -- */
         .chart-grid {
             display: grid;
             grid-template-columns: minmax(0, 1fr) 160px;
             gap: 0.9rem;
             margin-bottom: 0.95rem;
         }
-
         .chart-panel {
             background: var(--bg-2);
             border: 1px solid rgba(36, 56, 48, 0.5);
@@ -326,75 +212,42 @@
             overflow: hidden;
             position: relative;
             min-height: 370px;
+            height: 370px;
         }
-
-        .chart-panel canvas,
-        .mini-indicator canvas {
-            width: 100%;
-            display: block;
-        }
+        .chart-panel canvas, .mini-indicator canvas { width: 100%; display: block; }
 
         .chart-footer {
-            position: absolute;
-            inset: auto 0 0 0;
+            position: absolute; inset: auto 0 0 0;
             padding: 0.75rem 0.9rem;
             background: linear-gradient(180deg, transparent, rgba(6, 9, 10, 0.95));
-            display: flex;
-            justify-content: space-between;
-            gap: 1rem;
-            color: var(--fg-2);
-            font-size: 0.75rem;
+            display: flex; justify-content: space-between; gap: 1rem;
+            color: var(--fg-2); font-size: 0.75rem;
         }
 
+        /* -- Orderbook -- */
         .orderbook {
-            display: flex;
-            flex-direction: column;
-            gap: 0.65rem;
+            display: flex; flex-direction: column; gap: 0.65rem;
             background: var(--bg-2);
             border: 1px solid rgba(36, 56, 48, 0.5);
             border-radius: 16px;
             padding: 0.9rem;
             min-height: 370px;
         }
-
-        .orderbook h3,
-        .subhead {
-            font-size: 0.76rem;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            color: var(--muted);
+        .orderbook h3, .subhead {
+            font-size: 0.76rem; text-transform: uppercase;
+            letter-spacing: 0.08em; color: var(--muted);
         }
-
-        .order-stack {
-            display: flex;
-            flex-direction: column;
-            gap: 0.28rem;
-        }
-
+        .order-stack { display: flex; flex-direction: column; gap: 0.28rem; }
         .order-row {
-            position: relative;
-            padding: 0.3rem 0.45rem;
-            border-radius: 10px;
-            overflow: hidden;
+            position: relative; padding: 0.3rem 0.45rem;
+            border-radius: 10px; overflow: hidden;
             font-size: 0.72rem;
             border: 1px solid rgba(255, 255, 255, 0.03);
         }
-
-        .order-fill {
-            position: absolute;
-            inset: 0;
-            opacity: 0.9;
-        }
-
-        .order-content {
-            position: relative;
-            display: flex;
-            justify-content: space-between;
-        }
-
+        .order-fill   { position: absolute; inset: 0; opacity: 0.9; }
+        .order-content { position: relative; display: flex; justify-content: space-between; }
         .order-price.sell { color: var(--red); }
-        .order-price.buy { color: var(--green); }
-
+        .order-price.buy  { color: var(--green); }
         .spread-box {
             text-align: center;
             background: var(--card-2);
@@ -403,12 +256,8 @@
             padding: 0.6rem;
         }
 
-        .mini-grid {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 0.9rem;
-        }
-
+        /* -- Mini indicators -- */
+        .mini-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.9rem; }
         .mini-indicator {
             background: var(--bg-2);
             border: 1px solid rgba(36, 56, 48, 0.5);
@@ -416,793 +265,726 @@
             padding: 0.9rem;
         }
 
-        .bot-card {
-            position: sticky;
-            top: 1rem;
+        /* -- Bot card -- */
+        .bot-card { position: sticky; top: 1rem; }
+
+        /* -- Row helpers -- */
+        .control-row, .slider-row, .recent-row,
+        .legend-row, .history-row, .signal-row {
+            display: flex; align-items: center;
+            justify-content: space-between; gap: 0.75rem;
         }
 
-        .control-row,
-        .slider-row,
-        .recent-row,
-        .legend-row,
-        .history-row,
-        .signal-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 0.75rem;
-        }
-
+        /* -- Toggle -- */
         .toggle {
-            width: 48px;
-            height: 26px;
+            width: 48px; height: 26px;
             border-radius: 999px;
             background: #1e2e27;
             border: 1px solid rgba(255, 255, 255, 0.05);
-            position: relative;
-            cursor: pointer;
+            position: relative; cursor: pointer;
             transition: 0.25s ease;
         }
-
         .toggle::after {
             content: "";
-            position: absolute;
-            top: 2px;
-            left: 2px;
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            background: white;
+            position: absolute; top: 2px; left: 2px;
+            width: 20px; height: 20px;
+            border-radius: 50%; background: white;
             transition: 0.25s ease;
         }
+        .toggle.on { background: var(--gold); }
+        .toggle.on::after { transform: translateX(22px); }
 
-        .toggle.on {
-            background: var(--gold);
-        }
+        input[type="range"] { width: 100%; accent-color: var(--gold); }
 
-        .toggle.on::after {
-            transform: translateX(22px);
-        }
+        /* -- Stack -- */
+        .stack { display: flex; flex-direction: column; gap: 0.95rem; }
 
-        input[type="range"] {
-            width: 100%;
-            accent-color: var(--gold);
-        }
+        .bot-meta { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.55rem; }
 
-        .stack {
-            display: flex;
-            flex-direction: column;
-            gap: 0.95rem;
-        }
-
-        .bot-meta {
-            display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 0.55rem;
-        }
-
-        .meta-box,
-        .signal-card,
-        .heat-cell,
-        .recent-item,
-        .history-table tbody tr,
-        .legend-box,
-        .metrics-box {
+        .meta-box, .signal-card, .heat-cell,
+        .recent-item, .history-table tbody tr,
+        .legend-box, .metrics-box {
             background: var(--bg-2);
             border: 1px solid rgba(36, 56, 48, 0.5);
             border-radius: 14px;
         }
+        .meta-box { padding: 0.75rem 0.55rem; text-align: center; }
+        .signal-card, .metrics-box { padding: 0.9rem; }
 
-        .meta-box {
-            padding: 0.75rem 0.55rem;
-            text-align: center;
-        }
-
-        .signal-card,
-        .metrics-box {
-            padding: 0.9rem;
-        }
-
-        .heat-grid {
-            display: grid;
-            grid-template-columns: repeat(5, minmax(0, 1fr));
-            gap: 0.7rem;
-        }
-
+        /* -- Heat grid -- */
+        .heat-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.7rem; }
         .heat-cell {
-            padding: 0.8rem;
-            cursor: pointer;
+            padding: 0.8rem; cursor: pointer;
             transition: transform 0.2s ease, border-color 0.2s ease;
         }
+        .heat-cell:hover { transform: translateY(-2px) scale(1.01); border-color: var(--border-2); }
 
-        .heat-cell:hover {
-            transform: translateY(-2px) scale(1.01);
-            border-color: var(--border-2);
-        }
-
-        .signal-list,
-        .news-list {
-            display: flex;
-            flex-direction: column;
-            gap: 0.8rem;
-        }
-
-        .signal-row,
-        .news-row {
+        /* -- Signal / News -- */
+        .signal-list, .news-list { display: flex; flex-direction: column; gap: 0.8rem; }
+        .signal-row, .news-row {
             padding: 0.85rem 0.95rem;
             border-radius: 14px;
             background: var(--bg-2);
             border: 1px solid rgba(36, 56, 48, 0.5);
         }
+        .signal-meta { display: flex; flex-direction: column; gap: 0.25rem; }
+        .signal-score.up, .text-up   { color: var(--green); }
+        .signal-score.down, .text-down { color: var(--red); }
+        .signal-score.flat            { color: var(--gold); }
 
-        .signal-meta {
-            display: flex;
-            flex-direction: column;
-            gap: 0.25rem;
-        }
-
-        .signal-score.up,
-        .text-up { color: var(--green); }
-        .signal-score.down,
-        .text-down { color: var(--red); }
-        .signal-score.flat { color: var(--gold); }
-
+        /* -- History table -- */
         .history-table {
-            width: 100%;
-            border-collapse: separate;
+            width: 100%; border-collapse: separate;
             border-spacing: 0 0.5rem;
             font-size: 0.82rem;
         }
-
         .history-table th {
-            color: var(--muted);
-            font-size: 0.72rem;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            padding-bottom: 0.55rem;
-            text-align: left;
+            color: var(--muted); font-size: 0.72rem;
+            text-transform: uppercase; letter-spacing: 0.08em;
+            padding-bottom: 0.55rem; text-align: left;
         }
-
-        .history-table td {
-            padding: 0.8rem;
-        }
-
+        .history-table td { padding: 0.8rem; }
         .history-table td:first-child,
-        .history-table th:first-child {
-            padding-left: 0.95rem;
-        }
-
+        .history-table th:first-child { padding-left: 0.95rem; }
         .history-table td:last-child,
-        .history-table th:last-child {
-            padding-right: 0.95rem;
-            text-align: right;
-        }
-
+        .history-table th:last-child { padding-right: 0.95rem; text-align: right; }
         .history-table td:nth-child(4),
         .history-table td:nth-child(5),
-        .history-table td:nth-child(6) {
-            text-align: right;
-        }
+        .history-table td:nth-child(6) { text-align: right; }
 
-        .empty {
-            padding: 1rem;
-            text-align: center;
-            color: var(--muted);
-        }
+        .empty { padding: 1rem; text-align: center; color: var(--muted); }
 
+        /* -- Toast -- */
         .toast-root {
-            position: fixed;
-            bottom: 1rem;
-            right: 1rem;
-            display: flex;
-            flex-direction: column;
-            gap: 0.6rem;
-            z-index: 10;
+            position: fixed; bottom: 1rem; right: 1rem;
+            display: flex; flex-direction: column;
+            gap: 0.6rem; z-index: 10;
         }
-
         .toast {
-            min-width: 260px;
-            max-width: 360px;
+            min-width: 260px; max-width: 360px;
             border-radius: 14px;
             border: 1px solid var(--border-2);
             background: rgba(12, 18, 20, 0.96);
             box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
             padding: 0.9rem 1rem;
-            display: flex;
-            align-items: center;
-            gap: 0.8rem;
-            transform: translateX(120%);
-            opacity: 0;
+            display: flex; align-items: center; gap: 0.8rem;
+            transform: translateX(120%); opacity: 0;
             transition: 0.3s ease;
         }
+        .toast.show { transform: translateX(0); opacity: 1; }
 
-        .toast.show {
-            transform: translateX(0);
-            opacity: 1;
-        }
-
+        /* -- Responsive -- */
         @media (max-width: 1240px) {
             .grid-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-            .main-grid,
-            .bottom-grid { grid-template-columns: 1fr; }
+            .main-grid, .bottom-grid { grid-template-columns: 1fr; }
             .bot-card { position: static; }
         }
-
         @media (max-width: 860px) {
             .grid-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-            .chart-grid { grid-template-columns: 1fr; }
-            .mini-grid { grid-template-columns: 1fr; }
-            .heat-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-            .topbar { flex-direction: column; align-items: flex-start; }
-            .price-main { font-size: 1.6rem; }
+            .chart-grid   { grid-template-columns: 1fr; }
+            .mini-grid    { grid-template-columns: 1fr; }
+            .heat-grid    { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+            .topbar       { flex-direction: column; align-items: flex-start; }
+            .price-main   { font-size: 1.6rem; }
         }
-
         @media (max-width: 560px) {
             .grid-summary { grid-template-columns: 1fr; }
-            .heat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-            .container { padding: 0.8rem; }
+            .heat-grid    { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .container    { padding: 0.8rem; }
             .history-table { font-size: 0.75rem; }
             .history-table th:nth-child(4),
             .history-table th:nth-child(6),
             .history-table td:nth-child(4),
-            .history-table td:nth-child(6) {
-                display: none;
-            }
+            .history-table td:nth-child(6) { display: none; }
+        }
+        @media (max-width: 480px) {
+            .grid-summary  { grid-template-columns: 1fr 1fr; }
+            .heat-grid     { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .bot-meta      { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .status-strip  { gap: 0.6rem; }
+            .price-main    { font-size: 1.35rem; }
+            .stat-value    { font-size: 1.15rem; }
         }
     </style>
 </head>
 <body>
-    <div class="shell">
-        <div class="ticker-bar">
-            <div class="ticker-track mono" id="tickerTrack"></div>
-        </div>
-
-        <div class="container">
-            <header class="topbar">
-                <div class="brand">
-                    <div class="brand-icon"><i class="fas fa-bolt"></i></div>
-                    <div>
-                        <h1>BIST Bot</h1>
-                        <p class="muted">Algoritmik Islem Kontrol Paneli</p>
-                    </div>
-                </div>
-                <div class="status-strip mono">
-                    <span class="signal-row" style="padding:0.5rem 0.75rem; border-radius:999px;">
-                        <span class="live-dot"></span>
-                        <span id="marketState">Veri izleniyor</span>
-                    </span>
-                    <span id="lastUpdated">--:--:--</span>
-                    <button class="ghost-btn" id="refreshButton"><i class="fas fa-arrows-rotate"></i> Yenile</button>
-                </div>
-            </header>
-
-            <section class="grid-summary">
-                <div class="card stat-card">
-                    <div class="stat-top"><span>Izlenen Hisse</span><i class="fas fa-binoculars"></i></div>
-                    <div class="stat-value" id="statScanned">0</div>
-                    <div class="stat-sub" id="statCoverage">Watchlist taramasi bekleniyor</div>
-                </div>
-                <div class="card stat-card">
-                    <div class="stat-top"><span>Aksiyon Alinabilir</span><i class="fas fa-bullseye"></i></div>
-                    <div class="stat-value" id="statActionable">0</div>
-                    <div class="stat-sub" id="statActionableMix">Long / short sinyaller ayrilir</div>
-                </div>
-                <div class="card stat-card">
-                    <div class="stat-top"><span>Ortalama Skor</span><i class="fas fa-wave-square"></i></div>
-                    <div class="stat-value mono" id="statAverageScore">0.0</div>
-                    <div class="stat-sub" id="statScoreBias">Momentum dagilimi izleniyor</div>
-                </div>
-                <div class="card stat-card">
-                    <div class="stat-top"><span>En Guclu Sinyal</span><i class="fas fa-bolt-lightning"></i></div>
-                    <div class="stat-value" id="statTopTicker">-</div>
-                    <div class="stat-sub" id="statTopSignal">Sinyal yok</div>
-                </div>
-                <div class="card stat-card">
-                    <div class="stat-top"><span>Sistem Durumu</span><i class="fas fa-shield-halved"></i></div>
-                    <div class="stat-value" id="statHealth">Hazir</div>
-                    <div class="stat-sub" id="statDuration">API baglantisi hazir</div>
-                </div>
-            </section>
-
-            <section class="main-grid">
-                <div class="stack">
-                    <div class="card card-pad">
-                        <div class="section-head">
-                            <div>
-                                <h2 id="activeTickerLabel">THYAO.IS</h2>
-                                <div class="muted" id="activeTickerName">Hisse analizi yukleniyor</div>
-                            </div>
-                            <div class="pill-row" id="periodButtons">
-                                <button class="period-btn active" data-period="60">60 Bar</button>
-                                <button class="period-btn" data-period="40">40 Bar</button>
-                                <button class="period-btn" data-period="20">20 Bar</button>
-                            </div>
-                        </div>
-
-                        <div class="price-line">
-                            <div class="price-main mono" id="activePrice">-</div>
-                            <span class="badge flat" id="priceBadge">Hazirlaniyor</span>
-                            <span class="badge flat" id="signalBadge">Sinyal bekleniyor</span>
-                        </div>
-
-                        <div class="stock-pills" id="stockPills"></div>
-
-                        <div class="chart-grid">
-                            <div class="chart-panel">
-                                <canvas id="candlesCanvas"></canvas>
-                                <div class="chart-footer mono">
-                                    <span id="candleInfo">O/H/L/C -</span>
-                                    <span id="signalMeta">Stop / Hedef -</span>
-                                </div>
-                            </div>
-                            <div class="orderbook">
-                                <h3>Emir Defteri</h3>
-                                <div class="order-stack" id="askStack"></div>
-                                <div class="spread-box mono">
-                                    <div class="muted" style="font-size:0.7rem; margin-bottom:0.18rem;">Anlik Fiyat</div>
-                                    <div id="midPrice">-</div>
-                                </div>
-                                <div class="order-stack" id="bidStack"></div>
-                            </div>
-                        </div>
-
-                        <div class="mini-grid">
-                            <div class="mini-indicator">
-                                <div class="section-head" style="margin-bottom:0.6rem;">
-                                    <div>
-                                        <h2 style="font-size:0.88rem;">RSI (14)</h2>
-                                        <div class="muted mono" id="rsiValue">-</div>
-                                    </div>
-                                    <span class="badge flat" id="rsiState">N/A</span>
-                                </div>
-                                <canvas id="rsiCanvas"></canvas>
-                            </div>
-                            <div class="mini-indicator">
-                                <div class="section-head" style="margin-bottom:0.6rem;">
-                                    <div>
-                                        <h2 style="font-size:0.88rem;">Hizli / Yavas SMA</h2>
-                                        <div class="muted mono" id="smaValue">-</div>
-                                    </div>
-                                    <span class="badge flat" id="trendState">N/A</span>
-                                </div>
-                                <canvas id="trendCanvas"></canvas>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="bottom-grid">
-                        <div class="card card-pad">
-                            <div class="section-head">
-                                <h2>Piyasa Isi Haritasi</h2>
-                                <div class="chip-row muted" style="font-size:0.74rem;">
-                                    <span><i class="fas fa-square text-up"></i> Yukselen</span>
-                                    <span><i class="fas fa-square text-down"></i> Dusen</span>
-                                    <span><i class="fas fa-square" style="color:var(--gold);"></i> Nötr</span>
-                                </div>
-                            </div>
-                            <div class="heat-grid" id="heatGrid"></div>
-                        </div>
-
-                        <div class="stack">
-                            <div class="card card-pad">
-                                <div class="section-head">
-                                    <h2>Canli Sinyal Akisi</h2>
-                                    <button class="ghost-btn" id="rescanButton"><i class="fas fa-radar"></i> Tara</button>
-                                </div>
-                                <div class="signal-list" id="signalList"></div>
-                            </div>
-
-                            <div class="card card-pad">
-                                <div class="section-head">
-                                    <h2>Sistem Notlari</h2>
-                                    <span class="muted mono" id="newsCount">3 madde</span>
-                                </div>
-                                <div class="news-list" id="newsList"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <aside class="stack bot-card">
-                    <div class="card card-pad">
-                        <div class="section-head">
-                            <h2>Bot Kontrolu</h2>
-                            <span class="badge up" id="botStatus">AKTIF</span>
-                        </div>
-
-                        <div class="control-row metrics-box">
-                            <div>
-                                <div style="font-weight:700;">Otomatik Mod</div>
-                                <div class="muted" style="font-size:0.8rem;">Scan + raporlama akisi</div>
-                            </div>
-                            <button class="toggle on" id="botToggle" aria-label="Bot ac kapa"></button>
-                        </div>
-
-                        <div class="bot-meta">
-                            <div class="meta-box">
-                                <div class="muted" style="font-size:0.7rem; text-transform:uppercase;">Strateji</div>
-                                <div style="font-weight:800; margin-top:0.25rem;">MTF</div>
-                            </div>
-                            <div class="meta-box">
-                                <div class="muted" style="font-size:0.7rem; text-transform:uppercase;">Risk</div>
-                                <div style="font-weight:800; margin-top:0.25rem; color:var(--gold);">Dinamik</div>
-                            </div>
-                            <div class="meta-box">
-                                <div class="muted" style="font-size:0.7rem; text-transform:uppercase;">DB</div>
-                                <div style="font-weight:800; margin-top:0.25rem; color:var(--green);">WAL</div>
-                            </div>
-                        </div>
-
-                        <div class="stack" style="margin-top:1rem;">
-                            <div class="signal-card">
-                                <div class="slider-row">
-                                    <label for="riskRange">Risk Limiti</label>
-                                    <span class="mono" id="riskRangeValue">%2.0</span>
-                                </div>
-                                <input type="range" id="riskRange" min="0.5" max="5" step="0.1" value="2.0">
-                            </div>
-                            <div class="signal-card">
-                                <div class="slider-row">
-                                    <label for="positionRange">Pozisyon Tavanı</label>
-                                    <span class="mono" id="positionRangeValue">₺5,000</span>
-                                </div>
-                                <input type="range" id="positionRange" min="1000" max="25000" step="500" value="5000">
-                            </div>
-                            <div class="signal-card">
-                                <div class="slider-row">
-                                    <label for="rsiRange">RSI Esiği</label>
-                                    <span class="mono" id="rsiRangeValue">30 / 70</span>
-                                </div>
-                                <input type="range" id="rsiRange" min="20" max="40" step="1" value="30">
-                            </div>
-                        </div>
-
-                        <div class="stack" style="margin-top:1rem;">
-                            <button class="bot-btn primary" id="scanButton"><i class="fas fa-play"></i> Canli Taramayi Yenile</button>
-                            <button class="bot-btn" id="analyzeButton"><i class="fas fa-chart-column"></i> Aktif Hisseyi Analiz Et</button>
-                            <button class="bot-btn" id="panicButton" style="border-color:rgba(248,113,113,0.35); color:var(--red);"><i class="fas fa-hand"></i> Acil Durdur</button>
-                        </div>
-                    </div>
-
-                    <div class="card card-pad">
-                        <div class="section-head">
-                            <h2>Son Islemler</h2>
-                            <span class="muted mono" id="recentCount">0 kayit</span>
-                        </div>
-                        <div class="stack" id="recentTrades"></div>
-                    </div>
-                </aside>
-            </section>
-
-            <section class="card card-pad">
-                <div class="section-head">
-                    <h2>Islem ve Sinyal Gecmisi</h2>
-                    <div class="pill-row" id="historyFilters">
-                        <button class="period-btn active" data-filter="all">Tumu</button>
-                        <button class="period-btn" data-filter="buy">Alis</button>
-                        <button class="period-btn" data-filter="sell">Satis</button>
-                    </div>
-                </div>
-                <div style="overflow-x:auto;">
-                    <table class="history-table">
-                        <thead>
-                            <tr>
-                                <th>Zaman</th>
-                                <th>Hisse</th>
-                                <th>Sinyal</th>
-                                <th>Skor</th>
-                                <th>Fiyat</th>
-                                <th>PnL / Hedef</th>
-                            </tr>
-                        </thead>
-                        <tbody id="historyBody"></tbody>
-                    </table>
-                </div>
-            </section>
-        </div>
+<div class="shell">
+    <div class="ticker-bar">
+        <div class="ticker-track mono" id="tickerTrack"></div>
     </div>
 
-    <div class="toast-root" id="toastRoot"></div>
+    <div class="container">
+        <header class="topbar">
+            <div class="brand">
+                <div class="brand-icon" aria-hidden="true"><i class="fas fa-bolt"></i></div>
+                <div>
+                    <h1>BIST Bot</h1>
+                    <p class="muted">Algoritmik Islem Kontrol Paneli</p>
+                </div>
+            </div>
+            <div class="status-strip mono">
+                <span class="signal-row" style="padding:0.5rem 0.75rem; border-radius:999px;">
+                    <span class="live-dot" aria-label="Canli"></span>
+                    <span id="marketState">Veri izleniyor</span>
+                </span>
+                <span id="lastUpdated">--:--:--</span>
+                <button class="ghost-btn" id="refreshButton" aria-label="Yenile">
+                    <i class="fas fa-arrows-rotate"></i> Yenile
+                </button>
+            </div>
+        </header>
 
-    <script>
-        const state = {
-            marketData: [],
-            activeTicker: null,
-            priceData: [],
-            historySignals: [],
-            filter: "all",
-            botEnabled: true,
-            visibleBars: 60,
-        };
+        <section class="grid-summary" aria-label="Ozet istatistikler">
+            <div class="card stat-card">
+                <div class="stat-top"><span>Izlenen Hisse</span><i class="fas fa-binoculars" aria-hidden="true"></i></div>
+                <div class="stat-value" id="statScanned">0</div>
+                <div class="stat-sub" id="statCoverage">Watchlist taramasi bekleniyor</div>
+            </div>
+            <div class="card stat-card">
+                <div class="stat-top"><span>Aksiyon Alinabilir</span><i class="fas fa-bullseye" aria-hidden="true"></i></div>
+                <div class="stat-value" id="statActionable">0</div>
+                <div class="stat-sub" id="statActionableMix">Long / short sinyaller ayrilir</div>
+            </div>
+            <div class="card stat-card">
+                <div class="stat-top"><span>Ortalama Skor</span><i class="fas fa-wave-square" aria-hidden="true"></i></div>
+                <div class="stat-value mono" id="statAverageScore">0.0</div>
+                <div class="stat-sub" id="statScoreBias">Momentum dagilimi izleniyor</div>
+            </div>
+            <div class="card stat-card">
+                <div class="stat-top"><span>En Guclu Sinyal</span><i class="fas fa-bolt-lightning" aria-hidden="true"></i></div>
+                <div class="stat-value" id="statTopTicker">-</div>
+                <div class="stat-sub" id="statTopSignal">Sinyal yok</div>
+            </div>
+            <div class="card stat-card">
+                <div class="stat-top"><span>Sistem Durumu</span><i class="fas fa-shield-halved" aria-hidden="true"></i></div>
+                <div class="stat-value" id="statHealth">Hazir</div>
+                <div class="stat-sub" id="statDuration">API baglantisi hazir</div>
+            </div>
+        </section>
 
-        const fallbackNotes = [
-            "Backtest artik look-ahead bias icermiyor; execution sonraki bar acilisinda yapiliyor.",
-            "Strict watchlist, pozitif getiri ve minimum 10 islem filtresi ile uretildi.",
-            "ASCII sparkline ve yildiz puani rapor okunabilirligini artirdi.",
-        ];
-
-        function money(value) {
-            return new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY", maximumFractionDigits: 2 }).format(value || 0);
-        }
-
-        function percent(value) {
-            const prefix = value > 0 ? "+" : "";
-            return `${prefix}${(value || 0).toFixed(2)}%`;
-        }
-
-        function signalMood(score) {
-            if (score > 8) return "up";
-            if (score < -8) return "down";
-            return "flat";
-        }
-
-        function buildTickerTape() {
-            if (!state.marketData.length) return;
-            const items = [...state.marketData, ...state.marketData].map((item) => {
-                const mood = signalMood(item.score);
-                return `<span><strong>${item.ticker.replace(".IS", "")}</strong> <span style="color:${mood === "up" ? "var(--green)" : mood === "down" ? "var(--red)" : "var(--gold)"};">${money(item.price)} / ${percent(item.score / 2)}</span></span>`;
-            }).join("");
-            document.getElementById("tickerTrack").innerHTML = items;
-        }
-
-        function updateHeaderStats(scanPayload) {
-            const scores = state.marketData.map((item) => item.score);
-            const avgScore = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
-            const actionable = state.marketData.filter((item) => Math.abs(item.score) >= 8);
-            const strongest = [...state.marketData].sort((a, b) => Math.abs(b.score) - Math.abs(a.score))[0];
-
-            document.getElementById("statScanned").textContent = scanPayload.scanned || state.marketData.length;
-            document.getElementById("statCoverage").textContent = `${state.marketData.length} sinyal satiri guncel`;
-            document.getElementById("statActionable").textContent = actionable.length;
-            document.getElementById("statActionableMix").textContent = `${actionable.filter((i) => i.score > 0).length} long / ${actionable.filter((i) => i.score < 0).length} short`;
-            document.getElementById("statAverageScore").textContent = avgScore.toFixed(1);
-            document.getElementById("statScoreBias").textContent = avgScore >= 0 ? "Skor egilimi yukari" : "Skor egilimi savunmada";
-            document.getElementById("statTopTicker").textContent = strongest ? strongest.ticker.replace(".IS", "") : "-";
-            document.getElementById("statTopSignal").textContent = strongest ? `${strongest.signal} / ${strongest.confidence}` : "Sinyal yok";
-            document.getElementById("statHealth").textContent = "Hazir";
-            document.getElementById("statDuration").textContent = `${scanPayload.duration_ms || 0} ms tarama suresi`;
-            document.getElementById("lastUpdated").textContent = new Date().toLocaleTimeString("tr-TR");
-        }
-
-        function buildStockPills() {
-            const root = document.getElementById("stockPills");
-            root.innerHTML = state.marketData.slice(0, 14).map((item) => {
-                const active = item.ticker === state.activeTicker;
-                return `<button class="stock-pill ${active ? "active" : ""}" data-ticker="${item.ticker}">${item.ticker.replace(".IS", "")}</button>`;
-            }).join("");
-
-            root.querySelectorAll(".stock-pill").forEach((button) => {
-                button.addEventListener("click", () => loadTicker(button.dataset.ticker));
-            });
-        }
-
-        function updateSignalList() {
-            const root = document.getElementById("signalList");
-            if (!state.marketData.length) {
-                root.innerHTML = '<div class="empty">Sinyal verisi bekleniyor.</div>';
-                return;
-            }
-
-            root.innerHTML = state.marketData.slice(0, 7).map((item) => {
-                const mood = signalMood(item.score);
-                return `
-                    <div class="signal-row">
-                        <div class="signal-meta">
-                            <strong>${item.ticker.replace(".IS", "")}</strong>
-                            <span class="muted">${item.name || item.ticker}</span>
+        <section class="main-grid">
+            <div class="stack">
+                <div class="card card-pad">
+                    <div class="section-head">
+                        <div>
+                            <h2 id="activeTickerLabel">THYAO.IS</h2>
+                            <div class="muted" id="activeTickerName">Hisse analizi yukleniyor</div>
                         </div>
-                        <div style="text-align:right;">
-                            <div class="signal-score ${mood}">${item.signal}</div>
-                            <div class="mono muted">${item.score.toFixed(1)}</div>
+                        <div class="pill-row" id="periodButtons" role="group" aria-label="Bar periyodu">
+                            <button class="period-btn active" data-period="60">60 Bar</button>
+                            <button class="period-btn"        data-period="40">40 Bar</button>
+                            <button class="period-btn"        data-period="20">20 Bar</button>
                         </div>
                     </div>
-                `;
-            }).join("");
-        }
 
-        function updateNewsList() {
-            const root = document.getElementById("newsList");
-            const strongest = state.marketData.slice(0, 3).map((item) => `${item.ticker.replace(".IS", "")}: ${item.reasons?.[0] || "Teknik konfluens izleniyor"}`);
-            const notes = [...strongest, ...fallbackNotes].slice(0, 4);
-            document.getElementById("newsCount").textContent = `${notes.length} madde`;
-            root.innerHTML = notes.map((note, index) => `
-                <div class="news-row">
-                    <div class="muted" style="font-size:0.72rem; margin-bottom:0.3rem;">Not ${index + 1}</div>
-                    <div style="line-height:1.5; font-size:0.87rem;">${note}</div>
-                </div>
-            `).join("");
-        }
-
-        function updateHeatGrid() {
-            const root = document.getElementById("heatGrid");
-            root.innerHTML = state.marketData.slice(0, 15).map((item) => {
-                const score = item.score || 0;
-                const intensity = Math.min(Math.abs(score) / 50, 1);
-                const color = score > 0
-                    ? `rgba(52, 211, 153, ${0.12 + intensity * 0.35})`
-                    : score < 0
-                        ? `rgba(248, 113, 113, ${0.12 + intensity * 0.35})`
-                        : `rgba(201, 168, 76, 0.16)`;
-                const accent = score > 0 ? "var(--green)" : score < 0 ? "var(--red)" : "var(--gold)";
-                return `
-                    <button class="heat-cell" style="background:${color}" data-ticker="${item.ticker}">
-                        <div style="font-weight:800; color:${accent};">${item.ticker.replace(".IS", "")}</div>
-                        <div class="mono" style="margin-top:0.35rem; font-size:0.8rem;">${money(item.price)}</div>
-                        <div class="mono" style="margin-top:0.2rem; color:${accent};">${item.score.toFixed(1)}</div>
-                    </button>
-                `;
-            }).join("");
-
-            root.querySelectorAll(".heat-cell").forEach((button) => {
-                button.addEventListener("click", () => loadTicker(button.dataset.ticker));
-            });
-        }
-
-        function buildRecentTrades() {
-            const root = document.getElementById("recentTrades");
-            const recent = state.marketData.slice(0, 5).map((item, index) => ({
-                type: item.score >= 0 ? "AL" : "SAT",
-                ticker: item.ticker.replace(".IS", ""),
-                price: item.price,
-                amount: 10 + index * 5,
-            }));
-            document.getElementById("recentCount").textContent = `${recent.length} kayit`;
-            root.innerHTML = recent.map((item) => `
-                <div class="recent-item" style="padding:0.85rem 0.95rem; display:flex; justify-content:space-between; align-items:center;">
-                    <div>
-                        <div style="font-weight:700;">${item.ticker}</div>
-                        <div class="muted" style="font-size:0.78rem;">${item.amount} lot / ${item.type}</div>
+                    <div class="price-line">
+                        <div class="price-main mono" id="activePrice">-</div>
+                        <span class="badge flat" id="priceBadge">Hazirlaniyor</span>
+                        <span class="badge flat" id="signalBadge">Sinyal bekleniyor</span>
                     </div>
-                    <div class="mono" style="color:${item.type === "AL" ? "var(--green)" : "var(--red)"};">${money(item.price)}</div>
+
+                    <div class="stock-pills" id="stockPills" role="group" aria-label="Hisse secimi"></div>
+
+                    <div class="chart-grid">
+                        <div class="chart-panel" role="img" aria-label="Fiyat grafigi">
+                            <canvas id="candlesCanvas"></canvas>
+                            <div class="chart-footer mono">
+                                <span id="candleInfo">O/H/L/C -</span>
+                                <span id="signalMeta">Stop / Hedef -</span>
+                            </div>
+                        </div>
+                        <div class="orderbook" aria-label="Emir defteri">
+                            <h3>Emir Defteri</h3>
+                            <div class="order-stack" id="askStack"></div>
+                            <div class="spread-box mono">
+                                <div class="muted" style="font-size:0.7rem; margin-bottom:0.18rem;">Anlik Fiyat</div>
+                                <div id="midPrice">-</div>
+                            </div>
+                            <div class="order-stack" id="bidStack"></div>
+                        </div>
+                    </div>
+
+                    <div class="mini-grid">
+                        <div class="mini-indicator">
+                            <div class="section-head" style="margin-bottom:0.6rem;">
+                                <div>
+                                    <h2 style="font-size:0.88rem;">RSI (14)</h2>
+                                    <div class="muted mono" id="rsiValue">-</div>
+                                </div>
+                                <span class="badge flat" id="rsiState">N/A</span>
+                            </div>
+                            <canvas id="rsiCanvas" role="img" aria-label="RSI grafigi"></canvas>
+                        </div>
+                        <div class="mini-indicator">
+                            <div class="section-head" style="margin-bottom:0.6rem;">
+                                <div>
+                                    <h2 style="font-size:0.88rem;">Hizli / Yavas SMA</h2>
+                                    <div class="muted mono" id="smaValue">-</div>
+                                </div>
+                                <span class="badge flat" id="trendState">N/A</span>
+                            </div>
+                            <canvas id="trendCanvas" role="img" aria-label="Trend grafigi"></canvas>
+                        </div>
+                    </div>
                 </div>
-            `).join("");
-        }
 
-        function updateHistoryTable() {
-            const root = document.getElementById("historyBody");
-            let rows = state.marketData.slice(0, 12);
-            if (state.filter === "buy") rows = rows.filter((item) => item.score >= 0);
-            if (state.filter === "sell") rows = rows.filter((item) => item.score < 0);
+                <div class="bottom-grid">
+                    <div class="card card-pad">
+                        <div class="section-head">
+                            <h2>Piyasa Isi Haritasi</h2>
+                            <div class="chip-row muted" style="font-size:0.74rem;" aria-label="Renk aciklamasi">
+                                <span><i class="fas fa-square text-up" aria-hidden="true"></i> Yukselen</span>
+                                <span><i class="fas fa-square text-down" aria-hidden="true"></i> Dusen</span>
+                                <span><i class="fas fa-square" style="color:var(--gold);" aria-hidden="true"></i> Notr</span>
+                            </div>
+                        </div>
+                        <div class="heat-grid" id="heatGrid" role="list" aria-label="Isi haritasi"></div>
+                    </div>
 
-            if (!rows.length) {
-                root.innerHTML = '<tr><td colspan="6" class="empty">Filtreye uygun kayit yok.</td></tr>';
-                return;
-            }
+                    <div class="stack">
+                        <div class="card card-pad">
+                            <div class="section-head">
+                                <h2>Canli Sinyal Akisi</h2>
+                                <button class="ghost-btn" id="rescanButton" aria-label="Yeniden tara">
+                                    <i class="fas fa-radar" aria-hidden="true"></i> Tara
+                                </button>
+                            </div>
+                            <div class="signal-list" id="signalList" aria-live="polite"></div>
+                        </div>
 
-            root.innerHTML = rows.map((item, index) => {
+                        <div class="card card-pad">
+                            <div class="section-head">
+                                <h2>Sistem Notlari</h2>
+                                <span class="muted mono" id="newsCount">3 madde</span>
+                            </div>
+                            <div class="news-list" id="newsList"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <aside class="stack bot-card">
+                <div class="card card-pad">
+                    <div class="section-head">
+                        <h2>Bot Kontrolu</h2>
+                        <span class="badge up" id="botStatus">AKTIF</span>
+                    </div>
+
+                    <div class="control-row metrics-box">
+                        <div>
+                            <div style="font-weight:700;">Otomatik Mod</div>
+                            <div class="muted" style="font-size:0.8rem;">Scan + raporlama akisi</div>
+                        </div>
+                        <button class="toggle on" id="botToggle" aria-label="Bot ac kapa" role="switch" aria-checked="true"></button>
+                    </div>
+
+                    <div class="bot-meta">
+                        <div class="meta-box">
+                            <div class="muted" style="font-size:0.7rem; text-transform:uppercase;">Strateji</div>
+                            <div style="font-weight:800; margin-top:0.25rem;">MTF</div>
+                        </div>
+                        <div class="meta-box">
+                            <div class="muted" style="font-size:0.7rem; text-transform:uppercase;">Risk</div>
+                            <div style="font-weight:800; margin-top:0.25rem; color:var(--gold);">Dinamik</div>
+                        </div>
+                        <div class="meta-box">
+                            <div class="muted" style="font-size:0.7rem; text-transform:uppercase;">DB</div>
+                            <div style="font-weight:800; margin-top:0.25rem; color:var(--green);">WAL</div>
+                        </div>
+                    </div>
+
+                    <div class="stack" style="margin-top:1rem;">
+                        <div class="signal-card">
+                            <div class="slider-row">
+                                <label for="riskRange">Risk Limiti</label>
+                                <span class="mono" id="riskRangeValue">%2.0</span>
+                            </div>
+                            <input type="range" id="riskRange" min="0.5" max="5" step="0.1" value="2.0" aria-label="Risk limiti">
+                        </div>
+                        <div class="signal-card">
+                            <div class="slider-row">
+                                <label for="positionRange">Pozisyon Tavani</label>
+                                <span class="mono" id="positionRangeValue">TL5,000</span>
+                            </div>
+                            <input type="range" id="positionRange" min="1000" max="25000" step="500" value="5000" aria-label="Pozisyon tavani">
+                        </div>
+                        <div class="signal-card">
+                            <div class="slider-row">
+                                <label for="rsiRange">RSI Esigi</label>
+                                <span class="mono" id="rsiRangeValue">30 / 70</span>
+                            </div>
+                            <input type="range" id="rsiRange" min="20" max="40" step="1" value="30" aria-label="RSI esigi">
+                        </div>
+                    </div>
+
+                    <div class="stack" style="margin-top:1rem;">
+                        <button class="bot-btn primary" id="scanButton" aria-label="Canli taramayi yenile">
+                            <i class="fas fa-play" aria-hidden="true"></i> Canli Taramayi Yenile
+                        </button>
+                        <button class="bot-btn" id="analyzeButton" aria-label="Aktif hisseyi analiz et">
+                            <i class="fas fa-chart-column" aria-hidden="true"></i> Aktif Hisseyi Analiz Et
+                        </button>
+                        <button class="bot-btn" id="panicButton"
+                                style="border-color:rgba(248,113,113,0.35); color:var(--red);"
+                                aria-label="Acil durdur">
+                            <i class="fas fa-hand" aria-hidden="true"></i> Acil Durdur
+                        </button>
+                    </div>
+                </div>
+
+                <div class="card card-pad">
+                    <div class="section-head">
+                        <h2>Son Islemler</h2>
+                        <span class="muted mono" id="recentCount">0 kayit</span>
+                    </div>
+                    <div class="stack" id="recentTrades"></div>
+                </div>
+            </aside>
+        </section>
+
+        <section class="card card-pad">
+            <div class="section-head">
+                <h2>Islem ve Sinyal Gecmisi</h2>
+                <div class="pill-row" id="historyFilters" role="group" aria-label="Gecmis filtresi">
+                    <button class="period-btn active" data-filter="all">Tumu</button>
+                    <button class="period-btn"        data-filter="buy">Alis</button>
+                    <button class="period-btn"        data-filter="sell">Satis</button>
+                </div>
+            </div>
+            <div style="overflow-x:auto;">
+                <table class="history-table" aria-label="Sinyal gecmisi">
+                    <thead>
+                        <tr>
+                            <th>Zaman</th>
+                            <th>Hisse</th>
+                            <th>Sinyal</th>
+                            <th>Skor</th>
+                            <th>Fiyat</th>
+                            <th>PnL / Hedef</th>
+                        </tr>
+                    </thead>
+                    <tbody id="historyBody"></tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+</div>
+
+<div class="toast-root" id="toastRoot" aria-live="assertive" aria-atomic="true"></div>
+
+<script>
+    const state = {
+        marketData: [],
+        activeTicker: null,
+        priceData: [],
+        historySignals: [],
+        filter: "all",
+        botEnabled: true,
+        visibleBars: 60,
+    };
+
+    const fallbackNotes = [
+        "Backtest artik look-ahead bias icermiyor; execution sonraki bar acilisinda yapiliyor.",
+        "Strict watchlist, pozitif getiri ve minimum 10 islem filtresi ile uretildi.",
+        "ASCII sparkline ve yildiz puani rapor okunabilirligini artirdi.",
+    ];
+
+    const money = (v) =>
+        new Intl.NumberFormat("tr-TR", {
+            style: "currency", currency: "TRY", maximumFractionDigits: 2,
+        }).format(v || 0);
+
+    const pct = (v) => `${v > 0 ? "+" : ""}${(v || 0).toFixed(2)}%`;
+
+    const signalMood = (score) => (score > 8 ? "up" : score < -8 ? "down" : "flat");
+
+    function buildTickerTape() {
+        if (!state.marketData.length) return;
+        const items = [...state.marketData, ...state.marketData]
+            .map((item) => {
                 const mood = signalMood(item.score);
-                const pnlText = item.target ? `Hedef ${money(item.target)}` : (item.stop_loss ? `Stop ${money(item.stop_loss)}` : "- ");
-                return `
-                    <tr>
-                        <td class="mono">${new Date(Date.now() - index * 600000).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}</td>
-                        <td><strong>${item.ticker.replace(".IS", "")}</strong></td>
-                        <td><span class="badge ${mood}">${item.signal}</span></td>
-                        <td class="mono ${mood === "up" ? "text-up" : mood === "down" ? "text-down" : ""}">${item.score.toFixed(1)}</td>
-                        <td class="mono">${money(item.price)}</td>
-                        <td class="mono">${pnlText}</td>
-                    </tr>
-                `;
-            }).join("");
-        }
+                const color = mood === "up" ? "var(--green)" : mood === "down" ? "var(--red)" : "var(--gold)";
+                return `<span><strong>${item.ticker.replace(".IS", "")}</strong> <span style="color:${color};">${money(item.price)} / ${pct(item.score / 2)}</span></span>`;
+            })
+            .join("");
+        document.getElementById("tickerTrack").innerHTML = items;
+    }
 
-        function badgeClass(value) {
-            if (value > 0) return "badge up";
-            if (value < 0) return "badge down";
-            return "badge flat";
-        }
+    function updateHeaderStats(scanPayload) {
+        const scores = state.marketData.map((d) => d.score);
+        const avgScore = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
+        const actionable = state.marketData.filter((d) => Math.abs(d.score) >= 8);
+        const strongest = [...state.marketData].sort((a, b) => Math.abs(b.score) - Math.abs(a.score))[0];
 
-        function updateActiveHeader(analysis) {
+        document.getElementById("statScanned").textContent = scanPayload.scanned || state.marketData.length;
+        document.getElementById("statCoverage").textContent = `${state.marketData.length} sinyal satiri guncel`;
+        document.getElementById("statActionable").textContent = actionable.length;
+        document.getElementById("statActionableMix").textContent = `${actionable.filter((d) => d.score > 0).length} long / ${actionable.filter((d) => d.score < 0).length} short`;
+        document.getElementById("statAverageScore").textContent = avgScore.toFixed(1);
+        document.getElementById("statScoreBias").textContent = avgScore >= 0 ? "Skor egilimi yukari" : "Skor egilimi savunmada";
+        document.getElementById("statTopTicker").textContent = strongest ? strongest.ticker.replace(".IS", "") : "-";
+        document.getElementById("statTopSignal").textContent = strongest ? `${strongest.signal} / ${strongest.confidence}` : "Sinyal yok";
+        document.getElementById("statHealth").textContent = "Hazir";
+        document.getElementById("statDuration").textContent = `${scanPayload.duration_ms || 0} ms tarama suresi`;
+        document.getElementById("lastUpdated").textContent = new Date().toLocaleTimeString("tr-TR");
+    }
+
+    function buildStockPills() {
+        const root = document.getElementById("stockPills");
+        root.innerHTML = state.marketData.slice(0, 14).map((item) => {
+            const active = item.ticker === state.activeTicker;
+            return `<button class="stock-pill${active ? " active" : ""}" data-ticker="${item.ticker}">${item.ticker.replace(".IS", "")}</button>`;
+        }).join("");
+
+        root.querySelectorAll(".stock-pill").forEach((btn) => {
+            btn.addEventListener("click", () => loadTicker(btn.dataset.ticker));
+        });
+    }
+
+    function updateSignalList() {
+        const root = document.getElementById("signalList");
+        if (!state.marketData.length) {
+            root.innerHTML = '<div class="empty">Sinyal verisi bekleniyor.</div>';
+            return;
+        }
+        root.innerHTML = state.marketData.slice(0, 7).map((item) => {
+            const mood = signalMood(item.score);
+            return `
+            <div class="signal-row" role="listitem">
+                <div class="signal-meta">
+                    <strong>${item.ticker.replace(".IS", "")}</strong>
+                    <span class="muted">${item.name || item.ticker}</span>
+                </div>
+                <div style="text-align:right;">
+                    <div class="signal-score ${mood}">${item.signal}</div>
+                    <div class="mono muted">${item.score.toFixed(1)}</div>
+                </div>
+            </div>`;
+        }).join("");
+    }
+
+    function updateNewsList() {
+        const root = document.getElementById("newsList");
+        const strongest = state.marketData.slice(0, 3).map(
+            (d) => `${d.ticker.replace(".IS", "")}: ${d.reasons?.[0] || "Teknik konfluens izleniyor"}`
+        );
+        const notes = [...strongest, ...fallbackNotes].slice(0, 4);
+        document.getElementById("newsCount").textContent = `${notes.length} madde`;
+        root.innerHTML = notes.map((note, i) => `
+            <div class="news-row">
+                <div class="muted" style="font-size:0.72rem; margin-bottom:0.3rem;">Not ${i + 1}</div>
+                <div style="line-height:1.5; font-size:0.87rem;">${note}</div>
+            </div>`
+        ).join("");
+    }
+
+    function updateHeatGrid() {
+        const root = document.getElementById("heatGrid");
+        root.innerHTML = state.marketData.slice(0, 15).map((item) => {
+            const score = item.score || 0;
+            const intensity = Math.min(Math.abs(score) / 50, 1);
+            const color = score > 0
+                ? `rgba(52,211,153,${0.12 + intensity * 0.35})`
+                : score < 0
+                ? `rgba(248,113,113,${0.12 + intensity * 0.35})`
+                : `rgba(201,168,76,0.16)`;
+            const accent = score > 0 ? "var(--green)" : score < 0 ? "var(--red)" : "var(--gold)";
+            return `
+            <button class="heat-cell" style="background:${color}" data-ticker="${item.ticker}" role="listitem" aria-label="${item.ticker}: skor ${score.toFixed(1)}">
+                <div style="font-weight:800; color:${accent};">${item.ticker.replace(".IS","")}</div>
+                <div class="mono" style="margin-top:0.35rem; font-size:0.8rem;">${money(item.price)}</div>
+                <div class="mono" style="margin-top:0.2rem; color:${accent};">${score.toFixed(1)}</div>
+            </button>`;
+        }).join("");
+
+        root.querySelectorAll(".heat-cell").forEach((btn) => {
+            btn.addEventListener("click", () => loadTicker(btn.dataset.ticker));
+        });
+    }
+
+    function buildRecentTrades() {
+        const root = document.getElementById("recentTrades");
+        const recent = state.marketData.slice(0, 5).map((item, i) => ({
+            type: item.score >= 0 ? "AL" : "SAT",
+            ticker: item.ticker.replace(".IS", ""),
+            price: item.price,
+            amount: 10 + i * 5,
+        }));
+        document.getElementById("recentCount").textContent = `${recent.length} kayit`;
+        root.innerHTML = recent.map((item) => `
+            <div class="recent-item" style="padding:0.85rem 0.95rem; display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <div style="font-weight:700;">${item.ticker}</div>
+                    <div class="muted" style="font-size:0.78rem;">${item.amount} lot / ${item.type}</div>
+                </div>
+                <div class="mono" style="color:${item.type === "AL" ? "var(--green)" : "var(--red)"};">${money(item.price)}</div>
+            </div>`
+        ).join("");
+    }
+
+    function updateHistoryTable() {
+        const root = document.getElementById("historyBody");
+        let rows = state.marketData.slice(0, 12);
+        if (state.filter === "buy") rows = rows.filter((d) => d.score >= 0);
+        if (state.filter === "sell") rows = rows.filter((d) => d.score < 0);
+
+        if (!rows.length) {
+            root.innerHTML = '<tr><td colspan="6" class="empty">Filtreye uygun kayit yok.</td></tr>';
+            return;
+        }
+        root.innerHTML = rows.map((item, i) => {
+            const mood = signalMood(item.score);
+            const pnlText = item.target ? `Hedef ${money(item.target)}` : (item.stop_loss ? `Stop ${money(item.stop_loss)}` : "-");
+            return `
+            <tr>
+                <td class="mono">${new Date(Date.now() - i * 600000).toLocaleTimeString("tr-TR", { hour:"2-digit", minute:"2-digit" })}</td>
+                <td><strong>${item.ticker.replace(".IS","")}</strong></td>
+                <td><span class="badge ${mood}">${item.signal}</span></td>
+                <td class="mono ${mood === "up" ? "text-up" : mood === "down" ? "text-down" : ""}">${item.score.toFixed(1)}</td>
+                <td class="mono">${money(item.price)}</td>
+                <td class="mono">${pnlText}</td>
+            </tr>`;
+        }).join("");
+    }
+
+    function badgeClass(v) {
+        return v > 0 ? "badge up" : v < 0 ? "badge down" : "badge flat";
+    }
+
+    function updateActiveHeader(analysis) {
+        try {
             const signal = analysis.signal || {};
-            const lastPrice = state.priceData.length ? state.priceData[state.priceData.length - 1].close : 0;
-            const firstPrice = state.priceData.length ? state.priceData[0].close : lastPrice;
+            const lastPrice = state.priceData.length ? state.priceData[state.priceData.length - 1].close || 0 : 0;
+            const firstPrice = state.priceData.length ? state.priceData[0].close || lastPrice : lastPrice;
             const change = firstPrice ? ((lastPrice - firstPrice) / firstPrice) * 100 : 0;
 
-            document.getElementById("activeTickerLabel").textContent = analysis.ticker || state.activeTicker;
-            document.getElementById("activeTickerName").textContent = analysis.name || state.activeTicker;
-            document.getElementById("activePrice").textContent = money(lastPrice);
+            document.getElementById("activeTickerLabel").textContent = analysis.ticker || state.activeTicker || "-";
+            document.getElementById("activeTickerName").textContent = analysis.name || state.activeTicker || "-";
+            document.getElementById("activePrice").textContent = lastPrice ? money(lastPrice) : "-";
 
             const priceBadge = document.getElementById("priceBadge");
             priceBadge.className = badgeClass(change);
-            priceBadge.textContent = percent(change);
+            priceBadge.textContent = pct(change);
 
             const signalBadge = document.getElementById("signalBadge");
             signalBadge.className = badgeClass(signal.score || 0);
-            signalBadge.textContent = `${signal.type || "N/A"} / ${signal.score || 0}`;
+            signalBadge.textContent = `${signal.type || "N/A"} / ${(signal.score || 0).toFixed(1)}`;
 
-            document.getElementById("candleInfo").textContent = state.priceData.length
-                ? `O ${state.priceData.at(-1).open} / H ${state.priceData.at(-1).high} / L ${state.priceData.at(-1).low} / C ${state.priceData.at(-1).close}`
+            const last = state.priceData.length ? state.priceData.at(-1) : null;
+            document.getElementById("candleInfo").textContent = last
+                ? `O ${Number(last.open).toFixed(2)} / H ${Number(last.high).toFixed(2)} / L ${Number(last.low).toFixed(2)} / C ${Number(last.close).toFixed(2)}`
                 : "O/H/L/C bekleniyor";
             document.getElementById("signalMeta").textContent = `Stop ${money(signal.stop_loss || 0)} / Hedef ${money(signal.target || 0)}`;
+        } catch (err) {
+            console.error("updateActiveHeader hatasi:", err);
         }
+    }
 
-        function fitCanvas(canvas, width, height) {
-            const ratio = window.devicePixelRatio || 1;
-            canvas.width = width * ratio;
-            canvas.height = height * ratio;
-            canvas.style.width = `${width}px`;
-            canvas.style.height = `${height}px`;
-            const ctx = canvas.getContext("2d");
-            ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-            return ctx;
+    function fitCanvas(canvas, width, height) {
+        const ratio = window.devicePixelRatio || 1;
+        canvas.width = width * ratio;
+        canvas.height = height * ratio;
+        canvas.style.width = `${width}px`;
+        canvas.style.height = `${height}px`;
+        const ctx = canvas.getContext("2d");
+        ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+        return ctx;
+    }
+
+    function drawGridLines(ctx, width, height, topPad, bottomPad, minVal, maxVal, rows = 5) {
+        const range = Math.max(maxVal - minVal, 1);
+        const chartH = height - topPad - bottomPad;
+        ctx.strokeStyle = "rgba(90,110,100,0.25)";
+        ctx.fillStyle = "rgba(163,181,172,0.65)";
+        ctx.font = "11px JetBrains Mono, monospace";
+        ctx.lineWidth = 1;
+        for (let i = 0; i < rows; i++) {
+            const y = topPad + (chartH * i) / (rows - 1);
+            const v = maxVal - (range * i) / (rows - 1);
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(width, y);
+            ctx.stroke();
+            ctx.fillText(money(v), 8, y - 4);
         }
+    }
 
-        function drawCandles() {
+    function drawCandles() {
+        try {
             const canvas = document.getElementById("candlesCanvas");
             const parent = canvas.parentElement;
-            const width = parent.clientWidth;
-            const height = parent.clientHeight;
+            const width = parent.clientWidth || 600;
+            const height = parent.clientHeight || 370;
             const ctx = fitCanvas(canvas, width, height);
             ctx.clearRect(0, 0, width, height);
 
             const bars = state.priceData.slice(-state.visibleBars);
             if (!bars.length) return;
 
-            const maxPrice = Math.max(...bars.map((bar) => Number(bar.high)));
-            const minPrice = Math.min(...bars.map((bar) => Number(bar.low)));
+            const highs = bars.map((b) => Number(b.high) || 0);
+            const lows = bars.map((b) => Number(b.low) || 0);
+            const maxPrice = Math.max(...highs);
+            const minPrice = Math.min(...lows.filter((v) => v > 0));
             const range = Math.max(maxPrice - minPrice, 1);
             const topPad = 18;
-            const bottomPad = 32;
-            const chartHeight = height - topPad - bottomPad;
-            const gap = (width - 36) / bars.length;
-            const candleWidth = Math.max(3, gap * 0.62);
+            const botPad = 32;
+            const chartH = height - topPad - botPad;
+            const gap = (width - 36) / Math.max(bars.length, 1);
+            const candleW = Math.max(3, gap * 0.62);
 
-            ctx.strokeStyle = "rgba(90, 110, 100, 0.25)";
-            ctx.fillStyle = "rgba(163, 181, 172, 0.65)";
-            ctx.font = "11px JetBrains Mono";
-            for (let i = 0; i < 5; i += 1) {
-                const y = topPad + (chartHeight * i) / 4;
-                const value = maxPrice - (range * i) / 4;
-                ctx.beginPath();
-                ctx.moveTo(0, y);
-                ctx.lineTo(width, y);
-                ctx.stroke();
-                ctx.fillText(money(value), 8, y - 4);
-            }
+            drawGridLines(ctx, width, height, topPad, botPad, minPrice, maxPrice);
 
-            bars.forEach((bar, index) => {
-                const open = Number(bar.open);
-                const close = Number(bar.close);
-                const high = Number(bar.high);
-                const low = Number(bar.low);
-                const x = 28 + index * gap + gap / 2;
-                const wickTop = topPad + ((maxPrice - high) / range) * chartHeight;
-                const wickBottom = topPad + ((maxPrice - low) / range) * chartHeight;
-                const bodyTop = topPad + ((maxPrice - Math.max(open, close)) / range) * chartHeight;
-                const bodyBottom = topPad + ((maxPrice - Math.min(open, close)) / range) * chartHeight;
+            bars.forEach((bar, idx) => {
+                const open = Number(bar.open) || 0;
+                const close = Number(bar.close) || 0;
+                const high = Number(bar.high) || 0;
+                const low = Number(bar.low) || 0;
+                const x = 28 + idx * gap + gap / 2;
+                const toY = (v) => topPad + ((maxPrice - v) / range) * chartH;
+
                 const color = close >= open ? "#34d399" : "#f87171";
-
                 ctx.strokeStyle = color;
                 ctx.lineWidth = 1;
                 ctx.beginPath();
-                ctx.moveTo(x, wickTop);
-                ctx.lineTo(x, wickBottom);
+                ctx.moveTo(x, toY(high));
+                ctx.lineTo(x, toY(low));
                 ctx.stroke();
 
-                const bodyHeight = Math.max(bodyBottom - bodyTop, 1.4);
+                const bodyTop = toY(Math.max(open, close));
+                const bodyBottom = toY(Math.min(open, close));
+                const bodyH = Math.max(bodyBottom - bodyTop, 1.4);
+
                 if (close >= open) {
-                    ctx.fillStyle = "rgba(52, 211, 153, 0.22)";
-                    ctx.fillRect(x - candleWidth / 2, bodyTop, candleWidth, bodyHeight);
-                    ctx.strokeRect(x - candleWidth / 2, bodyTop, candleWidth, bodyHeight);
+                    ctx.fillStyle = "rgba(52,211,153,0.22)";
+                    ctx.fillRect(x - candleW / 2, bodyTop, candleW, bodyH);
+                    ctx.strokeRect(x - candleW / 2, bodyTop, candleW, bodyH);
                 } else {
                     ctx.fillStyle = color;
-                    ctx.fillRect(x - candleWidth / 2, bodyTop, candleWidth, bodyHeight);
+                    ctx.fillRect(x - candleW / 2, bodyTop, candleW, bodyH);
                 }
             });
+        } catch (err) {
+            console.error("drawCandles hatasi:", err);
         }
+    }
 
-        function drawLineCanvas(canvasId, values, color, rangeHint = null) {
+    function drawLineCanvas(canvasId, values, color, rangeHint = null) {
+        try {
             const canvas = document.getElementById(canvasId);
-            const width = canvas.parentElement.clientWidth - 28;
+            const width = Math.max((canvas.parentElement?.clientWidth || 280) - 28, 80);
             const height = 120;
             const ctx = fitCanvas(canvas, width, height);
             ctx.clearRect(0, 0, width, height);
-            if (!values.length) return;
 
-            const low = rangeHint ? rangeHint.min : Math.min(...values);
-            const high = rangeHint ? rangeHint.max : Math.max(...values);
-            const range = Math.max(high - low, 1);
+            const clean = values.filter((v) => Number.isFinite(v));
+            if (!clean.length) return;
 
-            ctx.strokeStyle = "rgba(90, 110, 100, 0.28)";
+            const low = rangeHint ? rangeHint.min : Math.min(...clean);
+            const high = rangeHint ? rangeHint.max : Math.max(...clean);
+            const rng = Math.max(high - low, 1);
+
+            ctx.strokeStyle = "rgba(90,110,100,0.28)";
+            ctx.lineWidth = 1;
             ctx.beginPath();
             ctx.moveTo(0, height / 2);
             ctx.lineTo(width, height / 2);
@@ -1211,223 +993,238 @@
             ctx.beginPath();
             ctx.strokeStyle = color;
             ctx.lineWidth = 2;
-            values.forEach((value, index) => {
-                const x = (index / Math.max(values.length - 1, 1)) * width;
-                const y = height - ((value - low) / range) * (height - 18) - 9;
-                if (index === 0) ctx.moveTo(x, y);
-                else ctx.lineTo(x, y);
+            clean.forEach((v, i) => {
+                const x = (i / Math.max(clean.length - 1, 1)) * width;
+                const y = height - ((v - low) / rng) * (height - 18) - 9;
+                i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
             });
             ctx.stroke();
+        } catch (err) {
+            console.error(`drawLineCanvas(${canvasId}) hatasi:`, err);
+        }
+    }
+
+    function updateIndicators() {
+        const bars = state.priceData.slice(-state.visibleBars);
+        if (!bars.length) return;
+
+        const closes = bars.map((b) => Number(b.close) || 0);
+        const rsiValues = bars.map((b) => Number(b.rsi) || 50).filter(Number.isFinite);
+        const smaFast = bars.map((b) => Number(b.sma_fast) || b.close);
+        const smaSlow = bars.map((b) => Number(b.sma_slow) || b.close);
+
+        const lastRsi = rsiValues.at(-1) ?? 50;
+        document.getElementById("rsiValue").textContent = lastRsi.toFixed(2);
+        const rsiState = document.getElementById("rsiState");
+        const rsiMood = lastRsi < 30 ? 1 : lastRsi > 70 ? -1 : 0;
+        rsiState.className = badgeClass(rsiMood);
+        rsiState.textContent = lastRsi < 30 ? "Asiri Satim" : lastRsi > 70 ? "Asiri Alim" : "Dengeli";
+        drawLineCanvas("rsiCanvas", rsiValues, "#c9a84c", { min: 0, max: 100 });
+
+        const fast = Number(smaFast.at(-1)) || 0;
+        const slow = Number(smaSlow.at(-1)) || 0;
+        document.getElementById("smaValue").textContent = `${fast.toFixed(2)} / ${slow.toFixed(2)}`;
+        const trendState = document.getElementById("trendState");
+        trendState.className = badgeClass(fast - slow);
+        trendState.textContent = fast > slow ? "Trend Up" : fast < slow ? "Trend Down" : "Yatay";
+        drawLineCanvas("trendCanvas", closes.map((p, i) => p - (Number(smaSlow[i]) || p)), "#34d399");
+    }
+
+    function updateOrderBook() {
+        const last = state.priceData.at(-1);
+        const current = last ? (Number(last.close) || 0) : 0;
+
+        document.getElementById("midPrice").textContent = current ? money(current) : "-";
+
+        if (!current) {
+            document.getElementById("askStack").innerHTML = '<div class="empty muted" style="font-size:0.75rem;">Veri bekleniyor</div>';
+            document.getElementById("bidStack").innerHTML = "";
+            return;
         }
 
-        function updateIndicators() {
-            const bars = state.priceData.slice(-state.visibleBars);
-            if (!bars.length) return;
-            const closes = bars.map((bar) => Number(bar.close));
-            const rsiValues = bars.map((bar) => Number(bar.rsi ?? 50)).filter((value) => Number.isFinite(value));
-            const smaFast = bars.map((bar) => Number(bar.sma_fast ?? bar.close));
-            const smaSlow = bars.map((bar) => Number(bar.sma_slow ?? bar.close));
+        const mkRow = (price, size, side) => {
+            const w = Math.min((size / 320) * 100, 100);
+            const fillBg = side === "ask"
+                ? `linear-gradient(90deg,transparent,rgba(248,113,113,0.14));width:${w}%;left:auto;right:0;`
+                : `linear-gradient(90deg,rgba(52,211,153,0.14),transparent);width:${w}%;`;
+            return `
+            <div class="order-row">
+                <div class="order-fill" style="background:${fillBg}"></div>
+                <div class="order-content mono">
+                    <span class="order-price ${side === "ask" ? "sell" : "buy"}">${price.toFixed(2)}</span>
+                    <span>${size}</span>
+                </div>
+            </div>`;
+        };
 
-            const lastRsi = rsiValues.at(-1) ?? 50;
-            document.getElementById("rsiValue").textContent = lastRsi.toFixed(2);
-            const rsiState = document.getElementById("rsiState");
-            rsiState.className = badgeClass(lastRsi < 30 ? 1 : lastRsi > 70 ? -1 : 0);
-            rsiState.textContent = lastRsi < 30 ? "Asiri Satim" : lastRsi > 70 ? "Asiri Alim" : "Dengeli";
-            drawLineCanvas("rsiCanvas", rsiValues, "#c9a84c", { min: 0, max: 100 });
+        const asks = Array.from({ length: 6 }, (_, i) => ({
+            price: current * (1 + 0.0008 * (6 - i)),
+            size: 70 + Math.round(Math.random() * 220),
+        }));
+        const bids = Array.from({ length: 6 }, (_, i) => ({
+            price: current * (1 - 0.0008 * (i + 1)),
+            size: 70 + Math.round(Math.random() * 220),
+        }));
 
-            const fast = smaFast.at(-1) ?? closes.at(-1) ?? 0;
-            const slow = smaSlow.at(-1) ?? closes.at(-1) ?? 0;
-            document.getElementById("smaValue").textContent = `${fast.toFixed(2)} / ${slow.toFixed(2)}`;
-            const trendState = document.getElementById("trendState");
-            trendState.className = badgeClass(fast - slow);
-            trendState.textContent = fast > slow ? "Trend Up" : fast < slow ? "Trend Down" : "Yatay";
-            drawLineCanvas("trendCanvas", closes.map((price, index) => price - (smaSlow[index] ?? price)), "#34d399");
-        }
+        document.getElementById("askStack").innerHTML = asks.map((r) => mkRow(r.price, r.size, "ask")).join("");
+        document.getElementById("bidStack").innerHTML = bids.map((r) => mkRow(r.price, r.size, "bid")).join("");
+    }
 
-        function updateOrderBook() {
-            const current = state.priceData.at(-1)?.close || 0;
-            const askRoot = document.getElementById("askStack");
-            const bidRoot = document.getElementById("bidStack");
-            document.getElementById("midPrice").textContent = money(current);
+    function toast(msg, mood = "flat") {
+        const root = document.getElementById("toastRoot");
+        const icon = mood === "up" ? "fa-circle-check" : mood === "down" ? "fa-triangle-exclamation" : "fa-circle-info";
+        const color = mood === "up" ? "var(--green)" : mood === "down" ? "var(--red)" : "var(--gold)";
+        const el = document.createElement("div");
+        el.className = "toast";
+        el.setAttribute("role", "alert");
+        el.innerHTML = `<i class="fas ${icon}" style="color:${color}" aria-hidden="true"></i><div>${msg}</div>`;
+        root.appendChild(el);
+        requestAnimationFrame(() => el.classList.add("show"));
+        setTimeout(() => { el.classList.remove("show"); setTimeout(() => el.remove(), 300); }, 3200);
+    }
 
-            const asks = Array.from({ length: 6 }, (_, index) => ({
-                price: current * (1 + 0.0008 * (6 - index)),
-                size: 70 + Math.round(Math.random() * 220),
-            }));
-            const bids = Array.from({ length: 6 }, (_, index) => ({
-                price: current * (1 - 0.0008 * (index + 1)),
-                size: 70 + Math.round(Math.random() * 220),
-            }));
+    async function scanMarket() {
+        const btn = document.getElementById("scanButton");
+        btn.disabled = true;
+        btn.textContent = "Taraniyor...";
 
-            askRoot.innerHTML = asks.map((row) => {
-                const width = Math.min((row.size / 320) * 100, 100);
-                return `
-                    <div class="order-row">
-                        <div class="order-fill" style="background:linear-gradient(90deg, transparent, rgba(248, 113, 113, 0.14)); width:${width}%; left:auto; right:0;"></div>
-                        <div class="order-content mono"><span class="order-price sell">${row.price.toFixed(2)}</span><span>${row.size}</span></div>
-                    </div>
-                `;
-            }).join("");
+        try {
+            const res = await fetch("/api/scan", { method: "POST" });
+            const payload = await res.json();
+            if (payload.status !== "ok") throw new Error(payload.message || "Tarama basarisiz");
 
-            bidRoot.innerHTML = bids.map((row) => {
-                const width = Math.min((row.size / 320) * 100, 100);
-                return `
-                    <div class="order-row">
-                        <div class="order-fill" style="background:linear-gradient(90deg, rgba(52, 211, 153, 0.14), transparent); width:${width}%;"></div>
-                        <div class="order-content mono"><span class="order-price buy">${row.price.toFixed(2)}</span><span>${row.size}</span></div>
-                    </div>
-                `;
-            }).join("");
-        }
+            state.marketData = payload.signals.sort((a, b) => Math.abs(b.score) - Math.abs(a.score));
+            state.activeTicker = state.activeTicker || state.marketData[0]?.ticker || null;
 
-        function toast(message, mood = "flat") {
-            const root = document.getElementById("toastRoot");
-            const icon = mood === "up" ? "fa-circle-check" : mood === "down" ? "fa-triangle-exclamation" : "fa-circle-info";
-            const color = mood === "up" ? "var(--green)" : mood === "down" ? "var(--red)" : "var(--gold)";
-            const el = document.createElement("div");
-            el.className = "toast";
-            el.innerHTML = `<i class="fas ${icon}" style="color:${color}"></i><div>${message}</div>`;
-            root.appendChild(el);
-            requestAnimationFrame(() => el.classList.add("show"));
-            setTimeout(() => {
-                el.classList.remove("show");
-                setTimeout(() => el.remove(), 300);
-            }, 3200);
-        }
-
-        async function scanMarket() {
-            const button = document.getElementById("scanButton");
-            button.disabled = true;
-            button.textContent = "Taraniyor...";
-
-            try {
-                const response = await fetch("/api/scan", { method: "POST" });
-                const payload = await response.json();
-                if (payload.status !== "ok") throw new Error(payload.message || "Tarama basarisiz");
-
-                state.marketData = payload.signals.sort((a, b) => Math.abs(b.score) - Math.abs(a.score));
-                state.activeTicker = state.activeTicker || state.marketData[0]?.ticker || null;
-
-                buildTickerTape();
-                buildStockPills();
-                updateHeaderStats(payload);
-                updateSignalList();
-                updateHeatGrid();
-                updateNewsList();
-                buildRecentTrades();
-                updateHistoryTable();
-
-                if (state.activeTicker) {
-                    await loadTicker(state.activeTicker, false);
-                }
-
-                toast(`${payload.scanned} hisse tarandi, ${state.marketData.length} sonuc guncel.`, "up");
-            } catch (error) {
-                console.error(error);
-                document.getElementById("statHealth").textContent = "Hata";
-                document.getElementById("statDuration").textContent = String(error.message || error);
-                toast(`Tarama hatasi: ${error.message || error}`, "down");
-            } finally {
-                button.disabled = false;
-                button.innerHTML = '<i class="fas fa-play"></i> Canli Taramayi Yenile';
-            }
-        }
-
-        async function loadTicker(ticker, notify = true) {
-            if (!ticker) return;
-            state.activeTicker = ticker;
+            buildTickerTape();
             buildStockPills();
+            updateHeaderStats(payload);
+            updateSignalList();
+            updateHeatGrid();
+            updateNewsList();
+            buildRecentTrades();
+            updateHistoryTable();
 
-            try {
-                const response = await fetch(`/api/analyze/${ticker.replace(".IS", "")}`);
-                const payload = await response.json();
-                if (payload.status !== "ok") throw new Error(payload.message || "Analiz alinamadi");
-
-                state.priceData = payload.price_data || [];
-                updateActiveHeader(payload);
-                drawCandles();
-                updateIndicators();
-                updateOrderBook();
-
-                if (notify) {
-                    toast(`${ticker.replace(".IS", "")} analizi guncellendi.`, "flat");
-                }
-            } catch (error) {
-                console.error(error);
-                toast(`Analiz hatasi: ${error.message || error}`, "down");
+            if (state.activeTicker) {
+                await loadTicker(state.activeTicker, false);
             }
+
+            toast(`${payload.scanned} hisse tarandi, ${state.marketData.length} sonuc guncel.`, "up");
+        } catch (err) {
+            console.error("scanMarket hatasi:", err);
+            document.getElementById("statHealth").textContent = "Hata";
+            document.getElementById("statDuration").textContent = String(err.message || err);
+            toast(`Tarama hatasi: ${err.message || err}`, "down");
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-play" aria-hidden="true"></i> Canli Taramayi Yenile';
         }
+    }
 
-        function wireControls() {
-            document.getElementById("refreshButton").addEventListener("click", scanMarket);
-            document.getElementById("scanButton").addEventListener("click", scanMarket);
-            document.getElementById("analyzeButton").addEventListener("click", () => loadTicker(state.activeTicker));
-            document.getElementById("panicButton").addEventListener("click", () => {
-                state.botEnabled = false;
-                const botToggle = document.getElementById("botToggle");
-                botToggle.classList.remove("on");
-                document.getElementById("botStatus").className = "badge down";
-                document.getElementById("botStatus").textContent = "DURDURULDU";
-                toast("Acil durdurma aktif. Otomatik tarama pasif.", "down");
-            });
+    async function loadTicker(ticker, notify = true) {
+        if (!ticker) return;
+        state.activeTicker = ticker;
+        buildStockPills();
 
-            document.getElementById("botToggle").addEventListener("click", (event) => {
-                state.botEnabled = !state.botEnabled;
-                event.currentTarget.classList.toggle("on", state.botEnabled);
-                document.getElementById("botStatus").className = state.botEnabled ? "badge up" : "badge down";
-                document.getElementById("botStatus").textContent = state.botEnabled ? "AKTIF" : "PASIF";
-                toast(state.botEnabled ? "Bot yeniden aktif." : "Bot pasif moda alindi.", state.botEnabled ? "up" : "down");
-            });
+        try {
+            const res = await fetch(`/api/analyze/${ticker.replace(".IS","")}`);
+            const payload = await res.json();
+            if (payload.status !== "ok") throw new Error(payload.message || "Analiz alinamadi");
 
-            document.querySelectorAll("#periodButtons .period-btn").forEach((button) => {
-                button.addEventListener("click", () => {
-                    document.querySelectorAll("#periodButtons .period-btn").forEach((item) => item.classList.remove("active"));
-                    button.classList.add("active");
-                    state.visibleBars = Number(button.dataset.period);
-                    drawCandles();
-                    updateIndicators();
-                });
-            });
-
-            document.querySelectorAll("#historyFilters .period-btn").forEach((button) => {
-                button.addEventListener("click", () => {
-                    document.querySelectorAll("#historyFilters .period-btn").forEach((item) => item.classList.remove("active"));
-                    button.classList.add("active");
-                    state.filter = button.dataset.filter;
-                    updateHistoryTable();
-                });
-            });
-
-            const riskRange = document.getElementById("riskRange");
-            riskRange.addEventListener("input", () => {
-                document.getElementById("riskRangeValue").textContent = `%${Number(riskRange.value).toFixed(1)}`;
-            });
-
-            const positionRange = document.getElementById("positionRange");
-            positionRange.addEventListener("input", () => {
-                document.getElementById("positionRangeValue").textContent = money(Number(positionRange.value));
-            });
-
-            const rsiRange = document.getElementById("rsiRange");
-            rsiRange.addEventListener("input", () => {
-                const lower = Number(rsiRange.value);
-                document.getElementById("rsiRangeValue").textContent = `${lower} / ${100 - lower}`;
-            });
-        }
-
-        window.addEventListener("resize", () => {
+            state.priceData = payload.price_data || [];
+            updateActiveHeader(payload);
             drawCandles();
             updateIndicators();
+            updateOrderBook();
+
+            if (notify) toast(`${ticker.replace(".IS","")} analizi guncellendi.`, "flat");
+        } catch (err) {
+            console.error("loadTicker hatasi:", err);
+            toast(`Analiz hatasi: ${err.message || err}`, "down");
+        }
+    }
+
+    function wireControls() {
+        document.getElementById("refreshButton").addEventListener("click", scanMarket);
+        document.getElementById("scanButton").addEventListener("click", scanMarket);
+        document.getElementById("rescanButton").addEventListener("click", scanMarket);
+
+        document.getElementById("analyzeButton").addEventListener("click", () => loadTicker(state.activeTicker));
+
+        document.getElementById("panicButton").addEventListener("click", () => {
+            state.botEnabled = false;
+            const toggle = document.getElementById("botToggle");
+            toggle.classList.remove("on");
+            toggle.setAttribute("aria-checked", "false");
+            const statusEl = document.getElementById("botStatus");
+            statusEl.className = "badge down";
+            statusEl.textContent = "DURDURULDU";
+            toast("Acil durdurma aktif. Otomatik tarama pasif.", "down");
         });
 
-        document.addEventListener("DOMContentLoaded", async () => {
-            wireControls();
-            updateNewsList();
-            await scanMarket();
-            setInterval(() => {
-                if (state.botEnabled) scanMarket();
-            }, 45000);
+        document.getElementById("botToggle").addEventListener("click", (e) => {
+            state.botEnabled = !state.botEnabled;
+            e.currentTarget.classList.toggle("on", state.botEnabled);
+            e.currentTarget.setAttribute("aria-checked", String(state.botEnabled));
+            const statusEl = document.getElementById("botStatus");
+            statusEl.className = state.botEnabled ? "badge up" : "badge down";
+            statusEl.textContent = state.botEnabled ? "AKTIF" : "PASIF";
+            toast(state.botEnabled ? "Bot yeniden aktif." : "Bot pasif moda alindi.", state.botEnabled ? "up" : "down");
         });
-    </script>
+
+        document.querySelectorAll("#periodButtons .period-btn").forEach((btn) => {
+            btn.addEventListener("click", () => {
+                document.querySelectorAll("#periodButtons .period-btn").forEach((b) => b.classList.remove("active"));
+                btn.classList.add("active");
+                state.visibleBars = Number(btn.dataset.period);
+                drawCandles();
+                updateIndicators();
+            });
+        });
+
+        document.querySelectorAll("#historyFilters .period-btn").forEach((btn) => {
+            btn.addEventListener("click", () => {
+                document.querySelectorAll("#historyFilters .period-btn").forEach((b) => b.classList.remove("active"));
+                btn.classList.add("active");
+                state.filter = btn.dataset.filter;
+                updateHistoryTable();
+            });
+        });
+
+        const riskRange = document.getElementById("riskRange");
+        riskRange.addEventListener("input", () => {
+            document.getElementById("riskRangeValue").textContent = `%${Number(riskRange.value).toFixed(1)}`;
+        });
+
+        const positionRange = document.getElementById("positionRange");
+        positionRange.addEventListener("input", () => {
+            document.getElementById("positionRangeValue").textContent = money(Number(positionRange.value));
+        });
+
+        const rsiRange = document.getElementById("rsiRange");
+        rsiRange.addEventListener("input", () => {
+            const lower = Number(rsiRange.value);
+            document.getElementById("rsiRangeValue").textContent = `${lower} / ${100 - lower}`;
+        });
+    }
+
+    let resizeTimer;
+    window.addEventListener("resize", () => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => {
+            drawCandles();
+            updateIndicators();
+        }, 150);
+    });
+
+    document.addEventListener("DOMContentLoaded", async () => {
+        wireControls();
+        updateNewsList();
+        await scanMarket();
+        setInterval(() => {
+            if (state.botEnabled) scanMarket();
+        }, 45000);
+    });
+</script>
 </body>
 </html>
