@@ -1,7 +1,9 @@
+import json
 import logging
 import importlib
 from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Optional, Protocol, TypedDict, cast
 
 import numpy as np
@@ -44,6 +46,20 @@ class BacktestTrade:
     holding_days: int
     exit_reason: str = ""
 
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "entry_date": self.entry_date.isoformat(),
+            "exit_date": self.exit_date.isoformat(),
+            "ticker": self.ticker,
+            "entry_price": self.entry_price,
+            "exit_price": self.exit_price,
+            "signal_score": self.signal_score,
+            "profit_pct": self.profit_pct,
+            "profit_tl": self.profit_tl,
+            "holding_days": self.holding_days,
+            "exit_reason": self.exit_reason,
+        }
+
 
 @dataclass
 class BacktestResult:
@@ -61,6 +77,32 @@ class BacktestResult:
     max_drawdown_pct: float
     sharpe_ratio: float
     trades: list[BacktestTrade] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "ticker": self.ticker,
+            "period": self.period,
+            "initial_capital": self.initial_capital,
+            "final_capital": self.final_capital,
+            "total_return_pct": self.total_return_pct,
+            "total_trades": self.total_trades,
+            "winning_trades": self.winning_trades,
+            "losing_trades": self.losing_trades,
+            "win_rate": self.win_rate,
+            "avg_profit_pct": self.avg_profit_pct,
+            "avg_loss_pct": self.avg_loss_pct,
+            "max_drawdown_pct": self.max_drawdown_pct,
+            "sharpe_ratio": self.sharpe_ratio,
+            "trades": [trade.to_dict() for trade in self.trades],
+        }
+
+    def to_json(self, output_path: str | Path | None = None) -> str:
+        payload = json.dumps(self.to_dict(), ensure_ascii=False, indent=2)
+        if output_path is not None:
+            path = Path(output_path)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(payload, encoding="utf-8")
+        return payload
 
     def __str__(self):
         return (
@@ -208,6 +250,7 @@ class Backtester:
         ticker: str,
         df: pd.DataFrame,
         verbose: bool = True,
+        output_path: str | Path | None = None,
     ) -> Optional[BacktestResult]:
         if df is None or len(df) < 50:
             logger.warning(f"  Yetersiz veri: {len(df) if df is not None else 0}")
@@ -221,8 +264,13 @@ class Backtester:
             return None
 
         if self._use_vectorized_path():
-            return self._run_vectorized(ticker, df, verbose)
-        return self._run_iterative(ticker, df, verbose)
+            result = self._run_vectorized(ticker, df, verbose)
+        else:
+            result = self._run_iterative(ticker, df, verbose)
+
+        if result is not None and output_path is not None:
+            result.to_json(output_path)
+        return result
 
     def _run_vectorized(
         self,

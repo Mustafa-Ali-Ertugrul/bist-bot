@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 import logging
 from typing import Optional
@@ -88,6 +89,14 @@ class RiskManager:
 
     def reset_sectors(self):
         self._sector_signal_counts.clear()
+
+    @contextmanager
+    def sector_scan(self):
+        self.reset_sectors()
+        try:
+            yield self
+        finally:
+            self.reset_sectors()
 
     def reset_portfolio(self) -> None:
         self._portfolio_history.clear()

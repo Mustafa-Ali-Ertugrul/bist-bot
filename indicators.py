@@ -9,6 +9,80 @@ logger = logging.getLogger(__name__)
 
 class TechnicalIndicators:
     @staticmethod
+    def _nanargmin(values: np.ndarray) -> float:
+        if np.isnan(values).all():
+            return np.nan
+        return float(np.nanargmin(values))
+
+    @staticmethod
+    def _add_min_divergence(
+        df: pd.DataFrame,
+        source_col: str,
+        output_col: str,
+        lookback: int,
+        low_threshold: float,
+        high_threshold: float,
+    ) -> pd.DataFrame:
+        df = df.copy()
+        df[output_col] = "NONE"
+
+        if len(df) < lookback * 2:
+            return df
+
+        source = df[source_col]
+        price = df["close"]
+        n_rows = len(df)
+        row_positions = np.arange(n_rows)
+
+        current_min = source.rolling(window=lookback + 1, min_periods=lookback + 1).min()
+        current_argmin = source.rolling(window=lookback + 1, min_periods=lookback + 1).apply(
+            TechnicalIndicators._nanargmin,
+            raw=True,
+        )
+
+        previous_source = source.shift(lookback + 1)
+        previous_min = previous_source.rolling(window=lookback, min_periods=1).min()
+        previous_argmin = previous_source.rolling(window=lookback, min_periods=1).apply(
+            TechnicalIndicators._nanargmin,
+            raw=True,
+        )
+
+        current_positions = row_positions - lookback + current_argmin.to_numpy(dtype=float)
+        previous_starts = np.maximum(0, row_positions - (lookback * 2))
+        previous_positions = previous_starts + previous_argmin.to_numpy(dtype=float)
+
+        price_values = price.to_numpy(dtype=float)
+        current_price = np.full(n_rows, np.nan, dtype=float)
+        previous_price = np.full(n_rows, np.nan, dtype=float)
+
+        valid_current_pos = ~np.isnan(current_positions)
+        valid_previous_pos = ~np.isnan(previous_positions)
+
+        current_pos_int = current_positions[valid_current_pos].astype(int)
+        previous_pos_int = previous_positions[valid_previous_pos].astype(int)
+        current_price[valid_current_pos] = price_values[current_pos_int]
+        previous_price[valid_previous_pos] = price_values[previous_pos_int]
+
+        bullish = (
+            (current_min < low_threshold)
+            & (current_min > previous_min)
+            & (current_price < previous_price)
+        )
+        bearish = (
+            (current_min > high_threshold)
+            & (current_min < previous_min)
+            & (current_price > previous_price)
+        )
+
+        eligible_rows = (row_positions >= lookback) & (row_positions < n_rows - 1)
+        bullish &= eligible_rows
+        bearish &= eligible_rows
+
+        df.loc[bullish, output_col] = "BULLISH"
+        df.loc[bearish, output_col] = "BEARISH"
+        return df
+
+    @staticmethod
     def add_all(df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
         df = TechnicalIndicators.add_rsi(df)
@@ -136,77 +210,25 @@ class TechnicalIndicators:
 
     @staticmethod
     def add_rsi_divergence(df: pd.DataFrame, lookback: int = 5) -> pd.DataFrame:
-        df = df.copy()
-        
-        df["rsi_divergence"] = "NONE"
-        
-        if len(df) < lookback * 2:
-            return df
-        
-        for i in range(lookback, len(df) - 1):
-            rsi_window = df["rsi"].iloc[i - lookback:i + 1]
-            price_window = df["close"].iloc[i - lookback:i + 1]
-            
-            if rsi_window.isna().any() or price_window.isna().any():
-                continue
-            
-            rsi_min_idx = rsi_window.idxmin()
-            rsi_min = rsi_window.min()
-            price_at_rsi_min = df["close"].loc[rsi_min_idx]
-            
-            prev_slice = df["rsi"].iloc[max(0, i - lookback * 2):i - lookback]
-            if prev_slice.dropna().empty:
-                continue
-            prev_rsi_min_idx = prev_slice.idxmin()
-            if pd.isna(prev_rsi_min_idx):
-                continue
-            
-            prev_rsi_min = df["rsi"].loc[prev_rsi_min_idx]
-            prev_price_at_rsi_min = df["close"].loc[prev_rsi_min_idx]
-            
-            if rsi_min < 35 and rsi_min > prev_rsi_min and price_at_rsi_min < prev_price_at_rsi_min:
-                df.loc[df.index[i], "rsi_divergence"] = "BULLISH"
-            elif rsi_min > 65 and rsi_min < prev_rsi_min and price_at_rsi_min > prev_price_at_rsi_min:
-                df.loc[df.index[i], "rsi_divergence"] = "BEARISH"
-        
-        return df
+        return TechnicalIndicators._add_min_divergence(
+            df=df,
+            source_col="rsi",
+            output_col="rsi_divergence",
+            lookback=lookback,
+            low_threshold=35,
+            high_threshold=65,
+        )
 
     @staticmethod
     def add_macd_divergence(df: pd.DataFrame, lookback: int = 5) -> pd.DataFrame:
-        df = df.copy()
-        
-        df["macd_divergence"] = "NONE"
-        
-        if len(df) < lookback * 2:
-            return df
-        
-        for i in range(lookback, len(df) - 1):
-            macd_window = df["macd"].iloc[i - lookback:i + 1]
-            price_window = df["close"].iloc[i - lookback:i + 1]
-            
-            if macd_window.isna().any() or price_window.isna().any():
-                continue
-            
-            macd_min_idx = macd_window.idxmin()
-            macd_min = macd_window.min()
-            price_at_macd_min = df["close"].loc[macd_min_idx]
-            
-            prev_slice = df["macd"].iloc[max(0, i - lookback * 2):i - lookback]
-            if prev_slice.dropna().empty:
-                continue
-            prev_macd_min_idx = prev_slice.idxmin()
-            if pd.isna(prev_macd_min_idx):
-                continue
-            
-            prev_macd_min = df["macd"].loc[prev_macd_min_idx]
-            prev_price_at_macd_min = df["close"].loc[prev_macd_min_idx]
-            
-            if macd_min < 0 and macd_min > prev_macd_min and price_at_macd_min < prev_price_at_macd_min:
-                df.loc[df.index[i], "macd_divergence"] = "BULLISH"
-            elif macd_min > 0 and macd_min < prev_macd_min and price_at_macd_min > prev_price_at_macd_min:
-                df.loc[df.index[i], "macd_divergence"] = "BEARISH"
-        
-        return df
+        return TechnicalIndicators._add_min_divergence(
+            df=df,
+            source_col="macd",
+            output_col="macd_divergence",
+            lookback=lookback,
+            low_threshold=0,
+            high_threshold=0,
+        )
 
     @staticmethod
     def add_sma(df: pd.DataFrame, fast: int = None, slow: int = None) -> pd.DataFrame:

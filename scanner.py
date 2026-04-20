@@ -1,8 +1,9 @@
 import logging
-import config
 from datetime import datetime
 from time import sleep
+from typing import Any
 
+from config import settings as default_settings
 from strategy import SignalType, Signal, detect_regime
 
 
@@ -10,11 +11,12 @@ logger = logging.getLogger(__name__)
 
 
 class ScanService:
-    def __init__(self, fetcher, engine, notifier, db):
+    def __init__(self, fetcher, engine, notifier, db, settings: Any | None = None):
         self.fetcher = fetcher
         self.engine = engine
         self.notifier = notifier
         self.db = db
+        self.settings = settings or default_settings
 
     def _check_signal_changes(self, signals):
         for s in signals:
@@ -44,15 +46,15 @@ class ScanService:
         logger.info("\n" + "█" * 55)
         logger.info("█  BIST BOT — TARAMA BAŞLIYOR")
         logger.info(f"█  Saat: {datetime.now().strftime('%d.%m.%Y %H:%M')}")
-        logger.info(f"█  Watchlist: {len(config.settings.WATCHLIST)} hisse")
+        logger.info(f"█  Watchlist: {len(self.settings.WATCHLIST)} hisse")
         logger.info("█" * 55)
 
         self.fetcher.clear_cache()
         all_data = self.fetcher.fetch_multi_timeframe_all(
-            trend_period=getattr(config.settings, "MTF_TREND_PERIOD", "6mo"),
-            trend_interval=getattr(config.settings, "MTF_TREND_INTERVAL", "1d"),
-            trigger_period=getattr(config.settings, "MTF_TRIGGER_PERIOD", "1mo"),
-            trigger_interval=getattr(config.settings, "MTF_TRIGGER_INTERVAL", "15m"),
+            trend_period=getattr(self.settings, "MTF_TREND_PERIOD", "6mo"),
+            trend_interval=getattr(self.settings, "MTF_TREND_INTERVAL", "1d"),
+            trigger_period=getattr(self.settings, "MTF_TRIGGER_PERIOD", "1mo"),
+            trigger_interval=getattr(self.settings, "MTF_TRIGGER_INTERVAL", "15m"),
         )
 
         if not all_data:
@@ -84,7 +86,7 @@ class ScanService:
         for s in actionable:
             self.db.save_signal(s)
 
-            if getattr(config.settings, "PAPER_MODE", False):
+            if getattr(self.settings, "PAPER_MODE", False):
                 regime_enum = detect_regime(self.fetcher.fetch_single(s.ticker, period="3mo"))
                 regime = regime_enum.value if regime_enum else "UNKNOWN"
                 self.db.add_paper_trade(
@@ -108,19 +110,19 @@ class ScanService:
 
             strong = [
                 s for s in actionable
-                if abs(s.score) >= getattr(config.settings, "TELEGRAM_MIN_SCORE", 70)
+                if abs(s.score) >= getattr(self.settings, "TELEGRAM_MIN_SCORE", 70)
             ]
             for s in strong:
                 self.notifier.send_signal(s)
                 sleep(1)
 
-        if getattr(config.settings, "PAPER_MODE", False):
+        if getattr(self.settings, "PAPER_MODE", False):
             self.update_paper_trades()
 
         return signals
 
     def update_paper_trades(self):
-        if not getattr(config.settings, "PAPER_MODE", False):
+        if not getattr(self.settings, "PAPER_MODE", False):
             return
 
         open_trades = self.db.get_open_paper_trades()

@@ -45,22 +45,18 @@ class ScriptedBacktester(Backtester):
         )
 
 
-def override_slippage_settings(slippage_pct: float, penalty_ratio: float, max_cap: float) -> tuple[float, float, float]:
-    originals = (
-        settings.SLIPPAGE_PCT,
-        settings.SLIPPAGE_PENALTY_RATIO,
-        settings.SLIPPAGE_MAX_CAP,
+def override_slippage_settings(slippage_pct: float, penalty_ratio: float, max_cap: float):
+    override = settings.override(
+        SLIPPAGE_PCT=slippage_pct,
+        SLIPPAGE_PENALTY_RATIO=penalty_ratio,
+        SLIPPAGE_MAX_CAP=max_cap,
     )
-    object.__setattr__(settings, "SLIPPAGE_PCT", slippage_pct)
-    object.__setattr__(settings, "SLIPPAGE_PENALTY_RATIO", penalty_ratio)
-    object.__setattr__(settings, "SLIPPAGE_MAX_CAP", max_cap)
-    return originals
+    override.__enter__()
+    return override
 
 
-def restore_slippage_settings(originals: tuple[float, float, float]) -> None:
-    object.__setattr__(settings, "SLIPPAGE_PCT", originals[0])
-    object.__setattr__(settings, "SLIPPAGE_PENALTY_RATIO", originals[1])
-    object.__setattr__(settings, "SLIPPAGE_MAX_CAP", originals[2])
+def restore_slippage_settings(override) -> None:
+    override.__exit__(None, None, None)
 
 
 def build_price_frame() -> pd.DataFrame:

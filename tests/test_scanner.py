@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
+from dataclasses import replace
 from datetime import datetime
 from unittest.mock import MagicMock
 
@@ -62,14 +63,12 @@ def test_check_signal_changes_sends_notification_on_change(monkeypatch):
 
 
 def test_update_paper_trades_skips_on_no_open_trades(monkeypatch):
-    monkeypatch.setattr(config.settings, "PAPER_MODE", True, raising=False)
-
     fetcher = MagicMock()
     engine = MagicMock()
     notifier = MagicMock()
     db = MagicMock()
     db.get_open_paper_trades.return_value = []
-    service = ScanService(fetcher, engine, notifier, db)
+    service = ScanService(fetcher, engine, notifier, db, settings=replace(config.settings, PAPER_MODE=True))
 
     service.update_paper_trades()
 

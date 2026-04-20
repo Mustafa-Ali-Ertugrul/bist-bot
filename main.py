@@ -28,6 +28,17 @@ def main():
 
     import config
 
+    def create_runtime_dashboard_app():
+        from dashboard import create_dashboard_app
+        from dependencies import build_app_container
+
+        dashboard_container = build_app_container()
+        return create_dashboard_app(
+            fetcher=dashboard_container.fetcher,
+            engine=dashboard_container.engine,
+            db=dashboard_container.db,
+        )
+
     fetcher = BISTDataFetcher()
     engine = StrategyEngine()
     notifier = TelegramNotifier()
@@ -47,10 +58,10 @@ def main():
     elif "--backtest" in sys.argv:
         run_backtest(fetcher)
     elif "--dashboard" in sys.argv:
-        from dashboard import app
+        app = create_runtime_dashboard_app()
         app.run(host="0.0.0.0", port=config.FLASK_PORT, debug=config.FLASK_DEBUG)
     else:
-        from dashboard import app
+        app = create_runtime_dashboard_app()
         t = Thread(
             target=lambda: app.run(host="0.0.0.0", port=config.FLASK_PORT, debug=False, use_reloader=False),
             daemon=True

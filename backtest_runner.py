@@ -1,4 +1,6 @@
 import logging
+from pathlib import Path
+
 import config
 
 from backtest import Backtester
@@ -12,12 +14,14 @@ def run_backtest(fetcher):
     logger.info("=" * 55)
 
     backtester = Backtester(initial_capital=getattr(config.settings, "INITIAL_CAPITAL", 8500.0))
+    output_dir = Path("data")
     results = []
 
     for ticker in config.settings.WATCHLIST:
         df = fetcher.fetch_single(ticker, period="1y")
         if df is not None:
-            result = backtester.run(ticker, df, verbose=False)
+            output_path = output_dir / f"backtest_{ticker.replace('.', '_')}.json"
+            result = backtester.run(ticker, df, verbose=False, output_path=output_path)
             if result:
                 results.append(result)
                 print(result)

@@ -1,5 +1,6 @@
 """Signal scoring and classification logic for BIST trading ideas."""
 
+from contextlib import nullcontext
 import pandas as pd
 from enum import Enum
 from typing import Optional
@@ -604,14 +605,20 @@ class StrategyEngine:
             Sorted list of generated signals.
         """
         signals = []
-        self.risk_manager.reset_sectors()
         self.risk_manager.reset_portfolio()
         self.risk_manager.build_global_correlation_cache(data)
 
-        for ticker, df in data.items():
-            signal = self.analyze(ticker, df, enforce_sector_limit=True)
-            if signal:
-                signals.append(signal)
+        sector_scan = getattr(self.risk_manager, "sector_scan", None)
+        sector_context = sector_scan() if callable(sector_scan) else nullcontext()
+
+        with sector_context:
+            if not callable(sector_scan):
+                self.risk_manager.reset_sectors()
+
+            for ticker, df in data.items():
+                signal = self.analyze(ticker, df, enforce_sector_limit=True)
+                if signal:
+                    signals.append(signal)
 
         signals.sort(key=lambda s: s.score, reverse=True)
 

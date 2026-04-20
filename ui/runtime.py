@@ -98,10 +98,10 @@ def _collect_scan_result(fetcher, engine, notifier, last_scan_time=None, force_c
             confidence=signal.confidence,
         )
 
-    for ticker, trigger_df in all_data.items():
-        signal_type, conditions = check_signals(ticker, trigger_df)
-        if signal_type:
-            send_signal_notification(ticker, signal_type, conditions, notifier)
+    for ticker, market_data in timeframe_data.items():
+        signal = check_signals(ticker, market_data)
+        if signal is not None:
+            send_signal_notification(signal, notifier)
 
     return {"all_data": all_data, "signals": signals, "last_scan_time": scan_started_at, "error": None}
 

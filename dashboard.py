@@ -187,16 +187,13 @@ def create_dashboard_app(
 
     return app
 
-
-_dashboard_container = build_app_container()
-app = create_dashboard_app(
-    fetcher=_dashboard_container.fetcher,
-    engine=_dashboard_container.engine,
-    db=_dashboard_container.db,
-)
-
-
 if __name__ == "__main__":
+    dashboard_container = build_app_container()
+    app = create_dashboard_app(
+        fetcher=dashboard_container.fetcher,
+        engine=dashboard_container.engine,
+        db=dashboard_container.db,
+    )
     app.run(
         host="0.0.0.0",
         port=settings.FLASK_PORT,

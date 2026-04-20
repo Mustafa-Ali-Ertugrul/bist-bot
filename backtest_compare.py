@@ -14,17 +14,14 @@ import argparse
 import logging
 import sys
 from dataclasses import dataclass
-from typing import Optional
 
 import numpy as np
 import pandas as pd
 
 from config import settings
-from backtest import Backtester, BacktestResult, StrategyBacktester, compare_benchmark
-from contracts import StrategyEngineProtocol
+from backtest import Backtester, StrategyBacktester, compare_benchmark
 from data_fetcher import BISTDataFetcher
 from indicators import TechnicalIndicators
-from signal_models import SignalType
 from strategy import MarketRegime, StrategyEngine, detect_regime
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
@@ -51,65 +48,6 @@ class CompareRow:
     new_sharpe: float
     benchmark_return: float
     sideways_bars_pct: float
-
-
-class NewEngineBacktester:
-    """
-    Yeni StrategyEngine'i kullanarak walk-forward tarzı backtest yapar.
-    Her bar için sub_df üzerinden analyze() çağırır; sector_limit kapalı
-    (tekil analiz modu), reset_sectors() her trade döngüsünde yok.
-    """
-
-    def __init__(
-        self,
-        initial_capital: Optional[float] = None,
-        engine: Optional[StrategyEngineProtocol] = None,
-        backtester: Optional[Backtester] = None,
-    ):
-        self.engine = engine or StrategyEngine()
-        self.backtester = backtester or Backtester(
-            initial_capital=initial_capital,
-            indicators=TechnicalIndicators(),
-        )
-        self._enriched_cache: Optional[pd.DataFrame] = None
-
-    @staticmethod
-    def _empty_signal_context() -> dict[str, float | bool]:
-        return {
-            "enter": False,
-            "exit": False,
-            "score": 0.0,
-            "stop_loss": 0.0,
-            "target_price": 0.0,
-        }
-
-    def run(self, ticker: str, df: pd.DataFrame) -> Optional[BacktestResult]:
-        self._enriched_cache = TechnicalIndicators().add_all(df.copy())
-
-        def signal_builder(ticker: str, history: pd.DataFrame) -> dict[str, float | bool]:
-            idx = len(history) - 1
-            if self._enriched_cache is None or idx < 0 or idx >= len(self._enriched_cache):
-                return self._empty_signal_context()
-
-            enriched_slice = self._enriched_cache.iloc[: idx + 1]
-            signal = self.engine.analyze(ticker, enriched_slice, enforce_sector_limit=False)
-            if signal is None:
-                return self._empty_signal_context()
-            return {
-                "enter": signal.signal_type in {SignalType.STRONG_BUY, SignalType.BUY},
-                "exit": signal.signal_type in {SignalType.SELL, SignalType.STRONG_SELL},
-                "score": signal.score,
-                "stop_loss": signal.stop_loss,
-                "target_price": signal.target_price,
-            }
-
-        self.backtester.signal_builder = signal_builder
-        try:
-            return self.backtester.run(ticker, self._enriched_cache, verbose=False)
-        finally:
-            self.backtester.signal_builder = None
-            self._enriched_cache = None
-
 
 def _sideways_pct(df: pd.DataFrame) -> float:
     ti = TechnicalIndicators()
@@ -183,11 +121,9 @@ def run_slippage_sweep(
     """Stress test strategy sensitivity against multiple slippage penalties."""
     logger.warning("\n🧹 %s için slippage sweep başlıyor...", ticker)
     results: list[dict[str, float | int]] = []
-    original_penalty = float(getattr(settings, "SLIPPAGE_PENALTY_RATIO", 0.15))
 
-    try:
-        for penalty in penalties:
-            object.__setattr__(settings, "SLIPPAGE_PENALTY_RATIO", float(penalty))
+    for penalty in penalties:
+        with settings.override(SLIPPAGE_PENALTY_RATIO=float(penalty)):
             backtester = StrategyBacktester(engine=StrategyEngine())
             result = backtester.run(ticker, df.copy(), verbose=False)
             if result is None:
@@ -203,8 +139,6 @@ def run_slippage_sweep(
                     "Max Drawdown (%)": round(result.max_drawdown_pct, 2),
                 }
             )
-    finally:
-        object.__setattr__(settings, "SLIPPAGE_PENALTY_RATIO", original_penalty)
 
     sweep_df = pd.DataFrame(results)
     print("\n" + "=" * 60)
@@ -225,7 +159,7 @@ def run(tickers: list[str], period: str = "1y") -> list[CompareRow]:
         buy_threshold=getattr(settings, "BUY_THRESHOLD", 10),
         sell_threshold=getattr(settings, "SELL_THRESHOLD", -10),
     )
-    new_bt = NewEngineBacktester(
+    new_bt = StrategyBacktester(
         initial_capital=getattr(settings, "INITIAL_CAPITAL", 8500.0),
     )
 
@@ -239,7 +173,7 @@ def run(tickers: list[str], period: str = "1y") -> list[CompareRow]:
             continue
 
         old_result = old_bt.run(ticker, df.copy(), verbose=False)
-        new_result = new_bt.run(ticker, df.copy())
+        new_result = new_bt.run(ticker, df.copy(), verbose=False)
 
         if old_result is None or new_result is None:
             print("backtest başarısız, atlandı.")

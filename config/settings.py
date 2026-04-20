@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import logging
+from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -22,6 +23,32 @@ CONFIG_FILE = CONFIG_DIR / "user_settings.json"
 
 
 logger = logging.getLogger(__name__)
+
+_SETTINGS_OVERRIDES: ContextVar[tuple[dict[str, Any], ...]] = ContextVar(
+    "settings_overrides",
+    default=(),
+)
+
+
+class SettingsOverride:
+    def __init__(self, settings_obj: "Settings", **overrides: Any) -> None:
+        valid_fields = settings_obj.__dataclass_fields__
+        unknown_fields = sorted(name for name in overrides if name not in valid_fields)
+        if unknown_fields:
+            unknown = ", ".join(unknown_fields)
+            raise AttributeError(f"Unknown settings override(s): {unknown}")
+        self._overrides = overrides
+        self._token: Token[tuple[dict[str, Any], ...]] | None = None
+
+    def __enter__(self) -> "Settings":
+        current = _SETTINGS_OVERRIDES.get()
+        self._token = _SETTINGS_OVERRIDES.set(current + (self._overrides,))
+        return settings
+
+    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+        if self._token is not None:
+            _SETTINGS_OVERRIDES.reset(self._token)
+            self._token = None
 
 
 def _get_bool_env(name: str, default: bool = False) -> bool:
@@ -255,6 +282,18 @@ class Settings:
     WALKFORWARD_TRAIN_DAYS: int = _get_int_env("WALKFORWARD_TRAIN_DAYS", 180)
     WALKFORWARD_TEST_DAYS: int = _get_int_env("WALKFORWARD_TEST_DAYS", 30)
     SECTOR_LIMIT: int = _get_int_env("SECTOR_LIMIT", 2)
+
+    def __getattribute__(self, name: str) -> Any:
+        if not name.startswith("__"):
+            dataclass_fields = object.__getattribute__(self, "__dataclass_fields__")
+            if name in dataclass_fields:
+                for overrides in reversed(_SETTINGS_OVERRIDES.get()):
+                    if name in overrides:
+                        return overrides[name]
+        return object.__getattribute__(self, name)
+
+    def override(self, **overrides: Any) -> SettingsOverride:
+        return SettingsOverride(self, **overrides)
 
     def _load_persisted_settings(self) -> dict[str, Any]:
         """Load persisted settings from JSON file."""
