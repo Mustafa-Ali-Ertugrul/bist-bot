@@ -13,6 +13,7 @@ if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
 from backtest import Backtester  # noqa: E402
+from config import settings  # noqa: E402
 
 
 class IdentityIndicators:
@@ -44,6 +45,24 @@ class ScriptedBacktester(Backtester):
         )
 
 
+def override_slippage_settings(slippage_pct: float, penalty_ratio: float, max_cap: float) -> tuple[float, float, float]:
+    originals = (
+        settings.SLIPPAGE_PCT,
+        settings.SLIPPAGE_PENALTY_RATIO,
+        settings.SLIPPAGE_MAX_CAP,
+    )
+    object.__setattr__(settings, "SLIPPAGE_PCT", slippage_pct)
+    object.__setattr__(settings, "SLIPPAGE_PENALTY_RATIO", penalty_ratio)
+    object.__setattr__(settings, "SLIPPAGE_MAX_CAP", max_cap)
+    return originals
+
+
+def restore_slippage_settings(originals: tuple[float, float, float]) -> None:
+    object.__setattr__(settings, "SLIPPAGE_PCT", originals[0])
+    object.__setattr__(settings, "SLIPPAGE_PENALTY_RATIO", originals[1])
+    object.__setattr__(settings, "SLIPPAGE_MAX_CAP", originals[2])
+
+
 def build_price_frame() -> pd.DataFrame:
     dates = pd.date_range(datetime(2024, 1, 1), periods=55, freq="D")
     rows = []
@@ -57,6 +76,7 @@ def build_price_frame() -> pd.DataFrame:
                 "low": base - 0.5,
                 "close": base + 0.1,
                 "volume": 1000,
+                "atr": 0.0,
                 "rsi": 50.0,
                 "sma_20": base,
             }
@@ -80,7 +100,11 @@ def test_backtester_enters_on_next_bar_open():
         }
     )
 
-    result = backtester.run("TEST.IS", df, verbose=False)
+    originals = override_slippage_settings(0.0, 0.0, 0.02)
+    try:
+        result = backtester.run("TEST.IS", df, verbose=False)
+    finally:
+        restore_slippage_settings(originals)
 
     assert result is not None
     assert result.trades
@@ -107,10 +131,46 @@ def test_intrabar_simulation_uses_price_path_heuristic_for_same_bar_hits():
         }
     )
 
-    result = backtester.run("TEST.IS", df, verbose=False)
+    originals = override_slippage_settings(0.0, 0.0, 0.02)
+    try:
+        result = backtester.run("TEST.IS", df, verbose=False)
+    finally:
+        restore_slippage_settings(originals)
 
     assert result is not None
     assert result.trades
     trade = result.trades[0]
     assert trade.exit_reason == "STOP_LOSS"
     assert trade.exit_price == 9.0
+
+
+def test_dynamic_slippage_uses_atr_on_entry_and_exit():
+    df = build_price_frame()
+    df.iloc[1, df.columns.get_loc("open")] = 10.0
+    df.iloc[1, df.columns.get_loc("close")] = 10.2
+    df.iloc[1, df.columns.get_loc("atr")] = 1.0
+    df.iloc[-1, df.columns.get_loc("close")] = 15.0
+    df.iloc[-1, df.columns.get_loc("atr")] = 1.5
+
+    backtester = ScriptedBacktester(
+        {
+            1: {
+                "enter": True,
+                "exit": False,
+                "score": 25.0,
+                "stop_loss": 0.0,
+                "target_price": 0.0,
+            }
+        }
+    )
+    originals = override_slippage_settings(0.001, 0.15, 0.02)
+    try:
+        result = backtester.run("TEST.IS", df, verbose=False)
+    finally:
+        restore_slippage_settings(originals)
+
+    assert result is not None
+    assert result.trades
+    trade = result.trades[0]
+    assert trade.entry_price == 10.16
+    assert trade.exit_price == 14.76
