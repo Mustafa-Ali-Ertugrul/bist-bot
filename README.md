@@ -81,6 +81,10 @@ pytest tests/ -v
 ruff check . --isolated
 ```
 
+## Contributing
+
+Please read [CONTRIBUTING.md](./CONTRIBUTING.md) before opening a PR or pushing non-trivial changes.
+
 ## Lisans
 
 MIT
