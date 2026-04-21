@@ -1,16 +1,20 @@
+"""Market-hours scheduler for the CLI bot runtime."""
+
 import logging
-import config
 from datetime import datetime
 from time import sleep
+
+from config import settings as default_settings
 
 
 logger = logging.getLogger(__name__)
 
 
 class MarketScheduler:
-    def __init__(self, scan_service, notifier):
+    def __init__(self, scan_service, notifier, settings=default_settings):
         self.scanner = scan_service
         self.notifier = notifier
+        self.settings = settings
         self.running = False
 
     def run_loop(self):
@@ -31,33 +35,33 @@ class MarketScheduler:
                 sleep(3600)
                 continue
 
-            if hour < config.settings.MARKET_OPEN_HOUR:
-                wait = (config.settings.MARKET_OPEN_HOUR - hour) * 3600
+            if hour < self.settings.MARKET_OPEN_HOUR:
+                wait = (self.settings.MARKET_OPEN_HOUR - hour) * 3600
                 logger.info(
                     f"⏰ Borsa henüz açılmadı. "
-                    f"{config.settings.MARKET_OPEN_HOUR}:00'da başlayacak..."
+                    f"{self.settings.MARKET_OPEN_HOUR}:00'da başlayacak..."
                 )
                 sleep(min(wait, 1800))
                 continue
 
-            warmup_minutes = getattr(config.settings, "MARKET_WARMUP_MINUTES", 15)
-            half_day_hour = getattr(config.settings, "MARKET_HALF_DAY_HOUR", 13)
+            warmup_minutes = getattr(self.settings, "MARKET_WARMUP_MINUTES", 15)
+            half_day_hour = getattr(self.settings, "MARKET_HALF_DAY_HOUR", 13)
 
-            if hour >= config.settings.MARKET_CLOSE_HOUR:
+            if hour >= self.settings.MARKET_CLOSE_HOUR:
                 logger.info("🌙 Borsa kapandı. Yarın görüşürüz!")
                 self.scanner.scan_once()
                 sleep(3600 * 14)
                 continue
 
-            if hour == config.settings.MARKET_OPEN_HOUR and minute < warmup_minutes:
+            if hour == self.settings.MARKET_OPEN_HOUR and minute < warmup_minutes:
                 logger.info(f"🌅 Açılış gürültüsü - ilk {warmup_minutes} dakika bekleniyor...")
                 sleep(60)
                 continue
 
-            if hour >= half_day_hour and hour < config.settings.MARKET_CLOSE_HOUR:
+            if hour >= half_day_hour and hour < self.settings.MARKET_CLOSE_HOUR:
                 logger.info("🌓 Yarım gün - sadece son saatlerde tarama yapılıyor")
                 self.scanner.scan_once()
-                sleep(3600 * (config.settings.MARKET_CLOSE_HOUR - half_day_hour))
+                sleep(3600 * (self.settings.MARKET_CLOSE_HOUR - half_day_hour))
                 continue
 
             try:
@@ -68,10 +72,10 @@ class MarketScheduler:
 
             logger.info(
                 f"\n⏳ Sonraki tarama: "
-                f"{config.settings.SCAN_INTERVAL_MINUTES} dakika sonra"
+                f"{self.settings.SCAN_INTERVAL_MINUTES} dakika sonra"
             )
 
-            for _ in range(config.settings.SCAN_INTERVAL_MINUTES * 6):
+            for _ in range(self.settings.SCAN_INTERVAL_MINUTES * 6):
                 if not self.running:
                     break
                 sleep(10)

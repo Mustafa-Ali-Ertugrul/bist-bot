@@ -1,50 +1,36 @@
-import io
+"""Primary runtime entry point for the bot and scheduler process."""
+
 import logging
 import sys
-from logging.handlers import RotatingFileHandler
 
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+from app_logging import configure_logging
 
-handler_file = RotatingFileHandler(
-    "bot.log", maxBytes=5 * 1024 * 1024, backupCount=3, encoding="utf-8"
-)
-handler_console = logging.StreamHandler()
-fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S")
-handler_file.setFormatter(fmt)
-handler_console.setFormatter(fmt)
-logging.basicConfig(level=logging.INFO, handlers=[handler_file, handler_console])
 logger = logging.getLogger(__name__)
 
 
 def main():
-    from data_fetcher import BISTDataFetcher
-    from strategy import StrategyEngine
-    from notifier import TelegramNotifier
-    from database import SignalDatabase
+    """Run the CLI-oriented bot process.
+
+    Modes:
+    - default: scheduler + embedded Flask dashboard
+    - --once: single scan
+    - --backtest: run watchlist backtests
+    - --dashboard: run only the Flask dashboard
+    """
+    configure_logging()
+
+    from dashboard import create_default_dashboard_app
+    from dependencies import get_default_container
     from scanner import ScanService
     from scheduler import MarketScheduler
     from backtest_runner import run_backtest
     from threading import Thread
 
-    import config
+    from config import settings
 
-    def create_runtime_dashboard_app():
-        from dashboard import create_dashboard_app
-        from dependencies import build_app_container
-
-        dashboard_container = build_app_container()
-        return create_dashboard_app(
-            fetcher=dashboard_container.fetcher,
-            engine=dashboard_container.engine,
-            db=dashboard_container.db,
-        )
-
-    fetcher = BISTDataFetcher()
-    engine = StrategyEngine()
-    notifier = TelegramNotifier()
-    db = SignalDatabase()
-    scanner = ScanService(fetcher, engine, notifier, db)
-    scheduler = MarketScheduler(scanner, notifier)
+    container = get_default_container()
+    scanner = ScanService(container.fetcher, container.engine, container.notifier, container.db, settings=settings)
+    scheduler = MarketScheduler(scanner, container.notifier, settings=settings)
 
     def shutdown(signum, frame):
         logger.info("🛑 Bot durduruluyor...")
@@ -56,18 +42,18 @@ def main():
     if "--once" in sys.argv:
         scanner.scan_once()
     elif "--backtest" in sys.argv:
-        run_backtest(fetcher)
+        run_backtest(container.fetcher)
     elif "--dashboard" in sys.argv:
-        app = create_runtime_dashboard_app()
-        app.run(host="0.0.0.0", port=config.FLASK_PORT, debug=config.FLASK_DEBUG)
+        app = create_default_dashboard_app(container)
+        app.run(host="0.0.0.0", port=settings.FLASK_PORT, debug=settings.FLASK_DEBUG)
     else:
-        app = create_runtime_dashboard_app()
+        app = create_default_dashboard_app(container)
         t = Thread(
-            target=lambda: app.run(host="0.0.0.0", port=config.FLASK_PORT, debug=False, use_reloader=False),
+            target=lambda: app.run(host="0.0.0.0", port=settings.FLASK_PORT, debug=False, use_reloader=False),
             daemon=True
         )
         t.start()
-        logger.info(f"🌐 Dashboard: http://localhost:{config.FLASK_PORT}")
+        logger.info(f"🌐 Dashboard: http://localhost:{settings.FLASK_PORT}")
         scheduler.run_loop()
 
 

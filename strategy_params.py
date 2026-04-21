@@ -1,4 +1,6 @@
-from dataclasses import dataclass
+"""Centralized strategy threshold and scoring defaults."""
+
+from dataclasses import dataclass, field
 
 from config import settings
 
@@ -7,13 +9,13 @@ from config import settings
 class StrategyParams:
     """Strateji motoru için dışarıdan yapılandırılabilir parametreler."""
 
-    # Eşik Değerleri (Thresholds)
-    strong_buy_threshold: float = getattr(settings, "STRONG_BUY_THRESHOLD", 40.0)
-    buy_threshold: float = getattr(settings, "BUY_THRESHOLD", 10.0)
-    weak_buy_threshold: float = getattr(settings, "WEAK_BUY_THRESHOLD", 8.0)
-    weak_sell_threshold: float = getattr(settings, "WEAK_SELL_THRESHOLD", -8.0)
-    sell_threshold: float = getattr(settings, "SELL_THRESHOLD", -10.0)
-    strong_sell_threshold: float = getattr(settings, "STRONG_SELL_THRESHOLD", -40.0)
+    # Eşik değerlerinin tek kaynağı `config.settings` içindeki ayarlardır.
+    strong_buy_threshold: float = field(default_factory=lambda: float(settings.STRONG_BUY_THRESHOLD))
+    buy_threshold: float = field(default_factory=lambda: float(settings.BUY_THRESHOLD))
+    weak_buy_threshold: float = field(default_factory=lambda: float(settings.WEAK_BUY_THRESHOLD))
+    weak_sell_threshold: float = field(default_factory=lambda: float(settings.WEAK_SELL_THRESHOLD))
+    sell_threshold: float = field(default_factory=lambda: float(settings.SELL_THRESHOLD))
+    strong_sell_threshold: float = field(default_factory=lambda: float(settings.STRONG_SELL_THRESHOLD))
 
     # RSI Parametreleri
     rsi_oversold_extreme: float = 25.0

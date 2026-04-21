@@ -9,7 +9,6 @@ Kullanim:
     python backtest_compare.py
     python backtest_compare.py --tickers THYAO.IS ASELS.IS --period 1y
 """
-import io
 import argparse
 import logging
 import sys
@@ -18,18 +17,14 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from config import settings
+from app_logging import configure_logging
 from backtest import Backtester, StrategyBacktester, compare_benchmark
+from config import settings
 from data_fetcher import BISTDataFetcher
 from indicators import TechnicalIndicators
-from strategy import MarketRegime, StrategyEngine, detect_regime
+from strategy import StrategyEngine
+from strategy_regime import MarketRegime, detect_regime
 
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-
-logging.basicConfig(
-    level=logging.WARNING,
-    format="%(levelname)s | %(message)s",
-)
 logger = logging.getLogger(__name__)
 
 
@@ -156,8 +151,8 @@ def run(tickers: list[str], period: str = "1y") -> list[CompareRow]:
     fetcher = BISTDataFetcher()
     old_bt = Backtester(
         initial_capital=getattr(settings, "INITIAL_CAPITAL", 8500.0),
-        buy_threshold=getattr(settings, "BUY_THRESHOLD", 10),
-        sell_threshold=getattr(settings, "SELL_THRESHOLD", -10),
+        buy_threshold=settings.BUY_THRESHOLD,
+        sell_threshold=settings.SELL_THRESHOLD,
     )
     new_bt = StrategyBacktester(
         initial_capital=getattr(settings, "INITIAL_CAPITAL", 8500.0),
@@ -214,6 +209,7 @@ def run(tickers: list[str], period: str = "1y") -> list[CompareRow]:
 
 
 def main():
+    configure_logging(level=logging.WARNING, log_file=None, fmt="%(levelname)s | %(message)s")
     parser = argparse.ArgumentParser(description="Eski vs Yeni backtest karşılaştırması")
     parser.add_argument(
         "--tickers",

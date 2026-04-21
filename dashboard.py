@@ -1,3 +1,9 @@
+"""Flask dashboard entry point and app factory.
+
+Use `create_dashboard_app(...)` when embedding Flask in another process.
+Run this module directly only when you want the standalone Flask dashboard.
+"""
+
 from __future__ import annotations
 
 import logging
@@ -9,7 +15,7 @@ from flask import Flask, jsonify, render_template, request
 
 from config import settings
 from contracts import DataFetcherProtocol, SignalRepositoryProtocol, StrategyEngineProtocol
-from dependencies import build_app_container
+from dependencies import AppContainer, get_default_container
 from indicators import TechnicalIndicators
 
 TR = timezone(timedelta(hours=3))
@@ -30,6 +36,7 @@ def create_dashboard_app(
     engine: StrategyEngineProtocol,
     db: SignalRepositoryProtocol,
 ) -> Flask:
+    """Create the standalone Flask dashboard application."""
     app = Flask(__name__)
     app.config["fetcher"] = fetcher
     app.config["engine"] = engine
@@ -79,8 +86,7 @@ def create_dashboard_app(
             signals = runtime_engine.scan_all(all_data)
             actionable = runtime_engine.get_actionable_signals(signals)
 
-            for signal in actionable:
-                runtime_db.save_signal(signal)
+            runtime_db.save_signals(actionable)
 
             buys = [signal for signal in signals if signal.score > 0]
             sells = [signal for signal in signals if signal.score < 0]
@@ -187,15 +193,26 @@ def create_dashboard_app(
 
     return app
 
-if __name__ == "__main__":
-    dashboard_container = build_app_container()
-    app = create_dashboard_app(
-        fetcher=dashboard_container.fetcher,
-        engine=dashboard_container.engine,
-        db=dashboard_container.db,
+
+def create_default_dashboard_app(container: AppContainer | None = None) -> Flask:
+    """Build the Flask dashboard from the shared application container."""
+    runtime_container = container or get_default_container()
+    return create_dashboard_app(
+        fetcher=runtime_container.fetcher,
+        engine=runtime_container.engine,
+        db=runtime_container.db,
     )
+
+
+def main() -> None:
+    """Run the standalone Flask dashboard process."""
+    app = create_default_dashboard_app()
     app.run(
         host="0.0.0.0",
         port=settings.FLASK_PORT,
         debug=settings.FLASK_DEBUG,
     )
+
+
+if __name__ == "__main__":
+    main()

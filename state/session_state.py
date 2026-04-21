@@ -1,3 +1,5 @@
+"""Streamlit session state bootstrap for the primary UI flow."""
+
 from __future__ import annotations
 
 import uuid
@@ -6,20 +8,20 @@ import streamlit as st
 
 from config import settings
 import config_store
-from dependencies import build_app_container
-
-DEFAULT_CONTAINER = build_app_container()
+from dependencies import get_default_container
 
 
 def init_session_state(container=None) -> None:
+    """Populate Streamlit session state from the shared app container."""
     if "_initialized" in st.session_state:
         return
 
-    runtime_container = container or DEFAULT_CONTAINER
+    runtime_container = container or get_default_container()
     defaults = {
         "data_fetcher": runtime_container.fetcher,
         "engine": runtime_container.engine,
         "notifier": runtime_container.notifier,
+        "db": runtime_container.db,
         "signals": [],
         "all_data": {},
         "auto_refresh": False,

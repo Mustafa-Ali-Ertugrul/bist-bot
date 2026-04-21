@@ -1,14 +1,20 @@
+"""Repository facade used by application runtime code."""
+
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Optional
 
 from db.database import DatabaseManager
 from db.repositories.config_repository import ConfigRepository
 from db.repositories.portfolio_repository import PortfolioRepository
 from db.repositories.signals_repository import SignalsRepository
+from signal_models import Signal
 
 
 class AppRepository:
+    """Thin application-facing facade over signal, portfolio, and config repositories."""
+
     def __init__(self, manager: Optional[DatabaseManager] = None) -> None:
         self.manager = manager or DatabaseManager()
         self.signals = SignalsRepository(self.manager)
@@ -18,8 +24,12 @@ class AppRepository:
     def ping(self) -> bool:
         return self.manager.ping()
 
-    def save_signal(self, signal):
+    def save_signal(self, signal: Signal) -> None:
         return self.signals.save_signal(signal)
+
+    def save_signals(self, signals: Sequence[Signal]) -> None:
+        for signal in signals:
+            self.save_signal(signal)
 
     def get_signals(self, limit: int = 50, ticker: str | None = None):
         return self.signals.get_signals(limit=limit, ticker=ticker)

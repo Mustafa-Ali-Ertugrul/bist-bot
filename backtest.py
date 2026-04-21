@@ -175,10 +175,10 @@ class Backtester:
             slippage_pct if slippage_pct is not None else getattr(settings, "BACKTEST_SLIPPAGE_PCT", 0.0005)
         )
         self.buy_threshold = float(
-            buy_threshold if buy_threshold is not None else getattr(settings, "BUY_THRESHOLD", 10)
+            buy_threshold if buy_threshold is not None else settings.BUY_THRESHOLD
         )
         self.sell_threshold = float(
-            sell_threshold if sell_threshold is not None else getattr(settings, "SELL_THRESHOLD", -10)
+            sell_threshold if sell_threshold is not None else settings.SELL_THRESHOLD
         )
         self.target_rr = float(target_rr)
         self.indicators = indicators or TechnicalIndicators()

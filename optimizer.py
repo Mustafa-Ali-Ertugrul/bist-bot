@@ -7,6 +7,7 @@ from typing import Dict, List, Any, Optional, Tuple
 
 import pandas as pd
 
+from app_logging import configure_logging
 from strategy_params import StrategyParams
 from strategy import StrategyEngine
 from backtest import StrategyBacktester, BacktestResult
@@ -216,7 +217,7 @@ class StrategyOptimizer:
 if __name__ == "__main__":
     from data_fetcher import BISTDataFetcher
 
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    configure_logging(level=logging.INFO, log_file=None, fmt="%(message)s")
 
     fetcher = BISTDataFetcher()
     ticker = "THYAO.IS"

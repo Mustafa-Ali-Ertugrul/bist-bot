@@ -1,29 +1,21 @@
 """Market data fetching helpers for BIST symbols."""
 
-import yfinance as yf
 import pandas as pd
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from functools import wraps
 from typing import cast
 import logging
-import re
 import time
-import requests
-from bs4 import BeautifulSoup
+
+import yfinance as yf
 
 from config import settings
 from data.bist100 import BIST100_TICKERS
+import data_fetcher_helpers as fetch_helpers
+import data_fetcher_quotes as fetch_quotes
+from data_fetcher_scraper import scrape_bist_quote
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%H:%M:%S"
-)
 logger = logging.getLogger(__name__)
-
-_BIST100_CACHE: list[str] | None = None
-_BIST100_CACHE_TIME: datetime | None = None
 
 
 class RateLimiter:
@@ -31,16 +23,12 @@ class RateLimiter:
 
     Her domain icin son istek zamanini izler ve minimum bekleme suresi
     uygulanarak ardisik isteklerin cok sik gonderilmesini engeller.
-
-    Attributes:
-        last_request: Domain bazli son istek zamanlarini tutar.
     """
 
     def __init__(self):
         self.last_request: dict[str, float] = {}
 
     def wait_if_needed(self, domain: str) -> None:
-        """Domain için yeterli süre geçmediyse bekle."""
         current_time = time.time()
         min_interval = float(getattr(settings, "RATE_LIMIT_SECONDS", 2.0))
         last_request = self.last_request.get(domain)
@@ -54,264 +42,32 @@ class RateLimiter:
 _rate_limiter = RateLimiter()
 
 
-def rate_limited(domain: str = "default"):
-    """Wrap a function with domain-based rate limiting.
-
-    Args:
-        domain: Logical domain key used by the shared rate limiter.
-
-    Returns:
-        Decorator function.
-    """
-
-    def decorator(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            _rate_limiter.wait_if_needed(domain)
-            return func(*args, **kwargs)
-
-        return wrapper
-
-    return decorator
-
-
 def _parse_tr_number(raw: str) -> float | None:
-    """Parse Turkish-formatted numeric text into a float.
-
-    Args:
-        raw: Raw text value that may contain separators or percent signs.
-
-    Returns:
-        Parsed float value, or ``None`` if parsing fails.
-    """
-    cleaned = raw.strip().replace("%", "").replace("\u00a0", " ")
-    cleaned = cleaned.replace(".", "").replace(",", ".")
-    cleaned = re.sub(r"[^0-9+\-.]", "", cleaned)
-    if not cleaned:
-        return None
-    try:
-        return float(cleaned)
-    except ValueError:
-        return None
-
-
-def get_price_from_bist_website(ticker: str) -> dict[str, float | str] | None:
-    """Fetch a near real-time quote from the Borsa Istanbul website.
-
-    Args:
-        ticker: Stock symbol such as ``THYAO.IS``.
-
-    Returns:
-        Quote payload with ``price``, ``change_percent`` and ``source`` fields,
-        or ``None`` when no parsable quote is found.
-    """
-    symbol = ticker.replace(".IS", "").upper()
-    candidate_urls = [
-        f"https://www.borsaistanbul.com/tr/sirketler/islem-goren-sirketler/sirket-bilgileri?kod={symbol}",
-        f"https://www.borsaistanbul.com/tr/sirketler/sirket-karti?kod={symbol}",
-    ]
-    headers = {"User-Agent": "Mozilla/5.0"}
-
-    for url in candidate_urls:
-        try:
-            _rate_limiter.wait_if_needed("borsaistanbul.com.tr")
-            # Uretimde kullanmadan once robots.txt ve site kullanim kosullari kontrol edilmeli.
-            response = requests.get(url, timeout=10, headers=headers)
-            response.raise_for_status()
-
-            soup = BeautifulSoup(response.text, "html.parser")
-            text_blobs = [soup.get_text(" ", strip=True)]
-            text_blobs.extend(script.get_text(" ", strip=True) for script in soup.find_all("script"))
-
-            price = None
-            change_percent = None
-            for blob in text_blobs:
-                if not blob:
-                    continue
-
-                price_match = re.search(
-                    r"(?:Son(?:\s+Değer|\s+Fiyat)?|LastPrice|price)\D{0,20}([0-9]{1,3}(?:[\.,][0-9]{3})*(?:[\.,][0-9]{2}))",
-                    blob,
-                    re.IGNORECASE,
-                )
-                if price is None and price_match:
-                    price = _parse_tr_number(price_match.group(1))
-
-                change_match = re.search(
-                    r"(?:Değişim%|Degisim%|changePercent|change_percent|Bugün\s*\(%\))\D{0,20}([+-]?[0-9]{1,3}(?:[\.,][0-9]{1,2})?)",
-                    blob,
-                    re.IGNORECASE,
-                )
-                if change_percent is None and change_match:
-                    change_percent = _parse_tr_number(change_match.group(1))
-
-                if price is not None:
-                    return {
-                        "price": price,
-                        "change_percent": change_percent if change_percent is not None else 0.0,
-                        "source": "borsaistanbul.com",
-                    }
-        except Exception as e:
-            logger.warning(f"BIST website fiyat cekme hatasi ({symbol}): {e}")
-
-    return None
-
-
-def get_bist100_tickers(force_refresh: bool = False) -> list[str]:
-    """Build the watchlist ticker set with cache and fallback support.
-
-    Args:
-        force_refresh: Bypass the in-memory cache when ``True``.
-
-    Returns:
-        Normalized ticker list.
-    """
-    # Demo/watchlist: Yahoo Finance screener (day_gainers). Gercek BIST100 endeksi icin BIST-DDS gerekli.
-    global _BIST100_CACHE, _BIST100_CACHE_TIME
-
-    if not force_refresh:
-        cached = _BIST100_CACHE
-        cached_time = _BIST100_CACHE_TIME
-        if cached and cached_time and (datetime.now() - cached_time).total_seconds() < 3600:
-            logger.info(f"Demo/watchlist cache hit: {len(cached)} tickers")
-            return cached
-
-    tickers = []
-
-    try:
-        _rate_limiter.wait_if_needed("yahoo.finance")
-        response = requests.get(
-            "https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved?formatted=true&lang=tr-TR&region=TR&scrIds=day_gainers&start=0&count=10",
-            timeout=10,
-            headers={"User-Agent": "Mozilla/5.0"}
-        )
-        if response.status_code == 200:
-            data = response.json()
-            results = data.get("finance", {}).get("result", [])
-            if results:
-                for item in results[0].get("quotes", []):
-                    symbol = item.get("symbol", "")
-                    if symbol and not symbol.endswith(".IS"):
-                        symbol = symbol + ".IS"
-                    if symbol.endswith(".IS"):
-                        tickers.append(symbol)
-    except Exception as e:
-        logger.warning(f"Demo/watchlist dynamic fetch hatasi: {e}")
-
-    tickers = _clean_ticker_list(tickers)
-
-    if len(tickers) >= 50:
-        _BIST100_CACHE = tickers
-        _BIST100_CACHE_TIME = datetime.now()
-        logger.info(f"Demo/watchlist dynamic yüklendi: {len(tickers)} hisse")
-        return tickers
-
-    logger.info(f"Demo/watchlist dynamic yetersiz ({len(tickers)}), fallback kullaniliyor")
-    fallback = BIST100_TICKERS
-    if fallback:
-        fallback_clean = _clean_ticker_list(fallback)
-        _BIST100_CACHE = fallback_clean
-        _BIST100_CACHE_TIME = datetime.now()
-        return fallback_clean
-
-    _BIST100_CACHE = []
-    _BIST100_CACHE_TIME = datetime.now()
-    return []
-
-
-def normalize_ticker(ticker: str) -> str:
-    """Normalize a single ticker into uppercase BIST format.
-
-    Args:
-        ticker: Raw symbol such as ``thyao`` or ``THYAO.IS``.
-
-    Returns:
-        Upper-cased ticker with ``.IS`` suffix.
-    """
-    normalized = ticker.strip().upper()
-    if not normalized:
-        return ""
-    if not normalized.endswith(".IS"):
-        normalized = normalized + ".IS"
-    return normalized
+    return fetch_quotes.parse_tr_number(raw)
 
 
 def _clean_ticker_list(tickers: list[str]) -> list[str]:
-    """Normalize ticker symbols and remove duplicates.
+    return fetch_helpers.clean_ticker_list(tickers)
 
-    Args:
-        tickers: Raw ticker list.
 
-    Returns:
-        Deduplicated normalized ticker list.
-    """
-    seen = set()
-    result = []
-    for raw_ticker in tickers:
-        ticker = normalize_ticker(raw_ticker)
-        if not ticker or ticker in seen:
-            continue
-        seen.add(ticker)
-        result.append(ticker)
-    return result
+def normalize_ticker(ticker: str) -> str:
+    return fetch_helpers.normalize_ticker(ticker)
 
 
 def validate_data(df: pd.DataFrame | None, min_rows: int = 5) -> bool:
-    """Validate downloaded OHLCV data before normalization.
-
-    Args:
-        df: Raw dataframe to validate.
-        min_rows: Minimum acceptable row count.
-
-    Returns:
-        ``True`` when the dataframe is usable, otherwise ``False``.
-    """
-    if df is None or df.empty:
-        return False
-    if len(df) < min_rows:
-        return False
-    if df.isnull().all(axis=1).mean() > 0.20:
-        return False
-    return True
+    return fetch_helpers.validate_data(df, min_rows=min_rows)
 
 
-def fetch_ohlcv(ticker: str, period: str, interval: str) -> pd.DataFrame | None:
-    """Fetch raw OHLCV data from yfinance.
+def get_bist100_tickers(force_refresh: bool = False) -> list[str]:
+    return fetch_quotes.get_bist100_tickers(_rate_limiter, force_refresh=force_refresh)
 
-    Args:
-        ticker: Normalized ticker symbol.
-        period: Lookback period.
-        interval: Candle interval.
 
-    Returns:
-        Raw dataframe from yfinance or ``None`` when unavailable.
-    """
-    _rate_limiter.wait_if_needed("yahoo.finance")
-    stock = yf.Ticker(ticker)
-    return stock.history(period=period, interval=interval)
+def get_price_from_bist_website(ticker: str) -> dict[str, float | str] | None:
+    return fetch_quotes.get_price_from_bist_website(ticker, _rate_limiter)
 
 
 def fetch_with_fallback(ticker: str, period: str, interval: str) -> pd.DataFrame | None:
-    """Fetch data safely, logging failures and returning ``None`` on error.
-
-    Args:
-        ticker: Raw or normalized ticker symbol.
-        period: Lookback period.
-        interval: Candle interval.
-
-    Returns:
-        Raw dataframe when available, otherwise ``None``.
-    """
-    normalized_ticker = normalize_ticker(ticker)
-    try:
-        df = fetch_ohlcv(normalized_ticker, period=period, interval=interval)
-        if not validate_data(df):
-            logger.warning("⚠️ %s icin bos veya yetersiz veri dondu", normalized_ticker)
-            return None
-        return df
-    except Exception as exc:
-        logger.error("❌ %s veri cekilemedi: %s", normalized_ticker, exc)
-        return None
+    return fetch_helpers.fetch_with_fallback(ticker, period, interval, _rate_limiter)
 
 
 class BISTDataFetcher:
@@ -605,14 +361,29 @@ class BISTDataFetcher:
             Latest price if available, otherwise ``None``.
         """
         if getattr(settings, "ENABLE_REALTIME_SCRAPING", True):
-            scraped = get_price_from_bist_website(ticker)
-            if scraped is not None:
-                logger.info(f"  ⚡ {ticker}: anlik fiyat BIST web sitesinden alindi")
-                return float(scraped["price"])
+            try:
+                scraped_result = scrape_bist_quote(ticker, _rate_limiter)
+            except Exception as exc:
+                scraped_result = None
+                logger.warning("⚠️ %s realtime scrape beklenmeyen hatayla başarısız oldu: %s", ticker, exc)
+
+            if scraped_result and scraped_result.success and scraped_result.price is not None:
+                logger.info("⚡ %s realtime fiyat scrape ile alındı", ticker)
+                return float(scraped_result.price)
+
+            if scraped_result is not None:
+                logger.info(
+                    "↩️ %s scrape başarısız (%s); Yahoo fallback kullanılacak",
+                    ticker,
+                    scraped_result.detail or "bilinmeyen-neden",
+                )
 
         df = self.fetch_single(ticker, period="5d", interval="1d")
         if df is not None and not df.empty:
+            logger.info("📉 %s fiyatı Yahoo history fallback ile alındı", ticker)
             return float(df["close"].iloc[-1])
+
+        logger.error("❌ %s için realtime scrape ve Yahoo fallback birlikte başarısız oldu", ticker)
         return None
 
     def get_stock_info(self, ticker: str) -> dict[str, str | int | float | None]:

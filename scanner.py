@@ -1,10 +1,13 @@
+"""Scan orchestration service shared by CLI and dashboard flows."""
+
 import logging
 from datetime import datetime
 from time import sleep
 from typing import Any
 
 from config import settings as default_settings
-from strategy import SignalType, Signal, detect_regime
+from signal_models import Signal, SignalType
+from strategy_regime import detect_regime
 
 
 logger = logging.getLogger(__name__)
@@ -12,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 class ScanService:
     def __init__(self, fetcher, engine, notifier, db, settings: Any | None = None):
+        """Compose fetch, analyze, persistence, and notification steps."""
         self.fetcher = fetcher
         self.engine = engine
         self.notifier = notifier
@@ -83,8 +87,9 @@ class ScanService:
 
         self._check_signal_changes(signals)
 
+        self.db.save_signals(actionable)
+
         for s in actionable:
-            self.db.save_signal(s)
 
             if getattr(self.settings, "PAPER_MODE", False):
                 regime_enum = detect_regime(self.fetcher.fetch_single(s.ticker, period="3mo"))

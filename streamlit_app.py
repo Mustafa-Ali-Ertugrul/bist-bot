@@ -1,3 +1,5 @@
+"""Streamlit entry point for the interactive operator dashboard."""
+
 import streamlit as st
 
 from state.session_state import init_session_state
@@ -16,6 +18,7 @@ st.set_page_config(
 
 
 def main() -> None:
+    """Render the Streamlit UI pages and initialize shared runtime state."""
     init_session_state()
     prepare_streamlit_runtime()
 
