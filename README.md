@@ -109,7 +109,9 @@ ruff check . --isolated
 
 ## Known Limitations
 
-- `yfinance` verisi delisted hisseleri her zaman icermeyebilir; bu nedenle backtest ve walk-forward sonuclarinda survivorship bias olasi kalir.
+- **Survivorship bias**: `yfinance` verisi delisted hisseleri her zaman icermeyebilir; backtest ve walk-forward sonuclarinda survivorship bias olasıdır.
+- **Intraday gecikme**: BIST verileri 15 dakika gecikmeli sunulur; gerçek zamanli emirde fiyat farkı oluşabilir.
+- **Rate limit**: yfinance ve BIST scraper için rate limit mevcuttur; coklu isteklerde 429 donusu alınabilir.
 
 ## Security
 

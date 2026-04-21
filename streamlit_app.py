@@ -3,7 +3,9 @@
 import streamlit as st
 
 from state.session_state import init_session_state
+from ui.pages.analyze_page import render_analyze_page
 from ui.pages.backtest_page import render_backtest_page
+from ui.pages.overview_page import render_overview_page
 from ui.pages.portfolio_page import render_portfolio_page
 from ui.pages.settings_page import render_settings_page
 from ui.pages.signals_page import render_signals_page
@@ -64,11 +66,15 @@ def main() -> None:
 
     page = st.sidebar.radio(
         "Navigasyon",
-        options=["Portfolio", "Signals", "Backtest", "Settings"],
+        options=["Overview", "Analyze", "Portfolio", "Signals", "Backtest", "Settings"],
         index=0,
     )
 
-    if page == "Portfolio":
+    if page == "Overview":
+        render_overview_page()
+    elif page == "Analyze":
+        render_analyze_page()
+    elif page == "Portfolio":
         render_portfolio_page()
     elif page == "Signals":
         render_signals_page()
