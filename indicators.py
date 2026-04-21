@@ -147,22 +147,29 @@ class TechnicalIndicators:
     @staticmethod
     def add_adx(df: pd.DataFrame, period: int = 14) -> pd.DataFrame:
         df = df.copy()
-        
+
         high_diff = df["high"].diff()
         low_diff = -df["low"].diff()
-        
-        plus_dm = np.where((high_diff > low_diff) & (high_diff > 0), high_diff, 0)
-        np.where((low_diff > high_diff) & (low_diff > 0), low_diff, 0)
-        
-        df["plus_dm"] = plus_dm
-        df["minus_dm"] = low_diff.clip(lower=0)
-        df.loc[low_diff <= high_diff, "minus_dm"] = 0
-        
-        plus_di = 100 * df["plus_dm"].rolling(window=period).mean() / df["atr"]
-        minus_di = 100 * df["minus_dm"].rolling(window=period).mean() / df["atr"]
-        
-        dx = 100 * abs(plus_di - minus_di) / (plus_di + minus_di)
-        df["adx"] = dx.rolling(window=period).mean()
+
+        df["plus_dm"] = pd.Series(
+            np.where((high_diff > low_diff) & (high_diff > 0), high_diff, 0.0),
+            index=df.index,
+        )
+        df["minus_dm"] = pd.Series(
+            np.where((low_diff > high_diff) & (low_diff > 0), low_diff, 0.0),
+            index=df.index,
+        )
+
+        smoothed_plus_dm = df["plus_dm"].ewm(alpha=1 / period, adjust=False, min_periods=period).mean()
+        smoothed_minus_dm = df["minus_dm"].ewm(alpha=1 / period, adjust=False, min_periods=period).mean()
+        atr = df["atr"].replace(0, np.nan)
+
+        plus_di = 100 * smoothed_plus_dm / atr
+        minus_di = 100 * smoothed_minus_dm / atr
+
+        di_sum = (plus_di + minus_di).replace(0, np.nan)
+        dx = 100 * (plus_di - minus_di).abs() / di_sum
+        df["adx"] = dx.ewm(alpha=1 / period, adjust=False, min_periods=period).mean()
         df["plus_di"] = plus_di
         df["minus_di"] = minus_di
         
@@ -357,11 +364,11 @@ class TechnicalIndicators:
         high_low = df["high"] - df["low"]
         high_close = abs(df["high"] - df["close"].shift(1))
         low_close = abs(df["low"] - df["close"].shift(1))
-        
+
         tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
-        df["atr"] = tr.rolling(window=period).mean()
+        df["atr"] = tr.ewm(alpha=1 / period, adjust=False, min_periods=period).mean()
         df["stop_loss_atr"] = df["close"] - (2 * df["atr"])
-        
+
         return df
 
     @staticmethod
