@@ -186,7 +186,6 @@ def test_calculate_risk_throttle_edge_cases():
     
     # Test moderate ATR pct
     result = manager._calculate_risk_throttle(0.05)  # Double baseline
-    expected = 0.025 / 0.05  # 0.5
     assert result == 0.5  # Between baseline and 1.0
 
 
@@ -204,7 +203,6 @@ def test_get_correlated_positions_uses_global_cache():
     }
     
     # Setup mock global correlation cache
-    import numpy as np
     mock_corr = pd.DataFrame(
         [[1.0, 0.8], [0.8, 1.0]],
         index=["TICKER3.IS", "TICKER1.IS"],
