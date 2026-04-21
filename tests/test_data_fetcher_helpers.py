@@ -3,14 +3,11 @@
 from __future__ import annotations
 
 import pandas as pd
-import pytest
 
 from data_fetcher_helpers import (
     clean_ticker_list,
     normalize_ticker,
     validate_data,
-    fetch_ohlcv,
-    fetch_with_fallback,
 )
 
 

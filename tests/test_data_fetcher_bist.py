@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import pandas as pd
 import pytest
 
 from data_fetcher import BISTDataFetcher, _rate_limiter
-from data_fetcher_scraper import ScrapeQuoteResult
 
 
 @dataclass
@@ -66,7 +64,7 @@ def test_get_current_price_realtime_failure_yahoo_fallback():
         "volume": [1000, 1100, 1200]
     }, index=pd.date_range(start="2025-01-01", periods=3))
     
-    with patch("data_fetcher.scrape_bist_quote", return_value=mock_scrape_result) as mock_scrape:
+    with patch("data_fetcher.scrape_bist_quote", return_value=mock_scrape_result):
         with patch("data_fetcher.settings") as mock_settings:
             mock_settings.ENABLE_REALTIME_SCRAPING = True
             
@@ -86,7 +84,7 @@ def test_get_current_price_both_fail():
     mock_scrape_result = MockScrapeResult(success=False, detail="some error")
     
     # Mock fetch_single to return None (simulating failure)
-    with patch("data_fetcher.scrape_bist_quote", return_value=mock_scrape_result) as mock_scrape:
+    with patch("data_fetcher.scrape_bist_quote", return_value=mock_scrape_result):
         with patch("data_fetcher.settings") as mock_settings:
             mock_settings.ENABLE_REALTIME_SCRAPING = True
             

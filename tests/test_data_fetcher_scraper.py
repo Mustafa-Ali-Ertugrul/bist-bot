@@ -3,15 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Generator
-import pytest
 import requests
 
 from data_fetcher_scraper import (
     _parse_number,
     _extract_quote_from_text,
     _extract_quote_from_html,
-    ScrapeQuoteResult,
     scrape_bist_quote,
 )
 
