@@ -3,10 +3,11 @@ from signal_models import Signal, SignalType
 from strategy import StrategyEngine
 
 
-def check_signals(ticker, df):
+def check_signals(ticker, df, engine: StrategyEngine | None = None):
     if df is None:
         return None
-    return StrategyEngine().analyze(ticker, df, enforce_sector_limit=False)
+    runtime_engine = engine or StrategyEngine()
+    return runtime_engine.analyze(ticker, df, enforce_sector_limit=False)
 
 
 def send_signal_notification(

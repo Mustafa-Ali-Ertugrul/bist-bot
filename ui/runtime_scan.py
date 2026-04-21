@@ -67,7 +67,7 @@ def collect_scan_result(fetcher, engine, notifier, db, last_scan_time: datetime 
     db.save_signals(signals)
 
     for ticker, market_data in timeframe_data.items():
-        signal = check_signals(ticker, market_data)
+        signal = check_signals(ticker, market_data, engine=engine)
         if signal is not None:
             send_signal_notification(signal, notifier)
 

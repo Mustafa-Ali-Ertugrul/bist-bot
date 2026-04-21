@@ -45,20 +45,6 @@ class ScriptedBacktester(Backtester):
         )
 
 
-def override_slippage_settings(slippage_pct: float, penalty_ratio: float, max_cap: float):
-    override = settings.override(
-        SLIPPAGE_PCT=slippage_pct,
-        SLIPPAGE_PENALTY_RATIO=penalty_ratio,
-        SLIPPAGE_MAX_CAP=max_cap,
-    )
-    override.__enter__()
-    return override
-
-
-def restore_slippage_settings(override) -> None:
-    override.__exit__(None, None, None)
-
-
 def build_price_frame() -> pd.DataFrame:
     dates = pd.date_range(datetime(2024, 1, 1), periods=55, freq="D")
     rows = []
@@ -96,11 +82,12 @@ def test_backtester_enters_on_next_bar_open():
         }
     )
 
-    originals = override_slippage_settings(0.0, 0.0, 0.02)
-    try:
+    with settings.override(
+        SLIPPAGE_PCT=0.0,
+        SLIPPAGE_PENALTY_RATIO=0.0,
+        SLIPPAGE_MAX_CAP=0.02,
+    ):
         result = backtester.run("TEST.IS", df, verbose=False)
-    finally:
-        restore_slippage_settings(originals)
 
     assert result is not None
     assert result.trades
@@ -127,11 +114,12 @@ def test_intrabar_simulation_uses_price_path_heuristic_for_same_bar_hits():
         }
     )
 
-    originals = override_slippage_settings(0.0, 0.0, 0.02)
-    try:
+    with settings.override(
+        SLIPPAGE_PCT=0.0,
+        SLIPPAGE_PENALTY_RATIO=0.0,
+        SLIPPAGE_MAX_CAP=0.02,
+    ):
         result = backtester.run("TEST.IS", df, verbose=False)
-    finally:
-        restore_slippage_settings(originals)
 
     assert result is not None
     assert result.trades
@@ -159,11 +147,12 @@ def test_dynamic_slippage_uses_atr_on_entry_and_exit():
             }
         }
     )
-    originals = override_slippage_settings(0.001, 0.15, 0.02)
-    try:
+    with settings.override(
+        SLIPPAGE_PCT=0.001,
+        SLIPPAGE_PENALTY_RATIO=0.15,
+        SLIPPAGE_MAX_CAP=0.02,
+    ):
         result = backtester.run("TEST.IS", df, verbose=False)
-    finally:
-        restore_slippage_settings(originals)
 
     assert result is not None
     assert result.trades
