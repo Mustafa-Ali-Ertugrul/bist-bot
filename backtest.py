@@ -3,6 +3,7 @@ import logging
 import importlib
 from dataclasses import dataclass, field
 from datetime import datetime
+from enum import Enum
 from pathlib import Path
 from typing import Any, Optional, Protocol, TypedDict, cast
 
@@ -45,6 +46,12 @@ class BacktestTrade:
     profit_tl: float
     holding_days: int
     exit_reason: str = ""
+    gross_profit_tl: float = 0.0
+    total_cost_tl: float = 0.0
+    commission_tl: float = 0.0
+    bsmv_tl: float = 0.0
+    exchange_fee_tl: float = 0.0
+    slippage_tl: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -58,7 +65,45 @@ class BacktestTrade:
             "profit_tl": self.profit_tl,
             "holding_days": self.holding_days,
             "exit_reason": self.exit_reason,
+            "gross_profit_tl": self.gross_profit_tl,
+            "total_cost_tl": self.total_cost_tl,
+            "commission_tl": self.commission_tl,
+            "bsmv_tl": self.bsmv_tl,
+            "exchange_fee_tl": self.exchange_fee_tl,
+            "slippage_tl": self.slippage_tl,
         }
+
+
+@dataclass
+class CostBreakdown:
+    gross_return: float = 0.0
+    total_commission: float = 0.0
+    total_bsmv: float = 0.0
+    total_exchange_fee: float = 0.0
+    total_slippage: float = 0.0
+    net_return: float = 0.0
+
+    def to_dict(self) -> dict[str, float]:
+        return {
+            "gross_return": self.gross_return,
+            "total_commission": self.total_commission,
+            "total_bsmv": self.total_bsmv,
+            "total_exchange_fee": self.total_exchange_fee,
+            "total_slippage": self.total_slippage,
+            "net_return": self.net_return,
+        }
+
+
+@dataclass(frozen=True)
+class CostModel:
+    commission_bps: float = 2.0
+    bsmv_bps: float = 0.1
+    exchange_fee_bps: float = 0.3
+    slippage_model: str = "fixed"
+    fixed_slippage_bps: float = 5.0
+    volume_slippage_bps_per_volume_ratio: float = 200.0
+    atr_slippage_ratio: float = 0.10
+    max_slippage_bps: float = 50.0
 
 
 @dataclass
@@ -76,6 +121,11 @@ class BacktestResult:
     avg_loss_pct: float
     max_drawdown_pct: float
     sharpe_ratio: float
+    sortino_ratio: float = 0.0
+    cagr: float = 0.0
+    profit_factor: float = 0.0
+    avg_trade_pct: float = 0.0
+    cost_breakdown: CostBreakdown = field(default_factory=CostBreakdown)
     trades: list[BacktestTrade] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -93,6 +143,11 @@ class BacktestResult:
             "avg_loss_pct": self.avg_loss_pct,
             "max_drawdown_pct": self.max_drawdown_pct,
             "sharpe_ratio": self.sharpe_ratio,
+            "sortino_ratio": self.sortino_ratio,
+            "cagr": self.cagr,
+            "profit_factor": self.profit_factor,
+            "avg_trade_pct": self.avg_trade_pct,
+            "cost_breakdown": self.cost_breakdown.to_dict(),
             "trades": [trade.to_dict() for trade in self.trades],
         }
 
@@ -123,8 +178,72 @@ class BacktestResult:
             f"  Ort. Zarar      : %{self.avg_loss_pct:.2f}\n"
             f"  Max Drawdown    : %{self.max_drawdown_pct:.2f}\n"
             f"  Sharpe Ratio    : {self.sharpe_ratio:.2f}\n"
+            f"  Sortino Ratio   : {self.sortino_ratio:.2f}\n"
+            f"  Profit Factor   : {self.profit_factor:.2f}\n"
             f"{'═'*55}"
         )
+
+
+class WindowMode(str, Enum):
+    ROLLING = "rolling"
+    ANCHORED = "anchored"
+
+
+@dataclass
+class WalkForwardWindowResult:
+    window_index: int
+    train_period: str
+    test_period: str
+    train_rows: int
+    test_rows: int
+    params: dict[str, Any]
+    metrics: dict[str, Any]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "window_index": self.window_index,
+            "train_period": self.train_period,
+            "test_period": self.test_period,
+            "train_rows": self.train_rows,
+            "test_rows": self.test_rows,
+            "params": self.params,
+            "metrics": self.metrics,
+        }
+
+
+@dataclass
+class WalkForwardResult:
+    ticker: str
+    initial_capital: float
+    final_capital: float
+    train_window_months: int
+    test_window_months: int
+    step_months: int
+    mode: str
+    windows: list[WalkForwardWindowResult]
+    combined_metrics: dict[str, Any]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "ticker": self.ticker,
+            "initial_capital": self.initial_capital,
+            "final_capital": self.final_capital,
+            "train_window_months": self.train_window_months,
+            "test_window_months": self.test_window_months,
+            "step_months": self.step_months,
+            "mode": self.mode,
+            "window_count": len(self.windows),
+            "combined_metrics": self.combined_metrics,
+            "windows": [window.to_dict() for window in self.windows],
+        }
+
+    def to_json(self, output_path: str | Path | None = None) -> str:
+        payload = json.dumps(self.to_dict(), ensure_ascii=False, indent=2)
+        if output_path is not None:
+            path = Path(output_path)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(payload, encoding="utf-8")
+        return payload
 
 
 def _to_float(value: Any, default: float = 0.0) -> float:
@@ -145,6 +264,96 @@ def _to_datetime(value: Any) -> datetime:
     return cast(datetime, timestamp.to_pydatetime())
 
 
+def _annualized_ratios(returns: np.ndarray) -> tuple[float, float]:
+    if returns.size <= 1:
+        return 0.0, 0.0
+
+    mean_return = float(np.mean(returns))
+    std_return = float(np.std(returns))
+    sharpe = float(mean_return / std_return * np.sqrt(252)) if std_return > 0 else 0.0
+
+    downside = returns[returns < 0]
+    downside_std = float(np.std(downside)) if downside.size > 0 else 0.0
+    sortino = float(mean_return / downside_std * np.sqrt(252)) if downside_std > 0 else 0.0
+    return sharpe, sortino
+
+
+def _calculate_cagr(initial_capital: float, final_capital: float, start_date: datetime, end_date: datetime) -> float:
+    total_days = max((end_date - start_date).days, 0)
+    if total_days <= 0 or initial_capital <= 0 or final_capital <= 0:
+        return 0.0
+    years = total_days / 365.25
+    if years <= 0:
+        return 0.0
+    return (final_capital / initial_capital) ** (1 / years) - 1
+
+
+def _build_cost_breakdown(initial_capital: float, final_capital: float, trades: list[BacktestTrade]) -> CostBreakdown:
+    total_commission = sum(trade.commission_tl for trade in trades)
+    total_bsmv = sum(trade.bsmv_tl for trade in trades)
+    total_exchange_fee = sum(trade.exchange_fee_tl for trade in trades)
+    total_slippage = sum(trade.slippage_tl for trade in trades)
+    gross_return = sum(trade.gross_profit_tl for trade in trades)
+    net_return = final_capital - initial_capital
+
+    return CostBreakdown(
+        gross_return=round(gross_return, 2),
+        total_commission=round(total_commission, 2),
+        total_bsmv=round(total_bsmv, 2),
+        total_exchange_fee=round(total_exchange_fee, 2),
+        total_slippage=round(total_slippage, 2),
+        net_return=round(net_return, 2),
+    )
+
+
+def _summarize_trades_and_equity(
+    ticker: str,
+    start_date: datetime,
+    end_date: datetime,
+    initial_capital: float,
+    final_capital: float,
+    trades: list[BacktestTrade],
+    equity_history: list[float],
+) -> dict[str, Any]:
+    total_return_pct = (final_capital - initial_capital) / initial_capital * 100 if initial_capital else 0.0
+    winning = [trade for trade in trades if trade.profit_pct > 0]
+    losing = [trade for trade in trades if trade.profit_pct <= 0]
+
+    cap_series = pd.Series(equity_history, dtype=float)
+    rolling_max = cap_series.cummax()
+    drawdown = (cap_series - rolling_max) / rolling_max * 100
+    max_drawdown_pct = float(drawdown.min()) if not drawdown.empty else 0.0
+
+    returns = np.array([trade.profit_pct for trade in trades], dtype=float)
+    sharpe_ratio, sortino_ratio = _annualized_ratios(returns)
+    avg_trade_pct = float(np.mean(returns)) if returns.size else 0.0
+    gross_profit = sum(trade.profit_tl for trade in winning)
+    gross_loss = abs(sum(trade.profit_tl for trade in losing))
+    profit_factor = gross_profit / gross_loss if gross_loss > 0 else 0.0
+    cagr = _calculate_cagr(initial_capital, final_capital, start_date, end_date)
+
+    return {
+        "ticker": ticker,
+        "period": f"{start_date.strftime('%d.%m.%Y')} → {end_date.strftime('%d.%m.%Y')}",
+        "initial_capital": initial_capital,
+        "final_capital": round(final_capital, 2),
+        "total_return_pct": round(total_return_pct, 2),
+        "total_trades": len(trades),
+        "winning_trades": len(winning),
+        "losing_trades": len(losing),
+        "win_rate": round(len(winning) / len(trades) * 100, 1) if trades else 0.0,
+        "avg_profit_pct": round(float(np.mean([trade.profit_pct for trade in winning])), 2) if winning else 0.0,
+        "avg_loss_pct": round(float(np.mean([trade.profit_pct for trade in losing])), 2) if losing else 0.0,
+        "max_drawdown_pct": round(max_drawdown_pct, 2),
+        "sharpe_ratio": round(sharpe_ratio, 2),
+        "sortino_ratio": round(sortino_ratio, 2),
+        "cagr": round(cagr * 100, 2),
+        "profit_factor": round(profit_factor, 2),
+        "avg_trade_pct": round(avg_trade_pct, 2),
+        "cost_breakdown": _build_cost_breakdown(initial_capital, final_capital, trades),
+    }
+
+
 class Backtester:
     def __init__(
         self,
@@ -156,6 +365,7 @@ class Backtester:
         slippage_pct: Optional[float] = None,
         target_rr: float = 2.0,
         indicators: Optional[TechnicalIndicators] = None,
+        cost_model: Optional[CostModel] = None,
     ):
         self.initial_capital = float(
             initial_capital if initial_capital is not None else getattr(settings, "INITIAL_CAPITAL", 8500.0)
@@ -174,6 +384,10 @@ class Backtester:
         self.slippage_pct = float(
             slippage_pct if slippage_pct is not None else getattr(settings, "BACKTEST_SLIPPAGE_PCT", 0.0005)
         )
+        use_legacy_costs = any(
+            value is not None for value in (commission_buy_pct, commission_sell_pct, slippage_pct)
+        ) and cost_model is None
+        self.cost_model = None if use_legacy_costs else (cost_model or CostModel())
         self.buy_threshold = float(
             buy_threshold if buy_threshold is not None else settings.BUY_THRESHOLD
         )
@@ -302,7 +516,12 @@ class Backtester:
             }
 
             if position is not None and self._should_exit_on_open(signal):
-                exit_fill_price = self._calculate_dynamic_slippage(open_price, row, is_buy=False)
+                exit_fill_price = self._calculate_fill_price(
+                    open_price,
+                    row,
+                    is_buy=False,
+                    shares=int(position["shares"]),
+                )
                 capital = self._close_position(
                     capital=capital,
                     position=position,
@@ -318,8 +537,14 @@ class Backtester:
 
             if position is None and self._should_enter_on_open(signal):
                 if last_buy_date is None or (date - last_buy_date).days >= 1:
-                    entry_fill_price = self._calculate_dynamic_slippage(open_price, row, is_buy=True)
-                    position = self._open_position(signal, entry_fill_price, date, capital)
+                    estimated_shares = self._estimate_entry_shares(capital, open_price)
+                    entry_fill_price = self._calculate_fill_price(
+                        open_price,
+                        row,
+                        is_buy=True,
+                        shares=estimated_shares,
+                    )
+                    position = self._open_position(signal, entry_fill_price, open_price, date, capital)
                     if position is not None:
                         capital -= position["cost"]
                         last_buy_date = date
@@ -334,7 +559,12 @@ class Backtester:
                 intrabar_exit = self._simulate_intrabar_exit(position, open_price, high_price, low_price, close_price)
                 if intrabar_exit is not None:
                     ref_price = intrabar_exit["reference_price"]
-                    exit_fill_price = self._calculate_dynamic_slippage(ref_price, row, is_buy=False)
+                    exit_fill_price = self._calculate_fill_price(
+                        ref_price,
+                        row,
+                        is_buy=False,
+                        shares=int(position["shares"]),
+                    )
                     capital = self._close_position(
                         capital=capital,
                         position=position,
@@ -361,7 +591,12 @@ class Backtester:
                 trades=trades,
                 ticker=ticker,
                 exit_date=last_date,
-                fill_price=self._calculate_dynamic_slippage(last_close, last_bar, is_buy=False),
+                fill_price=self._calculate_fill_price(
+                    last_close,
+                    last_bar,
+                    is_buy=False,
+                    shares=int(position["shares"]),
+                ),
                 reference_price=last_close,
                 reason="FINAL_CLOSE",
                 verbose=False,
@@ -394,7 +629,12 @@ class Backtester:
             signal = self._build_signal_context(ticker, history)
 
             if position is not None and self._should_exit_on_open(signal):
-                exit_fill_price = self._calculate_dynamic_slippage(open_price, bar, is_buy=False)
+                exit_fill_price = self._calculate_fill_price(
+                    open_price,
+                    bar,
+                    is_buy=False,
+                    shares=int(position["shares"]),
+                )
                 capital = self._close_position(
                     capital=capital,
                     position=position,
@@ -410,8 +650,14 @@ class Backtester:
 
             if position is None and self._should_enter_on_open(signal):
                 if last_buy_date is None or (date - last_buy_date).days >= 1:
-                    entry_fill_price = self._calculate_dynamic_slippage(open_price, bar, is_buy=True)
-                    position = self._open_position(signal, entry_fill_price, date, capital)
+                    estimated_shares = self._estimate_entry_shares(capital, open_price)
+                    entry_fill_price = self._calculate_fill_price(
+                        open_price,
+                        bar,
+                        is_buy=True,
+                        shares=estimated_shares,
+                    )
+                    position = self._open_position(signal, entry_fill_price, open_price, date, capital)
                     if position is not None:
                         capital -= position["cost"]
                         last_buy_date = date
@@ -426,7 +672,12 @@ class Backtester:
                 intrabar_exit = self._simulate_intrabar_exit(position, open_price, high_price, low_price, close_price)
                 if intrabar_exit is not None:
                     ref_price = intrabar_exit["reference_price"]
-                    exit_fill_price = self._calculate_dynamic_slippage(ref_price, bar, is_buy=False)
+                    exit_fill_price = self._calculate_fill_price(
+                        ref_price,
+                        bar,
+                        is_buy=False,
+                        shares=int(position["shares"]),
+                    )
                     capital = self._close_position(
                         capital=capital,
                         position=position,
@@ -453,7 +704,12 @@ class Backtester:
                 trades=trades,
                 ticker=ticker,
                 exit_date=last_date,
-                fill_price=self._calculate_dynamic_slippage(last_close, last_bar, is_buy=False),
+                fill_price=self._calculate_fill_price(
+                    last_close,
+                    last_bar,
+                    is_buy=False,
+                    shares=int(position["shares"]),
+                ),
                 reference_price=last_close,
                 reason="FINAL_CLOSE",
                 verbose=False,
@@ -484,6 +740,69 @@ class Backtester:
     def _should_exit_on_open(self, signal: dict[str, float | bool]) -> bool:
         return bool(signal.get("exit"))
 
+    def _fee_components(self, notional: float) -> dict[str, float]:
+        if self.cost_model is None:
+            return {
+                "commission": 0.0,
+                "bsmv": 0.0,
+                "exchange_fee": 0.0,
+                "total": 0.0,
+            }
+
+        commission = notional * (self.cost_model.commission_bps / 10_000)
+        bsmv = notional * (self.cost_model.bsmv_bps / 10_000)
+        exchange_fee = notional * (self.cost_model.exchange_fee_bps / 10_000)
+        return {
+            "commission": commission,
+            "bsmv": bsmv,
+            "exchange_fee": exchange_fee,
+            "total": commission + bsmv + exchange_fee,
+        }
+
+    def _extract_row_value(self, row: Any, key: str, default: float = 0.0) -> float:
+        if hasattr(row, key):
+            return _to_float(getattr(row, key), default)
+        if isinstance(row, pd.Series):
+            return _to_float(row.get(key), default)
+        return default
+
+    def _calculate_slippage_bps(self, price: float, row: Any, shares: int) -> float:
+        if self.cost_model is None:
+            return 0.0
+
+        model = self.cost_model
+        if model.slippage_model == "fixed":
+            return model.fixed_slippage_bps
+
+        if model.slippage_model == "volume_aware":
+            avg_daily_volume = self._extract_row_value(row, "volume_sma_20", 0.0)
+            if avg_daily_volume <= 0:
+                avg_daily_volume = self._extract_row_value(row, "volume", 0.0)
+            if avg_daily_volume <= 0:
+                return model.fixed_slippage_bps
+            volume_ratio = shares / avg_daily_volume
+            return min(volume_ratio * model.volume_slippage_bps_per_volume_ratio, model.max_slippage_bps)
+
+        if model.slippage_model == "atr_aware":
+            atr_value = self._extract_row_value(row, "atr", 0.0)
+            if atr_value <= 0 or price <= 0:
+                return model.fixed_slippage_bps
+            atr_ratio = atr_value / price
+            return min(atr_ratio * model.atr_slippage_ratio * 10_000, model.max_slippage_bps)
+
+        return model.fixed_slippage_bps
+
+    def _estimate_entry_shares(self, capital: float, price: float) -> int:
+        if price <= 0:
+            return 0
+        return max(int(capital / price), 1)
+
+    def _calculate_fill_price(self, price: float, row: Any, is_buy: bool, shares: int) -> float:
+        if self.cost_model is not None:
+            slippage_pct = self._calculate_slippage_bps(price, row, shares) / 10_000
+            return price * (1 + slippage_pct if is_buy else 1 - slippage_pct)
+        return self._calculate_dynamic_slippage(price, row, is_buy=is_buy)
+
     def _calculate_dynamic_slippage(self, price: float, row: Any, is_buy: bool) -> float:
         """Calculate volatility-aware slippage using ATR when available."""
         base_slippage = float(getattr(settings, "SLIPPAGE_PCT", 0.001))
@@ -513,24 +832,50 @@ class Backtester:
         self,
         signal: dict[str, float | bool],
         fill_price: float,
+        reference_price: float,
         entry_date: datetime,
         capital: float,
     ) -> Optional[dict[str, Any]]:
         entry_price = fill_price
-        unit_cost = entry_price * (1 + self.commission_buy_pct)
-        shares = int(capital / unit_cost) if unit_cost > 0 else 0
+        if self.cost_model is None:
+            unit_cost = entry_price * (1 + self.commission_buy_pct)
+            shares = int(capital / unit_cost) if unit_cost > 0 else 0
+            entry_fee_tl = shares * entry_price * self.commission_buy_pct
+            entry_bsmv_tl = 0.0
+            entry_exchange_fee_tl = 0.0
+        else:
+            fee_pct = (
+                self.cost_model.commission_bps
+                + self.cost_model.bsmv_bps
+                + self.cost_model.exchange_fee_bps
+            ) / 10_000
+            unit_cost = entry_price * (1 + fee_pct)
+            shares = int(capital / unit_cost) if unit_cost > 0 else 0
+            fee_components = self._fee_components(shares * entry_price)
+            entry_fee_tl = fee_components["commission"]
+            entry_bsmv_tl = fee_components["bsmv"]
+            entry_exchange_fee_tl = fee_components["exchange_fee"]
         if shares <= 0:
             return None
 
-        cost = shares * unit_cost
+        if self.cost_model is None:
+            cost = shares * unit_cost
+        else:
+            cost = shares * entry_price + entry_fee_tl + entry_bsmv_tl + entry_exchange_fee_tl
+        entry_slippage_tl = shares * max(entry_price - reference_price, 0.0)
         return {
             "entry_date": entry_date,
             "entry_price": entry_price,
+            "reference_entry_price": reference_price,
             "shares": shares,
             "cost": cost,
             "stop_loss": _to_float(signal.get("stop_loss"), entry_price * 0.95),
             "target_price": _to_float(signal.get("target_price"), 0.0),
             "score": _to_float(signal.get("score"), 0.0),
+            "entry_fee_tl": entry_fee_tl,
+            "entry_bsmv_tl": entry_bsmv_tl,
+            "entry_exchange_fee_tl": entry_exchange_fee_tl,
+            "entry_slippage_tl": entry_slippage_tl,
         }
 
     def _simulate_intrabar_exit(
@@ -592,10 +937,28 @@ class Backtester:
         reason: str,
         verbose: bool,
     ) -> float:
-        revenue = position["shares"] * fill_price * (1 - self.commission_sell_pct)
+        notional = position["shares"] * fill_price
+        if self.cost_model is None:
+            exit_fee_tl = notional * self.commission_sell_pct
+            exit_bsmv_tl = 0.0
+            exit_exchange_fee_tl = 0.0
+        else:
+            fee_components = self._fee_components(notional)
+            exit_fee_tl = fee_components["commission"]
+            exit_bsmv_tl = fee_components["bsmv"]
+            exit_exchange_fee_tl = fee_components["exchange_fee"]
+
+        revenue = notional - exit_fee_tl - exit_bsmv_tl - exit_exchange_fee_tl
         profit_tl = revenue - position["cost"]
         profit_pct = (profit_tl / position["cost"]) * 100 if position["cost"] else 0.0
         holding_days = max((exit_date - position["entry_date"]).days, 0)
+        gross_profit_tl = position["shares"] * (reference_price - position["reference_entry_price"])
+        exit_slippage_tl = position["shares"] * max(reference_price - fill_price, 0.0)
+        total_commission_tl = position["entry_fee_tl"] + exit_fee_tl
+        total_bsmv_tl = position["entry_bsmv_tl"] + exit_bsmv_tl
+        total_exchange_fee_tl = position["entry_exchange_fee_tl"] + exit_exchange_fee_tl
+        total_slippage_tl = position["entry_slippage_tl"] + exit_slippage_tl
+        total_cost_tl = total_commission_tl + total_bsmv_tl + total_exchange_fee_tl + total_slippage_tl
 
         trades.append(
             BacktestTrade(
@@ -609,6 +972,12 @@ class Backtester:
                 profit_tl=round(profit_tl, 2),
                 holding_days=holding_days,
                 exit_reason=reason,
+                gross_profit_tl=round(gross_profit_tl, 2),
+                total_cost_tl=round(total_cost_tl, 2),
+                commission_tl=round(total_commission_tl, 2),
+                bsmv_tl=round(total_bsmv_tl, 2),
+                exchange_fee_tl=round(total_exchange_fee_tl, 2),
+                slippage_tl=round(total_slippage_tl, 2),
             )
         )
 
@@ -630,22 +999,6 @@ class Backtester:
         trades: list[BacktestTrade],
         capital_history: list[float],
     ) -> BacktestResult:
-        total_return = (capital - self.initial_capital) / self.initial_capital * 100
-        winning = [t for t in trades if t.profit_pct > 0]
-        losing = [t for t in trades if t.profit_pct <= 0]
-
-        cap_series = pd.Series(capital_history, dtype=float)
-        rolling_max = cap_series.cummax()
-        drawdown = (cap_series - rolling_max) / rolling_max * 100
-        max_dd = float(drawdown.min()) if not drawdown.empty else 0.0
-
-        sharpe = 0.0
-        if len(trades) > 1:
-            returns = np.array([t.profit_pct for t in trades], dtype=float)
-            std = float(np.std(returns))
-            if std > 0:
-                sharpe = float(np.mean(returns) / std * np.sqrt(252))
-
         avg_holding = 0.0
         idle_ratio = 0.0
         if trades:
@@ -658,20 +1011,35 @@ class Backtester:
         self.avg_holding_days = avg_holding
         logger.info(f"  📊 Ort. holding: {avg_holding} gün, Idle: %{idle_ratio}")
 
-        return BacktestResult(
+        summary = _summarize_trades_and_equity(
             ticker=ticker,
-            period=f"{_to_datetime(df.index[0]).strftime('%d.%m.%Y')} → {_to_datetime(df.index[-1]).strftime('%d.%m.%Y')}",
+            start_date=_to_datetime(df.index[0]),
+            end_date=_to_datetime(df.index[-1]),
             initial_capital=self.initial_capital,
-            final_capital=round(capital, 2),
-            total_return_pct=round(total_return, 2),
-            total_trades=len(trades),
-            winning_trades=len(winning),
-            losing_trades=len(losing),
-            win_rate=round(len(winning) / len(trades) * 100, 1) if trades else 0.0,
-            avg_profit_pct=round(float(np.mean([t.profit_pct for t in winning])), 2) if winning else 0.0,
-            avg_loss_pct=round(float(np.mean([t.profit_pct for t in losing])), 2) if losing else 0.0,
-            max_drawdown_pct=round(max_dd, 2),
-            sharpe_ratio=round(sharpe, 2),
+            final_capital=capital,
+            trades=trades,
+            equity_history=capital_history,
+        )
+
+        return BacktestResult(
+            ticker=summary["ticker"],
+            period=summary["period"],
+            initial_capital=summary["initial_capital"],
+            final_capital=summary["final_capital"],
+            total_return_pct=summary["total_return_pct"],
+            total_trades=summary["total_trades"],
+            winning_trades=summary["winning_trades"],
+            losing_trades=summary["losing_trades"],
+            win_rate=summary["win_rate"],
+            avg_profit_pct=summary["avg_profit_pct"],
+            avg_loss_pct=summary["avg_loss_pct"],
+            max_drawdown_pct=summary["max_drawdown_pct"],
+            sharpe_ratio=summary["sharpe_ratio"],
+            sortino_ratio=summary["sortino_ratio"],
+            cagr=summary["cagr"],
+            profit_factor=summary["profit_factor"],
+            avg_trade_pct=summary["avg_trade_pct"],
+            cost_breakdown=cast(CostBreakdown, summary["cost_breakdown"]),
             trades=trades,
         )
 
@@ -765,6 +1133,168 @@ class StrategyBacktester:
         finally:
             self.backtester.signal_builder = None
             self._enriched_cache = None
+
+
+class WalkForwardValidator:
+    def __init__(
+        self,
+        train_window: int = 12,
+        test_window: int = 3,
+        step: int = 3,
+        mode: str = WindowMode.ROLLING.value,
+        optimizer_iterations: int = 20,
+        param_grid: Optional[dict[str, list[Any]]] = None,
+        optimizer_factory: Any | None = None,
+        backtester_factory: Any | None = None,
+    ) -> None:
+        self.train_window = train_window
+        self.test_window = test_window
+        self.step = step
+        self.mode = WindowMode(mode)
+        self.optimizer_iterations = optimizer_iterations
+        self.param_grid = param_grid or {
+            "buy_threshold": [12.0, 15.0, 20.0],
+            "sell_threshold": [-12.0, -20.0, -28.0],
+            "score_macd_cross": [8.0, 12.0, 15.0],
+            "score_sma_golden_cross": [10.0, 12.0, 15.0],
+        }
+        self.optimizer_factory = optimizer_factory
+        self.backtester_factory = backtester_factory
+
+    def _build_windows(self, df: pd.DataFrame) -> list[tuple[pd.DataFrame, pd.DataFrame]]:
+        windows: list[tuple[pd.DataFrame, pd.DataFrame]] = []
+        if df.empty:
+            return windows
+
+        index = pd.DatetimeIndex(df.index)
+        start_date = _to_datetime(index.min())
+        end_date = _to_datetime(index.max())
+        current_train_start = pd.Timestamp(start_date)
+        current_train_months = self.train_window
+
+        while True:
+            train_end = current_train_start + pd.DateOffset(months=current_train_months)
+            test_end = train_end + pd.DateOffset(months=self.test_window)
+            if test_end > end_date:
+                break
+
+            train_df = df.loc[(df.index >= current_train_start) & (df.index < train_end)]
+            test_df = df.loc[(df.index >= train_end) & (df.index < test_end)]
+            if not train_df.empty and not test_df.empty:
+                windows.append((train_df, test_df))
+
+            if self.mode is WindowMode.ROLLING:
+                current_train_start = current_train_start + pd.DateOffset(months=self.step)
+            else:
+                current_train_start = pd.Timestamp(start_date)
+                current_train_months += self.step
+
+        return windows
+
+    def _optimizer(self, ticker: str, train_df: pd.DataFrame, initial_capital: float) -> Any:
+        if self.optimizer_factory is not None:
+            return self.optimizer_factory(ticker, train_df, initial_capital)
+
+        from optimizer import StrategyOptimizer
+
+        return StrategyOptimizer(ticker=ticker, df=train_df, initial_capital=initial_capital)
+
+    def _backtester(self, initial_capital: float, params: Any) -> StrategyBacktester:
+        if self.backtester_factory is not None:
+            return self.backtester_factory(initial_capital, params)
+
+        engine = strategy_module.StrategyEngine(params=params)
+        return StrategyBacktester(initial_capital=initial_capital, engine=engine)
+
+    def run(
+        self,
+        ticker: str,
+        df: pd.DataFrame,
+        initial_capital: Optional[float] = None,
+        output_path: str | Path | None = None,
+    ) -> Optional[WalkForwardResult]:
+        if df is None or df.empty:
+            return None
+
+        initial = float(initial_capital or getattr(settings, "INITIAL_CAPITAL", 8500.0))
+        df_sorted = df.sort_index()
+        windows = self._build_windows(df_sorted)
+        if not windows:
+            return None
+
+        compounded_capital = initial
+        equity_history = [initial]
+        combined_trades: list[BacktestTrade] = []
+        window_results: list[WalkForwardWindowResult] = []
+
+        for idx, (train_df, test_df) in enumerate(windows, start=1):
+            optimizer = self._optimizer(ticker, train_df, initial)
+            best_params, _ = optimizer.random_search(self.param_grid, n_iter=self.optimizer_iterations)
+            if best_params is None:
+                continue
+
+            backtester = self._backtester(initial, best_params)
+            test_result = backtester.run(ticker, test_df, verbose=False)
+            if test_result is None:
+                continue
+
+            compounded_capital *= 1 + (test_result.total_return_pct / 100)
+            equity_history.append(compounded_capital)
+            combined_trades.extend(test_result.trades)
+
+            params_dict = getattr(best_params, "__dict__", {})
+            window_results.append(
+                WalkForwardWindowResult(
+                    window_index=idx,
+                    train_period=f"{_to_datetime(train_df.index[0]).strftime('%Y-%m-%d')} -> {_to_datetime(train_df.index[-1]).strftime('%Y-%m-%d')}",
+                    test_period=f"{_to_datetime(test_df.index[0]).strftime('%Y-%m-%d')} -> {_to_datetime(test_df.index[-1]).strftime('%Y-%m-%d')}",
+                    train_rows=len(train_df),
+                    test_rows=len(test_df),
+                    params={key: value for key, value in params_dict.items() if key in self.param_grid},
+                    metrics=test_result.to_dict(),
+                )
+            )
+
+        if not window_results:
+            return None
+
+        combined_summary = _summarize_trades_and_equity(
+            ticker=ticker,
+            start_date=_to_datetime(df_sorted.index[0]),
+            end_date=_to_datetime(df_sorted.index[-1]),
+            initial_capital=initial,
+            final_capital=compounded_capital,
+            trades=combined_trades,
+            equity_history=equity_history,
+        )
+        combined_metrics = {
+            "sharpe": combined_summary["sharpe_ratio"],
+            "sortino": combined_summary["sortino_ratio"],
+            "max_drawdown": combined_summary["max_drawdown_pct"],
+            "cagr": combined_summary["cagr"],
+            "win_rate": combined_summary["win_rate"],
+            "profit_factor": combined_summary["profit_factor"],
+            "avg_trade": combined_summary["avg_trade_pct"],
+            "total_return_pct": combined_summary["total_return_pct"],
+            "final_capital": combined_summary["final_capital"],
+            "total_trades": combined_summary["total_trades"],
+        }
+
+        result = WalkForwardResult(
+            ticker=ticker,
+            initial_capital=initial,
+            final_capital=round(compounded_capital, 2),
+            train_window_months=self.train_window,
+            test_window_months=self.test_window,
+            step_months=self.step,
+            mode=self.mode.value,
+            windows=window_results,
+            combined_metrics=combined_metrics,
+        )
+
+        if output_path is not None:
+            result.to_json(output_path)
+        return result
 
 
 def _reload_strategy_dependencies() -> StrategyEngineProtocol:

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Iterator, Optional
 
@@ -78,6 +78,34 @@ class ConfigRecord(Base):
     updated_at: Mapped[str] = mapped_column(Text, nullable=False, default="")
 
 
+class UserRecord(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    email: Mapped[str] = mapped_column(String, nullable=False, unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    role: Mapped[str] = mapped_column(String, nullable=False, default="admin")
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    updated_at: Mapped[str] = mapped_column(Text, nullable=False, default="")
+
+
+class OrderRecord(Base):
+    __tablename__ = "orders"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    ticker: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    side: Mapped[str] = mapped_column(String, nullable=False)
+    qty: Mapped[float] = mapped_column(Float, nullable=False)
+    type: Mapped[str] = mapped_column(String, nullable=False)
+    price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    state: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    broker_order_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    updated_at: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    filled_qty: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    avg_fill_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+
 class DatabaseManager:
     def __init__(
         self,
@@ -121,6 +149,7 @@ class DatabaseManager:
     def initialize(self) -> None:
         Base.metadata.create_all(self.engine)
         self._migrate_legacy_schema()
+        self._seed_admin_user()
 
     def _migrate_legacy_schema(self) -> None:
         with self.engine.begin() as conn:
@@ -146,6 +175,45 @@ class DatabaseManager:
 
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_signals_created_at ON signals(created_at DESC)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_signals_ticker_created_at ON signals(ticker, created_at DESC)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_orders_state ON orders(state)"))
+
+    def _seed_admin_user(self) -> None:
+        if not settings.ADMIN_EMAIL or not settings.ADMIN_PASSWORD_HASH:
+            return
+
+        now = self.now_iso()
+        with self.engine.begin() as conn:
+            existing = conn.execute(
+                text("SELECT id FROM users WHERE email = :email LIMIT 1"),
+                {"email": settings.ADMIN_EMAIL},
+            ).scalar_one_or_none()
+            if existing is not None:
+                conn.execute(
+                    text(
+                        "UPDATE users SET password_hash = :password_hash, updated_at = :updated_at WHERE email = :email"
+                    ),
+                    {
+                        "email": settings.ADMIN_EMAIL,
+                        "password_hash": settings.ADMIN_PASSWORD_HASH,
+                        "updated_at": now,
+                    },
+                )
+                return
+
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO users (email, password_hash, role, created_at, updated_at)
+                    VALUES (:email, :password_hash, 'admin', :created_at, :updated_at)
+                    """
+                ),
+                {
+                    "email": settings.ADMIN_EMAIL,
+                    "password_hash": settings.ADMIN_PASSWORD_HASH,
+                    "created_at": now,
+                    "updated_at": now,
+                },
+            )
 
     @contextmanager
     def session_scope(self) -> Iterator[Session]:
@@ -174,4 +242,4 @@ class DatabaseManager:
         return str(value)
 
     def now_iso(self) -> str:
-        return datetime.utcnow().isoformat(timespec="seconds")
+        return datetime.now(UTC).isoformat(timespec="seconds")

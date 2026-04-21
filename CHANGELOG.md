@@ -4,6 +4,16 @@ Tum degisiklikler chronolojik sirayla listelenir.
 
 ## [Unreleased]
 
+### Added
+- Walk-forward validation akisi eklendi; optimizer tabanli out-of-sample pencere testleri ve JSON rapor ciktilari uretiliyor.
+- BIST'e daha yakin komisyon, BSMV, borsa payi ve slippage kirilimlarini izleyen cost model eklendi.
+- AlgoLab broker entegrasyonu icin test edilebilir execution iskeleti, order tracker ve order lifecycle persistence eklendi.
+
+### Changed
+- `backtest_runner.py` artik survivorship bias uyarisi basiyor ve `--walk-forward` modu ile pencere bazli dogrulama calistirabiliyor.
+- Backtest ciktilarina `cost_breakdown` ozeti ve ek risk metrikleri (Sortino, CAGR, Profit Factor, Avg Trade) eklendi.
+- Broker secimi artik `BROKER_PROVIDER` ile yapiliyor; `AUTO_EXECUTE` ve `CONFIRM_LIVE_TRADING` guvenlik kapilari eklendi.
+
 ### Fixed
 - ADX hesaplama hizalamasi duzeltildi (`indicators.py`): `pd.Series(plus_dm)` yerine
   `df["plus_dm"]` kullanilarak pandas index alignment saglandi. Bu duzeltme

@@ -7,6 +7,7 @@ from typing import Optional
 
 from db.database import DatabaseManager
 from db.repositories.config_repository import ConfigRepository
+from db.repositories.orders_repository import OrdersRepository
 from db.repositories.portfolio_repository import PortfolioRepository
 from db.repositories.signals_repository import SignalsRepository
 from signal_models import Signal
@@ -20,6 +21,7 @@ class AppRepository:
         self.signals = SignalsRepository(self.manager)
         self.portfolio = PortfolioRepository(self.manager)
         self.config = ConfigRepository(self.manager)
+        self.orders = OrdersRepository(self.manager)
 
     def ping(self) -> bool:
         return self.manager.ping()
@@ -69,3 +71,15 @@ class AppRepository:
 
     def get_paper_performance(self):
         return self.portfolio.get_paper_performance()
+
+    def create_order(self, *args, **kwargs):
+        return self.orders.create_order(*args, **kwargs)
+
+    def update_order(self, *args, **kwargs):
+        return self.orders.update_order(*args, **kwargs)
+
+    def get_pending_orders(self):
+        return self.orders.get_pending_orders()
+
+    def get_order(self, order_id: int):
+        return self.orders.get_order(order_id)

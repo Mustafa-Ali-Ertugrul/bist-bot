@@ -1,8 +1,4 @@
-"""Flask dashboard entry point and app factory.
-
-Use `create_dashboard_app(...)` when embedding Flask in another process.
-Run this module directly only when you want the standalone Flask dashboard.
-"""
+"""Flask JSON API entry point with authentication and rate limiting."""
 
 from __future__ import annotations
 
@@ -11,7 +7,13 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, request
+from flask_cors import CORS
+from flask_jwt_extended import JWTManager, create_access_token, jwt_required
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from passlib.context import CryptContext
+from sqlalchemy import text
 
 from config import settings
 from contracts import DataFetcherProtocol, SignalRepositoryProtocol, StrategyEngineProtocol
@@ -20,6 +22,7 @@ from indicators import TechnicalIndicators
 
 TR = timezone(timedelta(hours=3))
 logger = logging.getLogger(__name__)
+PASSWORD_CONTEXT = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 def _round_value(value: Any) -> float | None:
@@ -31,16 +34,29 @@ def _round_value(value: Any) -> float | None:
         return None
 
 
+def _cors_origins() -> list[str]:
+    return [origin for origin in settings.CORS_ORIGINS if origin and origin != "*"]
+
+
 def create_dashboard_app(
     fetcher: DataFetcherProtocol,
     engine: StrategyEngineProtocol,
     db: SignalRepositoryProtocol,
 ) -> Flask:
-    """Create the standalone Flask dashboard application."""
+    """Create the authenticated Flask API application."""
+    settings.require_security_config()
+
     app = Flask(__name__)
     app.config["fetcher"] = fetcher
     app.config["engine"] = engine
     app.config["db"] = db
+    app.config["JWT_SECRET_KEY"] = settings.JWT_SECRET_KEY
+    app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(hours=12)
+    app.config["RATELIMIT_STORAGE_URI"] = settings.RATE_LIMIT_STORAGE_URI
+
+    JWTManager(app)
+    limiter = Limiter(get_remote_address, app=app, default_limits=["60 per minute"])
+    CORS(app, resources={r"/api/*": {"origins": _cors_origins()}})
 
     def get_fetcher() -> DataFetcherProtocol:
         return app.config["fetcher"]
@@ -50,6 +66,26 @@ def create_dashboard_app(
 
     def get_db() -> SignalRepositoryProtocol:
         return app.config["db"]
+
+    def verify_admin(email: str, password: str) -> bool:
+        manager = getattr(get_db(), "manager", None)
+        if manager is None:
+            return False
+        with manager.engine.begin() as conn:
+            row = conn.execute(
+                text("SELECT password_hash FROM users WHERE email = :email LIMIT 1"),
+                {"email": email},
+            ).mappings().first()
+        if row is None:
+            return False
+        return PASSWORD_CONTEXT.verify(password, str(row["password_hash"]))
+
+    @app.after_request
+    def add_security_headers(response):
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        return response
 
     @app.route("/health")
     def health_check():
@@ -64,11 +100,21 @@ def create_dashboard_app(
         status_code = 200 if health["status"] == "healthy" else 503
         return jsonify(health), status_code
 
-    @app.route("/")
-    def index():
-        return render_template("dashboard.html")
+    @app.route("/api/auth/login", methods=["POST"])
+    @limiter.limit("5 per minute")
+    def api_auth_login():
+        payload = request.get_json(silent=True) or {}
+        email = str(payload.get("email", "")).strip().lower()
+        password = str(payload.get("password", ""))
+        if not email or not password or not verify_admin(email, password):
+            return jsonify({"status": "error", "message": "Gecersiz kimlik bilgileri"}), 401
+
+        token = create_access_token(identity=email)
+        return jsonify({"status": "ok", "access_token": token, "expires_in_hours": 12})
 
     @app.route("/api/scan", methods=["POST"])
+    @jwt_required()
+    @limiter.limit("10 per minute")
     def api_scan():
         start_time = time.time()
         try:
@@ -123,10 +169,12 @@ def create_dashboard_app(
                 }
             )
         except Exception as exc:
-            logger.error(f"Tarama hatası: {exc}")
+            logger.error("Tarama hatasi: %s", exc)
             return jsonify({"status": "error", "message": str(exc)}), 500
 
     @app.route("/api/analyze/<ticker>")
+    @jwt_required()
+    @limiter.limit("30 per minute")
     def api_analyze(ticker: str):
         start_time = time.time()
         try:
@@ -136,7 +184,7 @@ def create_dashboard_app(
 
             df = runtime_fetcher.fetch_single(normalized_ticker, period="6mo")
             if df is None:
-                return jsonify({"status": "error", "message": "Veri bulunamadı"}), 404
+                return jsonify({"status": "error", "message": "Veri bulunamadi"}), 404
 
             indicator_engine = TechnicalIndicators()
             enriched = indicator_engine.add_all(df.copy())
@@ -145,7 +193,7 @@ def create_dashboard_app(
 
             price_data = [
                 {
-                    "date": idx.strftime("%Y-%m-%d"),
+                    "date": str(idx)[:10],
                     "open": _round_value(row.get("open")),
                     "high": _round_value(row.get("high")),
                     "low": _round_value(row.get("low")),
@@ -176,10 +224,11 @@ def create_dashboard_app(
                 }
             )
         except Exception as exc:
-            logger.exception("Analiz hatası")
+            logger.exception("Analiz hatasi")
             return jsonify({"status": "error", "message": str(exc)}), 500
 
     @app.route("/api/signals/history")
+    @jwt_required()
     def api_signal_history():
         limit = request.args.get("limit", 50, type=int)
         ticker = request.args.get("ticker")
@@ -187,6 +236,7 @@ def create_dashboard_app(
         return jsonify({"status": "ok", "signals": signals})
 
     @app.route("/api/stats")
+    @jwt_required()
     def api_stats():
         stats = get_db().get_performance_stats()
         return jsonify({"status": "ok", "stats": stats})
@@ -195,7 +245,7 @@ def create_dashboard_app(
 
 
 def create_default_dashboard_app(container: AppContainer | None = None) -> Flask:
-    """Build the Flask dashboard from the shared application container."""
+    """Build the Flask API app from the shared application container."""
     runtime_container = container or get_default_container()
     return create_dashboard_app(
         fetcher=runtime_container.fetcher,
@@ -205,12 +255,13 @@ def create_default_dashboard_app(container: AppContainer | None = None) -> Flask
 
 
 def main() -> None:
-    """Run the standalone Flask dashboard process."""
+    """Run the standalone Flask API process."""
     app = create_default_dashboard_app()
     app.run(
         host="0.0.0.0",
         port=settings.FLASK_PORT,
-        debug=settings.FLASK_DEBUG,
+        debug=False,
+        use_reloader=settings.FLASK_DEBUG,
     )
 
 

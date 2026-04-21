@@ -90,6 +90,14 @@ def _get_str_env(name: str, default: str = "") -> str:
     return value.strip()
 
 
+def _get_csv_env(name: str) -> tuple[str, ...]:
+    value = os.getenv(name)
+    if value is None:
+        return ()
+    items = [item.strip() for item in value.split(",") if item.strip()]
+    return tuple(items)
+
+
 DEFAULT_BIST100_WATCHLIST = BIST100_TICKERS
 
 DEFAULT_SETTINGS = {
@@ -245,6 +253,12 @@ class Settings:
 
     FLASK_PORT: int = _get_int_env("FLASK_PORT", 5000)
     FLASK_DEBUG: bool = _get_bool_env("FLASK_DEBUG", False)
+    API_BASE_URL: str = _get_str_env("API_BASE_URL", f"http://localhost:{_get_int_env('FLASK_PORT', 5000)}")
+    RATE_LIMIT_STORAGE_URI: str = _get_str_env("RATE_LIMIT_STORAGE_URI", "memory://")
+    JWT_SECRET_KEY: str = _get_str_env("JWT_SECRET_KEY")
+    ADMIN_EMAIL: str = _get_str_env("ADMIN_EMAIL")
+    ADMIN_PASSWORD_HASH: str = _get_str_env("ADMIN_PASSWORD_HASH")
+    CORS_ORIGINS: tuple[str, ...] = field(default_factory=lambda: _get_csv_env("CORS_ORIGINS"))
 
     INITIAL_CAPITAL: float = _get_float_env("INITIAL_CAPITAL", 8500.0)
     ML_SEQUENCE_LENGTH: int = _get_int_env("ML_SEQUENCE_LENGTH", 60)
@@ -261,6 +275,14 @@ class Settings:
     COMMISSION_BUY: float = _get_float_env("COMMISSION_BUY", 0.0002)
     COMMISSION_SELL: float = _get_float_env("COMMISSION_SELL", 0.0002)
     BSMV: float = _get_float_env("BSMV", 0.0005)
+    AUTO_EXECUTE: bool = _get_bool_env("AUTO_EXECUTE", False)
+    CONFIRM_LIVE_TRADING: bool = _get_bool_env("CONFIRM_LIVE_TRADING", False)
+    BROKER_PROVIDER: str = _get_str_env("BROKER_PROVIDER", "paper").lower()
+    ALGOLAB_API_KEY: str = _get_str_env("ALGOLAB_API_KEY")
+    ALGOLAB_USERNAME: str = _get_str_env("ALGOLAB_USERNAME")
+    ALGOLAB_PASSWORD: str = _get_str_env("ALGOLAB_PASSWORD")
+    ALGOLAB_OTP_CODE: str = _get_str_env("ALGOLAB_OTP_CODE")
+    ALGOLAB_DRY_RUN: bool = _get_bool_env("ALGOLAB_DRY_RUN", True)
     SLIPPAGE: float = _get_float_env("SLIPPAGE", 0.001)
     SLIPPAGE_PCT: float = _get_float_env("SLIPPAGE_PCT", 0.001)
     SLIPPAGE_PENALTY_RATIO: float = _get_float_env("SLIPPAGE_PENALTY_RATIO", 0.15)
@@ -295,6 +317,28 @@ class Settings:
     def override(self, **overrides: Any) -> SettingsOverride:
         return SettingsOverride(self, **overrides)
 
+    def require_security_config(self) -> None:
+        missing = []
+        if not self.JWT_SECRET_KEY:
+            missing.append("JWT_SECRET_KEY")
+        if not self.ADMIN_EMAIL:
+            missing.append("ADMIN_EMAIL")
+        if not self.ADMIN_PASSWORD_HASH:
+            missing.append("ADMIN_PASSWORD_HASH")
+        if missing:
+            joined = ", ".join(missing)
+            raise RuntimeError(f"Missing required security setting(s): {joined}")
+
+    def validate_broker_config(self) -> None:
+        if self.BROKER_PROVIDER not in {"paper", "algolab"}:
+            raise RuntimeError(f"Unsupported BROKER_PROVIDER: {self.BROKER_PROVIDER}")
+        if self.BROKER_PROVIDER != "algolab":
+            return
+        if not self.ALGOLAB_API_KEY or not self.ALGOLAB_USERNAME or not self.ALGOLAB_PASSWORD:
+            raise RuntimeError("Missing required AlgoLab credentials for BROKER_PROVIDER=algolab")
+        if not self.ALGOLAB_DRY_RUN and not self.CONFIRM_LIVE_TRADING:
+            raise RuntimeError("CONFIRM_LIVE_TRADING=true is required when ALGOLAB_DRY_RUN=false")
+
     def _load_persisted_settings(self) -> dict[str, Any]:
         """Load persisted settings from JSON file."""
         if not CONFIG_FILE.exists():
@@ -303,14 +347,14 @@ class Settings:
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
             # Ensure all sections exist with defaults
-            for section, defaults in self.DEFAULT_SETTINGS.items():
+            for section, defaults in DEFAULT_SETTINGS.items():
                 if section not in data:
                     data[section] = defaults.copy()
                 else:
                     for key, value in defaults.items():
                         if key not in data[section]:
                             data[section][key] = value
-            return data
+            return dict(data)
         except Exception as e:
             logger.warning(f"Settings load failed: {e}, using defaults")
             return {}
@@ -364,16 +408,16 @@ class Settings:
             return False
 
     @classmethod
-    def get_indicator_defaults(cls) -> dict:
-        return cls.DEFAULT_SETTINGS["indicator"].copy()
+    def get_indicator_defaults(cls) -> dict[str, Any]:
+        return dict(DEFAULT_SETTINGS["indicator"])
 
     @classmethod
-    def get_telegram_settings(cls) -> dict:
-        return cls.DEFAULT_SETTINGS["telegram"].copy()
+    def get_telegram_settings(cls) -> dict[str, Any]:
+        return dict(DEFAULT_SETTINGS["telegram"])
 
     @classmethod
-    def get_scan_settings(cls) -> dict:
-        return cls.DEFAULT_SETTINGS["scan"].copy()
+    def get_scan_settings(cls) -> dict[str, Any]:
+        return dict(DEFAULT_SETTINGS["scan"])
 
 
 settings = Settings()

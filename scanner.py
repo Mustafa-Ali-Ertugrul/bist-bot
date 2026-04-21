@@ -3,9 +3,10 @@
 import logging
 from datetime import datetime
 from time import sleep
-from typing import Any
+from typing import Any, cast
 
 from config import settings as default_settings
+from execution.base import OrderSide, OrderType
 from signal_models import Signal, SignalType
 from strategy_regime import detect_regime
 
@@ -14,13 +15,55 @@ logger = logging.getLogger(__name__)
 
 
 class ScanService:
-    def __init__(self, fetcher, engine, notifier, db, settings: Any | None = None):
+    def __init__(self, fetcher, engine, notifier, db, broker=None, settings: Any | None = None):
         """Compose fetch, analyze, persistence, and notification steps."""
         self.fetcher = fetcher
         self.engine = engine
         self.notifier = notifier
         self.db = db
+        self.broker = broker
         self.settings = settings or default_settings
+
+    def _auto_execute_signals(self, signals: list[Signal]) -> None:
+        if not getattr(self.settings, "AUTO_EXECUTE", False) or self.broker is None:
+            return
+
+        try:
+            authenticated = self.broker.authenticate()
+        except Exception as exc:
+            logger.warning("Broker authentication failed; auto execution skipped: %s", exc)
+            return
+        if not authenticated:
+            logger.warning("Broker authentication failed; auto execution skipped")
+            return
+
+        for signal in signals:
+            if signal.signal_type not in {SignalType.STRONG_BUY, SignalType.STRONG_SELL}:
+                continue
+            side = OrderSide.BUY if signal.signal_type is SignalType.STRONG_BUY else OrderSide.SELL
+            order_row = self.db.create_order(
+                ticker=signal.ticker,
+                side=side.value,
+                quantity=1.0,
+                order_type=OrderType.MARKET.value,
+                price=None,
+                state="CREATED",
+            )
+            try:
+                result = self.broker.place_order(
+                    ticker=signal.ticker,
+                    side=side,
+                    quantity=1.0,
+                    order_type=OrderType.MARKET,
+                )
+                self.db.update_order(
+                    int(order_row["id"]),
+                    state=result.state.value,
+                    broker_order_id=result.broker_order_id or result.order_id,
+                )
+            except Exception as exc:
+                self.db.update_order(int(order_row["id"]), state="REJECTED")
+                logger.warning("Auto execution failed for %s: %s", signal.ticker, exc)
 
     def _check_signal_changes(self, signals):
         for s in signals:
@@ -88,6 +131,7 @@ class ScanService:
         self._check_signal_changes(signals)
 
         self.db.save_signals(actionable)
+        self._auto_execute_signals(actionable)
 
         for s in actionable:
 
@@ -124,7 +168,7 @@ class ScanService:
         if getattr(self.settings, "PAPER_MODE", False):
             self.update_paper_trades()
 
-        return signals
+        return cast(list[Signal], signals)
 
     def update_paper_trades(self):
         if not getattr(self.settings, "PAPER_MODE", False):

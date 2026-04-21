@@ -107,6 +107,24 @@ pytest tests/ -v
 ruff check . --isolated
 ```
 
+## Known Limitations
+
+- `yfinance` verisi delisted hisseleri her zaman icermeyebilir; bu nedenle backtest ve walk-forward sonuclarinda survivorship bias olasi kalir.
+
+## Security
+
+- Flask API JWT tabanli auth ile korunur; `JWT_SECRET_KEY`, `ADMIN_EMAIL` ve `ADMIN_PASSWORD_HASH` olmadan API startup baslatilmaz.
+- CORS sadece `CORS_ORIGINS` whitelist'inden gelen origin'lere izin verir; `*` varsayilan olarak kullanilmaz.
+- Uretimde `.env` dosyasini repoya eklemeyin; hassas ayarlar ortam degiskenleri veya lokal `.env` ile saglanmalidir.
+
+## Live Trading (Experimental)
+
+- `BROKER_PROVIDER=algolab` ile AlgoLab broker iskeleti secilebilir; ancak resmi HTTP endpoint yollarinin guncelligi teyit edilmeden canli kullanim yapmayin.
+- `ALGOLAB_DRY_RUN=true` varsayilan ve onerilen moddur; bu modda emirler sadece loglanir, gercekten gonderilmez.
+- Canli emir icin cift onay gerekir: `ALGOLAB_DRY_RUN=false` ve `CONFIRM_LIVE_TRADING=true` birlikte ayarlanmalidir.
+- `AUTO_EXECUTE` varsayilan olarak kapali gelir; acildiginda ilk asamada yalnizca `STRONG_BUY` ve `STRONG_SELL` sinyalleri broker'a iletilir.
+- Tum risk ve sorumluluk kullanicidadir; bu iskelet uretim oncesi broker sandbox/mock ortaminda ayrica dogrulanmalidir.
+
 ## Contributing
 
 Please read [CONTRIBUTING.md](./CONTRIBUTING.md) before opening a PR or pushing non-trivial changes.

@@ -6,6 +6,7 @@ from typing import Any, Optional, Protocol
 
 import pandas as pd
 
+from execution.base import AccountInfo, Order, OrderResult, OrderSide, OrderStatus, OrderType, Position
 from signal_models import Signal
 
 
@@ -59,18 +60,44 @@ class SignalRepositoryProtocol(Protocol):
     ) -> None: ...
     def get_open_paper_trades(self) -> list[Any]: ...
     def update_all_paper_close(self, prices: dict[str, float]) -> None: ...
-    def ping(self) -> bool: ...
-
-
-class ExecutionProviderProtocol(Protocol):
-    def get_account_balance(self) -> float: ...
-    def get_positions(self) -> dict[str, Any]: ...
-    def submit_order(
+    def create_order(
         self,
         ticker: str,
         side: str,
         quantity: float,
-        order_type: str = ...,
+        order_type: str,
+        price: float | None = ...,
+        state: str = ...,
+        broker_order_id: str | None = ...,
+        filled_qty: float = ...,
+        avg_fill_price: float | None = ...,
+    ) -> dict[str, Any]: ...
+    def update_order(
+        self,
+        order_id: int,
+        *,
+        state: str | None = ...,
+        broker_order_id: str | None = ...,
+        filled_qty: float | None = ...,
+        avg_fill_price: float | None = ...,
+    ) -> Optional[dict[str, Any]]: ...
+    def get_pending_orders(self) -> list[dict[str, Any]]: ...
+    def ping(self) -> bool: ...
+
+
+class ExecutionProviderProtocol(Protocol):
+    def authenticate(self) -> bool: ...
+    def get_positions(self) -> list[Position]: ...
+    def get_account_info(self) -> AccountInfo: ...
+    def place_order(
+        self,
+        ticker: str,
+        side: OrderSide,
+        quantity: float,
+        order_type: OrderType,
         price: Optional[float] = ...,
-    ) -> Any: ...
+        stop_price: Optional[float] = ...,
+    ) -> OrderResult: ...
     def cancel_order(self, order_id: str) -> bool: ...
+    def get_order_status(self, order_id: str) -> OrderStatus: ...
+    def get_open_orders(self) -> list[Order]: ...

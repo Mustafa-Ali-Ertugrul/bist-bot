@@ -4,8 +4,25 @@ from __future__ import annotations
 
 import io
 import logging
+import re
 import sys
 from logging.handlers import RotatingFileHandler
+
+
+SENSITIVE_PATTERNS = [
+    re.compile(r"(password|passwd|secret|token|api_key|otp|session)\s*[=:]\s*([^\s,;]+)", re.IGNORECASE),
+    re.compile(r"(ALGOLAB_PASSWORD|ALGOLAB_API_KEY|JWT_SECRET_KEY)=([^\s]+)", re.IGNORECASE),
+]
+
+
+class SensitiveDataFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        message = record.getMessage()
+        for pattern in SENSITIVE_PATTERNS:
+            message = pattern.sub(r"\1=***", message)
+        record.msg = message
+        record.args = ()
+        return True
 
 
 def configure_logging(
@@ -21,9 +38,11 @@ def configure_logging(
 
     formatter = logging.Formatter(fmt, datefmt=datefmt)
     handlers: list[logging.Handler] = []
+    sensitive_filter = SensitiveDataFilter()
 
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(formatter)
+    console_handler.addFilter(sensitive_filter)
     handlers.append(console_handler)
 
     if log_file:
@@ -34,6 +53,7 @@ def configure_logging(
             encoding="utf-8",
         )
         file_handler.setFormatter(formatter)
+        file_handler.addFilter(sensitive_filter)
         handlers.append(file_handler)
 
     logging.basicConfig(level=level, handlers=handlers, force=True)

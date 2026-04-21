@@ -21,6 +21,7 @@ def main():
 
     from dashboard import create_default_dashboard_app
     from dependencies import get_default_container
+    from execution.order_tracker import OrderTracker
     from scanner import ScanService
     from scheduler import MarketScheduler
     from backtest_runner import run_backtest
@@ -29,12 +30,14 @@ def main():
     from config import settings
 
     container = get_default_container()
-    scanner = ScanService(container.fetcher, container.engine, container.notifier, container.db, settings=settings)
+    scanner = ScanService(container.fetcher, container.engine, container.notifier, container.db, broker=container.broker, settings=settings)
     scheduler = MarketScheduler(scanner, container.notifier, settings=settings)
+    order_tracker = OrderTracker(container.broker, container.db)
 
     def shutdown(signum, frame):
         logger.info("🛑 Bot durduruluyor...")
         scheduler.running = False
+        order_tracker.stop()
 
     import signal as _signal
     _signal.signal(_signal.SIGINT, shutdown)
@@ -45,8 +48,14 @@ def main():
         run_backtest(container.fetcher)
     elif "--dashboard" in sys.argv:
         app = create_default_dashboard_app(container)
-        app.run(host="0.0.0.0", port=settings.FLASK_PORT, debug=settings.FLASK_DEBUG)
+        app.run(
+            host="0.0.0.0",
+            port=settings.FLASK_PORT,
+            debug=False,
+            use_reloader=settings.FLASK_DEBUG,
+        )
     else:
+        order_tracker.start()
         app = create_default_dashboard_app(container)
         t = Thread(
             target=lambda: app.run(host="0.0.0.0", port=settings.FLASK_PORT, debug=False, use_reloader=False),

@@ -1,11 +1,23 @@
+"""Execution provider contracts and shared order models."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Any, Optional
+from typing import Any, Protocol
 from uuid import uuid4
+
+
+def utc_now() -> datetime:
+    return datetime.now(UTC)
+
+
+class OrderType(StrEnum):
+    MARKET = "MARKET"
+    LIMIT = "LIMIT"
+    STOP = "STOP"
 
 
 class OrderSide(StrEnum):
@@ -13,33 +25,49 @@ class OrderSide(StrEnum):
     SELL = "SELL"
 
 
-class OrderType(StrEnum):
-    MARKET = "MARKET"
-    LIMIT = "LIMIT"
-
-
-class OrderStatus(StrEnum):
-    CREATED = "created"
-    SENT = "sent"
-    PARTIAL = "partial"
-    FILLED = "filled"
-    CANCELLED = "cancelled"
-    REJECTED = "rejected"
+class OrderState(StrEnum):
+    CREATED = "CREATED"
+    SENT = "SENT"
+    PARTIAL = "PARTIAL"
+    FILLED = "FILLED"
+    CANCELLED = "CANCELLED"
+    REJECTED = "REJECTED"
 
 
 @dataclass
-class BrokerOrder:
+class Position:
+    ticker: str
+    quantity: float
+    average_price: float
+    market_value: float = 0.0
+    unrealized_pnl: float = 0.0
+    updated_at: datetime = field(default_factory=utc_now)
+
+
+@dataclass
+class AccountInfo:
+    cash_balance: float
+    buying_power: float
+    equity: float
+    currency: str = "TRY"
+    account_id: str | None = None
+
+
+@dataclass
+class Order:
     ticker: str
     side: OrderSide
     quantity: float
-    order_type: OrderType = OrderType.MARKET
-    price: Optional[float] = None
+    order_type: OrderType
+    price: float | None = None
+    stop_price: float | None = None
     order_id: str = field(default_factory=lambda: uuid4().hex)
-    status: OrderStatus = OrderStatus.CREATED
+    broker_order_id: str | None = None
+    state: OrderState = OrderState.CREATED
     filled_quantity: float = 0.0
-    average_fill_price: Optional[float] = None
-    created_at: datetime = field(default_factory=datetime.utcnow)
-    updated_at: datetime = field(default_factory=datetime.utcnow)
+    average_fill_price: float | None = None
+    created_at: datetime = field(default_factory=utc_now)
+    updated_at: datetime = field(default_factory=utc_now)
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def remaining_quantity(self) -> float:
@@ -47,36 +75,78 @@ class BrokerOrder:
 
 
 @dataclass
-class BrokerPosition:
-    ticker: str
-    quantity: float
-    average_price: float
-    opened_at: datetime = field(default_factory=datetime.utcnow)
-    updated_at: datetime = field(default_factory=datetime.utcnow)
+class OrderStatus:
+    order_id: str
+    state: OrderState
+    filled_quantity: float = 0.0
+    average_fill_price: float | None = None
+    broker_order_id: str | None = None
+    raw_payload: dict[str, Any] = field(default_factory=dict)
 
 
-class BaseBroker(ABC):
-    """Common contract for paper and live execution providers."""
+@dataclass
+class OrderResult:
+    accepted: bool
+    order_id: str
+    state: OrderState
+    broker_order_id: str | None = None
+    message: str = ""
+    raw_payload: dict[str, Any] = field(default_factory=dict)
 
-    @abstractmethod
-    def get_account_balance(self) -> float:
-        """Return currently available cash balance."""
 
-    @abstractmethod
-    def get_positions(self) -> dict[str, BrokerPosition]:
-        """Return currently open positions keyed by ticker."""
-
-    @abstractmethod
-    def submit_order(
+class ExecutionProvider(Protocol):
+    def authenticate(self) -> bool: ...
+    def get_positions(self) -> list[Position]: ...
+    def get_account_info(self) -> AccountInfo: ...
+    def place_order(
         self,
         ticker: str,
-        side: str,
+        side: OrderSide,
         quantity: float,
-        order_type: str = "MARKET",
-        price: Optional[float] = None,
-    ) -> BrokerOrder:
-        """Submit an order and return the broker-side order model."""
+        order_type: OrderType,
+        price: float | None = None,
+        stop_price: float | None = None,
+    ) -> OrderResult: ...
+    def cancel_order(self, order_id: str) -> bool: ...
+    def get_order_status(self, order_id: str) -> OrderStatus: ...
+    def get_open_orders(self) -> list[Order]: ...
+
+
+class BaseExecutionProvider(ABC):
+    """Shared execution provider base class."""
+
+    @abstractmethod
+    def authenticate(self) -> bool:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_positions(self) -> list[Position]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_account_info(self) -> AccountInfo:
+        raise NotImplementedError
+
+    @abstractmethod
+    def place_order(
+        self,
+        ticker: str,
+        side: OrderSide,
+        quantity: float,
+        order_type: OrderType,
+        price: float | None = None,
+        stop_price: float | None = None,
+    ) -> OrderResult:
+        raise NotImplementedError
 
     @abstractmethod
     def cancel_order(self, order_id: str) -> bool:
-        """Cancel a pending order if the broker still allows it."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_order_status(self, order_id: str) -> OrderStatus:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_open_orders(self) -> list[Order]:
+        raise NotImplementedError

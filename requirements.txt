@@ -7,6 +7,11 @@ beautifulsoup4>=4.12.0
 plotly>=5.18.0
 python-dotenv>=1.0.0
 flask>=3.0.0
+flask-cors>=5.0.0
+flask-jwt-extended>=4.6.0
+flask-limiter>=3.8.0
+bcrypt<4.1
+passlib[bcrypt]>=1.7.4
 scikit-learn>=1.4.0
 pytest>=9.0.0
 SQLAlchemy>=2.0.36
