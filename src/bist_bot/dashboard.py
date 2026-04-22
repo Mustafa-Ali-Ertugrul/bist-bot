@@ -20,9 +20,31 @@ from bist_bot.contracts import DataFetcherProtocol, SignalRepositoryProtocol, St
 from bist_bot.dependencies import AppContainer, get_default_container
 from bist_bot.indicators import TechnicalIndicators
 from bist_bot.locales import get_message
+from bist_bot.scanner import ScanService
 
 TR = timezone(timedelta(hours=3))
 logger = logging.getLogger(__name__)
+
+
+class _SilentNotifier:
+    def send_message(self, text: str, parse_mode: str = "HTML") -> bool:
+        _ = text, parse_mode
+        return True
+
+    def send_signal(self, signal) -> bool:
+        _ = signal
+        return True
+
+    def send_scan_summary(self, signals, total_scanned: int) -> bool:
+        _ = signals, total_scanned
+        return True
+
+    def send_signal_change(self, ticker: str, old_signal, new_signal) -> bool:
+        _ = ticker, old_signal, new_signal
+        return True
+
+    def send_startup_message(self) -> bool:
+        return True
 
 
 def _round_value(value: Any) -> float | None:
@@ -74,6 +96,9 @@ def create_dashboard_app(
 
     def get_db() -> SignalRepositoryProtocol:
         return app.config["db"]
+
+    def get_scan_service() -> ScanService:
+        return ScanService(get_fetcher(), get_engine(), _SilentNotifier(), get_db(), settings=settings)
 
     def verify_admin(email: str, password: str) -> bool:
         manager = getattr(get_db(), "manager", None)
@@ -139,35 +164,11 @@ def create_dashboard_app(
     def api_scan():
         start_time = time.time()
         try:
-            runtime_fetcher = get_fetcher()
-            runtime_engine = get_engine()
-            runtime_db = get_db()
             payload = request.get_json(silent=True) or {}
             force_refresh = _coerce_bool(payload.get("force_refresh", request.args.get("force_refresh")))
-
-            if force_refresh:
-                runtime_fetcher.clear_cache(scope="intraday_fetch")
-                runtime_fetcher.clear_cache(scope="analysis")
-            all_data = runtime_fetcher.fetch_multi_timeframe_all(
-                trend_period=getattr(settings, "MTF_TREND_PERIOD", "6mo"),
-                trend_interval=getattr(settings, "MTF_TREND_INTERVAL", "1d"),
-                trigger_period=getattr(settings, "MTF_TRIGGER_PERIOD", "1mo"),
-                trigger_interval=getattr(settings, "MTF_TRIGGER_INTERVAL", "15m"),
-                force_refresh=force_refresh,
-            )
-            signals = runtime_engine.scan_all(all_data)
-            actionable = runtime_engine.get_actionable_signals(signals)
-
-            runtime_db.save_signals(actionable)
-
-            buys = [signal for signal in signals if signal.score > 0]
-            sells = [signal for signal in signals if signal.score < 0]
-            runtime_db.save_scan_log(
-                len(all_data),
-                len(actionable),
-                len(buys),
-                len(sells),
-            )
+            scan_service = get_scan_service()
+            signals = scan_service.scan_once(force_refresh=force_refresh)
+            scan_stats = scan_service.last_scan_stats
 
             results = [
                 {
@@ -188,7 +189,7 @@ def create_dashboard_app(
             return jsonify(
                 {
                     "status": "ok",
-                    "scanned": len(all_data),
+                    "scanned": scan_stats["scanned"],
                     "signals": results,
                     "force_refresh": force_refresh,
                     "timestamp": datetime.now(TR).isoformat(),

@@ -41,6 +41,7 @@ class ScanService:
         self.execution_service = execution_service or ExecutionService(db, broker=broker, settings=self.settings)
         self.paper_trade_service = paper_trade_service or PaperTradeService(fetcher, db, settings=self.settings)
         self.notification_service = notification_service or NotificationDispatchService(notifier, settings=self.settings)
+        self.last_scan_stats: dict[str, int] = {"scanned": 0, "actionable": 0, "buys": 0, "sells": 0}
 
     def _auto_execute_signals(self, signals: list[Signal]) -> None:
         self.execution_service.auto_execute_signals(signals)
@@ -77,6 +78,12 @@ class ScanService:
 
         buys = [s for s in signals if s.score > 0]
         sells = [s for s in signals if s.score < 0]
+        self.last_scan_stats = {
+            "scanned": len(all_data),
+            "actionable": len(actionable),
+            "buys": len(buys),
+            "sells": len(sells),
+        }
 
         logger.info(f"\n{'─'*55}")
         logger.info("📊 " + get_message("log.results"))

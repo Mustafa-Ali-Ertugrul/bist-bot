@@ -8,6 +8,7 @@ from typing import Any, cast
 
 import pandas as pd
 from flask_jwt_extended import create_access_token
+from sqlalchemy import text
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:
@@ -20,11 +21,12 @@ from bist_bot.strategy.signal_models import Signal, SignalType  # noqa: E402
 
 
 class FetcherSpy:
-    def __init__(self) -> None:
+    def __init__(self, scan_payload: dict[str, dict[str, Any]] | None = None) -> None:
         self.clear_calls: list[tuple[str, str | None]] = []
         self.scan_force_refresh: list[bool] = []
         self.fetch_single_force: list[bool] = []
         self.analysis_cache: dict[str, dict[str, Any]] = {}
+        self.scan_payload = scan_payload or {}
 
     def clear_cache(
         self,
@@ -50,7 +52,7 @@ class FetcherSpy:
     ):
         _ = trend_period, trend_interval, trigger_period, trigger_interval
         self.scan_force_refresh.append(force_refresh)
-        return {}
+        return self.scan_payload
 
     def fetch_single(
         self,
@@ -82,12 +84,13 @@ class FetcherSpy:
 
 
 class EngineSpy:
-    def __init__(self) -> None:
+    def __init__(self, scan_signals: list[Signal] | None = None) -> None:
         self.analyze_calls = 0
+        self.scan_signals = scan_signals or []
 
     def scan_all(self, data):
         _ = data
-        return []
+        return list(self.scan_signals)
 
     def get_actionable_signals(self, signals):
         return signals
@@ -98,15 +101,22 @@ class EngineSpy:
         return Signal(ticker=ticker, signal_type=SignalType.BUY, score=25, price=5.2)
 
 
-def _build_authorized_client(tmp_path):
-    fetcher = FetcherSpy()
-    engine = EngineSpy()
+def _build_authorized_client(
+    tmp_path,
+    *,
+    scan_signals: list[Signal] | None = None,
+    scan_payload: dict[str, dict[str, Any]] | None = None,
+    **overrides: Any,
+):
+    fetcher = FetcherSpy(scan_payload=scan_payload)
+    engine = EngineSpy(scan_signals=scan_signals)
     with settings.override(
         DB_PATH=str(tmp_path / "dashboard_cache.db"),
         JWT_SECRET_KEY="test_secret_key_12345678901234567890",
-        ADMIN_EMAIL="",
-        ADMIN_PASSWORD_HASH="",
+        ADMIN_BOOTSTRAP_EMAIL="",
+        ADMIN_BOOTSTRAP_PASSWORD_HASH="",
         CORS_ORIGINS=("http://localhost:8501",),
+        **overrides,
     ):
         manager = DatabaseManager(sqlite_path=str(tmp_path / "dashboard_cache.db"))
         db = DataAccess(manager)
@@ -115,11 +125,11 @@ def _build_authorized_client(tmp_path):
         with app.app_context():
             token = create_access_token(identity="admin@bistbot.local")
         client = app.test_client()
-    return client, fetcher, engine, token
+    return client, fetcher, engine, token, db
 
 
 def test_scan_endpoint_accepts_force_refresh(tmp_path):
-    client, fetcher, _engine, token = _build_authorized_client(tmp_path)
+    client, fetcher, _engine, token, _db = _build_authorized_client(tmp_path)
 
     response = client.post(
         "/api/scan",
@@ -137,7 +147,7 @@ def test_scan_endpoint_accepts_force_refresh(tmp_path):
 
 
 def test_analyze_endpoint_uses_analysis_cache_and_force_refresh(tmp_path):
-    client, fetcher, engine, token = _build_authorized_client(tmp_path)
+    client, fetcher, engine, token, _db = _build_authorized_client(tmp_path)
     headers = {"Authorization": f"Bearer {token}"}
 
     first = client.get("/api/analyze/THYAO", headers=headers)
@@ -152,3 +162,23 @@ def test_analyze_endpoint_uses_analysis_cache_and_force_refresh(tmp_path):
     assert ("analysis", "THYAO.IS") in fetcher.clear_calls
     assert second.get_json()["force_refresh"] is False
     assert forced.get_json()["force_refresh"] is True
+
+
+def test_scan_endpoint_reuses_scan_service_side_effects(tmp_path):
+    signal = Signal(ticker="THYAO.IS", signal_type=SignalType.BUY, score=25, price=5.2)
+    client, _fetcher, _engine, token, db = _build_authorized_client(
+        tmp_path,
+        scan_signals=[signal],
+        scan_payload={"THYAO.IS": {"trend": object(), "trigger": object()}},
+    )
+
+    with settings.override(PAPER_MODE=True):
+        response = client.post("/api/scan", headers={"Authorization": f"Bearer {token}"})
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload is not None
+    assert len(payload["signals"]) == 1
+    with db.manager.engine.begin() as conn:
+        trade_count = conn.execute(text("SELECT COUNT(*) FROM paper_trades")).scalar_one()
+    assert trade_count == 1

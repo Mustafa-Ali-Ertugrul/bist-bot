@@ -25,7 +25,7 @@ class IdentityIndicators:
 class FakeRiskLevels:
     final_stop = 95.0
     final_target = 120.0
-    confidence = "ORTA"
+    confidence = "confidence.medium"
     risk_reward_ratio = 2.0
     method_used = "Test"
     position_size = 10
@@ -164,6 +164,14 @@ def test_engine_thresholds_match_config():
     assert engine.WEAK_SELL_THRESHOLD == settings.WEAK_SELL_THRESHOLD == -8
     assert engine.SELL_THRESHOLD == settings.SELL_THRESHOLD == -20
     assert engine.STRONG_SELL_THRESHOLD == settings.STRONG_SELL_THRESHOLD == -48
+
+
+def test_engine_uses_configured_sideways_and_momentum_thresholds():
+    with settings.override(SIDEWAYS_EXTRA_THRESHOLD=9.0, MOMENTUM_CONFIRMATION_THRESHOLD=6.5):
+        engine = StrategyEngine()
+
+    assert engine.SIDEWAYS_EXTRA_THRESHOLD == 9.0
+    assert engine.MOMENTUM_CONFIRMATION == 6.5
 
 
 def test_score_classification_full_range():

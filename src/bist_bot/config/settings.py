@@ -222,8 +222,8 @@ class Settings:
     API_BASE_URL: str = _get_str_env("API_BASE_URL", f"http://localhost:{_get_int_env('FLASK_PORT', 5000)}")
     RATE_LIMIT_STORAGE_URI: str = _get_str_env("RATE_LIMIT_STORAGE_URI", "memory://")
     JWT_SECRET_KEY: str = _get_str_env("JWT_SECRET_KEY")
-    ADMIN_EMAIL: str = _get_str_env("ADMIN_EMAIL")
-    ADMIN_PASSWORD_HASH: str = _get_str_env("ADMIN_PASSWORD_HASH")
+    ADMIN_BOOTSTRAP_EMAIL: str = _get_str_env("ADMIN_BOOTSTRAP_EMAIL")
+    ADMIN_BOOTSTRAP_PASSWORD_HASH: str = _get_str_env("ADMIN_BOOTSTRAP_PASSWORD_HASH")
     CORS_ORIGINS: tuple[str, ...] = field(default_factory=lambda: _get_csv_env("CORS_ORIGINS"))
 
     INITIAL_CAPITAL: float = _get_float_env("INITIAL_CAPITAL", 8500.0)
@@ -267,6 +267,8 @@ class Settings:
     WEAK_SELL_THRESHOLD: int = _get_int_env("WEAK_SELL_THRESHOLD", -8)
     SELL_THRESHOLD: int = _get_int_env("SELL_THRESHOLD", -20)
     STRONG_SELL_THRESHOLD: int = _get_int_env("STRONG_SELL_THRESHOLD", -48)
+    SIDEWAYS_EXTRA_THRESHOLD: float = _get_float_env("SIDEWAYS_EXTRA_THRESHOLD", 5.0)
+    MOMENTUM_CONFIRMATION_THRESHOLD: float = _get_float_env("MOMENTUM_CONFIRMATION_THRESHOLD", 4.0)
 
     WALKFORWARD_TRAIN_DAYS: int = _get_int_env("WALKFORWARD_TRAIN_DAYS", 180)
     WALKFORWARD_TEST_DAYS: int = _get_int_env("WALKFORWARD_TEST_DAYS", 30)
@@ -287,6 +289,10 @@ class Settings:
     def require_security_config(self) -> None:
         if not self.JWT_SECRET_KEY:
             raise RuntimeError("Missing required security setting(s): JWT_SECRET_KEY")
+
+    @property
+    def admin_bootstrap_enabled(self) -> bool:
+        return bool(self.ADMIN_BOOTSTRAP_EMAIL and self.ADMIN_BOOTSTRAP_PASSWORD_HASH)
 
     def validate_broker_config(self) -> None:
         if self.BROKER_PROVIDER not in {"paper", "algolab"}:

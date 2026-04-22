@@ -66,8 +66,8 @@ def build_test_client(tmp_path):
     with settings.override(
         DB_PATH=str(tmp_path / "auth_test.db"),
         JWT_SECRET_KEY="test_secret_key_12345678901234567890",
-        ADMIN_EMAIL="admin@bistbot.local",
-        ADMIN_PASSWORD_HASH=password_hash,
+        ADMIN_BOOTSTRAP_EMAIL="admin@bistbot.local",
+        ADMIN_BOOTSTRAP_PASSWORD_HASH=password_hash,
         CORS_ORIGINS=("http://localhost:8501",),
     ):
         manager = DatabaseManager(sqlite_path=str(tmp_path / "auth_test.db"))
@@ -82,12 +82,12 @@ def build_db_user_client(tmp_path, *, include_bootstrap: bool = False):
         "DB_PATH": str(tmp_path / "auth_db_only.db"),
         "JWT_SECRET_KEY": "test_secret_key_12345678901234567890",
         "CORS_ORIGINS": ("http://localhost:8501",),
-        "ADMIN_EMAIL": "",
-        "ADMIN_PASSWORD_HASH": "",
+        "ADMIN_BOOTSTRAP_EMAIL": "",
+        "ADMIN_BOOTSTRAP_PASSWORD_HASH": "",
     }
     if include_bootstrap:
-        override_kwargs["ADMIN_EMAIL"] = "bootstrap@bistbot.local"
-        override_kwargs["ADMIN_PASSWORD_HASH"] = hash_password("bootstrap-password")
+        override_kwargs["ADMIN_BOOTSTRAP_EMAIL"] = "bootstrap@bistbot.local"
+        override_kwargs["ADMIN_BOOTSTRAP_PASSWORD_HASH"] = hash_password("bootstrap-password")
 
     with settings.override(**override_kwargs):
         manager = DatabaseManager(sqlite_path=str(tmp_path / "auth_db_only.db"))
@@ -177,8 +177,8 @@ def test_existing_db_users_prevent_env_bootstrap_override(tmp_path):
         DB_PATH=str(tmp_path / "auth_db_only.db"),
         JWT_SECRET_KEY="test_secret_key_12345678901234567890",
         CORS_ORIGINS=("http://localhost:8501",),
-        ADMIN_EMAIL="bootstrap@bistbot.local",
-        ADMIN_PASSWORD_HASH=hash_password("bootstrap-password"),
+        ADMIN_BOOTSTRAP_EMAIL="bootstrap@bistbot.local",
+        ADMIN_BOOTSTRAP_PASSWORD_HASH=hash_password("bootstrap-password"),
     ):
         db = DataAccess(manager)
         app = create_dashboard_app(cast(Any, DummyFetcher()), cast(Any, DummyEngine()), db)
@@ -200,8 +200,8 @@ def test_missing_jwt_secret_prevents_app_startup(tmp_path):
     with settings.override(
         DB_PATH=str(tmp_path / "auth_missing_jwt.db"),
         JWT_SECRET_KEY="",
-        ADMIN_EMAIL="",
-        ADMIN_PASSWORD_HASH="",
+        ADMIN_BOOTSTRAP_EMAIL="",
+        ADMIN_BOOTSTRAP_PASSWORD_HASH="",
         CORS_ORIGINS=("http://localhost:8501",),
     ):
         manager = DatabaseManager(sqlite_path=str(tmp_path / "auth_missing_jwt.db"))
@@ -220,8 +220,8 @@ def test_legacy_bcrypt_hash_migrates_on_successful_login(tmp_path):
     with settings.override(
         DB_PATH=str(tmp_path / "auth_legacy.db"),
         JWT_SECRET_KEY="test_secret_key_12345678901234567890",
-        ADMIN_EMAIL="",
-        ADMIN_PASSWORD_HASH="",
+        ADMIN_BOOTSTRAP_EMAIL="",
+        ADMIN_BOOTSTRAP_PASSWORD_HASH="",
         CORS_ORIGINS=("http://localhost:8501",),
     ):
         manager = DatabaseManager(sqlite_path=str(tmp_path / "auth_legacy.db"))

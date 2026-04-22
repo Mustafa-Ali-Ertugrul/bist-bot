@@ -181,7 +181,7 @@ class DatabaseManager:
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_orders_state ON orders(state)"))
 
     def _seed_admin_user(self) -> None:
-        if not settings.ADMIN_EMAIL or not settings.ADMIN_PASSWORD_HASH:
+        if not settings.admin_bootstrap_enabled:
             return
 
         now = self.now_iso()
@@ -198,8 +198,8 @@ class DatabaseManager:
                     """
                 ),
                 {
-                    "email": settings.ADMIN_EMAIL,
-                    "password_hash": settings.ADMIN_PASSWORD_HASH,
+                    "email": settings.ADMIN_BOOTSTRAP_EMAIL,
+                    "password_hash": settings.ADMIN_BOOTSTRAP_PASSWORD_HASH,
                     "created_at": now,
                     "updated_at": now,
                 },

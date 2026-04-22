@@ -144,8 +144,8 @@ def _build_client(tmp_path, fetcher, engine):
     with settings.override(
         DB_PATH=str(tmp_path / "integration_api.db"),
         JWT_SECRET_KEY="test_secret_key_12345678901234567890",
-        ADMIN_EMAIL="",
-        ADMIN_PASSWORD_HASH="",
+        ADMIN_BOOTSTRAP_EMAIL="",
+        ADMIN_BOOTSTRAP_PASSWORD_HASH="",
         CORS_ORIGINS=("http://localhost:8501",),
     ):
         manager = DatabaseManager(sqlite_path=str(tmp_path / "integration_api.db"))

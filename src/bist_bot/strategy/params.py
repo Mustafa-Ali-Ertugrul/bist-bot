@@ -16,6 +16,10 @@ class StrategyParams:
     weak_sell_threshold: float = field(default_factory=lambda: float(settings.WEAK_SELL_THRESHOLD))
     sell_threshold: float = field(default_factory=lambda: float(settings.SELL_THRESHOLD))
     strong_sell_threshold: float = field(default_factory=lambda: float(settings.STRONG_SELL_THRESHOLD))
+    sideways_extra_threshold: float = field(default_factory=lambda: float(settings.SIDEWAYS_EXTRA_THRESHOLD))
+    momentum_confirmation_threshold: float = field(
+        default_factory=lambda: float(settings.MOMENTUM_CONFIRMATION_THRESHOLD)
+    )
 
     # RSI Parametreleri
     rsi_oversold_extreme: float = 25.0

@@ -145,7 +145,7 @@ python main.py --backtest --walk-forward --historical-universe-date 2023-01-01
 
 - Flask API JWT tabanli auth ile korunur; startup icin yalnizca `JWT_SECRET_KEY` zorunludur.
 - Kimlik dogrulama tek kaynak olarak `users` tablosundan yapilir; login endpoint env icindeki admin bilgilerini dogrudan kullanmaz.
-- `ADMIN_EMAIL` ve `ADMIN_PASSWORD_HASH` verilirse bunlar sadece bootstrap icin kullanilir: uygulama ilk acilista `users` tablosu bossa ilk admin kullanicisi olusturulur.
+- `ADMIN_BOOTSTRAP_EMAIL` ve `ADMIN_BOOTSTRAP_PASSWORD_HASH` verilirse bunlar sadece bootstrap icin kullanilir: uygulama ilk acilista `users` tablosu bossa ilk admin kullanicisi olusturulur.
 - `users` tablosunda en az bir kullanici varsa env bootstrap ayarlari yok sayilir; mevcut DB kullanicilari source of truth olmaya devam eder.
 - CORS sadece `CORS_ORIGINS` whitelist'inden gelen origin'lere izin verir; `*` varsayilan olarak kullanilmaz.
 - Uretimde `.env` dosyasini repoya eklemeyin; hassas ayarlar ortam degiskenleri veya lokal `.env` ile saglanmalidir.
@@ -153,7 +153,8 @@ python main.py --backtest --walk-forward --historical-universe-date 2023-01-01
 Migration note:
 
 - Eski davranista env admin bilgileri startup icin zorunluydu; artik degil. Mevcut deployment'ta `users` tablosunda kullanici varsa ekstra degisiklik gerekmez.
-- Yeni kurulumda isterseniz ilk admin kullanicisini bir kez `ADMIN_EMAIL` + `ADMIN_PASSWORD_HASH` ile bootstrap edin; tablo dolduktan sonra bu env'leri kaldirabilirsiniz.
+- Yeni kurulumda isterseniz ilk admin kullanicisini bir kez `ADMIN_BOOTSTRAP_EMAIL` + `ADMIN_BOOTSTRAP_PASSWORD_HASH` ile bootstrap edin; tablo dolduktan sonra bu env'leri kaldirabilirsiniz.
+- Eski `ADMIN_EMAIL` ve `ADMIN_PASSWORD_HASH` env adlari artik okunmaz; deployment env'lerini yeni bootstrap adlarina tasiyin.
 
 ## Live Trading (Experimental)
 

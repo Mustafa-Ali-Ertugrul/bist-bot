@@ -24,9 +24,6 @@ logger = logging.getLogger(__name__)
 
 
 class StrategyEngine:
-    SIDEWAYS_EXTRA_THRESHOLD = 5
-    MOMENTUM_CONFIRMATION = 4.0
-
     def __init__(
         self,
         indicators: Optional[TechnicalIndicators] = None,
@@ -45,6 +42,8 @@ class StrategyEngine:
         self.WEAK_SELL_THRESHOLD = self.params.weak_sell_threshold
         self.SELL_THRESHOLD = self.params.sell_threshold
         self.STRONG_SELL_THRESHOLD = self.params.strong_sell_threshold
+        self.SIDEWAYS_EXTRA_THRESHOLD = self.params.sideways_extra_threshold
+        self.MOMENTUM_CONFIRMATION = self.params.momentum_confirmation_threshold
 
     def _extract_timeframes(self, market_data: pd.DataFrame | dict[str, pd.DataFrame]) -> tuple[pd.DataFrame, pd.DataFrame, bool]:
         if isinstance(market_data, dict):
