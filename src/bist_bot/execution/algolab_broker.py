@@ -121,6 +121,7 @@ class AlgoLabBroker(BaseExecutionProvider):
         self.dry_run = dry_run
         self.connect_timeout = connect_timeout
         self.read_timeout = read_timeout
+        self.timeout: tuple[float, float] = (self.connect_timeout, self.read_timeout)
         self.max_retries = max_retries
         self.max_requests_per_second = max_requests_per_second
         self._circuit = _CircuitBreaker(

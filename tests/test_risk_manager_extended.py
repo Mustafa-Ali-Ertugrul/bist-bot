@@ -320,7 +320,7 @@ def test_risk_levels_dataclass_defaults():
     
     # Check string defaults
     assert levels.method_used == ""
-    assert levels.confidence == "DÜŞÜK"
+    assert levels.confidence == "confidence.low"
 
 
 def test_risk_manager_with_custom_parameters():
