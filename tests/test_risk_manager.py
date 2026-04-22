@@ -12,7 +12,7 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
-from bist_bot.risk_manager import RiskLevels, RiskManager  # noqa: E402
+from bist_bot.risk import RiskLevels, RiskManager  # noqa: E402
 
 
 def build_frame(scale: float = 1.0, atr: float = 2.0) -> pd.DataFrame:

@@ -1,59 +1,93 @@
-"""Centralized logging setup for CLI entry points."""
+"""Minimal structured logging helpers with JSON and console renderers."""
 
 from __future__ import annotations
 
 import io
+import json
 import logging
-import re
 import sys
-from logging.handlers import RotatingFileHandler
+from datetime import datetime, timezone
+from typing import Any
+
+try:
+    import structlog as _structlog  # type: ignore
+except ImportError:  # pragma: no cover - optional dependency
+    _structlog = None
+
+from bist_bot.config.settings import settings
 
 
-SENSITIVE_PATTERNS = [
-    re.compile(r"(password|passwd|secret|token|api_key|otp|session)\s*[=:]\s*([^\s,;]+)", re.IGNORECASE),
-    re.compile(r"(ALGOLAB_PASSWORD|ALGOLAB_API_KEY|JWT_SECRET_KEY)=([^\s]+)", re.IGNORECASE),
-]
+_DEFAULT_COMPONENT = "app"
 
 
-class SensitiveDataFilter(logging.Filter):
-    def filter(self, record: logging.LogRecord) -> bool:
-        message = record.getMessage()
-        for pattern in SENSITIVE_PATTERNS:
-            message = pattern.sub(r"\1=***", message)
-        record.msg = message
-        record.args = ()
-        return True
+def _normalize_level(level: str | None = None) -> int:
+    return getattr(logging, (level or getattr(settings, "LOG_LEVEL", "INFO")).upper(), logging.INFO)
 
 
-def configure_logging(
-    *,
-    level: int = logging.INFO,
-    log_file: str | None = "bot.log",
-    fmt: str = "%(asctime)s [%(levelname)s] %(message)s",
-    datefmt: str = "%H:%M:%S",
-) -> None:
-    """Configure root logging for application entry points."""
-    if hasattr(sys.stdout, "buffer"):
-        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+def _json_enabled() -> bool:
+    return str(getattr(settings, "LOG_FORMAT", "console")).strip().lower() == "json"
 
-    formatter = logging.Formatter(fmt, datefmt=datefmt)
-    handlers: list[logging.Handler] = []
-    sensitive_filter = SensitiveDataFilter()
 
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
-    console_handler.addFilter(sensitive_filter)
-    handlers.append(console_handler)
+def _serialize_event(payload: dict[str, Any]) -> str:
+    if _json_enabled():
+        return json.dumps(payload, ensure_ascii=False, default=str)
+    ordered = [f"event={payload.get('event', 'log')}"]
+    for key in sorted(key for key in payload if key != "event"):
+        ordered.append(f"{key}={payload[key]}")
+    return " ".join(ordered)
 
-    if log_file:
-        file_handler = RotatingFileHandler(
-            log_file,
-            maxBytes=5 * 1024 * 1024,
-            backupCount=3,
-            encoding="utf-8",
-        )
-        file_handler.setFormatter(formatter)
-        file_handler.addFilter(sensitive_filter)
-        handlers.append(file_handler)
 
-    logging.basicConfig(level=level, handlers=handlers, force=True)
+def configure_logging(*, stream: io.TextIOBase | None = None) -> None:
+    handler = logging.StreamHandler(stream or sys.stdout)
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    root = logging.getLogger()
+    root.handlers.clear()
+    root.addHandler(handler)
+    root.setLevel(_normalize_level())
+
+
+class BoundLogger:
+    def __init__(self, name: str, **context: Any) -> None:
+        self._logger = logging.getLogger(name)
+        self._context = {"component": context.pop("component", name), **context}
+
+    def bind(self, **context: Any) -> "BoundLogger":
+        return BoundLogger(self._logger.name, **{**self._context, **context})
+
+    def _emit(self, level: int, event: str, *args: Any, **fields: Any) -> None:
+        if args:
+            try:
+                event = event % args
+            except TypeError:
+                event = event.format(*args)
+        payload = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            **self._context,
+            **fields,
+            "event": event,
+        }
+        self._logger.log(level, _serialize_event(payload))
+
+    def debug(self, event: str, *args: Any, **fields: Any) -> None:
+        self._emit(logging.DEBUG, event, *args, **fields)
+
+    def info(self, event: str, *args: Any, **fields: Any) -> None:
+        self._emit(logging.INFO, event, *args, **fields)
+
+    def warning(self, event: str, *args: Any, **fields: Any) -> None:
+        self._emit(logging.WARNING, event, *args, **fields)
+
+    def error(self, event: str, *args: Any, **fields: Any) -> None:
+        self._emit(logging.ERROR, event, *args, **fields)
+
+    def exception(self, event: str, *args: Any, **fields: Any) -> None:
+        error = fields.pop("error", None)
+        if error is not None and "error_type" not in fields:
+            fields["error_type"] = type(error).__name__
+        self._emit(logging.ERROR, event, *args, **fields)
+
+
+def get_logger(name: str, *, component: str | None = None) -> BoundLogger:
+    if _structlog is not None:
+        _ = _structlog
+    return BoundLogger(name, component=component or _DEFAULT_COMPONENT)

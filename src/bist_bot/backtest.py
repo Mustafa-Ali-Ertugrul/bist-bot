@@ -1,5 +1,4 @@
 import json
-import logging
 import importlib
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -9,6 +8,8 @@ from typing import Any, Optional, Protocol, TypedDict, cast
 
 import numpy as np
 import pandas as pd
+
+from bist_bot.app_logging import get_logger
 
 try:
     import yfinance as yf
@@ -21,7 +22,7 @@ from bist_bot.contracts import StrategyEngineProtocol
 from bist_bot.indicators import TechnicalIndicators
 from bist_bot.strategy.signal_models import SignalType
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__, component="backtest")
 
 
 class IntrabarExit(TypedDict):
@@ -152,7 +153,6 @@ class BacktestResult:
             "cost_breakdown": self.cost_breakdown.to_dict(),
             "trades": [trade.to_dict() for trade in self.trades],
         }
-
     def to_json(self, output_path: str | Path | None = None) -> str:
         payload = json.dumps(self.to_dict(), ensure_ascii=False, indent=2)
         if output_path is not None:
@@ -184,6 +184,20 @@ class BacktestResult:
             f"  Profit Factor   : {self.profit_factor:.2f}\n"
             f"{'═'*55}"
         )
+
+
+@dataclass(frozen=True)
+class VectorizedSignals:
+    dates: np.ndarray
+    opens: np.ndarray
+    highs: np.ndarray
+    lows: np.ndarray
+    closes: np.ndarray
+    enter_signals: np.ndarray
+    exit_signals: np.ndarray
+    scores: np.ndarray
+    stop_losses: np.ndarray
+    target_prices: np.ndarray
 
 
 class WindowMode(str, Enum):
@@ -406,31 +420,36 @@ class Backtester:
     def _precalculate_signals(self, df: pd.DataFrame) -> pd.DataFrame:
         """Precompute default backtest signals in a vectorized form."""
         df = df.copy()
-        df["score"] = 0.0
+        score = np.zeros(len(df), dtype=float)
 
         if "rsi" in df.columns:
-            df.loc[df["rsi"] < settings.RSI_OVERSOLD, "score"] += 20
-            df.loc[df["rsi"] > settings.RSI_OVERBOUGHT, "score"] -= 20
+            rsi = cast(pd.Series, df["rsi"])
+            score += np.where(rsi.to_numpy() < settings.RSI_OVERSOLD, 20.0, 0.0)
+            score += np.where(rsi.to_numpy() > settings.RSI_OVERBOUGHT, -20.0, 0.0)
 
         if "sma_cross" in df.columns:
-            df.loc[df["sma_cross"] == "GOLDEN_CROSS", "score"] += 20
-            df.loc[df["sma_cross"] == "DEATH_CROSS", "score"] -= 20
+            sma_cross = cast(pd.Series, df["sma_cross"]).astype(str).to_numpy()
+            score += np.where(sma_cross == "GOLDEN_CROSS", 20.0, 0.0)
+            score += np.where(sma_cross == "DEATH_CROSS", -20.0, 0.0)
 
         sma_fast_col = f"sma_{settings.SMA_FAST}"
         sma_slow_col = f"sma_{settings.SMA_SLOW}"
         if sma_fast_col in df.columns and sma_slow_col in df.columns:
-            df.loc[df[sma_fast_col] > df[sma_slow_col], "score"] += 5
-            df.loc[df[sma_fast_col] <= df[sma_slow_col], "score"] -= 5
+            sma_fast = cast(pd.Series, df[sma_fast_col]).to_numpy(dtype=float)
+            sma_slow = cast(pd.Series, df[sma_slow_col]).to_numpy(dtype=float)
+            score += np.where(sma_fast > sma_slow, 5.0, -5.0)
 
         if "macd_cross" in df.columns:
-            df.loc[df["macd_cross"] == "BULLISH", "score"] += 15
-            df.loc[df["macd_cross"] == "BEARISH", "score"] -= 15
+            macd_cross = cast(pd.Series, df["macd_cross"]).astype(str).to_numpy()
+            score += np.where(macd_cross == "BULLISH", 15.0, 0.0)
+            score += np.where(macd_cross == "BEARISH", -15.0, 0.0)
 
         if "bb_position" in df.columns:
-            df.loc[df["bb_position"] == "BELOW_LOWER", "score"] += 10
-            df.loc[df["bb_position"] == "ABOVE_UPPER", "score"] -= 10
+            bb_position = cast(pd.Series, df["bb_position"]).astype(str).to_numpy()
+            score += np.where(bb_position == "BELOW_LOWER", 10.0, 0.0)
+            score += np.where(bb_position == "ABOVE_UPPER", -10.0, 0.0)
 
-        df["score"] = df["score"].clip(lower=-100.0, upper=100.0)
+        df["score"] = np.clip(score, -100.0, 100.0)
 
         if "stop_loss_atr" in df.columns:
             df["calculated_stop"] = df["stop_loss_atr"].fillna(df["close"] * 0.95)
@@ -449,19 +468,112 @@ class Backtester:
         exit_series = cast(pd.Series, df["exit_signal"])
         close_series = cast(pd.Series, df["close"])
 
-        df["score"] = score_series.shift(1).fillna(0.0)
-        df["calculated_stop"] = stop_series.shift(1).fillna(close_series * 0.95)
-        df["target_price"] = target_series.shift(1).fillna(close_series)
-        df["enter_signal"] = enter_series.shift(1).fillna(False).astype(bool)
-        df["exit_signal"] = exit_series.shift(1).fillna(False).astype(bool)
+        df["score"] = score_series.shift(1, fill_value=0.0)
+        df["calculated_stop"] = stop_series.shift(1, fill_value=float(close_series.iloc[0]) * 0.95)
+        df["target_price"] = target_series.shift(1, fill_value=float(close_series.iloc[0]))
+        df["enter_signal"] = enter_series.shift(1, fill_value=False).astype(bool)
+        df["exit_signal"] = exit_series.shift(1, fill_value=False).astype(bool)
+        if len(df) >= 2:
+            df.loc[df.index[:2], "score"] = 0.0
+            df.loc[df.index[:2], "enter_signal"] = False
+            df.loc[df.index[:2], "exit_signal"] = False
+        df["stop_gap_candidate"] = (cast(pd.Series, df["calculated_stop"]) > 0) & (cast(pd.Series, df["open"]) <= cast(pd.Series, df["calculated_stop"]))
+        df["target_gap_candidate"] = (cast(pd.Series, df["target_price"]) > 0) & (cast(pd.Series, df["open"]) >= cast(pd.Series, df["target_price"]))
+        df["stop_hit_candidate"] = (cast(pd.Series, df["calculated_stop"]) > 0) & (cast(pd.Series, df["low"]) <= cast(pd.Series, df["calculated_stop"]))
+        df["target_hit_candidate"] = (cast(pd.Series, df["target_price"]) > 0) & (cast(pd.Series, df["high"]) >= cast(pd.Series, df["target_price"]))
 
         return df
+
+    def _build_vectorized_signals(self, df: pd.DataFrame) -> VectorizedSignals:
+        return VectorizedSignals(
+            dates=df.index.to_numpy(),
+            opens=cast(pd.Series, df["open"]).to_numpy(dtype=float),
+            highs=cast(pd.Series, df["high"]).to_numpy(dtype=float),
+            lows=cast(pd.Series, df["low"]).to_numpy(dtype=float),
+            closes=cast(pd.Series, df["close"]).to_numpy(dtype=float),
+            enter_signals=cast(pd.Series, df["enter_signal"]).to_numpy(dtype=bool),
+            exit_signals=cast(pd.Series, df["exit_signal"]).to_numpy(dtype=bool),
+            scores=cast(pd.Series, df["score"]).to_numpy(dtype=float),
+            stop_losses=cast(pd.Series, df["calculated_stop"]).to_numpy(dtype=float),
+            target_prices=cast(pd.Series, df["target_price"]).to_numpy(dtype=float),
+        )
 
     def _use_vectorized_path(self) -> bool:
         if self.signal_builder is not None:
             return False
         signal_context_builder = getattr(self._build_signal_context, "__func__", None)
         return signal_context_builder is Backtester._build_signal_context
+
+    def _find_next_entry_index(
+        self,
+        candidates: np.ndarray,
+        start_idx: int,
+        dates: np.ndarray,
+        last_buy_date: datetime | None,
+    ) -> int | None:
+        if start_idx >= len(dates):
+            return None
+        next_candidates = candidates[candidates >= start_idx]
+        if last_buy_date is None:
+            return int(next_candidates[0]) if len(next_candidates) else None
+        for idx in next_candidates:
+            candidate_date = _to_datetime(dates[int(idx)])
+            if (candidate_date - last_buy_date).days >= 1:
+                return int(idx)
+        return None
+
+    def _find_exit_index(
+        self,
+        vectors: VectorizedSignals,
+        entry_idx: int,
+        position: dict[str, Any],
+    ) -> tuple[int | None, str | None, float | None]:
+        stop_loss = _to_float(position.get("stop_loss"), 0.0)
+        target_price = _to_float(position.get("target_price"), 0.0)
+        if entry_idx + 1 >= len(vectors.opens):
+            return None, None, None
+
+        slice_start = entry_idx + 1
+        opens = vectors.opens[slice_start:]
+        highs = vectors.highs[slice_start:]
+        lows = vectors.lows[slice_start:]
+        closes = vectors.closes[slice_start:]
+        exit_signals = vectors.exit_signals[slice_start:]
+
+        stop_gap = stop_loss > 0 and np.less_equal(opens, stop_loss)
+        target_gap = target_price > 0 and np.greater_equal(opens, target_price)
+        stop_hit = stop_loss > 0 and np.less_equal(lows, stop_loss)
+        target_hit = target_price > 0 and np.greater_equal(highs, target_price)
+
+        event_mask = exit_signals.copy()
+        if isinstance(stop_gap, np.ndarray):
+            event_mask |= stop_gap
+        if isinstance(target_gap, np.ndarray):
+            event_mask |= target_gap
+        if isinstance(stop_hit, np.ndarray):
+            event_mask |= stop_hit
+        if isinstance(target_hit, np.ndarray):
+            event_mask |= target_hit
+
+        event_positions = np.flatnonzero(event_mask)
+        if len(event_positions) == 0:
+            return None, None, None
+
+        rel_idx = int(event_positions[0])
+        abs_idx = slice_start + rel_idx
+        if bool(exit_signals[rel_idx]):
+            return abs_idx, "SIGNAL_OPEN", float(opens[rel_idx])
+
+        intrabar_exit = self._simulate_intrabar_exit(
+            position,
+            float(opens[rel_idx]),
+            float(highs[rel_idx]),
+            float(lows[rel_idx]),
+            float(closes[rel_idx]),
+        )
+        if intrabar_exit is None:
+            return None, None, None
+        return abs_idx, intrabar_exit["reason"], float(intrabar_exit["reference_price"])
 
     def run(
         self,
@@ -500,117 +612,120 @@ class Backtester:
         verbose: bool,
     ) -> Optional[BacktestResult]:
         df = self._precalculate_signals(df)
+        vectors = self._build_vectorized_signals(df)
+        entry_candidates = np.flatnonzero(vectors.enter_signals)
 
         capital = self.initial_capital
-        position: Optional[dict[str, Any]] = None
         trades: list[BacktestTrade] = []
-        capital_history: list[float] = [capital]
+        capital_history = np.empty(len(df) + 1, dtype=float)
+        capital_history[0] = capital
         last_buy_date: Optional[datetime] = None
+        cursor = 0
 
-        for i, row in enumerate(df.itertuples(index=False, name="Bar")):
-            date = _to_datetime(df.index[i])
-            open_price = _to_float(getattr(row, "open", getattr(row, "close", 0.0)), _to_float(getattr(row, "close", 0.0)))
-            high_price = _to_float(getattr(row, "high", open_price), open_price)
-            low_price = _to_float(getattr(row, "low", open_price), open_price)
-            close_price = _to_float(getattr(row, "close", open_price), open_price)
+        while cursor < len(df):
+            entry_idx = self._find_next_entry_index(entry_candidates, cursor, vectors.dates, last_buy_date)
+            if entry_idx is None:
+                capital_history[cursor + 1 :] = capital
+                break
 
+            if entry_idx > cursor:
+                capital_history[cursor + 1 : entry_idx + 1] = capital
+
+            date = _to_datetime(vectors.dates[entry_idx])
+            open_price = float(vectors.opens[entry_idx])
+            close_price = float(vectors.closes[entry_idx])
             signal = {
-                "enter": bool(getattr(row, "enter_signal", False)),
-                "exit": bool(getattr(row, "exit_signal", False)),
-                "score": _to_float(getattr(row, "score", 0.0), 0.0),
-                "stop_loss": _to_float(getattr(row, "calculated_stop", close_price * 0.95), close_price * 0.95),
-                "target_price": _to_float(getattr(row, "target_price", close_price), close_price),
+                "enter": True,
+                "exit": bool(vectors.exit_signals[entry_idx]),
+                "score": float(vectors.scores[entry_idx]),
+                "stop_loss": float(vectors.stop_losses[entry_idx]),
+                "target_price": float(vectors.target_prices[entry_idx]),
             }
+            row = df.iloc[entry_idx]
+            estimated_shares = self._estimate_entry_shares(capital, open_price)
+            entry_fill_price = self._calculate_fill_price(open_price, row, is_buy=True, shares=estimated_shares)
+            position = self._open_position(signal, entry_fill_price, open_price, date, capital)
 
-            if position is not None and self._should_exit_on_open(signal):
-                exit_fill_price = self._calculate_fill_price(
-                    open_price,
-                    row,
-                    is_buy=False,
-                    shares=int(position["shares"]),
+            if position is None:
+                capital_history[entry_idx + 1] = capital
+                cursor = entry_idx + 1
+                continue
+
+            capital -= position["cost"]
+            last_buy_date = date
+            if verbose:
+                logger.info(
+                    f"  🟢 AL: {date.strftime('%d.%m')} | "
+                    f"₺{position['entry_price']:.2f} x {position['shares']} lot | "
+                    f"Skor: {position['score']:+.0f}"
                 )
+
+            same_bar_exit = self._simulate_intrabar_exit(
+                position,
+                open_price,
+                float(vectors.highs[entry_idx]),
+                float(vectors.lows[entry_idx]),
+                close_price,
+            )
+            if same_bar_exit is not None:
+                ref_price = float(same_bar_exit["reference_price"])
                 capital = self._close_position(
                     capital=capital,
                     position=position,
                     trades=trades,
                     ticker=ticker,
                     exit_date=date,
-                    fill_price=exit_fill_price,
-                    reference_price=open_price,
-                    reason="SIGNAL_OPEN",
+                    fill_price=self._calculate_fill_price(ref_price, row, is_buy=False, shares=int(position["shares"])),
+                    reference_price=ref_price,
+                    reason=same_bar_exit["reason"],
                     verbose=verbose,
                 )
-                position = None
+                capital_history[entry_idx + 1] = capital
+                cursor = entry_idx + 1
+                continue
 
-            if position is None and self._should_enter_on_open(signal):
-                if last_buy_date is None or (date - last_buy_date).days >= 1:
-                    estimated_shares = self._estimate_entry_shares(capital, open_price)
-                    entry_fill_price = self._calculate_fill_price(
-                        open_price,
-                        row,
-                        is_buy=True,
-                        shares=estimated_shares,
-                    )
-                    position = self._open_position(signal, entry_fill_price, open_price, date, capital)
-                    if position is not None:
-                        capital -= position["cost"]
-                        last_buy_date = date
-                        if verbose:
-                            logger.info(
-                                f"  🟢 AL: {date.strftime('%d.%m')} | "
-                                f"₺{position['entry_price']:.2f} x {position['shares']} lot | "
-                                f"Skor: {position['score']:+.0f}"
-                            )
+            exit_idx, exit_reason, reference_price = self._find_exit_index(vectors, entry_idx, position)
+            held_equity = capital + float(position["shares"]) * vectors.closes[entry_idx:]
 
-            if position is not None:
-                intrabar_exit = self._simulate_intrabar_exit(position, open_price, high_price, low_price, close_price)
-                if intrabar_exit is not None:
-                    ref_price = intrabar_exit["reference_price"]
-                    exit_fill_price = self._calculate_fill_price(
-                        ref_price,
-                        row,
-                        is_buy=False,
-                        shares=int(position["shares"]),
-                    )
-                    capital = self._close_position(
-                        capital=capital,
-                        position=position,
-                        trades=trades,
-                        ticker=ticker,
-                        exit_date=date,
-                        fill_price=exit_fill_price,
-                        reference_price=ref_price,
-                        reason=intrabar_exit["reason"],
-                        verbose=verbose,
-                    )
-                    position = None
+            if exit_idx is None or exit_reason is None or reference_price is None:
+                capital_history[entry_idx + 1 :] = held_equity
+                last_idx = len(df) - 1
+                last_row = df.iloc[last_idx]
+                last_date = _to_datetime(vectors.dates[last_idx])
+                last_close = float(vectors.closes[last_idx])
+                capital = self._close_position(
+                    capital=capital,
+                    position=position,
+                    trades=trades,
+                    ticker=ticker,
+                    exit_date=last_date,
+                    fill_price=self._calculate_fill_price(last_close, last_row, is_buy=False, shares=int(position["shares"])),
+                    reference_price=last_close,
+                    reason="FINAL_CLOSE",
+                    verbose=False,
+                )
+                capital_history[-1] = capital
+                cursor = len(df)
+                break
 
-            equity = capital if position is None else capital + position["shares"] * close_price
-            capital_history.append(equity)
-
-        if position is not None:
-            last_date = _to_datetime(df.index[-1])
-            last_bar = df.iloc[-1]
-            last_close = _to_float(last_bar.get("close"))
+            capital_history[entry_idx + 1 : exit_idx + 1] = held_equity[: exit_idx - entry_idx]
+            exit_row = df.iloc[exit_idx]
+            exit_date = _to_datetime(vectors.dates[exit_idx])
             capital = self._close_position(
                 capital=capital,
                 position=position,
                 trades=trades,
                 ticker=ticker,
-                exit_date=last_date,
-                fill_price=self._calculate_fill_price(
-                    last_close,
-                    last_bar,
-                    is_buy=False,
-                    shares=int(position["shares"]),
-                ),
-                reference_price=last_close,
-                reason="FINAL_CLOSE",
-                verbose=False,
+                exit_date=exit_date,
+                fill_price=self._calculate_fill_price(reference_price, exit_row, is_buy=False, shares=int(position["shares"])),
+                reference_price=reference_price,
+                reason=exit_reason,
+                verbose=verbose,
             )
-            capital_history[-1] = capital
+            capital_history[exit_idx + 1] = capital
+            cursor = exit_idx + 1
 
-        return self._build_result(ticker, df, capital, trades, capital_history)
+        return self._build_result(ticker, df, capital, trades, capital_history.tolist())
 
     def _run_iterative(
         self,

@@ -195,6 +195,19 @@ class Settings:
     DATA_PERIOD: str = _get_str_env("DATA_PERIOD", "3mo")
     DATA_INTERVAL: str = _get_str_env("DATA_INTERVAL", "1d")
     DATA_PROVIDER: str = _get_str_env("DATA_PROVIDER", "yfinance").lower()
+    OFFICIAL_VENDOR: str = _get_str_env("OFFICIAL_VENDOR", "generic").lower()
+    OFFICIAL_API_BASE_URL: str = _get_str_env("OFFICIAL_API_BASE_URL")
+    OFFICIAL_API_KEY: str = _get_str_env("OFFICIAL_API_KEY")
+    OFFICIAL_USERNAME: str = _get_str_env("OFFICIAL_USERNAME")
+    OFFICIAL_PASSWORD: str = _get_str_env("OFFICIAL_PASSWORD")
+    OFFICIAL_TIMEOUT: float = _get_float_env("OFFICIAL_TIMEOUT", 30.0)
+    OFFICIAL_MAX_RETRIES: int = _get_int_env("OFFICIAL_MAX_RETRIES", 3)
+    OFFICIAL_RETRY_BACKOFF_SECONDS: float = _get_float_env("OFFICIAL_RETRY_BACKOFF_SECONDS", 1.0)
+    OFFICIAL_AUTH_ENDPOINT: str = _get_str_env("OFFICIAL_AUTH_ENDPOINT")
+    OFFICIAL_HISTORY_ENDPOINT: str = _get_str_env("OFFICIAL_HISTORY_ENDPOINT")
+    OFFICIAL_BATCH_ENDPOINT: str = _get_str_env("OFFICIAL_BATCH_ENDPOINT")
+    OFFICIAL_QUOTE_ENDPOINT: str = _get_str_env("OFFICIAL_QUOTE_ENDPOINT")
+    OFFICIAL_UNIVERSE_ENDPOINT: str = _get_str_env("OFFICIAL_UNIVERSE_ENDPOINT")
     MTF_ENABLED: bool = _get_bool_env("MTF_ENABLED", True)
     MTF_TREND_PERIOD: str = _get_str_env("MTF_TREND_PERIOD", "6mo")
     MTF_TREND_INTERVAL: str = _get_str_env("MTF_TREND_INTERVAL", "1d")
@@ -219,6 +232,10 @@ class Settings:
 
     FLASK_PORT: int = _get_int_env("FLASK_PORT", 5000)
     FLASK_DEBUG: bool = _get_bool_env("FLASK_DEBUG", False)
+    LOG_FORMAT: str = _get_str_env("LOG_FORMAT", "console")
+    LOG_LEVEL: str = _get_str_env("LOG_LEVEL", "INFO")
+    STREAMLIT_SCAN_COOLDOWN_SECONDS: float = _get_float_env("STREAMLIT_SCAN_COOLDOWN_SECONDS", 8.0)
+    STREAMLIT_ANALYZE_COOLDOWN_SECONDS: float = _get_float_env("STREAMLIT_ANALYZE_COOLDOWN_SECONDS", 4.0)
     API_BASE_URL: str = _get_str_env("API_BASE_URL", f"http://localhost:{_get_int_env('FLASK_PORT', 5000)}")
     RATE_LIMIT_STORAGE_URI: str = _get_str_env("RATE_LIMIT_STORAGE_URI", "memory://")
     JWT_SECRET_KEY: str = _get_str_env("JWT_SECRET_KEY")
@@ -303,6 +320,20 @@ class Settings:
             raise RuntimeError("Missing required AlgoLab credentials for BROKER_PROVIDER=algolab")
         if not self.ALGOLAB_DRY_RUN and not self.CONFIRM_LIVE_TRADING:
             raise RuntimeError("CONFIRM_LIVE_TRADING=true is required when ALGOLAB_DRY_RUN=false")
+
+    def validate_data_provider_config(self) -> None:
+        if self.DATA_PROVIDER == "official":
+            missing = []
+            if not self.OFFICIAL_API_BASE_URL:
+                missing.append("OFFICIAL_API_BASE_URL")
+            if not self.OFFICIAL_API_KEY:
+                missing.append("OFFICIAL_API_KEY")
+            if not self.OFFICIAL_USERNAME:
+                missing.append("OFFICIAL_USERNAME")
+            if not self.OFFICIAL_PASSWORD:
+                missing.append("OFFICIAL_PASSWORD")
+            if missing:
+                raise RuntimeError(f"Missing required settings for DATA_PROVIDER=official: {', '.join(missing)}")
 
 
 settings = Settings()

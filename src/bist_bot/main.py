@@ -1,11 +1,10 @@
 """Primary runtime entry point for the bot and scheduler process."""
 
-import logging
 import sys
 
-from bist_bot.app_logging import configure_logging
+from bist_bot.app_logging import configure_logging, get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__, component="main")
 
 
 def main():
@@ -35,7 +34,8 @@ def main():
     order_tracker = OrderTracker(container.broker, container.db)
 
     def shutdown(signum, frame):
-        logger.info("🛑 Bot durduruluyor...")
+        _ = signum, frame
+        logger.info("shutdown_requested")
         scheduler.running = False
         order_tracker.stop()
 
@@ -65,7 +65,7 @@ def main():
             daemon=True
         )
         t.start()
-        logger.info(f"🌐 Dashboard: http://localhost:{settings.FLASK_PORT}")
+        logger.info("dashboard_started", port=settings.FLASK_PORT)
         scheduler.run_loop()
 
 

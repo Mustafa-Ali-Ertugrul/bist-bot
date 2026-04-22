@@ -4,7 +4,7 @@ import streamlit as st
 
 from bist_bot.config import store as config_store
 from bist_bot.config.settings import settings
-from bist_bot.ui.runtime import run_scan
+from bist_bot.ui.runtime import request_scan
 
 
 def render_settings_page() -> None:
@@ -65,8 +65,10 @@ def render_settings_page() -> None:
                 "vol_ratio_filter": st.session_state.vol_ratio_filter,
             }
             config_store.save_settings(user_settings)
-            run_scan()
-            st.success("Ayarlar kaydedildi.")
+            if request_scan():
+                st.success("Ayarlar kaydedildi.")
+            else:
+                st.info("Ayarlar kaydedildi. Tarama icin cooldown suresinin bitmesi bekleniyor.")
     with c_reset:
         if st.button("Varsayilanlara don", use_container_width=True):
             config_store.reset_settings()

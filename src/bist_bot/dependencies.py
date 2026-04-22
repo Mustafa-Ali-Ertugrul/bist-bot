@@ -9,13 +9,14 @@ from typing import Callable, Optional
 from bist_bot.config.settings import settings
 from bist_bot.backtest import Backtester
 from bist_bot.data.fetcher import BISTDataFetcher, BorsaIstanbulQuoteProvider, MarketDataProvider, OfficialProviderStub, YFinanceProvider
+from bist_bot.data.providers import build_official_provider, resolve_official_endpoints
 from bist_bot.db import DataAccess
 from bist_bot.execution.algolab_broker import AlgoLabBroker, AlgoLabCredentials
 from bist_bot.execution.base import BaseExecutionProvider
 from bist_bot.execution.paper_broker import PaperBroker
 from bist_bot.scanner import ScanService
 from bist_bot.notifier import TelegramNotifier
-from bist_bot.risk_manager import RiskManager
+from bist_bot.risk import RiskManager
 from bist_bot.strategy import StrategyEngine
 
 
@@ -93,6 +94,27 @@ def _build_rate_limiter():
 
 def _build_data_provider() -> MarketDataProvider:
     provider_name = getattr(settings, "DATA_PROVIDER", "yfinance")
+    if provider_name == "official":
+        settings.validate_data_provider_config()
+        return build_official_provider(
+            vendor=getattr(settings, "OFFICIAL_VENDOR", "generic"),
+            base_url=settings.OFFICIAL_API_BASE_URL,
+            api_key=settings.OFFICIAL_API_KEY,
+            username=settings.OFFICIAL_USERNAME,
+            password=settings.OFFICIAL_PASSWORD,
+            rate_limiter=_build_rate_limiter(),
+            timeout=getattr(settings, "OFFICIAL_TIMEOUT", 30.0),
+            max_retries=getattr(settings, "OFFICIAL_MAX_RETRIES", 3),
+            retry_backoff=getattr(settings, "OFFICIAL_RETRY_BACKOFF_SECONDS", 1.0),
+            endpoints=resolve_official_endpoints(
+                vendor=getattr(settings, "OFFICIAL_VENDOR", "generic"),
+                auth=getattr(settings, "OFFICIAL_AUTH_ENDPOINT", "") or None,
+                history=getattr(settings, "OFFICIAL_HISTORY_ENDPOINT", "") or None,
+                batch=getattr(settings, "OFFICIAL_BATCH_ENDPOINT", "") or None,
+                quote=getattr(settings, "OFFICIAL_QUOTE_ENDPOINT", "") or None,
+                universe=getattr(settings, "OFFICIAL_UNIVERSE_ENDPOINT", "") or None,
+            ),
+        )
     if provider_name == "official_stub":
         return OfficialProviderStub()
     return YFinanceProvider(rate_limiter=_build_rate_limiter())

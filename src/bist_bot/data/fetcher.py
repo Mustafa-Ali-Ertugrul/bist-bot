@@ -3,19 +3,19 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-import logging
 import time
 from typing import Any, cast
 
 import pandas as pd
 
+from bist_bot.app_logging import get_logger
 from bist_bot.config.settings import settings
 from bist_bot.data.bist100 import BIST100_TICKERS
 from bist_bot.data import helpers as fetch_helpers
 from bist_bot.data import quotes as fetch_quotes
-from bist_bot.data.providers import BorsaIstanbulQuoteProvider, MarketDataProvider, OfficialProviderStub, QuoteProvider, YFinanceProvider
+from bist_bot.data.providers import BorsaIstanbulQuoteProvider, MarketDataProvider, OfficialProvider, OfficialProviderStub, QuoteProvider, YFinanceProvider
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__, component="data_fetcher")
 
 
 @dataclass
@@ -549,6 +549,7 @@ __all__ = [
     "BISTDataFetcher",
     "BorsaIstanbulQuoteProvider",
     "MarketDataProvider",
+    "OfficialProvider",
     "OfficialProviderStub",
     "QuoteProvider",
     "RateLimiter",

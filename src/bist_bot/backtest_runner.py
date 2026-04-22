@@ -3,17 +3,17 @@
 from __future__ import annotations
 
 import argparse
-import logging
 import sys
 from datetime import datetime
 from pathlib import Path
 
 import bist_bot.config as config
 
+from bist_bot.app_logging import get_logger
 from bist_bot.backtest import Backtester, WalkForwardValidator
 from bist_bot.data.universe import get_universe_for_date
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__, component="backtest_runner")
 
 
 def _build_parser() -> argparse.ArgumentParser:

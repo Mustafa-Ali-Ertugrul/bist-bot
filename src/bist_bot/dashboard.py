@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -14,6 +13,8 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from sqlalchemy import text
 
+from bist_bot.app_logging import configure_logging, get_logger
+from bist_bot.app_metrics import render_metrics
 from bist_bot.auth.passwords import verify_and_rehash_password
 from bist_bot.config.settings import settings
 from bist_bot.contracts import DataFetcherProtocol, SignalRepositoryProtocol, StrategyEngineProtocol
@@ -23,7 +24,7 @@ from bist_bot.locales import get_message
 from bist_bot.scanner import ScanService
 
 TR = timezone(timedelta(hours=3))
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__, component="dashboard")
 
 
 class _SilentNotifier:
@@ -158,6 +159,10 @@ def create_dashboard_app(
         status_code = 200 if health["status"] == "healthy" else 503
         return jsonify(health), status_code
 
+    @app.route("/metrics")
+    def metrics():
+        return app.response_class(render_metrics(), mimetype="text/plain; version=0.0.4")
+
     @app.route("/api/auth/login", methods=["POST"])
     @limiter.limit("5 per minute")
     def api_auth_login():
@@ -198,18 +203,28 @@ def create_dashboard_app(
                 for signal in signals
             ]
 
-            return jsonify(
-                {
-                    "status": "ok",
-                    "scanned": scan_stats["scanned"],
-                    "signals": results,
-                    "force_refresh": force_refresh,
-                    "timestamp": datetime.now(TR).isoformat(),
-                    "duration_ms": round((time.time() - start_time) * 1000, 2),
-                }
+            response_payload = {
+                "status": "ok",
+                "scanned": scan_stats["scanned"],
+                "signals": results,
+                "force_refresh": force_refresh,
+                "timestamp": datetime.now(TR).isoformat(),
+                "duration_ms": round((time.time() - start_time) * 1000, 2),
+            }
+            logger.info(
+                "api_scan_completed",
+                duration_ms=response_payload["duration_ms"],
+                scanned_count=scan_stats["scanned"],
+                actionable_count=scan_stats["actionable"],
             )
+            return jsonify(response_payload)
         except Exception as exc:
-            logger.error(f"{get_message('api.scan_error')}: %s", exc)
+            logger.exception(
+                "api_scan_failed",
+                error=exc,
+                duration_ms=round((time.time() - start_time) * 1000, 2),
+                component="dashboard",
+            )
             return jsonify({"status": "error", "message": str(exc)}), 500
 
     @app.route("/api/analyze/<ticker>")
@@ -229,6 +244,7 @@ def create_dashboard_app(
                 payload = dict(cached_response)
                 payload["duration_ms"] = round((time.time() - start_time) * 1000, 2)
                 payload["force_refresh"] = force_refresh
+                logger.info("api_analyze_completed", ticker=normalized_ticker, duration_ms=payload["duration_ms"])
                 return jsonify(payload)
 
             if force_refresh:
@@ -276,9 +292,20 @@ def create_dashboard_app(
             runtime_fetcher.store_analysis(cache_key, response_payload)
             response_payload["force_refresh"] = force_refresh
             response_payload["duration_ms"] = round((time.time() - start_time) * 1000, 2)
+            logger.info(
+                "api_analyze_completed",
+                ticker=normalized_ticker,
+                signal_type=signal.signal_type.value if signal else None,
+                duration_ms=response_payload["duration_ms"],
+            )
             return jsonify(response_payload)
         except Exception as exc:
-            logger.exception(get_message("api.analyze_error"))
+            logger.exception(
+                "api_analyze_failed",
+                error=exc,
+                ticker=ticker,
+                duration_ms=round((time.time() - start_time) * 1000, 2),
+            )
             return jsonify({"status": "error", "message": str(exc)}), 500
 
     @app.route("/api/signals/history")
@@ -311,6 +338,7 @@ def create_default_dashboard_app(container: AppContainer | None = None) -> Flask
 
 def main() -> None:
     """Run the standalone Flask API process."""
+    configure_logging()
     app = create_default_dashboard_app()
     app.run(
         host="0.0.0.0",

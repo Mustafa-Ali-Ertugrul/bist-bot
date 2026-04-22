@@ -7,7 +7,7 @@ import logging
 
 from bist_bot.config.settings import settings
 from bist_bot.indicators import TechnicalIndicators
-from bist_bot.risk_manager import RiskManager
+from bist_bot.risk import RiskManager
 from bist_bot.strategy.signal_models import Signal, SignalType
 from bist_bot.strategy.params import StrategyParams
 from bist_bot.strategy.regime import (
@@ -264,22 +264,3 @@ class StrategyEngine:
         return [s for s in signals if s.signal_type != SignalType.HOLD]
 
 
-if __name__ == "__main__":
-    from bist_bot.data.fetcher import BISTDataFetcher
-
-    fetcher = BISTDataFetcher()
-    engine = StrategyEngine()
-
-    df = fetcher.fetch_single("THYAO.IS", period="6mo")
-    if df is not None:
-        signal = engine.analyze("THYAO.IS", df)
-        if signal:
-            print(signal)
-
-    print("\n🔍 Tam Watchlist Taraması:")
-    all_data = fetcher.fetch_all()
-    signals = engine.scan_all(all_data)
-
-    for s in signals:
-        if s.signal_type != SignalType.HOLD:
-            print(s)

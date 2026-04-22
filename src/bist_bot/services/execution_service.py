@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
+from bist_bot.app_logging import get_logger
+from bist_bot.app_metrics import inc_counter
 from bist_bot.config.settings import settings as default_settings
 from bist_bot.execution.base import OrderSide, OrderType
 from bist_bot.strategy.signal_models import Signal, SignalType
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__, component="execution")
 
 
 class ExecutionService:
@@ -21,20 +22,15 @@ class ExecutionService:
     def resolve_execution_quantity(self, signal: Signal) -> float | None:
         quantity = signal.position_size
         if quantity is None:
-            logger.warning("Auto execution skipped for %s: quantity is missing", signal.ticker)
+            logger.warning("auto_execute_skipped", ticker=signal.ticker, error_type="missing_quantity")
             return None
         if quantity <= 0:
-            logger.info("Auto execution skipped for %s: quantity=%s", signal.ticker, quantity)
+            logger.info("auto_execute_skipped", ticker=signal.ticker, error_type="non_positive_quantity")
             return None
 
         max_warn_quantity = getattr(self.settings, "AUTO_EXECUTE_WARN_MAX_QUANTITY", 100000)
         if quantity > max_warn_quantity:
-            logger.warning(
-                "Auto execution quantity unusually large for %s: quantity=%s threshold=%s",
-                signal.ticker,
-                quantity,
-                max_warn_quantity,
-            )
+            logger.warning("auto_execute_large_quantity", ticker=signal.ticker, actionable_count=quantity)
         return float(quantity)
 
     def auto_execute_signals(self, signals: list[Signal]) -> None:
@@ -44,10 +40,12 @@ class ExecutionService:
         try:
             authenticated = self.broker.authenticate()
         except Exception as exc:
-            logger.warning("Broker authentication failed; auto execution skipped: %s", exc)
+            inc_counter("bist_auto_execute_fail_total")
+            logger.warning("auto_execute_auth_failed", error_type=type(exc).__name__)
             return
         if not authenticated:
-            logger.warning("Broker authentication failed; auto execution skipped")
+            inc_counter("bist_auto_execute_fail_total")
+            logger.warning("auto_execute_auth_failed", error_type="broker_auth_rejected")
             return
 
         for signal in signals:
@@ -60,10 +58,9 @@ class ExecutionService:
 
             side = OrderSide.BUY if signal.signal_type is SignalType.STRONG_BUY else OrderSide.SELL
             logger.info(
-                "Creating auto-execution order for %s side=%s quantity=%s",
-                signal.ticker,
-                side.value,
-                quantity,
+                "auto_execute_order_created",
+                ticker=signal.ticker,
+                signal_type=signal.signal_type.value,
             )
             order_row = self.db.create_order(
                 ticker=signal.ticker,
@@ -85,19 +82,14 @@ class ExecutionService:
                     state=result.state.value,
                     broker_order_id=result.broker_order_id or result.order_id,
                 )
-                logger.info(
-                    "Auto-execution order updated for %s side=%s quantity=%s state=%s",
-                    signal.ticker,
-                    side.value,
-                    quantity,
-                    result.state.value,
-                )
+                inc_counter("bist_auto_execute_total")
+                logger.info("auto_execute_succeeded", ticker=signal.ticker, signal_type=signal.signal_type.value)
             except Exception as exc:
                 self.db.update_order(int(order_row["id"]), state="REJECTED")
+                inc_counter("bist_auto_execute_fail_total")
                 logger.warning(
-                    "Auto execution failed for %s side=%s quantity=%s: %s",
-                    signal.ticker,
-                    side.value,
-                    quantity,
-                    exc,
+                    "auto_execute_failed",
+                    ticker=signal.ticker,
+                    signal_type=signal.signal_type.value,
+                    error_type=type(exc).__name__,
                 )

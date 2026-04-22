@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 from unittest.mock import patch
 
-from bist_bot.risk_manager import RiskManager, RiskLevels
+from bist_bot.risk import RiskManager, RiskLevels
 
 
 def build_test_df(rows=30, base_price=100.0, atr_value=2.0):

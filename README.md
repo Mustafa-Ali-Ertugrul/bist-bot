@@ -89,6 +89,7 @@ python main.py --worker                    # Sadece scanner/scheduler worker
 streamlit run streamlit_app.py             # Streamlit operator paneli
 python dashboard.py                        # Standalone Flask dashboard (opsiyonel)
 python -m bist_bot.backtest_compare --tickers THYAO.IS ASELS.IS
+python scripts/benchmark_backtest.py       # Iterative vs vectorized benchmark
 ```
 
 ## Docker Compose
@@ -114,6 +115,55 @@ Healthcheckler:
 
 Backtest JSON ciktilari `data/` altina yazilir.
 
+## Official Data Provider
+
+`DATA_PROVIDER=official` ile Matriks, Foreks, Finnet gibi resmi veri saglayicilara baglanabilirsiniz. Provider, endpoint mapping'i uzerinden genisletilebilir bir REST adapter yapisi sunar.
+
+### Yapilandirma
+
+```env
+DATA_PROVIDER=official
+OFFICIAL_VENDOR=matriks
+OFFICIAL_API_BASE_URL=https://api.matriks.com
+OFFICIAL_API_KEY=your_api_key
+OFFICIAL_USERNAME=your_username
+OFFICIAL_PASSWORD=your_password
+OFFICIAL_TIMEOUT=30
+OFFICIAL_MAX_RETRIES=3
+OFFICIAL_RETRY_BACKOFF_SECONDS=1
+
+# Gerekirse vendor endpoint'lerini override edin
+OFFICIAL_AUTH_ENDPOINT=
+OFFICIAL_HISTORY_ENDPOINT=
+OFFICIAL_BATCH_ENDPOINT=
+OFFICIAL_QUOTE_ENDPOINT=
+OFFICIAL_UNIVERSE_ENDPOINT=
+```
+
+### Vendor-Specific Adapter
+
+Endpoint path'leri `OfficialProviderEndpoints` uzerinden override edilir:
+
+```python
+from bist_bot.data.providers import OfficialProvider, OfficialProviderEndpoints
+
+class MatriksProvider(OfficialProvider):
+    endpoints = OfficialProviderEndpoints(
+        auth="/matriks/v1/auth",
+        history="/matriks/v1/ohlcv",
+        batch="/matriks/v1/ohlcv/batch",
+        quote="/matriks/v1/quote",
+        universe="/matriks/v1/symbols",
+    )
+```
+
+- Varsayilan: `yfinance` (degisiklik yok)
+- `official_stub`: test amacli bos stub
+- `official`: gercek REST adapter (yukaridaki env'ler gerekli)
+- `OFFICIAL_VENDOR`: `generic`, `matriks`, `foreks`, `finnet`
+- Timeout, retry ve rate limit destegi dahildir
+- 401/429/5xx otomatik retry; 4xx hemen hata firlatir
+
 ## Test & Lint
 
 ```bash
@@ -133,6 +183,22 @@ ruff check . --isolated
 python main.py --backtest --historical-universe-date 2024-01-01
 python main.py --backtest --walk-forward --historical-universe-date 2023-01-01
 ```
+
+- Varsayilan `Backtester` akisi, ozel `signal_builder` yoksa vectorized path kullanir.
+- `signal_builder` tanimliysa backtest iterative fallback'e duser; cunku sinyal uretimi bar-bazli ozel mantiga bagli olabilir.
+- Intrabar stop/target cikislari davranis esitligini korumak icin trade bazli sirali degerlendirilir; bu kisim tamamen toplu hale getirilmemistir.
+
+## Import Migration (Shim Cleanup)
+
+Legacy shim dosyalari kaldirildi. Asagidaki eski importleri yeni pathlere tasiyin:
+
+| Eski Import | Yeni Import |
+|---|---|
+| `from bist_bot.risk_manager import RiskManager, RiskLevels` | `from bist_bot.risk import RiskManager, RiskLevels` |
+| `from bist_bot.database import SignalDatabase` | `from bist_bot.db import DataAccess` |
+
+- `bist_bot.risk_manager` artik kaldirildi; `RiskManager` ve `RiskLevels` dogrudan `bist_bot.risk` icinden import edilmelidir.
+- `bist_bot.database` tamamen kaldirildi; `DataAccess` dogrudan `bist_bot.db`'den import edilmelidir.
 
 ## Known Limitations
 
@@ -155,6 +221,27 @@ Migration note:
 - Eski davranista env admin bilgileri startup icin zorunluydu; artik degil. Mevcut deployment'ta `users` tablosunda kullanici varsa ekstra degisiklik gerekmez.
 - Yeni kurulumda isterseniz ilk admin kullanicisini bir kez `ADMIN_BOOTSTRAP_EMAIL` + `ADMIN_BOOTSTRAP_PASSWORD_HASH` ile bootstrap edin; tablo dolduktan sonra bu env'leri kaldirabilirsiniz.
 - Eski `ADMIN_EMAIL` ve `ADMIN_PASSWORD_HASH` env adlari artik okunmaz; deployment env'lerini yeni bootstrap adlarina tasiyin.
+
+## Observability
+
+- `LOG_FORMAT=json` ayari ile loglar JSON olarak akar; varsayilan `console` modu lokal gelistirmede daha okunaklidir.
+- `LOG_LEVEL=INFO` veya `DEBUG` ile detay seviyesi ayarlanabilir.
+- Flask API `GET /metrics` endpoint'i uzerinden Prometheus text format metrikler sunar.
+
+## Streamlit Cooldown
+
+- Streamlit UI, oturum bazli hafif cooldown uygular; bu katman Flask rate limiter'in yerine gecmez, sadece UI tarafli asiri scan/analyze tetiklemelerini azaltir.
+- Ayarlar:
+  - `STREAMLIT_SCAN_COOLDOWN_SECONDS`
+  - `STREAMLIT_ANALYZE_COOLDOWN_SECONDS`
+- Cooldown'a takilan kullaniciya UI icinde "Cok sik istek gonderildi, birkac saniye bekleyin" mesaji gosterilir.
+
+Ornek:
+
+```bash
+LOG_FORMAT=json python main.py --worker
+curl http://localhost:5000/metrics
+```
 
 ## Live Trading (Experimental)
 
