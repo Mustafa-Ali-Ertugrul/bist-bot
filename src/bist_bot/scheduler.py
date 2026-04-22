@@ -75,9 +75,12 @@ class MarketScheduler:
                 f"{self.settings.SCAN_INTERVAL_MINUTES} dakika sonra"
             )
 
-            for _ in range(self.settings.SCAN_INTERVAL_MINUTES * 6):
+            CHECK_INTERVAL_SECONDS = 10
+            total_wait_seconds = self.settings.SCAN_INTERVAL_MINUTES * 60
+            max_iterations = total_wait_seconds // CHECK_INTERVAL_SECONDS
+            for _ in range(max_iterations):
                 if not self.running:
                     break
-                sleep(10)
+                sleep(CHECK_INTERVAL_SECONDS)
 
         logger.info("👋 Bot durduruldu.")

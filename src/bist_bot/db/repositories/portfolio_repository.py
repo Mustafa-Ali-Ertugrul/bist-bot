@@ -43,13 +43,14 @@ class PortfolioRepository:
         score: int = 0,
         regime: str = "UNKNOWN",
     ) -> None:
-        with self.manager.session_scope() as session:
+        def _write(session):
             session.add(
                 PaperTradeRecord(
                     ticker=ticker,
                     signal_type=signal_type,
                     signal_price=signal_price,
-                    signal_time=signal_time or datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    signal_time=signal_time
+                    or datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     stop_loss=stop_loss,
                     target_price=target_price,
                     score=score,
@@ -57,12 +58,18 @@ class PortfolioRepository:
                     outcome="OPEN",
                 )
             )
+            return None
+
+        self.manager.run_session(_write)
 
     def update_paper_close(self, ticker: str, close_price: float) -> None:
-        with self.manager.session_scope() as session:
+        def _write(session):
             trade = session.scalar(
                 select(PaperTradeRecord)
-                .where(PaperTradeRecord.ticker == ticker, PaperTradeRecord.outcome == "OPEN")
+                .where(
+                    PaperTradeRecord.ticker == ticker,
+                    PaperTradeRecord.outcome == "OPEN",
+                )
                 .order_by(PaperTradeRecord.id.desc())
                 .limit(1)
             )
@@ -70,30 +77,26 @@ class PortfolioRepository:
                 return
             trade.close_price = close_price
             trade.outcome = "CLOSED"
-            trade.actual_profit_pct = (trade.signal_price - close_price) / trade.signal_price * 100
+            trade.actual_profit_pct = (
+                (close_price - trade.signal_price) / trade.signal_price * 100
+            )
+            return None
+
+        self.manager.run_session(_write)
 
     def update_all_paper_close(self, prices: dict[str, float]) -> None:
-        with self.manager.session_scope() as session:
-            for ticker, close_price in prices.items():
-                trade = session.scalar(
-                    select(PaperTradeRecord)
-                    .where(PaperTradeRecord.ticker == ticker, PaperTradeRecord.outcome == "OPEN")
-                    .order_by(PaperTradeRecord.id.desc())
-                    .limit(1)
-                )
-                if trade is None:
-                    continue
-                trade.close_price = close_price
-                trade.outcome = "CLOSED"
-                trade.actual_profit_pct = (trade.signal_price - close_price) / trade.signal_price * 100
+        for ticker, close_price in prices.items():
+            self.update_paper_close(ticker, close_price)
 
     def get_open_paper_trades(self) -> list[PaperTrade]:
-        with self.manager.session_scope() as session:
-            rows = session.scalars(
+        rows = self.manager.run_session(
+            lambda session: session.scalars(
                 select(PaperTradeRecord)
                 .where(PaperTradeRecord.outcome == "OPEN")
                 .order_by(PaperTradeRecord.id.asc())
-            ).all()
+            ).all(),
+            read_only=True,
+        )
         return [
             PaperTrade(
                 id=row.id,
@@ -127,10 +130,13 @@ class PortfolioRepository:
         exit_date: str,
         actual_profit_pct: Optional[float] = None,
     ) -> None:
-        with self.manager.session_scope() as session:
+        def _write(session):
             trade = session.scalar(
                 select(PaperTradeRecord)
-                .where(PaperTradeRecord.ticker == ticker, PaperTradeRecord.outcome == "OPEN")
+                .where(
+                    PaperTradeRecord.ticker == ticker,
+                    PaperTradeRecord.outcome == "OPEN",
+                )
                 .order_by(PaperTradeRecord.id.desc())
                 .limit(1)
             )
@@ -140,15 +146,30 @@ class PortfolioRepository:
             trade.exit_date = exit_date
             trade.outcome = "CLOSED"
             trade.actual_profit_pct = actual_profit_pct
+            return None
+
+        self.manager.run_session(_write)
 
     def get_paper_performance(self) -> dict[str, Any]:
-        with self.manager.session_scope() as session:
-            trades = session.scalars(select(PaperTradeRecord).where(PaperTradeRecord.outcome == "CLOSED")).all()
+        trades = self.manager.run_session(
+            lambda session: session.scalars(
+                select(PaperTradeRecord).where(PaperTradeRecord.outcome == "CLOSED")
+            ).all(),
+            read_only=True,
+        )
         if not trades:
             return {}
-        profitable = sum(1 for trade in trades if trade.actual_profit_pct and trade.actual_profit_pct > 0)
+        profitable = sum(
+            1
+            for trade in trades
+            if trade.actual_profit_pct and trade.actual_profit_pct > 0
+        )
         total = len(trades)
-        profits = [trade.actual_profit_pct for trade in trades if trade.actual_profit_pct is not None]
+        profits = [
+            trade.actual_profit_pct
+            for trade in trades
+            if trade.actual_profit_pct is not None
+        ]
         avg_profit = sum(profits) / len(profits) if profits else 0
         return {
             "total_trades": total,

@@ -3,10 +3,20 @@ from __future__ import annotations
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Iterator, Optional
+import time
+import random
+from typing import Callable, Iterator, Optional, TypeVar
 
 from sqlalchemy import Float, Integer, String, Text, create_engine, event, text
-from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, scoped_session, sessionmaker
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm import (
+    DeclarativeBase,
+    Mapped,
+    Session,
+    mapped_column,
+    scoped_session,
+    sessionmaker,
+)
 from sqlalchemy.pool import QueuePool
 
 from bist_bot.config.settings import settings
@@ -100,11 +110,16 @@ class OrderRecord(Base):
     type: Mapped[str] = mapped_column(String, nullable=False)
     price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     state: Mapped[str] = mapped_column(String, nullable=False, index=True)
-    broker_order_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
+    broker_order_id: Mapped[Optional[str]] = mapped_column(
+        String, nullable=True, index=True
+    )
     created_at: Mapped[str] = mapped_column(Text, nullable=False, default="")
     updated_at: Mapped[str] = mapped_column(Text, nullable=False, default="")
     filled_qty: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     avg_fill_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+
+_T = TypeVar("_T")
 
 
 class DatabaseManager:
@@ -115,9 +130,13 @@ class DatabaseManager:
         max_overflow: int = 10,
         pool_timeout: int = 30,
         busy_timeout_ms: int = 5000,
+        write_retry_attempts: int = 3,
+        write_retry_backoff_seconds: float = 0.05,
     ) -> None:
         self.sqlite_path = sqlite_path or settings.DB_PATH
         self.busy_timeout_ms = busy_timeout_ms
+        self.write_retry_attempts = max(int(write_retry_attempts), 1)
+        self.write_retry_backoff_seconds = max(float(write_retry_backoff_seconds), 0.0)
         self.engine = create_engine(
             f"sqlite:///{Path(self.sqlite_path)}",
             future=True,
@@ -132,7 +151,9 @@ class DatabaseManager:
         )
         self._register_pragmas()
         self.session_factory = scoped_session(
-            sessionmaker(bind=self.engine, autoflush=False, expire_on_commit=False, future=True)
+            sessionmaker(
+                bind=self.engine, autoflush=False, expire_on_commit=False, future=True
+            )
         )
         self.initialize()
 
@@ -154,31 +175,83 @@ class DatabaseManager:
 
     def _migrate_legacy_schema(self) -> None:
         with self.engine.begin() as conn:
-            signal_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(signals)")).fetchall()}
+            signal_columns = {
+                row[1]
+                for row in conn.execute(text("PRAGMA table_info(signals)")).fetchall()
+            }
             if "conditions" not in signal_columns:
-                conn.execute(text("ALTER TABLE signals ADD COLUMN conditions TEXT NOT NULL DEFAULT '[]'"))
+                conn.execute(
+                    text(
+                        "ALTER TABLE signals ADD COLUMN conditions TEXT NOT NULL DEFAULT '[]'"
+                    )
+                )
             if "created_at" not in signal_columns:
-                conn.execute(text("ALTER TABLE signals ADD COLUMN created_at TEXT NOT NULL DEFAULT ''"))
+                conn.execute(
+                    text(
+                        "ALTER TABLE signals ADD COLUMN created_at TEXT NOT NULL DEFAULT ''"
+                    )
+                )
             if "position_size" not in signal_columns:
-                conn.execute(text("ALTER TABLE signals ADD COLUMN position_size INTEGER"))
+                conn.execute(
+                    text("ALTER TABLE signals ADD COLUMN position_size INTEGER")
+                )
 
-            paper_columns = {row[1] for row in conn.execute(text(f"PRAGMA table_info({settings.PAPER_TRADES_TABLE})")).fetchall()}
+            paper_columns = {
+                row[1]
+                for row in conn.execute(
+                    text(f"PRAGMA table_info({settings.PAPER_TRADES_TABLE})")
+                ).fetchall()
+            }
             if "stop_loss" not in paper_columns:
-                conn.execute(text(f"ALTER TABLE {settings.PAPER_TRADES_TABLE} ADD COLUMN stop_loss REAL"))
+                conn.execute(
+                    text(
+                        f"ALTER TABLE {settings.PAPER_TRADES_TABLE} ADD COLUMN stop_loss REAL"
+                    )
+                )
             if "target_price" not in paper_columns:
-                conn.execute(text(f"ALTER TABLE {settings.PAPER_TRADES_TABLE} ADD COLUMN target_price REAL"))
+                conn.execute(
+                    text(
+                        f"ALTER TABLE {settings.PAPER_TRADES_TABLE} ADD COLUMN target_price REAL"
+                    )
+                )
             if "exit_price" not in paper_columns:
-                conn.execute(text(f"ALTER TABLE {settings.PAPER_TRADES_TABLE} ADD COLUMN exit_price REAL"))
+                conn.execute(
+                    text(
+                        f"ALTER TABLE {settings.PAPER_TRADES_TABLE} ADD COLUMN exit_price REAL"
+                    )
+                )
             if "exit_date" not in paper_columns:
-                conn.execute(text(f"ALTER TABLE {settings.PAPER_TRADES_TABLE} ADD COLUMN exit_date TEXT"))
+                conn.execute(
+                    text(
+                        f"ALTER TABLE {settings.PAPER_TRADES_TABLE} ADD COLUMN exit_date TEXT"
+                    )
+                )
             if "close_reason" not in paper_columns:
-                conn.execute(text(f"ALTER TABLE {settings.PAPER_TRADES_TABLE} ADD COLUMN close_reason TEXT"))
+                conn.execute(
+                    text(
+                        f"ALTER TABLE {settings.PAPER_TRADES_TABLE} ADD COLUMN close_reason TEXT"
+                    )
+                )
             if "close_time" not in paper_columns:
-                conn.execute(text(f"ALTER TABLE {settings.PAPER_TRADES_TABLE} ADD COLUMN close_time TEXT"))
+                conn.execute(
+                    text(
+                        f"ALTER TABLE {settings.PAPER_TRADES_TABLE} ADD COLUMN close_time TEXT"
+                    )
+                )
 
-            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_signals_created_at ON signals(created_at DESC)"))
-            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_signals_ticker_created_at ON signals(ticker, created_at DESC)"))
-            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_orders_state ON orders(state)"))
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_signals_created_at ON signals(created_at DESC)"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_signals_ticker_created_at ON signals(ticker, created_at DESC)"
+                )
+            )
+            conn.execute(
+                text("CREATE INDEX IF NOT EXISTS idx_orders_state ON orders(state)")
+            )
 
     def _seed_admin_user(self) -> None:
         if not settings.admin_bootstrap_enabled:
@@ -186,7 +259,9 @@ class DatabaseManager:
 
         now = self.now_iso()
         with self.engine.begin() as conn:
-            has_users = conn.execute(text("SELECT id FROM users LIMIT 1")).scalar_one_or_none()
+            has_users = conn.execute(
+                text("SELECT id FROM users LIMIT 1")
+            ).scalar_one_or_none()
             if has_users is not None:
                 return
 
@@ -206,17 +281,48 @@ class DatabaseManager:
             )
 
     @contextmanager
-    def session_scope(self) -> Iterator[Session]:
+    def session_scope(self, *, read_only: bool = False) -> Iterator[Session]:
         session = self.session_factory()
         try:
             yield session
-            session.commit()
+            if not read_only:
+                session.commit()
         except Exception:
             session.rollback()
             raise
         finally:
             session.close()
             self.session_factory.remove()
+
+    def run_session(
+        self,
+        operation: Callable[[Session], _T],
+        *,
+        read_only: bool = False,
+    ) -> _T:
+        if read_only:
+            with self.session_scope(read_only=True) as session:
+                return operation(session)
+
+        attempt = 0
+        while True:
+            try:
+                with self.session_scope(read_only=False) as session:
+                    return operation(session)
+            except OperationalError as exc:
+                if (
+                    not self._is_locked_error(exc)
+                    or attempt >= self.write_retry_attempts - 1
+                ):
+                    raise
+                backoff = self.write_retry_backoff_seconds * (2**attempt)
+                jitter = random.uniform(0, backoff * 0.5)
+                time.sleep(backoff + jitter)
+                attempt += 1
+
+    def _is_locked_error(self, exc: OperationalError) -> bool:
+        message = str(getattr(exc, "orig", exc)).lower()
+        return "database is locked" in message or "database table is locked" in message
 
     def ping(self) -> bool:
         try:

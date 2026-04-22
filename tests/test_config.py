@@ -67,9 +67,15 @@ def test_load_settings_merges_persisted_ui_preferences(tmp_path, monkeypatch):
     loaded = config_store.load_settings()
 
     assert loaded["indicator"]["rsi_period"] == 21
-    assert loaded["indicator"]["adx_threshold"] == config_store.DEFAULT_SETTINGS["indicator"]["adx_threshold"]
+    assert (
+        loaded["indicator"]["adx_threshold"]
+        == config_store.DEFAULT_SETTINGS["indicator"]["adx_threshold"]
+    )
     assert loaded["scan"]["refresh_interval"] == 15
-    assert loaded["telegram"]["enabled"] == config_store.DEFAULT_SETTINGS["telegram"]["enabled"]
+    assert (
+        loaded["telegram"]["enabled"]
+        == config_store.DEFAULT_SETTINGS["telegram"]["enabled"]
+    )
 
 
 def test_reset_settings_removes_persisted_file(tmp_path, monkeypatch):
@@ -81,3 +87,17 @@ def test_reset_settings_removes_persisted_file(tmp_path, monkeypatch):
 
     assert config_store.reset_settings() is True
     assert not config_file.exists()
+
+
+def test_settings_override_uses_fast_merged_view() -> None:
+    from bist_bot.config.settings import settings
+
+    original = settings.BUY_THRESHOLD
+
+    with settings.override(BUY_THRESHOLD=11):
+        assert settings.BUY_THRESHOLD == 11
+        with settings.override(SELL_THRESHOLD=-33):
+            assert settings.BUY_THRESHOLD == 11
+            assert settings.SELL_THRESHOLD == -33
+
+    assert settings.BUY_THRESHOLD == original

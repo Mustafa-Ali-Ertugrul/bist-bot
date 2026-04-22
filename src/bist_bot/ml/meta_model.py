@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import json
+import pickle
 from dataclasses import dataclass
-from typing import Iterable, Literal, Mapping
+from pathlib import Path
+from typing import Iterable, Literal, Mapping, cast
 
 import numpy as np
 import pandas as pd
@@ -49,9 +52,15 @@ class ProbabilityCalibrator:
         if self._model is None:
             return probabilities
         if self.method == "platt":
-            return self._model.predict_proba(probabilities.reshape(-1, 1))[:, 1]
+            model = cast(LogisticRegression, self._model)
+            return model.predict_proba(probabilities.reshape(-1, 1))[:, 1]
         return np.clip(
-            np.asarray(self._model.predict(probabilities), dtype=float), 0.0, 1.0
+            np.asarray(
+                cast(IsotonicRegression, self._model).predict(probabilities),
+                dtype=float,
+            ),
+            0.0,
+            1.0,
         )
 
 
@@ -107,4 +116,43 @@ class SignalMetaModel:
         missing = [name for name in self.feature_names if name not in frame.columns]
         if missing:
             raise ValueError(f"Missing meta-model feature(s): {', '.join(missing)}")
-        return frame[self.feature_names].astype(float)
+        return cast(pd.DataFrame, frame[self.feature_names].astype(float))
+
+    def save_artifacts(
+        self,
+        output_dir: str | Path,
+        *,
+        manifest: Mapping[str, object],
+        metrics: Mapping[str, object],
+    ) -> Path:
+        path = Path(output_dir)
+        path.mkdir(parents=True, exist_ok=True)
+        (path / "meta_model.pkl").write_bytes(pickle.dumps(self.model))
+        (path / "probability_calibrator.pkl").write_bytes(pickle.dumps(self.calibrator))
+        (path / "feature_columns.json").write_text(
+            json.dumps(self.feature_names, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        (path / "training_manifest.json").write_text(
+            json.dumps(dict(manifest), indent=2, ensure_ascii=False, default=str),
+            encoding="utf-8",
+        )
+        (path / "metrics.json").write_text(
+            json.dumps(dict(metrics), indent=2, ensure_ascii=False, default=str),
+            encoding="utf-8",
+        )
+        return path
+
+    @classmethod
+    def load_artifacts(cls, artifact_dir: str | Path) -> "SignalMetaModel":
+        path = Path(artifact_dir)
+        feature_names = json.loads(
+            (path / "feature_columns.json").read_text(encoding="utf-8")
+        )
+        model = pickle.loads((path / "meta_model.pkl").read_bytes())
+        calibrator = pickle.loads((path / "probability_calibrator.pkl").read_bytes())
+        instance = cls(getattr(calibrator, "method", "platt"))
+        instance.model = model
+        instance.calibrator = calibrator
+        instance.feature_names = list(feature_names)
+        return instance

@@ -9,6 +9,7 @@ Kullanim:
     python backtest_compare.py
     python backtest_compare.py --tickers THYAO.IS ASELS.IS --period 1y
 """
+
 import argparse
 import logging
 import sys
@@ -44,11 +45,12 @@ class CompareRow:
     benchmark_return: float
     sideways_bars_pct: float
 
+
 def _sideways_pct(df: pd.DataFrame) -> float:
     ti = TechnicalIndicators()
     df = ti.add_all(df).dropna(subset=["rsi", f"sma_{settings.SMA_SLOW}"])
     start = min(50, len(df))
-    regimes = [detect_regime(df.iloc[:i+1]) for i in range(start, len(df))]
+    regimes = [detect_regime(df.iloc[: i + 1]) for i in range(start, len(df))]
     if not regimes:
         return 0.0
     sideways = sum(1 for r in regimes if r == MarketRegime.SIDEWAYS)
@@ -102,7 +104,9 @@ def _print_comparison(rows: list[CompareRow]) -> None:
             f"\n  Özet: {improved}/{len(rows)} hissede yeni mantık daha iyi getiri sağladı"
         )
         print(f"  Ort. getiri farkı  : {avg_delta:+.2f}%")
-        print(f"  Ort. işlem farkı   : {avg_trade_change:+.1f} (negatif = daha az false positive)")
+        print(
+            f"  Ort. işlem farkı   : {avg_trade_change:+.1f} (negatif = daha az false positive)"
+        )
         print(f"  Ort. win rate farkı: {avg_wr_change:+.1f}%")
 
     print("═" * W + "\n")
@@ -209,8 +213,10 @@ def run(tickers: list[str], period: str = "1y") -> list[CompareRow]:
 
 
 def main():
-    configure_logging(level=logging.WARNING, log_file=None, fmt="%(levelname)s | %(message)s")
-    parser = argparse.ArgumentParser(description="Eski vs Yeni backtest karşılaştırması")
+    configure_logging(level=logging.WARNING, fmt="%(levelname)s | %(message)s")
+    parser = argparse.ArgumentParser(
+        description="Eski vs Yeni backtest karşılaştırması"
+    )
     parser.add_argument(
         "--tickers",
         nargs="+",

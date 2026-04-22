@@ -29,7 +29,9 @@ def build_two_year_frame() -> pd.DataFrame:
 
 
 class DummyOptimizer:
-    def __init__(self, ticker: str, train_df: pd.DataFrame, initial_capital: float) -> None:
+    def __init__(
+        self, ticker: str, train_df: pd.DataFrame, initial_capital: float
+    ) -> None:
         self.ticker = ticker
         self.train_df = train_df
         self.initial_capital = initial_capital
@@ -44,7 +46,9 @@ class DummyBacktester:
         self.initial_capital = initial_capital
         self.params = params
 
-    def run(self, ticker: str, df: pd.DataFrame, verbose: bool = False) -> BacktestResult:
+    def run(
+        self, ticker: str, df: pd.DataFrame, verbose: bool = False
+    ) -> BacktestResult:
         _ = verbose
         entry_date = df.index[0].to_pydatetime()
         exit_date = df.index[-1].to_pydatetime()
@@ -108,3 +112,20 @@ def test_walk_forward_generates_expected_windows_and_metrics() -> None:
     assert result.combined_metrics["win_rate"] >= 0
     assert result.combined_metrics["profit_factor"] >= 0
     assert result.combined_metrics["avg_trade"] > 0
+
+
+def test_walk_forward_anchored_mode_expands_training_window() -> None:
+    validator = WalkForwardValidator(
+        train_window=6,
+        test_window=3,
+        step=3,
+        mode="anchored",
+        optimizer_factory=DummyOptimizer,
+        backtester_factory=DummyBacktester,
+    )
+
+    windows = validator._build_windows(build_two_year_frame())
+
+    assert len(windows) >= 3
+    assert len(windows[1][0]) > len(windows[0][0])
+    assert windows[0][0].index.min() == windows[1][0].index.min()

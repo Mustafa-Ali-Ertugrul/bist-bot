@@ -75,7 +75,7 @@ def calc_swing_levels(df: pd.DataFrame, price: float, levels: RiskLevels) -> Ris
     if lookback < 5:
         return levels
 
-    recent = df.tail(lookback).copy()
+    recent = df.tail(lookback).iloc[:-2].copy()
     swing_low_mask = (
         (recent["low"] < recent["low"].shift(1))
         & (recent["low"] < recent["low"].shift(2))

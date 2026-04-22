@@ -81,16 +81,19 @@ class _MetricsRegistry:
 
     def render(self) -> str:
         with self._lock:
-            if self._prom_registry is not None and generate_latest is not None:
-                return generate_latest(self._prom_registry).decode("utf-8")
-            lines: list[str] = []
-            for name, value in self._counters.items():
-                lines.append(f"# TYPE {name} counter")
-                lines.append(f"{name} {value}")
-            for name, value in self._gauges.items():
-                lines.append(f"# TYPE {name} gauge")
-                lines.append(f"{name} {value}")
-            return "\n".join(lines) + "\n"
+            prom_registry = self._prom_registry
+            counter_snapshot = list(self._counters.items())
+            gauge_snapshot = list(self._gauges.items())
+        if prom_registry is not None and generate_latest is not None:
+            return generate_latest(prom_registry).decode("utf-8")
+        lines: list[str] = []
+        for name, value in counter_snapshot:
+            lines.append(f"# TYPE {name} counter")
+            lines.append(f"{name} {value}")
+        for name, value in gauge_snapshot:
+            lines.append(f"# TYPE {name} gauge")
+            lines.append(f"{name} {value}")
+        return "\n".join(lines) + "\n"
 
 
 _REGISTRY = _MetricsRegistry()

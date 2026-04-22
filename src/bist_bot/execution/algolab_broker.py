@@ -138,8 +138,9 @@ class AlgoLabBroker(BaseExecutionProvider):
         if self._session_token:
             return True
         if not self.endpoints.login or not self.endpoints.verify_otp:
-            raise RuntimeError(
-                "AlgoLab endpoint paths are not configured. TODO: set verified login and OTP endpoints before live use."
+            raise NotImplementedError(
+                "AlgoLab login/OTP endpoints are not yet configured for live trading. "
+                "Please configure the broker endpoints before enabling live trading."
             )
 
         with self._auth_lock:
@@ -272,7 +273,10 @@ class AlgoLabBroker(BaseExecutionProvider):
     def _required_endpoint(self, name: str) -> str:
         value = cast(str | None, getattr(self.endpoints, name))
         if not value:
-            raise RuntimeError(f"AlgoLab endpoint '{name}' is not configured. TODO: verify official API path.")
+            raise NotImplementedError(
+                f"AlgoLab endpoint '{name}' is not configured. "
+                "This feature requires official API endpoint configuration before use."
+            )
         return value
 
     def _auth_headers(self) -> dict[str, str]:

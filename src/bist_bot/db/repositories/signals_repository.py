@@ -34,7 +34,8 @@ class SignalsRepository:
 
     def save_signal(self, signal: Signal) -> None:
         created_at = signal.timestamp.isoformat()
-        with self.manager.session_scope() as session:
+
+        def _write(session):
             existing = session.scalar(
                 select(SignalRecord)
                 .where(
@@ -56,46 +57,72 @@ class SignalsRepository:
                     price=float(signal.price),
                     stop_loss=float(signal.stop_loss),
                     target_price=float(signal.target_price),
-                    position_size=int(signal.position_size) if signal.position_size is not None else None,
+                    position_size=int(signal.position_size)
+                    if signal.position_size is not None
+                    else None,
                     confidence=signal.confidence,
                     reasons=" | ".join(signal.reasons),
                     conditions=_serialize_reasons(signal.reasons),
                 )
             )
+            return None
 
-    def get_signals(self, limit: int = 50, ticker: Optional[str] = None) -> list[dict[str, Any]]:
-        with self.manager.session_scope() as session:
+        self.manager.run_session(_write)
+
+    def get_signals(
+        self, limit: int = 50, ticker: Optional[str] = None
+    ) -> list[dict[str, Any]]:
+        def _read(session):
             statement = select(SignalRecord)
             if ticker:
                 statement = statement.where(SignalRecord.ticker == ticker)
-            statement = statement.order_by(SignalRecord.timestamp.desc(), SignalRecord.id.desc()).limit(limit)
-            rows = session.scalars(statement).all()
+            statement = statement.order_by(
+                SignalRecord.timestamp.desc(), SignalRecord.id.desc()
+            ).limit(limit)
+            return session.scalars(statement).all()
+
+        rows = self.manager.run_session(_read, read_only=True)
         return [self._signal_to_dict(row) for row in rows]
 
-    def get_recent_signals(self, limit: int = 50, ticker: Optional[str] = None) -> list[dict[str, Any]]:
+    def get_recent_signals(
+        self, limit: int = 50, ticker: Optional[str] = None
+    ) -> list[dict[str, Any]]:
         return self.get_signals(limit=limit, ticker=ticker)
 
     def get_latest_signal(self, ticker: str) -> Optional[dict[str, Any]]:
-        with self.manager.session_scope() as session:
-            row = session.scalar(
+        row = self.manager.run_session(
+            lambda session: session.scalar(
                 select(SignalRecord)
                 .where(SignalRecord.ticker == ticker)
                 .order_by(SignalRecord.timestamp.desc(), SignalRecord.id.desc())
                 .limit(1)
-            )
-            return self._signal_to_dict(row) if row else None
+            ),
+            read_only=True,
+        )
+        return self._signal_to_dict(row) if row else None
 
-    def signal_exists(self, ticker: str, signal_type: Optional[str] = None, timestamp: Optional[str] = None) -> bool:
-        with self.manager.session_scope() as session:
-            statement = select(func.count()).select_from(SignalRecord).where(SignalRecord.ticker == ticker)
+    def signal_exists(
+        self,
+        ticker: str,
+        signal_type: Optional[str] = None,
+        timestamp: Optional[str] = None,
+    ) -> bool:
+        def _read(session):
+            statement = (
+                select(func.count())
+                .select_from(SignalRecord)
+                .where(SignalRecord.ticker == ticker)
+            )
             if signal_type:
                 statement = statement.where(SignalRecord.signal_type == signal_type)
             if timestamp:
                 statement = statement.where(SignalRecord.timestamp == timestamp)
             return bool(session.scalar(statement))
 
+        return self.manager.run_session(_read, read_only=True)
+
     def save_scan_log(self, total: int, generated: int, buys: int, sells: int) -> None:
-        with self.manager.session_scope() as session:
+        def _write(session):
             session.add(
                 ScanLogRecord(
                     timestamp=datetime.now().isoformat(),
@@ -105,9 +132,14 @@ class SignalsRepository:
                     sell_signals=sells,
                 )
             )
+            return None
 
-    def update_outcome(self, signal_id: int, outcome: str, outcome_price: float) -> None:
-        with self.manager.session_scope() as session:
+        self.manager.run_session(_write)
+
+    def update_outcome(
+        self, signal_id: int, outcome: str, outcome_price: float
+    ) -> None:
+        def _write(session):
             row = session.get(SignalRecord, signal_id)
             if row is None:
                 return
@@ -115,20 +147,50 @@ class SignalsRepository:
             row.outcome = outcome
             row.outcome_price = outcome_price
             row.outcome_date = datetime.now().isoformat()
-            row.profit_pct = round((outcome_price - original_price) / original_price * 100, 2)
+            row.profit_pct = round(
+                (outcome_price - original_price) / original_price * 100, 2
+            )
+            return None
+
+        self.manager.run_session(_write)
 
     def get_performance_stats(self) -> dict[str, Any]:
-        with self.manager.session_scope() as session:
+        def _read(session):
             total = session.scalar(select(func.count()).select_from(SignalRecord)) or 0
-            completed = session.scalar(select(func.count()).select_from(SignalRecord).where(SignalRecord.outcome != "PENDING")) or 0
-            profitable = session.scalar(select(func.count()).select_from(SignalRecord).where(SignalRecord.profit_pct > 0)) or 0
-            avg_profit = session.scalar(select(func.avg(SignalRecord.profit_pct)).where(SignalRecord.profit_pct.is_not(None)))
+            completed = (
+                session.scalar(
+                    select(func.count())
+                    .select_from(SignalRecord)
+                    .where(SignalRecord.outcome != "PENDING")
+                )
+                or 0
+            )
+            profitable = (
+                session.scalar(
+                    select(func.count())
+                    .select_from(SignalRecord)
+                    .where(SignalRecord.profit_pct > 0)
+                )
+                or 0
+            )
+            avg_profit = session.scalar(
+                select(func.avg(SignalRecord.profit_pct)).where(
+                    SignalRecord.profit_pct.is_not(None)
+                )
+            )
+            return total, completed, profitable, avg_profit
+
+        total, completed, profitable, avg_profit = self.manager.run_session(
+            _read, read_only=True
+        )
         return {
             "total_signals": int(total),
             "completed": int(completed),
             "profitable": int(profitable),
             "win_rate": round(profitable / completed * 100, 1) if completed > 0 else 0,
-            "avg_profit_pct": round(float(avg_profit), 2) if avg_profit is not None else 0,
+            "avg_profit_pct": round(float(avg_profit), 2)
+            if avg_profit is not None
+            else 0,
         }
 
     def _signal_to_dict(self, row: SignalRecord) -> dict[str, Any]:
@@ -144,7 +206,8 @@ class SignalsRepository:
             "target_price": row.target_price,
             "position_size": row.position_size,
             "confidence": row.confidence,
-            "reasons": _deserialize_reasons(row.conditions) or _deserialize_reasons(row.reasons),
+            "reasons": _deserialize_reasons(row.conditions)
+            or _deserialize_reasons(row.reasons),
             "outcome": row.outcome,
             "outcome_price": row.outcome_price,
             "outcome_date": row.outcome_date,

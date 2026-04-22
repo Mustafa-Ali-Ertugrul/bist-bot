@@ -24,7 +24,8 @@ class OrdersRepository:
         avg_fill_price: float | None = None,
     ) -> dict[str, Any]:
         now = self.manager.now_iso()
-        with self.manager.session_scope() as session:
+
+        def _write(session):
             row = OrderRecord(
                 ticker=ticker,
                 side=side,
@@ -42,6 +43,8 @@ class OrdersRepository:
             session.flush()
             return self._to_dict(row)
 
+        return self.manager.run_session(_write)
+
     def update_order(
         self,
         order_id: int,
@@ -51,7 +54,7 @@ class OrdersRepository:
         filled_qty: float | None = None,
         avg_fill_price: float | None = None,
     ) -> Optional[dict[str, Any]]:
-        with self.manager.session_scope() as session:
+        def _write(session):
             row = session.get(OrderRecord, order_id)
             if row is None:
                 return None
@@ -67,25 +70,33 @@ class OrdersRepository:
             session.flush()
             return self._to_dict(row)
 
+        return self.manager.run_session(_write)
+
     def get_pending_orders(self) -> list[dict[str, Any]]:
-        with self.manager.session_scope() as session:
-            rows = session.scalars(
+        rows = self.manager.run_session(
+            lambda session: session.scalars(
                 select(OrderRecord)
                 .where(OrderRecord.state.in_(["SENT", "PARTIAL"]))
                 .order_by(OrderRecord.created_at.asc(), OrderRecord.id.asc())
-            ).all()
+            ).all(),
+            read_only=True,
+        )
         return [self._to_dict(row) for row in rows]
 
     def get_order(self, order_id: int) -> Optional[dict[str, Any]]:
-        with self.manager.session_scope() as session:
-            row = session.get(OrderRecord, order_id)
+        row = self.manager.run_session(
+            lambda session: session.get(OrderRecord, order_id),
+            read_only=True,
+        )
         return self._to_dict(row) if row is not None else None
 
     def get_open_live_position_tickers(self) -> list[str]:
-        with self.manager.session_scope() as session:
-            rows = session.scalars(
+        rows = self.manager.run_session(
+            lambda session: session.scalars(
                 select(OrderRecord).where(OrderRecord.state.in_(["FILLED", "PARTIAL"]))
-            ).all()
+            ).all(),
+            read_only=True,
+        )
 
         net_positions: dict[str, float] = {}
         for row in rows:
@@ -97,7 +108,9 @@ class OrdersRepository:
             signed_qty = executed_qty if row.side == "BUY" else -executed_qty
             net_positions[row.ticker] = net_positions.get(row.ticker, 0.0) + signed_qty
 
-        return sorted(ticker for ticker, quantity in net_positions.items() if quantity > 0)
+        return sorted(
+            ticker for ticker, quantity in net_positions.items() if quantity > 0
+        )
 
     def _to_dict(self, row: OrderRecord) -> dict[str, Any]:
         return {

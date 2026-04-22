@@ -21,6 +21,10 @@ _SETTINGS_OVERRIDES: ContextVar[tuple[dict[str, Any], ...]] = ContextVar(
     "settings_overrides",
     default=(),
 )
+_SETTINGS_MERGED_OVERRIDE: ContextVar[dict[str, Any] | None] = ContextVar(
+    "settings_merged_override",
+    default=None,
+)
 
 
 class SettingsOverride:
@@ -32,13 +36,21 @@ class SettingsOverride:
             raise AttributeError(f"Unknown settings override(s): {unknown}")
         self._overrides = overrides
         self._token: Token[tuple[dict[str, Any], ...]] | None = None
+        self._merged_token: Token[dict[str, Any] | None] | None = None
 
     def __enter__(self) -> "Settings":
         current = _SETTINGS_OVERRIDES.get()
+        merged = _SETTINGS_MERGED_OVERRIDE.get()
+        next_merged = dict(merged) if merged else {}
+        next_merged.update(self._overrides)
         self._token = _SETTINGS_OVERRIDES.set(current + (self._overrides,))
+        self._merged_token = _SETTINGS_MERGED_OVERRIDE.set(next_merged)
         return settings
 
     def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+        if self._merged_token is not None:
+            _SETTINGS_MERGED_OVERRIDE.reset(self._merged_token)
+            self._merged_token = None
         if self._token is not None:
             _SETTINGS_OVERRIDES.reset(self._token)
             self._token = None
@@ -325,12 +337,10 @@ class Settings:
     SECTOR_LIMIT: int = _get_int_env("SECTOR_LIMIT", 2)
 
     def __getattribute__(self, name: str) -> Any:
-        if not name.startswith("__"):
-            dataclass_fields = object.__getattribute__(self, "__dataclass_fields__")
-            if name in dataclass_fields:
-                for overrides in reversed(_SETTINGS_OVERRIDES.get()):
-                    if name in overrides:
-                        return overrides[name]
+        if not name.startswith("__") and name in _SETTINGS_FIELD_NAMES:
+            merged_overrides = _SETTINGS_MERGED_OVERRIDE.get()
+            if merged_overrides is not None and name in merged_overrides:
+                return merged_overrides[name]
         return object.__getattribute__(self, name)
 
     def override(self, **overrides: Any) -> SettingsOverride:
@@ -380,3 +390,4 @@ class Settings:
 
 
 settings = Settings()
+_SETTINGS_FIELD_NAMES = frozenset(Settings.__dataclass_fields__)

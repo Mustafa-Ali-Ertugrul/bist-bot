@@ -5,6 +5,11 @@ from datetime import datetime
 import pandas as pd
 
 from bist_bot.backtest import BacktestMode, Backtester
+from bist_bot.ml.training import (
+    LabelDefinition,
+    SplitConfig,
+    train_meta_model_from_dataset,
+)
 
 
 class IdentityIndicators:
@@ -120,3 +125,48 @@ def test_meta_backtest_reports_probability_diagnostics() -> None:
     assert len(result.probability_diagnostics["probability_buckets"]) == 4
     assert result.turnover_ratio >= 0.0
     assert result.exposure_pct >= 0.0
+
+
+def test_backtest_ablation_accepts_loaded_training_artifact(tmp_path) -> None:
+    training_rows = []
+    dates = pd.date_range(datetime(2024, 1, 1), periods=80, freq="D")
+    for idx, date in enumerate(dates):
+        label = 1 if idx % 4 in {2, 3} else 0
+        training_rows.append(
+            {
+                "ticker": "TEST.IS",
+                "date": date,
+                "future_return": 0.03 if label else -0.01,
+                "label": label,
+                "score": float(20 + idx),
+                "adx": 18.0 + label * 10,
+                "rsi": 44.0 + label * 10,
+                "volume_ratio": 1.0 + label * 0.4,
+                "atr_pct": 0.02,
+                "risk_reward_ratio": 2.0,
+                "volatility_scale": 1.0,
+                "correlation_scale": 1.0,
+                "trend_bias": 1.0,
+                "close_vs_ema_long": 0.01 + label * 0.03,
+            }
+        )
+    model, _, _ = train_meta_model_from_dataset(
+        pd.DataFrame(training_rows),
+        split_config=SplitConfig(
+            train_fraction=0.5, validation_fraction=0.2, calibration_fraction=0.1
+        ),
+        label_definition=LabelDefinition(horizon_bars=5, return_threshold=0.02),
+        calibration_method="platt",
+        output_dir=tmp_path,
+    )
+
+    ablation = Backtester(
+        initial_capital=10000,
+        indicators=IdentityIndicators(),
+        meta_model=model,
+        min_probability=0.5,
+        fractional_kelly=0.25,
+        max_position_cap_pct=20.0,
+    ).run_ablation("TEST.IS", build_ablation_frame(), verbose=False)
+
+    assert "meta_filter_fractional_kelly" in ablation.runs

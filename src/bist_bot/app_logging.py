@@ -37,13 +37,30 @@ def _serialize_event(payload: dict[str, Any]) -> str:
     return " ".join(ordered)
 
 
-def configure_logging(*, stream: io.TextIOBase | None = None) -> None:
-    handler = logging.StreamHandler(stream or sys.stdout)
-    handler.setFormatter(logging.Formatter("%(message)s"))
+def configure_logging(
+    *,
+    stream: io.TextIOBase | None = None,
+    level: int | str | None = None,
+    log_file: str | None = None,
+    fmt: str | None = None,
+) -> None:
+    target = stream or sys.stdout
+    handlers: list[logging.Handler] = []
+    if log_file:
+        handlers.append(logging.FileHandler(log_file))
+    else:
+        handlers.append(logging.StreamHandler(target))
+    formatter = logging.Formatter(fmt or "%(message)s")
+    for h in handlers:
+        h.setFormatter(formatter)
     root = logging.getLogger()
     root.handlers.clear()
-    root.addHandler(handler)
-    root.setLevel(_normalize_level())
+    for h in handlers:
+        root.addHandler(h)
+    if level is not None:
+        root.setLevel(level if isinstance(level, int) else getattr(logging, str(level).upper(), logging.INFO))
+    else:
+        root.setLevel(_normalize_level())
 
 
 class BoundLogger:

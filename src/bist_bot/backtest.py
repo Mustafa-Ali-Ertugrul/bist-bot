@@ -11,6 +11,7 @@ import pandas as pd
 
 from bist_bot.app_logging import get_logger
 from bist_bot.config.settings import settings
+from bist_bot.ml.features import build_feature_payload
 from bist_bot.risk.sizing import calculate_kelly_fraction
 
 try:
@@ -1248,25 +1249,14 @@ class Backtester:
         reward_to_risk = (
             reward_per_share / risk_per_share if risk_per_share > 0 else 0.0
         )
-        ema_long = _to_float(last.get(f"ema_{settings.EMA_LONG}"), last_close)
         probability = float(
             self.meta_model.predict_probability(
-                {
-                    "score": score,
-                    "adx": _to_float(last.get("adx")),
-                    "rsi": _to_float(last.get("rsi")),
-                    "volume_ratio": _to_float(last.get("volume_ratio")),
-                    "atr_pct": _to_float(last.get("atr")) / last_close
-                    if last_close > 0
-                    else 0.0,
-                    "risk_reward_ratio": reward_to_risk,
-                    "volatility_scale": 1.0,
-                    "correlation_scale": 1.0,
-                    "trend_bias": 1.0 if score > 0 else -1.0 if score < 0 else 0.0,
-                    "close_vs_ema_long": (last_close / ema_long) - 1.0
-                    if ema_long > 0
-                    else 0.0,
-                }
+                build_feature_payload(
+                    last,
+                    score=score,
+                    stop_loss=stop_loss,
+                    target_price=target_price,
+                )
             )
         )
         fields: dict[str, float | bool] = {"signal_probability": probability}
@@ -1820,7 +1810,7 @@ class WalkForwardValidator:
         if self.optimizer_factory is not None:
             return self.optimizer_factory(ticker, train_df, initial_capital)
 
-        from optimizer import StrategyOptimizer
+        from bist_bot.optimizer import StrategyOptimizer
 
         return StrategyOptimizer(
             ticker=ticker, df=train_df, initial_capital=initial_capital

@@ -32,7 +32,9 @@ class ScriptedBacktester(Backtester):
         )
         self.scripted_signals = scripted_signals
 
-    def _build_signal_context(self, ticker: str, history: pd.DataFrame) -> dict[str, float | bool]:
+    def _build_signal_context(
+        self, ticker: str, history: pd.DataFrame
+    ) -> dict[str, float | bool]:
         return self.scripted_signals.get(
             len(history),
             {
@@ -159,3 +161,57 @@ def test_dynamic_slippage_uses_atr_on_entry_and_exit():
     trade = result.trades[0]
     assert trade.entry_price == 10.16
     assert trade.exit_price == 14.76
+
+
+def test_vectorized_backtest_shifts_signals_to_next_bar_open():
+    dates = pd.date_range(datetime(2024, 1, 1), periods=60, freq="D")
+    rows = []
+    for index, date in enumerate(dates):
+        close_price = 10.0 + index * 0.1
+        rows.append(
+            {
+                "date": date,
+                "open": close_price,
+                "high": close_price + 0.3,
+                "low": close_price - 0.3,
+                "close": close_price,
+                "volume": 1000,
+                "atr": 0.2,
+                "rsi": 50.0,
+                "sma_5": close_price + 0.1,
+                "sma_20": close_price,
+                "sma_cross": "NONE",
+                "macd_cross": "NONE",
+                "bb_position": "MIDDLE",
+            }
+        )
+    df = pd.DataFrame(rows).set_index("date")
+    signal_idx = 25
+    entry_idx = signal_idx + 1
+    df.iloc[signal_idx, df.columns.get_loc("rsi")] = 10.0
+    df.iloc[signal_idx, df.columns.get_loc("open")] = 13.0
+    df.iloc[entry_idx, df.columns.get_loc("open")] = 17.5
+
+    backtester = Backtester(
+        initial_capital=1000,
+        commission_buy_pct=0.0,
+        commission_sell_pct=0.0,
+        slippage_pct=0.0,
+        indicators=IdentityIndicators(),
+        buy_threshold=20,
+        sell_threshold=-20,
+    )
+
+    with settings.override(
+        SLIPPAGE_PCT=0.0,
+        SLIPPAGE_PENALTY_RATIO=0.0,
+        SLIPPAGE_MAX_CAP=0.02,
+    ):
+        result = backtester.run("TEST.IS", df, verbose=False)
+
+    assert result is not None
+    assert result.trades
+    assert (
+        result.trades[0].entry_date == pd.Timestamp(df.index[entry_idx]).to_pydatetime()
+    )
+    assert result.trades[0].entry_price == 17.5
