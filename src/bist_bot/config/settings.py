@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from typing import Any
@@ -91,7 +92,13 @@ def _get_float_env(name: str, default: float) -> float:
 def _get_str_env(name: str, default: str = "") -> str:
     value = os.getenv(name)
     if value is None:
-        return default
+        file_path = os.getenv(f"{name}_FILE")
+        if not file_path:
+            return default
+        try:
+            return Path(file_path).read_text(encoding="utf-8").strip()
+        except OSError:
+            return default
     return value.strip()
 
 
@@ -273,6 +280,8 @@ class Settings:
         "API_BASE_URL", f"http://localhost:{_get_int_env('FLASK_PORT', 5000)}"
     )
     RATE_LIMIT_STORAGE_URI: str = _get_str_env("RATE_LIMIT_STORAGE_URI", "memory://")
+    SENTRY_DSN: str | None = _get_str_env("SENTRY_DSN") or None
+    ENVIRONMENT: str = _get_str_env("ENVIRONMENT", "production")
     JWT_SECRET_KEY: str = _get_str_env("JWT_SECRET_KEY")
     ADMIN_BOOTSTRAP_EMAIL: str = _get_str_env("ADMIN_BOOTSTRAP_EMAIL")
     ADMIN_BOOTSTRAP_PASSWORD_HASH: str = _get_str_env("ADMIN_BOOTSTRAP_PASSWORD_HASH")

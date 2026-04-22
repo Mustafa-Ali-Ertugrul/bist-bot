@@ -17,7 +17,11 @@ from bist_bot.app_logging import configure_logging, get_logger
 from bist_bot.app_metrics import render_metrics
 from bist_bot.auth.passwords import verify_and_rehash_password
 from bist_bot.config.settings import settings
-from bist_bot.contracts import DataFetcherProtocol, SignalRepositoryProtocol, StrategyEngineProtocol
+from bist_bot.contracts import (
+    DataFetcherProtocol,
+    SignalRepositoryProtocol,
+    StrategyEngineProtocol,
+)
 from bist_bot.dependencies import AppContainer, get_default_container
 from bist_bot.indicators import TechnicalIndicators
 from bist_bot.locales import get_message
@@ -118,19 +122,29 @@ def create_dashboard_app(
         if manager is None:
             return False
         with manager.engine.begin() as conn:
-            row = conn.execute(
-                text("SELECT id, password_hash FROM users WHERE email = :email LIMIT 1"),
-                {"email": email},
-            ).mappings().first()
+            row = (
+                conn.execute(
+                    text(
+                        "SELECT id, password_hash FROM users WHERE email = :email LIMIT 1"
+                    ),
+                    {"email": email},
+                )
+                .mappings()
+                .first()
+            )
         if row is None:
             return False
-        verified, upgraded_hash = verify_and_rehash_password(password, str(row["password_hash"]))
+        verified, upgraded_hash = verify_and_rehash_password(
+            password, str(row["password_hash"])
+        )
         if not verified:
             return False
         if upgraded_hash is not None:
             with manager.engine.begin() as conn:
                 conn.execute(
-                    text("UPDATE users SET password_hash = :password_hash, updated_at = :updated_at WHERE id = :id"),
+                    text(
+                        "UPDATE users SET password_hash = :password_hash, updated_at = :updated_at WHERE id = :id"
+                    ),
                     {
                         "id": int(row["id"]),
                         "password_hash": upgraded_hash,
@@ -143,7 +157,9 @@ def create_dashboard_app(
     def add_security_headers(response):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
-        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        response.headers["Strict-Transport-Security"] = (
+            "max-age=31536000; includeSubDomains"
+        )
         return response
 
     @app.route("/health")
@@ -159,9 +175,16 @@ def create_dashboard_app(
         status_code = 200 if health["status"] == "healthy" else 503
         return jsonify(health), status_code
 
+    @app.route("/ready")
+    def readiness_check():
+        ready = {"status": "ready", "timestamp": datetime.now(TR).isoformat()}
+        return jsonify(ready), 200
+
     @app.route("/metrics")
     def metrics():
-        return app.response_class(render_metrics(), mimetype="text/plain; version=0.0.4")
+        return app.response_class(
+            render_metrics(), mimetype="text/plain; version=0.0.4"
+        )
 
     @app.route("/api/auth/login", methods=["POST"])
     @limiter.limit("5 per minute")
@@ -170,7 +193,9 @@ def create_dashboard_app(
         email = str(payload.get("email", "")).strip().lower()
         password = str(payload.get("password", ""))
         if not email or not password or not verify_admin(email, password):
-            return jsonify({"status": "error", "message": get_message("api.invalid_credentials")}), 401
+            return jsonify(
+                {"status": "error", "message": get_message("api.invalid_credentials")}
+            ), 401
 
         token = create_access_token(identity=email)
         return jsonify({"status": "ok", "access_token": token, "expires_in_hours": 12})
@@ -182,7 +207,9 @@ def create_dashboard_app(
         start_time = time.time()
         try:
             payload = request.get_json(silent=True) or {}
-            force_refresh = _coerce_bool(payload.get("force_refresh", request.args.get("force_refresh")))
+            force_refresh = _coerce_bool(
+                payload.get("force_refresh", request.args.get("force_refresh"))
+            )
             scan_service = get_scan_service()
             signals = scan_service.scan_once(force_refresh=force_refresh)
             scan_stats = scan_service.last_scan_stats
@@ -239,20 +266,30 @@ def create_dashboard_app(
             force_refresh = _coerce_bool(request.args.get("force_refresh"))
             cache_key = f"{normalized_ticker}|analyze|6mo"
 
-            cached_response = runtime_fetcher.get_cached_analysis(cache_key, force=force_refresh)
+            cached_response = runtime_fetcher.get_cached_analysis(
+                cache_key, force=force_refresh
+            )
             if cached_response is not None:
                 payload = dict(cached_response)
                 payload["duration_ms"] = round((time.time() - start_time) * 1000, 2)
                 payload["force_refresh"] = force_refresh
-                logger.info("api_analyze_completed", ticker=normalized_ticker, duration_ms=payload["duration_ms"])
+                logger.info(
+                    "api_analyze_completed",
+                    ticker=normalized_ticker,
+                    duration_ms=payload["duration_ms"],
+                )
                 return jsonify(payload)
 
             if force_refresh:
                 runtime_fetcher.clear_cache(scope="analysis", ticker=normalized_ticker)
 
-            df = runtime_fetcher.fetch_single(normalized_ticker, period="6mo", force=force_refresh)
+            df = runtime_fetcher.fetch_single(
+                normalized_ticker, period="6mo", force=force_refresh
+            )
             if df is None:
-                return jsonify({"status": "error", "message": get_message("api.data_not_found")}), 404
+                return jsonify(
+                    {"status": "error", "message": get_message("api.data_not_found")}
+                ), 404
 
             indicator_engine = TechnicalIndicators()
             enriched = indicator_engine.add_all(df.copy())
@@ -291,7 +328,9 @@ def create_dashboard_app(
             }
             runtime_fetcher.store_analysis(cache_key, response_payload)
             response_payload["force_refresh"] = force_refresh
-            response_payload["duration_ms"] = round((time.time() - start_time) * 1000, 2)
+            response_payload["duration_ms"] = round(
+                (time.time() - start_time) * 1000, 2
+            )
             logger.info(
                 "api_analyze_completed",
                 ticker=normalized_ticker,

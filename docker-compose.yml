@@ -4,14 +4,17 @@ x-bist-bot-common: &bist-bot-common
   build: .
   environment:
     TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+    TELEGRAM_BOT_TOKEN_FILE: ${TELEGRAM_BOT_TOKEN_FILE:-/run/secrets/telegram_bot_token}
     TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
-    JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-secret-change-me}
+    JWT_SECRET_KEY: ${JWT_SECRET_KEY:-}
+    JWT_SECRET_KEY_FILE: ${JWT_SECRET_KEY_FILE:-/run/secrets/jwt_secret_key}
     FLASK_DEBUG: "False"
     API_BASE_URL: http://flask-api:5000
     DB_PATH: /app/data/bist_signals.db
     PYTHONPATH: /app/src
   volumes:
     - ./data:/app/data
+    - ./secrets:/run/secrets:ro
   restart: unless-stopped
 
 services:

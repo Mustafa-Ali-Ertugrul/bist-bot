@@ -8,7 +8,13 @@ import pandas as pd
 from bist_bot.risk.models import RiskLevels
 
 
-def calc_atr_levels(df: pd.DataFrame, price: float, levels: RiskLevels, atr_stop_mult: float, atr_target_mult: float) -> RiskLevels:
+def calc_atr_levels(
+    df: pd.DataFrame,
+    price: float,
+    levels: RiskLevels,
+    atr_stop_mult: float,
+    atr_target_mult: float,
+) -> RiskLevels:
     atr = df.get("atr")
     if atr is not None and pd.notna(atr.iloc[-1]):
         atr_val = float(atr.iloc[-1])
@@ -17,7 +23,9 @@ def calc_atr_levels(df: pd.DataFrame, price: float, levels: RiskLevels, atr_stop
     return levels
 
 
-def calc_support_resistance(df: pd.DataFrame, price: float, levels: RiskLevels) -> RiskLevels:
+def calc_support_resistance(
+    df: pd.DataFrame, price: float, levels: RiskLevels
+) -> RiskLevels:
     supports: list[float] = []
     resistances: list[float] = []
     for window in [10, 20, 50]:
@@ -32,6 +40,8 @@ def calc_support_resistance(df: pd.DataFrame, price: float, levels: RiskLevels) 
     valid_resistances = [resistance for resistance in resistances if resistance > price]
     if valid_resistances:
         levels.target_resistance = round(min(valid_resistances), 2)
+    elif resistances:
+        levels.target_resistance = round(max(max(resistances) * 1.005, price * 1.02), 2)
     return levels
 
 
@@ -42,6 +52,9 @@ def calc_fibonacci(df: pd.DataFrame, price: float, levels: RiskLevels) -> RiskLe
     swing_low = float(recent["low"].min())
     diff = swing_high - swing_low
     if diff <= 0:
+        return levels
+    if (diff / price) < 0.05:
+        levels.target_fibonacci = round(price, 2)
         return levels
 
     fib_levels = {
@@ -64,7 +77,9 @@ def calc_fibonacci(df: pd.DataFrame, price: float, levels: RiskLevels) -> RiskLe
     return levels
 
 
-def calc_fixed_percent(price: float, levels: RiskLevels, fixed_stop_pct: float, fixed_target_pct: float) -> RiskLevels:
+def calc_fixed_percent(
+    price: float, levels: RiskLevels, fixed_stop_pct: float, fixed_target_pct: float
+) -> RiskLevels:
     levels.stop_percent = round(price * (1 - fixed_stop_pct / 100), 2)
     levels.target_percent = round(price * (1 + fixed_target_pct / 100), 2)
     return levels
@@ -110,9 +125,19 @@ def determine_final_levels(price: float, levels: RiskLevels) -> RiskLevels:
         "Yüzdelik": levels.stop_percent,
         "Swing": levels.stop_swing,
     }
-    valid_stops = {key: value for key, value in all_stops.items() if value > 0 and value < price}
-    reasonable_stops = {key: value for key, value in valid_stops.items() if (price - value) / price > 0.01}
-    reasonable_stops = {key: value for key, value in reasonable_stops.items() if (price - value) / price < 0.10}
+    valid_stops = {
+        key: value for key, value in all_stops.items() if value > 0 and value < price
+    }
+    reasonable_stops = {
+        key: value
+        for key, value in valid_stops.items()
+        if (price - value) / price > 0.01
+    }
+    reasonable_stops = {
+        key: value
+        for key, value in reasonable_stops.items()
+        if (price - value) / price < 0.10
+    }
 
     if reasonable_stops:
         best_stop_method = max(reasonable_stops, key=reasonable_stops.get)
@@ -134,14 +159,25 @@ def determine_final_levels(price: float, levels: RiskLevels) -> RiskLevels:
         "Swing": levels.target_swing,
     }
     valid_targets = {key: value for key, value in all_targets.items() if value > price}
-    reasonable_targets = {key: value for key, value in valid_targets.items() if (value - price) / price > 0.02}
+    reasonable_targets = {
+        key: value
+        for key, value in valid_targets.items()
+        if (value - price) / price > 0.02
+    }
 
+    target_priority = ["Direnç", "ATR", "Fibonacci", "Swing", "Yüzdelik"]
     if reasonable_targets:
-        best_target_method = min(reasonable_targets, key=reasonable_targets.get)
+        best_target_method = next(
+            (method for method in target_priority if method in reasonable_targets),
+            min(reasonable_targets, key=reasonable_targets.get),
+        )
         levels.final_target = reasonable_targets[best_target_method]
         target_method = best_target_method
     elif valid_targets:
-        best_target_method = min(valid_targets, key=valid_targets.get)
+        best_target_method = next(
+            (method for method in target_priority if method in valid_targets),
+            min(valid_targets, key=valid_targets.get),
+        )
         levels.final_target = valid_targets[best_target_method]
         target_method = best_target_method
     else:

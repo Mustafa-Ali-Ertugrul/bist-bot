@@ -2,18 +2,17 @@
 
 import itertools
 import random
-import logging
 from typing import Dict, List, Any, Optional, Tuple
 
 import pandas as pd
 
-from bist_bot.app_logging import configure_logging
+from bist_bot.app_logging import configure_logging, get_logger
 from bist_bot.strategy.params import StrategyParams
 from bist_bot.strategy import StrategyEngine
 from bist_bot.backtest import StrategyBacktester, BacktestResult
 from bist_bot.config.settings import settings
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__, component="optimizer")
 
 
 class StrategyOptimizer:
@@ -32,7 +31,9 @@ class StrategyOptimizer:
         """
         self.ticker = ticker
         self.df = df
-        self.initial_capital = initial_capital or getattr(settings, "INITIAL_CAPITAL", 8500.0)
+        self.initial_capital = initial_capital or getattr(
+            settings, "INITIAL_CAPITAL", 8500.0
+        )
         self.best_params: Optional[StrategyParams] = None
         self.best_result: Optional[BacktestResult] = None
         self.best_score: float = -float("inf")
@@ -76,8 +77,11 @@ class StrategyOptimizer:
                 self.best_params = params
                 self.best_result = result
                 logger.info(
-                    f"🌟 Yeni En İyi Bulundu! Skor: {score:.2f} | "
-                    f"Getiri: %{result.total_return_pct:.2f} | İşlem: {result.total_trades}"
+                    "optimizer_new_best",
+                    ticker=self.ticker,
+                    score=round(score, 2),
+                    return_pct=round(result.total_return_pct, 2),
+                    trade_count=result.total_trades,
                 )
 
     def grid_search(
@@ -89,16 +93,21 @@ class StrategyOptimizer:
         combinations = list(itertools.product(*(param_grid[key] for key in keys)))
         total_combos = len(combinations)
 
-        logger.info(f"🔍 Grid Search Başlıyor... Toplam {total_combos} kombinasyon test edilecek.")
+        logger.info("optimizer_grid_search_started", total_combinations=total_combos)
 
         for i, combo in enumerate(combinations):
             if i % 10 == 0:
-                logger.info(f"⏳ İlerleme: {i}/{total_combos} ({(i / total_combos) * 100:.1f}%)")
+                logger.info(
+                    "optimizer_grid_search_progress",
+                    completed=i,
+                    total=total_combos,
+                    progress_pct=round((i / total_combos) * 100, 1),
+                )
 
             param_dict = dict(zip(keys, combo))
             self._evaluate_combination(param_dict)
 
-        logger.info("✅ Grid Search Tamamlandı!")
+        logger.info("optimizer_grid_search_finished")
         return self.best_params, self.best_result
 
     def random_search(
@@ -107,16 +116,23 @@ class StrategyOptimizer:
         n_iter: int = 50,
     ) -> Tuple[Optional[StrategyParams], Optional[BacktestResult]]:
         """Try random parameter combinations from the provided search space."""
-        logger.info(f"🎲 Random Search Başlıyor... Rastgele {n_iter} kombinasyon test edilecek.")
+        logger.info("optimizer_random_search_started", iteration_count=n_iter)
 
         for i in range(n_iter):
             if i % 10 == 0:
-                logger.info(f"⏳ İlerleme: {i}/{n_iter} ({(i / n_iter) * 100:.1f}%)")
+                logger.info(
+                    "optimizer_random_search_progress",
+                    completed=i,
+                    total=n_iter,
+                    progress_pct=round((i / n_iter) * 100, 1),
+                )
 
-            param_dict = {key: random.choice(values) for key, values in param_grid.items()}
+            param_dict = {
+                key: random.choice(values) for key, values in param_grid.items()
+            }
             self._evaluate_combination(param_dict)
 
-        logger.info("✅ Random Search Tamamlandı!")
+        logger.info("optimizer_random_search_finished")
         return self.best_params, self.best_result
 
     def get_top_n_results(self, n: int = 5) -> pd.DataFrame:
@@ -137,14 +153,16 @@ class StrategyOptimizer:
     ) -> pd.DataFrame:
         """Run rolling walk-forward validation on the current dataset."""
         logger.info(
-            f"🚶‍♂️ Walk-Forward Başlıyor... (Eğitim: {train_window_days}g, Test: {test_window_days}g)"
+            "optimizer_walk_forward_started",
+            train_window_days=train_window_days,
+            test_window_days=test_window_days,
         )
 
         results = []
         df_sorted = self.df.sort_index()
 
         if df_sorted.empty or len(df_sorted) < (train_window_days + test_window_days):
-            logger.error("Veri seti Walk-Forward için çok kısa!")
+            logger.error("optimizer_walk_forward_insufficient_data")
             return pd.DataFrame()
 
         start_date = df_sorted.index[0]
@@ -154,7 +172,9 @@ class StrategyOptimizer:
         window_idx = 1
 
         while True:
-            current_train_end = current_train_start + pd.Timedelta(days=train_window_days)
+            current_train_end = current_train_start + pd.Timedelta(
+                days=train_window_days
+            )
             current_test_end = current_train_end + pd.Timedelta(days=test_window_days)
 
             if current_test_end > end_date:
@@ -167,25 +187,32 @@ class StrategyOptimizer:
             train_end_str = str(current_train_end)[:10]
             test_end_str = str(current_test_end)[:10]
 
-            logger.info(f"\n--- Pencere {window_idx} ---")
             logger.info(
-                f"📖 Eğitim: {train_start_str} -> {train_end_str}"
-            )
-            logger.info(
-                f"🎯 Test (OOS): {train_end_str} -> {test_end_str}"
+                "optimizer_walk_forward_window_started",
+                window_index=window_idx,
+                train_start=train_start_str,
+                train_end=train_end_str,
+                test_end=test_end_str,
             )
 
-            train_optimizer = StrategyOptimizer(self.ticker, train_df, self.initial_capital)
+            train_optimizer = StrategyOptimizer(
+                self.ticker, train_df, self.initial_capital
+            )
             best_params, _ = train_optimizer.random_search(param_grid, n_iter=n_iter)
 
             if best_params is None:
-                logger.warning("Bu pencerede uygun parametre bulunamadı, atlanıyor.")
+                logger.warning(
+                    "optimizer_walk_forward_window_skipped",
+                    window_index=window_idx,
+                )
                 current_train_start += pd.Timedelta(days=test_window_days)
                 window_idx += 1
                 continue
 
             test_engine = StrategyEngine(params=best_params)
-            test_backtester = StrategyBacktester(initial_capital=self.initial_capital, engine=test_engine)
+            test_backtester = StrategyBacktester(
+                initial_capital=self.initial_capital, engine=test_engine
+            )
             test_result = test_backtester.run(self.ticker, test_df, verbose=False)
 
             if test_result:
@@ -197,27 +224,35 @@ class StrategyOptimizer:
                         "OOS_Sharpe": test_result.sharpe_ratio,
                         "OOS_Trades": test_result.total_trades,
                         "Params_Used": {
-                            k: v for k, v in best_params.__dict__.items() if k in param_grid.keys()
+                            k: v
+                            for k, v in best_params.__dict__.items()
+                            if k in param_grid.keys()
                         },
                     }
                 )
                 logger.info(
-                    f"✅ OOS Getiri: %{test_result.total_return_pct:.2f} | İşlem: {test_result.total_trades}"
+                    "optimizer_walk_forward_window_completed",
+                    window_index=window_idx,
+                    oos_return_pct=round(test_result.total_return_pct, 2),
+                    trade_count=test_result.total_trades,
                 )
             else:
-                logger.info("❌ OOS: Bu dönemde işlem açılmadı.")
+                logger.info(
+                    "optimizer_walk_forward_window_no_trades",
+                    window_index=window_idx,
+                )
 
             current_train_start += pd.Timedelta(days=test_window_days)
             window_idx += 1
 
-        logger.info("\n🏁 Walk-Forward Validation Tamamlandı!")
+        logger.info("optimizer_walk_forward_finished", window_count=len(results))
         return pd.DataFrame(results)
 
 
 if __name__ == "__main__":
     from bist_bot.data.fetcher import BISTDataFetcher
 
-    configure_logging(level=logging.INFO, log_file=None, fmt="%(message)s")
+    configure_logging(level="INFO", fmt="%(message)s")
 
     fetcher = BISTDataFetcher()
     ticker = "THYAO.IS"

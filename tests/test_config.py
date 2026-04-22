@@ -101,3 +101,15 @@ def test_settings_override_uses_fast_merged_view() -> None:
             assert settings.SELL_THRESHOLD == -33
 
     assert settings.BUY_THRESHOLD == original
+
+
+def test_secret_settings_can_be_loaded_from_file(monkeypatch, tmp_path):
+    secret_file = tmp_path / "jwt_secret.txt"
+    secret_file.write_text("file-based-secret\n", encoding="utf-8")
+    monkeypatch.delenv("JWT_SECRET_KEY", raising=False)
+    monkeypatch.setenv("JWT_SECRET_KEY_FILE", str(secret_file))
+
+    config_settings = importlib.import_module("bist_bot.config.settings")
+    reloaded = importlib.reload(config_settings)
+
+    assert reloaded.settings.JWT_SECRET_KEY == "file-based-secret"

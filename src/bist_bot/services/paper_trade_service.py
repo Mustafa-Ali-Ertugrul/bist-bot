@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
+from bist_bot.app_logging import get_logger
 from bist_bot.config.settings import settings as default_settings
 from bist_bot.strategy.regime import detect_regime
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__, component="paper_trade")
 
 
 class PaperTradeService:
@@ -60,9 +60,17 @@ class PaperTradeService:
                 continue
             if trade.stop_loss and current <= trade.stop_loss:
                 self.db.close_paper_trade(trade.id, current, "STOP_HIT")
-                logger.info("🛑 Stop tetiklendi: %s @ %.2f", trade.ticker, current)
+                logger.info(
+                    "paper_trade_stop_hit",
+                    ticker=trade.ticker,
+                    current_price=round(current, 2),
+                )
             elif trade.target_price and current >= trade.target_price:
                 self.db.close_paper_trade(trade.id, current, "TARGET_HIT")
-                logger.info("🎯 Hedef tuttu: %s @ %.2f", trade.ticker, current)
+                logger.info(
+                    "paper_trade_target_hit",
+                    ticker=trade.ticker,
+                    current_price=round(current, 2),
+                )
 
-        logger.info("  📊 Paper trade güncellendi: %s hisse", len(prices))
+        logger.info("paper_trade_update_completed", ticker_count=len(prices))

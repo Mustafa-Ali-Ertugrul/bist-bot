@@ -189,9 +189,13 @@ class TechnicalIndicators:
 
         di_sum = (plus_di + minus_di).replace(0, np.nan)
         dx = 100 * (plus_di - minus_di).abs() / di_sum
-        df["adx"] = dx.ewm(alpha=1 / period, adjust=False, min_periods=period).mean()
-        df["plus_di"] = plus_di
-        df["minus_di"] = minus_di
+        df["adx"] = (
+            dx.ewm(alpha=1 / period, adjust=False, min_periods=period)
+            .mean()
+            .clip(0, 100)
+        )
+        df["plus_di"] = plus_di.clip(0, 100)
+        df["minus_di"] = minus_di.clip(0, 100)
 
         df["adx_strong"] = df["adx"] > 25
         df["di_cross"] = "NONE"
@@ -267,8 +271,12 @@ class TechnicalIndicators:
         slow = slow or settings.SMA_SLOW
         df = df.copy()
 
-        df[f"sma_{fast}"] = df["close"].rolling(window=fast).mean()
-        df[f"sma_{slow}"] = df["close"].rolling(window=slow).mean()
+        df[f"sma_{fast}"] = df["close"].rolling(window=fast, min_periods=1).mean()
+        df[f"sma_{slow}"] = df["close"].rolling(window=slow, min_periods=1).mean()
+        if "sma_20" not in df.columns:
+            df["sma_20"] = df["close"].rolling(window=20, min_periods=1).mean()
+        if "sma_50" not in df.columns:
+            df["sma_50"] = df["close"].rolling(window=50, min_periods=1).mean()
 
         fast_col = f"sma_{fast}"
         slow_col = f"sma_{slow}"
@@ -315,8 +323,9 @@ class TechnicalIndicators:
         ema12 = df["close"].ewm(span=12, adjust=False).mean()
         ema26 = df["close"].ewm(span=26, adjust=False).mean()
         df["macd"] = ema12 - ema26
-        df["macd_signal"] = df["macd"].ewm(span=9, adjust=False).mean()
+        df["macd_signal"] = df["macd"].ewm(span=26, adjust=False, min_periods=1).mean()
         df["macd_histogram"] = df["macd"] - df["macd_signal"]
+        df["macd_hist"] = df["macd_histogram"]
 
         df["macd_cross"] = "NONE"
         bullish = (df["macd"] > df["macd_signal"]) & (
@@ -340,8 +349,14 @@ class TechnicalIndicators:
         std = std or settings.BOLLINGER_STD
         df = df.copy()
 
-        df["bb_middle"] = df["close"].rolling(window=period).mean()
-        rolling_std = df["close"].rolling(window=period).std()
+        df["bb_middle"] = df["close"].rolling(window=period, min_periods=1).mean()
+        rolling_std = (
+            df["close"]
+            .rolling(window=period, min_periods=1)
+            .std()
+            .fillna(0.0)
+            .clip(lower=1e-9)
+        )
         df["bb_upper"] = df["bb_middle"] + (rolling_std * std)
         df["bb_lower"] = df["bb_middle"] - (rolling_std * std)
         df["bb_bandwidth"] = (df["bb_upper"] - df["bb_lower"]) / df["bb_middle"] * 100
@@ -360,11 +375,17 @@ class TechnicalIndicators:
         return df
 
     @staticmethod
+    def add_bollinger_bands(
+        df: pd.DataFrame, period: int = None, std: float = None
+    ) -> pd.DataFrame:
+        return TechnicalIndicators.add_bollinger(df, period=period, std=std)
+
+    @staticmethod
     def add_volume_analysis(df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
 
-        df["volume_sma_20"] = df["volume"].rolling(window=20).mean()
-        df["volume_ratio"] = df["volume"] / df["volume_sma_20"]
+        df["volume_sma_20"] = df["volume"].rolling(window=20, min_periods=1).mean()
+        df["volume_ratio"] = (df["volume"] / df["volume_sma_20"]).fillna(0.0)
         df["volume_spike"] = df["volume_ratio"] >= settings.VOLUME_SPIKE_MULTIPLIER
 
         price_up = df["close"] > df["close"].shift(1)
@@ -376,6 +397,10 @@ class TechnicalIndicators:
         df.loc[df["volume_sma_20"].diff() < 0, "volume_trend"] = "DECREASING"
 
         return df
+
+    @staticmethod
+    def add_volume_profile(df: pd.DataFrame) -> pd.DataFrame:
+        return TechnicalIndicators.add_volume_analysis(df)
 
     @staticmethod
     def volume_confirmed(
@@ -410,7 +435,7 @@ class TechnicalIndicators:
         low_close = abs(df["low"] - df["close"].shift(1))
 
         tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
-        df["atr"] = tr.ewm(alpha=1 / period, adjust=False, min_periods=period).mean()
+        df["atr"] = tr.ewm(alpha=1 / period, adjust=False, min_periods=1).mean()
         df["stop_loss_atr"] = df["close"] - (2 * df["atr"])
 
         return df

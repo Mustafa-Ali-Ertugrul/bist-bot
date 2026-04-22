@@ -1,13 +1,13 @@
 """Market-hours scheduler for the CLI bot runtime."""
 
-import logging
 from datetime import datetime
 from time import sleep
 
+from bist_bot.app_logging import get_logger
 from bist_bot.config.settings import settings as default_settings
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__, component="scheduler")
 
 
 class MarketScheduler:
@@ -20,7 +20,7 @@ class MarketScheduler:
     def run_loop(self):
         self.running = True
 
-        logger.info("🚀 BIST Bot başlatılıyor...")
+        logger.info("scheduler_started")
         self.notifier.send_startup_message()
 
         while self.running:
@@ -31,15 +31,15 @@ class MarketScheduler:
             weekday = now.weekday()
 
             if weekday >= 5:
-                logger.info("📅 Hafta sonu — tarama yapılmıyor")
+                logger.info("scheduler_weekend_idle")
                 sleep(3600)
                 continue
 
             if hour < self.settings.MARKET_OPEN_HOUR:
                 wait = (self.settings.MARKET_OPEN_HOUR - hour) * 3600
                 logger.info(
-                    f"⏰ Borsa henüz açılmadı. "
-                    f"{self.settings.MARKET_OPEN_HOUR}:00'da başlayacak..."
+                    "scheduler_pre_market_wait",
+                    market_open_hour=self.settings.MARKET_OPEN_HOUR,
                 )
                 sleep(min(wait, 1800))
                 continue
@@ -48,18 +48,21 @@ class MarketScheduler:
             half_day_hour = getattr(self.settings, "MARKET_HALF_DAY_HOUR", 13)
 
             if hour >= self.settings.MARKET_CLOSE_HOUR:
-                logger.info("🌙 Borsa kapandı. Yarın görüşürüz!")
+                logger.info("scheduler_market_closed")
                 self.scanner.scan_once()
                 sleep(3600 * 14)
                 continue
 
             if hour == self.settings.MARKET_OPEN_HOUR and minute < warmup_minutes:
-                logger.info(f"🌅 Açılış gürültüsü - ilk {warmup_minutes} dakika bekleniyor...")
+                logger.info(
+                    "scheduler_warmup_wait",
+                    warmup_minutes=warmup_minutes,
+                )
                 sleep(60)
                 continue
 
             if hour >= half_day_hour and hour < self.settings.MARKET_CLOSE_HOUR:
-                logger.info("🌓 Yarım gün - sadece son saatlerde tarama yapılıyor")
+                logger.info("scheduler_half_day_scan_window")
                 self.scanner.scan_once()
                 sleep(3600 * (self.settings.MARKET_CLOSE_HOUR - half_day_hour))
                 continue
@@ -67,12 +70,12 @@ class MarketScheduler:
             try:
                 self.scanner.scan_once()
             except Exception as e:
-                logger.error(f"❌ Tarama hatası: {e}")
+                logger.error("scheduler_scan_failed", error_type=type(e).__name__)
                 self.notifier.send_message(f"⚠️ Bot hatası: {e}")
 
             logger.info(
-                f"\n⏳ Sonraki tarama: "
-                f"{self.settings.SCAN_INTERVAL_MINUTES} dakika sonra"
+                "scheduler_next_scan_wait",
+                scan_interval_minutes=self.settings.SCAN_INTERVAL_MINUTES,
             )
 
             CHECK_INTERVAL_SECONDS = 10
@@ -83,4 +86,4 @@ class MarketScheduler:
                     break
                 sleep(CHECK_INTERVAL_SECONDS)
 
-        logger.info("👋 Bot durduruldu.")
+        logger.info("scheduler_stopped")

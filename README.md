@@ -100,10 +100,24 @@ python scripts/benchmark_backtest.py       # Iterative vs vectorized benchmark
   - `scanner-worker` -> scheduler/scanner worker
 - Ortak image `Dockerfile` ile uretilir; local script kullanimi degismez.
 - Ortak veri `./data` volume'u uzerinden paylasilir, SQLite DB burada tutulur.
+- `./secrets` klasoru read-only olarak `/run/secrets` altina mount edilir; hassas degerler icin `*_FILE` env deseni desteklenir.
 
 ```bash
 docker compose up --build
 ```
+
+Daha guvenli lokal kurulum ornegi:
+
+```bash
+mkdir -p secrets
+printf 'replace-with-long-random-secret' > secrets/jwt_secret_key
+printf 'telegram-token' > secrets/telegram_bot_token
+docker compose up --build
+```
+
+- Compose icinde `JWT_SECRET_KEY` bos birakilabilir; uygulama otomatik olarak `JWT_SECRET_KEY_FILE=/run/secrets/jwt_secret_key` dosyasini okur.
+- Ayni desen `TELEGRAM_BOT_TOKEN_FILE`, `ALGOLAB_PASSWORD_FILE`, `OFFICIAL_PASSWORD_FILE` icin de gecerlidir.
+- Secret dosyalari repoya eklenmemelidir; `secrets/` klasoru `.gitignore` altindadir.
 
 - UI: `http://localhost:8501`
 - API health: `http://localhost:5000/health`
@@ -215,6 +229,8 @@ Legacy shim dosyalari kaldirildi. Asagidaki eski importleri yeni pathlere tasiyi
 - `users` tablosunda en az bir kullanici varsa env bootstrap ayarlari yok sayilir; mevcut DB kullanicilari source of truth olmaya devam eder.
 - CORS sadece `CORS_ORIGINS` whitelist'inden gelen origin'lere izin verir; `*` varsayilan olarak kullanilmaz.
 - Uretimde `.env` dosyasini repoya eklemeyin; hassas ayarlar ortam degiskenleri veya lokal `.env` ile saglanmalidir.
+- Secret-bearing env'ler icin mumkunse dogrudan `*_FILE` kullanin; ornek: `JWT_SECRET_KEY_FILE`, `TELEGRAM_BOT_TOKEN_FILE`, `ALGOLAB_PASSWORD_FILE`, `OFFICIAL_PASSWORD_FILE`.
+- Lokal depoda gercek token/anahtar varsa bunlari rotate etmek en guvenli secenektir; `.gitignore` tek basina daha once izlenmis secret'lari korumaz.
 
 Migration note:
 

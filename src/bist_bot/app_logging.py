@@ -44,6 +44,7 @@ def configure_logging(
     log_file: str | None = None,
     fmt: str | None = None,
 ) -> None:
+    _configure_sentry()
     target = stream or sys.stdout
     handlers: list[logging.Handler] = []
     if log_file:
@@ -61,6 +62,22 @@ def configure_logging(
         root.setLevel(level if isinstance(level, int) else getattr(logging, str(level).upper(), logging.INFO))
     else:
         root.setLevel(_normalize_level())
+
+
+def _configure_sentry() -> None:
+    sentry_dsn = getattr(settings, "SENTRY_DSN", None)
+    if sentry_dsn:
+        try:
+            import sentry_sdk
+            from sentry_sdk.integrations.flask import FlaskIntegration
+            sentry_sdk.init(
+                dsn=sentry_dsn,
+                integrations=[FlaskIntegration()],
+                environment=getattr(settings, "ENVIRONMENT", "production"),
+                traces_sample_rate=0.1,
+            )
+        except ImportError:
+            pass
 
 
 class BoundLogger:
