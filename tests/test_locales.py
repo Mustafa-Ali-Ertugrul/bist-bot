@@ -1,8 +1,6 @@
 """Tests for i18n/locale system."""
 
-import pytest
-
-from bist_bot.locales import get_message, set_default_locale, get_available_locales, _catalogs
+from bist_bot.locales import get_available_locales, get_message, set_default_locale
 from bist_bot.strategy.signal_models import SignalType
 
 
@@ -29,7 +27,6 @@ class TestLocales:
         assert msg == "🟢 AL"
 
     def test_set_default_locale(self):
-        original = _catalogs.get("en", {}).get("signal.sell")
         set_default_locale("tr")
         msg = get_message("signal.sell")
         assert "SAT" in msg
