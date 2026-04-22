@@ -17,6 +17,7 @@ if ROOT_DIR not in sys.path:
 from dashboard import create_dashboard_app  # noqa: E402
 from bist_bot.config.settings import settings  # noqa: E402
 from bist_bot.db import DataAccess, DatabaseManager  # noqa: E402
+from bist_bot.execution.base import OrderResult, OrderState  # noqa: E402
 from bist_bot.strategy.signal_models import Signal, SignalType  # noqa: E402
 
 
@@ -101,11 +102,27 @@ class EngineSpy:
         return Signal(ticker=ticker, signal_type=SignalType.BUY, score=25, price=5.2)
 
 
+class BrokerSpy:
+    def __init__(self) -> None:
+        self.authenticate_calls = 0
+        self.order_calls = 0
+
+    def authenticate(self) -> bool:
+        self.authenticate_calls += 1
+        return True
+
+    def place_order(self, ticker, side, quantity, order_type, price=None, stop_price=None):
+        _ = ticker, side, quantity, order_type, price, stop_price
+        self.order_calls += 1
+        return OrderResult(accepted=True, order_id="ord-1", broker_order_id="brk-1", state=OrderState.SENT)
+
+
 def _build_authorized_client(
     tmp_path,
     *,
     scan_signals: list[Signal] | None = None,
     scan_payload: dict[str, dict[str, Any]] | None = None,
+    broker: Any | None = None,
     **overrides: Any,
 ):
     fetcher = FetcherSpy(scan_payload=scan_payload)
@@ -120,7 +137,7 @@ def _build_authorized_client(
     ):
         manager = DatabaseManager(sqlite_path=str(tmp_path / "dashboard_cache.db"))
         db = DataAccess(manager)
-        app = create_dashboard_app(cast(Any, fetcher), cast(Any, engine), db)
+        app = create_dashboard_app(cast(Any, fetcher), cast(Any, engine), db, broker=broker)
         app.config["TESTING"] = True
         with app.app_context():
             token = create_access_token(identity="admin@bistbot.local")
@@ -182,3 +199,30 @@ def test_scan_endpoint_reuses_scan_service_side_effects(tmp_path):
     with db.manager.engine.begin() as conn:
         trade_count = conn.execute(text("SELECT COUNT(*) FROM paper_trades")).scalar_one()
     assert trade_count == 1
+
+
+def test_scan_endpoint_auto_executes_when_broker_is_available(tmp_path):
+    signal = Signal(
+        ticker="THYAO.IS",
+        signal_type=SignalType.STRONG_BUY,
+        score=75,
+        price=5.2,
+        position_size=10,
+    )
+    broker = BrokerSpy()
+    client, _fetcher, _engine, token, db = _build_authorized_client(
+        tmp_path,
+        scan_signals=[signal],
+        scan_payload={"THYAO.IS": {"trend": object(), "trigger": object()}},
+        broker=broker,
+    )
+
+    with settings.override(AUTO_EXECUTE=True):
+        response = client.post("/api/scan", headers={"Authorization": f"Bearer {token}"})
+
+    assert response.status_code == 200
+    assert broker.authenticate_calls == 1
+    assert broker.order_calls == 1
+    pending_orders = db.get_pending_orders()
+    assert len(pending_orders) == 1
+    assert pending_orders[0]["state"] == "SENT"

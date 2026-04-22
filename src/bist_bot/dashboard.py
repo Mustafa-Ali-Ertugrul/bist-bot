@@ -72,6 +72,7 @@ def create_dashboard_app(
     fetcher: DataFetcherProtocol,
     engine: StrategyEngineProtocol,
     db: SignalRepositoryProtocol,
+    broker: Any | None = None,
 ) -> Flask:
     """Create the authenticated Flask API application."""
     settings.require_security_config()
@@ -80,6 +81,7 @@ def create_dashboard_app(
     app.config["fetcher"] = fetcher
     app.config["engine"] = engine
     app.config["db"] = db
+    app.config["broker"] = broker
     app.config["JWT_SECRET_KEY"] = settings.JWT_SECRET_KEY
     app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(hours=12)
     app.config["RATELIMIT_STORAGE_URI"] = settings.RATE_LIMIT_STORAGE_URI
@@ -97,8 +99,18 @@ def create_dashboard_app(
     def get_db() -> SignalRepositoryProtocol:
         return app.config["db"]
 
+    def get_broker() -> Any | None:
+        return app.config["broker"]
+
     def get_scan_service() -> ScanService:
-        return ScanService(get_fetcher(), get_engine(), _SilentNotifier(), get_db(), settings=settings)
+        return ScanService(
+            get_fetcher(),
+            get_engine(),
+            _SilentNotifier(),
+            get_db(),
+            broker=get_broker(),
+            settings=settings,
+        )
 
     def verify_admin(email: str, password: str) -> bool:
         manager = getattr(get_db(), "manager", None)
@@ -293,6 +305,7 @@ def create_default_dashboard_app(container: AppContainer | None = None) -> Flask
         fetcher=runtime_container.fetcher,
         engine=runtime_container.engine,
         db=runtime_container.db,
+        broker=runtime_container.broker,
     )
 
 
