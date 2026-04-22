@@ -6,7 +6,7 @@ from datetime import datetime
 
 import pandas as pd
 
-from backtest import Backtester, CostModel
+from bist_bot.backtest import Backtester, CostModel
 
 
 class IdentityIndicators:

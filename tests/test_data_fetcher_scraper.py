@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import requests
 
-from data_fetcher_scraper import (
+from bist_bot.data.scraper import (
     _parse_number,
     _extract_quote_from_text,
     _extract_quote_from_html,
@@ -130,7 +130,7 @@ def test_scrape_bist_quote_success(monkeypatch):
         assert headers == {"User-Agent": "Mozilla/5.0"}
         return mock_response
     
-    monkeypatch.setattr("data_fetcher_scraper.requests.get", mock_get)
+    monkeypatch.setattr("bist_bot.data.scraper.requests.get", mock_get)
     
     # Execute
     result = scrape_bist_quote("THYAO.IS", mock_limiter)
@@ -164,7 +164,7 @@ def test_scrape_bist_quote_timeout_retry(monkeypatch):
     waited_domains = []
     mock_limiter = MockRateLimiter(waited_domains)
     
-    monkeypatch.setattr("data_fetcher_scraper.requests.get", mock_get)
+    monkeypatch.setattr("bist_bot.data.scraper.requests.get", mock_get)
     
     result = scrape_bist_quote("THYAO.IS", mock_limiter)
     
@@ -181,7 +181,7 @@ def test_scrape_bist_quote_all_failures(monkeypatch):
     def mock_get(url, timeout, headers):
         raise requests.exceptions.RequestException("network error")
     
-    monkeypatch.setattr("data_fetcher_scraper.requests.get", mock_get)
+    monkeypatch.setattr("bist_bot.data.scraper.requests.get", mock_get)
     
     result = scrape_bist_quote("THYAO.IS", mock_limiter)
     

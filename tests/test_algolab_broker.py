@@ -12,8 +12,8 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
-from execution.algolab_broker import AlgoLabBroker, AlgoLabCredentials, AlgoLabEndpoints  # noqa: E402
-from execution.base import OrderSide, OrderType  # noqa: E402
+from bist_bot.execution.algolab_broker import AlgoLabBroker, AlgoLabCredentials, AlgoLabEndpoints  # noqa: E402
+from bist_bot.execution.base import OrderSide, OrderType  # noqa: E402
 
 
 class FakeResponse:
@@ -77,7 +77,7 @@ def test_request_retries_on_timeout_then_succeeds(monkeypatch) -> None:
     broker._session_token = "token"
     broker._last_request_at = -1.0
     sleeps: list[float] = []
-    monkeypatch.setattr("execution.algolab_broker.time.sleep", lambda value: sleeps.append(value))
+    monkeypatch.setattr("bist_bot.execution.algolab_broker.time.sleep", lambda value: sleeps.append(value))
 
     account = broker.get_account_info()
 
@@ -95,8 +95,8 @@ def test_rate_limit_waits_between_requests(monkeypatch) -> None:
     broker._last_request_at = -1.0
     timeline = iter([0.0, 0.0, 0.1, 0.1])
     sleeps: list[float] = []
-    monkeypatch.setattr("execution.algolab_broker.time.monotonic", lambda: next(timeline))
-    monkeypatch.setattr("execution.algolab_broker.time.sleep", lambda value: sleeps.append(round(value, 2)))
+    monkeypatch.setattr("bist_bot.execution.algolab_broker.time.monotonic", lambda: next(timeline))
+    monkeypatch.setattr("bist_bot.execution.algolab_broker.time.sleep", lambda value: sleeps.append(round(value, 2)))
 
     broker.get_account_info()
     broker.get_account_info()

@@ -1,69 +1,12 @@
-"""Primary runtime entry point for the bot and scheduler process."""
-
-import logging
+# ruff: noqa: E402
+from pathlib import Path
 import sys
 
-from app_logging import configure_logging
+SRC_DIR = Path(__file__).resolve().parent / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
 
-logger = logging.getLogger(__name__)
-
-
-def main():
-    """Run the CLI-oriented bot process.
-
-    Modes:
-    - default: scheduler + embedded Flask dashboard
-    - --once: single scan
-    - --backtest: run watchlist backtests
-    - --dashboard: run only the Flask dashboard
-    """
-    configure_logging()
-
-    from dashboard import create_default_dashboard_app
-    from dependencies import get_default_container
-    from execution.order_tracker import OrderTracker
-    from scanner import ScanService
-    from scheduler import MarketScheduler
-    from backtest_runner import run_backtest
-    from threading import Thread
-
-    from config import settings
-
-    container = get_default_container()
-    scanner = ScanService(container.fetcher, container.engine, container.notifier, container.db, broker=container.broker, settings=settings)
-    scheduler = MarketScheduler(scanner, container.notifier, settings=settings)
-    order_tracker = OrderTracker(container.broker, container.db)
-
-    def shutdown(signum, frame):
-        logger.info("🛑 Bot durduruluyor...")
-        scheduler.running = False
-        order_tracker.stop()
-
-    import signal as _signal
-    _signal.signal(_signal.SIGINT, shutdown)
-
-    if "--once" in sys.argv:
-        scanner.scan_once()
-    elif "--backtest" in sys.argv:
-        run_backtest(container.fetcher)
-    elif "--dashboard" in sys.argv:
-        app = create_default_dashboard_app(container)
-        app.run(
-            host="0.0.0.0",
-            port=settings.FLASK_PORT,
-            debug=False,
-            use_reloader=settings.FLASK_DEBUG,
-        )
-    else:
-        order_tracker.start()
-        app = create_default_dashboard_app(container)
-        t = Thread(
-            target=lambda: app.run(host="0.0.0.0", port=settings.FLASK_PORT, debug=False, use_reloader=False),
-            daemon=True
-        )
-        t.start()
-        logger.info(f"🌐 Dashboard: http://localhost:{settings.FLASK_PORT}")
-        scheduler.run_loop()
+from bist_bot.main import main
 
 
 if __name__ == "__main__":

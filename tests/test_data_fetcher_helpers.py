@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from data_fetcher_helpers import (
+from bist_bot.data.helpers import (
     clean_ticker_list,
     normalize_ticker,
     validate_data,

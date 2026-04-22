@@ -14,6 +14,7 @@ WORKDIR /app
 
 COPY --from=builder /root/.local /root/.local
 ENV PATH=/root/.local/bin:$PATH
+ENV PYTHONPATH=/app/src
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
@@ -30,9 +31,6 @@ USER appuser
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-EXPOSE 8080
+EXPOSE 8501 5000
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD-SHELL curl -f "http://localhost:${PORT:-8080}/_stcore/health" || exit 1
-
-CMD ["sh", "-c", "streamlit run streamlit_app.py --server.port=${PORT:-8080} --server.address=0.0.0.0"]
+CMD ["sh", "-c", "streamlit run streamlit_app.py --server.port=${PORT:-8501} --server.address=0.0.0.0"]

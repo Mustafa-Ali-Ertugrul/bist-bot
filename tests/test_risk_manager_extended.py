@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 from unittest.mock import patch
 
-from risk_manager import RiskManager, RiskLevels
+from bist_bot.risk_manager import RiskManager, RiskLevels
 
 
 def build_test_df(rows=30, base_price=100.0, atr_value=2.0):
@@ -31,7 +31,7 @@ def test_risk_manager_initialization_with_settings(monkeypatch):
     class MockSettings:
         INITIAL_CAPITAL = 5000.0
     
-    monkeypatch.setattr("risk_manager.settings", MockSettings())
+    monkeypatch.setattr("bist_bot.risk.manager.settings", MockSettings())
     
     manager = RiskManager()  # No capital provided
     assert manager.capital == 5000.0
@@ -231,7 +231,7 @@ def test_sector_limit_functionality():
         SECTOR_MAP = {"THYAO.IS": "Havaçılık", "ASELS.IS": "Savunma"}
         SECTOR_LIMIT = 1
     
-    with patch("risk_manager.settings", MockSettings()):
+    with patch("bist_bot.risk.manager.settings", MockSettings()):
         # First check should pass
         assert manager.check_sector_limit("THYAO.IS") is True
         
@@ -257,7 +257,7 @@ def test_sector_scan_context_manager():
         SECTOR_MAP = {"THYAO.IS": "Test"}
         SECTOR_LIMIT = 1
     
-    with patch("risk_manager.settings", MockSettings()):
+    with patch("bist_bot.risk.manager.settings", MockSettings()):
         # Use one sector slot
         manager.check_sector_limit("THYAO.IS")
         

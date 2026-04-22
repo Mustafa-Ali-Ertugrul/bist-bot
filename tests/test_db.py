@@ -6,9 +6,9 @@ from datetime import datetime
 
 import pytest
 
-from db.database import DatabaseManager
-from db.repositories.signals_repository import SignalsRepository
-from signal_models import Signal, SignalType
+from bist_bot.db.database import DatabaseManager
+from bist_bot.db.repositories.signals_repository import SignalsRepository
+from bist_bot.strategy.signal_models import Signal, SignalType
 
 
 @pytest.fixture

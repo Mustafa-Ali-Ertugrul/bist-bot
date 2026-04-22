@@ -9,9 +9,9 @@ import os
 
 import pytest
 
-from db.database import DatabaseManager
-from db.repositories.signals_repository import SignalsRepository
-from signal_models import Signal, SignalType
+from bist_bot.db.database import DatabaseManager
+from bist_bot.db.repositories.signals_repository import SignalsRepository
+from bist_bot.strategy.signal_models import Signal, SignalType
 
 
 @pytest.fixture
@@ -112,8 +112,30 @@ def test_save_signal_adds_new(signals_repo, sample_signal):
     assert signal["price"] == 100.0
     assert signal["stop_loss"] == 95.0
     assert signal["target_price"] == 110.0
+    assert signal["position_size"] is None
     # Check that reasons were serialized/deserialized correctly
     assert signal["reasons"] == ["RSI low", "MACD bullish"]
+
+
+def test_save_signal_persists_position_size(signals_repo):
+    signal = Signal(
+        ticker="THYAO.IS",
+        signal_type=SignalType.BUY,
+        score=25.0,
+        price=100.0,
+        reasons=["RSI low"],
+        stop_loss=95.0,
+        target_price=110.0,
+        position_size=10,
+        timestamp=datetime(2025, 1, 1, 10, 0, 0),
+    )
+
+    signals_repo.save_signal(signal)
+
+    rows = signals_repo.get_signals(limit=10, ticker="THYAO.IS")
+
+    assert len(rows) == 1
+    assert rows[0]["position_size"] == 10
 
 
 def test_get_signals_returns_empty_list(signals_repo):

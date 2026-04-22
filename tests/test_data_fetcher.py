@@ -7,6 +7,7 @@ import sys
 
 import pytest
 from dataclasses import replace
+import pandas as pd
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:
@@ -15,7 +16,7 @@ if ROOT_DIR not in sys.path:
 
 def test_parse_tr_number():
     """Parse Turkish number formatting correctly."""
-    from data_fetcher import _parse_tr_number
+    from bist_bot.data.fetcher import _parse_tr_number
 
     assert _parse_tr_number("1.234,56") == pytest.approx(1234.56)
     assert _parse_tr_number("100,00") == pytest.approx(100.0)
@@ -26,7 +27,7 @@ def test_parse_tr_number():
 
 def test_rate_limiter_initializes_request_store():
     """Rate limiter should start with an empty request registry."""
-    from data_fetcher import RateLimiter
+    from bist_bot.data.fetcher import RateLimiter
 
     limiter = RateLimiter()
 
@@ -36,7 +37,7 @@ def test_rate_limiter_initializes_request_store():
 
 def test_rate_limiter_waits_when_called_too_soon(monkeypatch):
     """Rate limiter should sleep when the same domain is hit too quickly."""
-    import data_fetcher
+    from bist_bot.data import fetcher as data_fetcher
 
     limiter = data_fetcher.RateLimiter()
     sleep_calls: list[float] = []
@@ -54,7 +55,7 @@ def test_rate_limiter_waits_when_called_too_soon(monkeypatch):
 
 def test_clean_ticker_list_normalizes_and_deduplicates():
     """Ticker normalization should append .IS and remove duplicates."""
-    from data_fetcher import _clean_ticker_list, normalize_ticker, validate_data
+    from bist_bot.data.fetcher import _clean_ticker_list, normalize_ticker, validate_data
     import pandas as pd
 
     raw = ["thyao", "THYAO.IS", " asels ", "ASELS.IS", ""]
@@ -63,3 +64,184 @@ def test_clean_ticker_list_normalizes_and_deduplicates():
     assert normalize_ticker("garan") == "GARAN.IS"
     assert normalize_ticker("THYAO.IS") == "THYAO.IS"
     assert validate_data(pd.DataFrame()) is False
+
+
+def test_fetcher_uses_injected_provider_for_history_and_batch():
+    from bist_bot.data.fetcher import BISTDataFetcher
+
+    class StubProvider:
+        def fetch_history(self, ticker: str, period: str, interval: str):
+            return pd.DataFrame(
+                {
+                    "open": [1, 1, 1, 1, 1],
+                    "high": [2, 2, 2, 2, 2],
+                    "low": [0.5, 0.5, 0.5, 0.5, 0.5],
+                    "close": [1.5, 1.5, 1.5, 1.5, 1.5],
+                    "volume": [100, 100, 100, 100, 100],
+                },
+                index=pd.date_range("2025-01-01", periods=5),
+            )
+
+        def fetch_batch(self, tickers: list[str], period: str, interval: str):
+            frame = pd.DataFrame(
+                {
+                    "open": [1, 1, 1, 1, 1],
+                    "high": [2, 2, 2, 2, 2],
+                    "low": [0.5, 0.5, 0.5, 0.5, 0.5],
+                    "close": [1.5, 1.5, 1.5, 1.5, 1.5],
+                    "volume": [100, 100, 100, 100, 100],
+                },
+                index=pd.date_range("2025-01-01", periods=5),
+            )
+            return {ticker: frame for ticker in tickers}
+
+        def fetch_quote(self, ticker: str):
+            _ = ticker
+            return None
+
+        def fetch_universe(self, force_refresh: bool = False):
+            _ = force_refresh
+            return ["THYAO.IS", "ASELS.IS"]
+
+    fetcher = BISTDataFetcher(watchlist=["THYAO.IS", "ASELS.IS"], provider=StubProvider())
+
+    single = fetcher.fetch_single("THYAO.IS", force=True)
+    batch = fetcher.fetch_all(period="1mo", interval="1d")
+
+    assert single is not None
+    assert set(batch) == {"THYAO.IS", "ASELS.IS"}
+
+
+def test_fetcher_uses_provider_quote_fallback_before_history(monkeypatch):
+    from bist_bot.data import fetcher as data_fetcher
+    from bist_bot.data.fetcher import BISTDataFetcher
+
+    class StubProvider:
+        def fetch_history(self, ticker: str, period: str, interval: str):
+            _ = ticker, period, interval
+            return None
+
+        def fetch_batch(self, tickers: list[str], period: str, interval: str):
+            _ = tickers, period, interval
+            return {}
+
+        def fetch_quote(self, ticker: str):
+            assert ticker == "THYAO.IS"
+            return 111.0
+
+        def fetch_universe(self, force_refresh: bool = False):
+            _ = force_refresh
+            return ["THYAO.IS"]
+
+    class NullQuoteProvider:
+        def fetch_quote(self, ticker: str):
+            _ = ticker
+            return None
+
+    fetcher = BISTDataFetcher(provider=StubProvider(), quote_provider=NullQuoteProvider())
+    monkeypatch.setattr(data_fetcher, "settings", replace(data_fetcher.settings, ENABLE_REALTIME_SCRAPING=True))
+
+    assert fetcher.get_current_price("THYAO.IS") == 111.0
+
+
+def test_dependencies_selects_configured_data_provider():
+    from bist_bot.dependencies import _build_data_provider
+    from bist_bot.config.settings import settings
+    from bist_bot.data.providers import OfficialProviderStub, YFinanceProvider
+
+    with settings.override(DATA_PROVIDER="official_stub"):
+        assert isinstance(_build_data_provider(), OfficialProviderStub)
+
+    with settings.override(DATA_PROVIDER="yfinance"):
+        assert isinstance(_build_data_provider(), YFinanceProvider)
+
+
+def test_fetch_single_uses_cache_until_ttl_expires(monkeypatch):
+    from bist_bot.data.fetcher import BISTDataFetcher
+
+    class CountingProvider:
+        def __init__(self):
+            self.history_calls = 0
+
+        def fetch_history(self, ticker: str, period: str, interval: str):
+            self.history_calls += 1
+            return pd.DataFrame(
+                {
+                    "open": [1, 1, 1, 1, 1],
+                    "high": [2, 2, 2, 2, 2],
+                    "low": [0.5, 0.5, 0.5, 0.5, 0.5],
+                    "close": [1.5, 1.5, 1.5, 1.5, 1.5],
+                    "volume": [100, 100, 100, 100, 100],
+                },
+                index=pd.date_range("2025-01-01", periods=5),
+            )
+
+        def fetch_batch(self, tickers: list[str], period: str, interval: str):
+            _ = tickers, period, interval
+            return {}
+
+        def fetch_quote(self, ticker: str):
+            _ = ticker
+            return None
+
+        def fetch_universe(self, force_refresh: bool = False):
+            _ = force_refresh
+            return ["THYAO.IS"]
+
+    provider = CountingProvider()
+    fetcher = BISTDataFetcher(watchlist=["THYAO.IS"], provider=provider)
+    current_time = [pd.Timestamp("2025-01-01 10:00:00").to_pydatetime()]
+    monkeypatch.setattr(fetcher, "_now", lambda: current_time[0])
+
+    first = fetcher.fetch_single("THYAO.IS", period="1mo", interval="15m")
+    current_time[0] = pd.Timestamp("2025-01-01 10:01:00").to_pydatetime()
+    second = fetcher.fetch_single("THYAO.IS", period="1mo", interval="15m")
+    current_time[0] = pd.Timestamp("2025-01-01 10:03:00").to_pydatetime()
+    third = fetcher.fetch_single("THYAO.IS", period="1mo", interval="15m")
+
+    assert first is not None
+    assert second is not None
+    assert third is not None
+    assert provider.history_calls == 2
+
+
+def test_fetch_single_force_refresh_bypasses_cache(monkeypatch):
+    from bist_bot.data.fetcher import BISTDataFetcher
+
+    class CountingProvider:
+        def __init__(self):
+            self.history_calls = 0
+
+        def fetch_history(self, ticker: str, period: str, interval: str):
+            self.history_calls += 1
+            return pd.DataFrame(
+                {
+                    "open": [1, 1, 1, 1, 1],
+                    "high": [2, 2, 2, 2, 2],
+                    "low": [0.5, 0.5, 0.5, 0.5, 0.5],
+                    "close": [1.5, 1.5, 1.5, 1.5, 1.5],
+                    "volume": [100, 100, 100, 100, 100],
+                },
+                index=pd.date_range("2025-01-01", periods=5),
+            )
+
+        def fetch_batch(self, tickers: list[str], period: str, interval: str):
+            _ = tickers, period, interval
+            return {}
+
+        def fetch_quote(self, ticker: str):
+            _ = ticker
+            return None
+
+        def fetch_universe(self, force_refresh: bool = False):
+            _ = force_refresh
+            return ["THYAO.IS"]
+
+    provider = CountingProvider()
+    fetcher = BISTDataFetcher(watchlist=["THYAO.IS"], provider=provider)
+    monkeypatch.setattr(fetcher, "_now", lambda: pd.Timestamp("2025-01-01 10:00:00").to_pydatetime())
+
+    fetcher.fetch_single("THYAO.IS", period="1mo", interval="15m")
+    fetcher.fetch_single("THYAO.IS", period="1mo", interval="15m", force=True)
+
+    assert provider.history_calls == 2

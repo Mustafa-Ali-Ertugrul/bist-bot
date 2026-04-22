@@ -6,8 +6,8 @@ from datetime import datetime
 
 import pandas as pd
 
-from backtest import BacktestResult, BacktestTrade, WalkForwardValidator
-from strategy_params import StrategyParams
+from bist_bot.backtest import BacktestResult, BacktestTrade, WalkForwardValidator
+from bist_bot.strategy.params import StrategyParams
 
 
 def build_two_year_frame() -> pd.DataFrame:

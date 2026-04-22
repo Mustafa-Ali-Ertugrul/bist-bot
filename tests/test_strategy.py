@@ -10,11 +10,11 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
-from config import settings  # noqa: E402
+from bist_bot.config.settings import settings  # noqa: E402
 import pandas as pd  # noqa: E402
 import pytest  # noqa: E402
-from strategy import StrategyEngine  # noqa: E402
-from strategy import TrendBias  # noqa: E402
+from bist_bot.strategy import StrategyEngine  # noqa: E402
+from bist_bot.strategy import TrendBias  # noqa: E402
 
 
 class IdentityIndicators:
@@ -252,3 +252,12 @@ def test_score_stays_within_expected_bounds(bullish_frame):
 
     assert signal is not None
     assert -100.0 <= signal.score <= 100.0
+
+
+def test_analyze_carries_risk_manager_position_size_into_signal(bullish_frame):
+    engine = BiasControlledStrategyEngine(TrendBias.LONG)
+
+    signal = engine.analyze("TEST.IS", {"trend": bullish_frame, "trigger": bullish_frame})
+
+    assert signal is not None
+    assert signal.position_size == 10

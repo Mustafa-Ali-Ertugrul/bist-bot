@@ -9,10 +9,10 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
-from db import DataAccess, DatabaseManager  # noqa: E402
-from execution.base import OrderSide, OrderType  # noqa: E402
-from execution.order_tracker import OrderTracker  # noqa: E402
-from execution.paper_broker import PaperBroker  # noqa: E402
+from bist_bot.db import DataAccess, DatabaseManager  # noqa: E402
+from bist_bot.execution.base import OrderSide, OrderType  # noqa: E402
+from bist_bot.execution.order_tracker import OrderTracker  # noqa: E402
+from bist_bot.execution.paper_broker import PaperBroker  # noqa: E402
 
 
 def test_order_lifecycle_created_to_sent_to_filled(tmp_path) -> None:
@@ -50,3 +50,24 @@ def test_order_lifecycle_created_to_sent_to_filled(tmp_path) -> None:
     assert filled["state"] == "FILLED"
     assert filled["filled_qty"] == 10.0
     assert filled["avg_fill_price"] == 100.0
+
+
+def test_order_repository_preserves_created_quantity_and_updated_state(tmp_path) -> None:
+    manager = DatabaseManager(sqlite_path=str(tmp_path / "orders.db"))
+    db = DataAccess(manager)
+
+    created = db.create_order(
+        ticker="ASELS.IS",
+        side=OrderSide.SELL.value,
+        quantity=7,
+        order_type=OrderType.MARKET.value,
+        price=None,
+        state="CREATED",
+    )
+    updated = db.update_order(created["id"], state="REJECTED", broker_order_id="BRK-7")
+
+    assert created["qty"] == 7
+    assert updated is not None
+    assert updated["qty"] == 7
+    assert updated["state"] == "REJECTED"
+    assert updated["broker_order_id"] == "BRK-7"

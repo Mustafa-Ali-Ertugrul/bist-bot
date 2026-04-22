@@ -25,43 +25,35 @@ BIST hisselerini teknik indikatörlerle tarayan, sinyal üreten, Telegram'a bild
 ## Mimari
 
 - `main.py` bot runtime'ını başlatır; tarayıcıyı, scheduler'ı ve isteğe bağlı dashboard'u ayağa kaldırır.
-- `scanner.py` çoklu zaman dilimi verisini toplar, `StrategyEngine` ile analiz eder, sinyalleri kaydeder ve bildirim yollar.
-- `strategy.py` skorlamayı, sinyal sınıflandırmasını ve risk yöneticisi entegrasyonunu yürütür.
-- `risk_manager.py` stop, hedef, pozisyon boyutu, korelasyon ve sektor limitlerini yönetir.
-- `db/` altındaki repository katmanı sinyal, konfigürasyon ve paper trade verilerini saklar.
-- `dashboard.py` Flask API/dashboard üretir; `streamlit_app.py` ise `ui/` bileşenleriyle interaktif arayuz sunar.
+- `src/bist_bot/scanner.py` çoklu zaman dilimi verisini toplar, `StrategyEngine` ile analiz eder, sinyalleri kaydeder ve bildirim yollar.
+- `src/bist_bot/strategy/` skorlamayı, sinyal sınıflandırmasını ve risk yöneticisi entegrasyonunu yürütür.
+- `src/bist_bot/risk/` stop, hedef, pozisyon boyutu, korelasyon ve sektor limitlerini yönetir.
+- `src/bist_bot/db/` altındaki repository katmanı sinyal, konfigürasyon ve paper trade verilerini saklar.
+- `dashboard.py` ve `streamlit_app.py` root'ta ince wrapper olarak kalir; asil uygulama kodu `src/bist_bot/` altindadir.
 
 ## Proje Yapısı
 
 ```text
 bist_bot/
-├── main.py                  # Ana CLI giris noktasi
-├── scanner.py               # Tarama ve bildirim orkestrasyonu
-├── scheduler.py             # Piyasa saati dongusu
-├── strategy.py              # StrategyEngine ve sinyal skorlama
-├── risk_manager.py          # Risk, korelasyon ve sektor limiti
-├── indicators.py            # Teknik indikatör hesaplamalari
-├── data_fetcher.py          # yfinance veri toplama ve cache
-├── notifier.py              # Telegram bildirim katmani
-├── backtest.py              # Backtester, StrategyBacktester, BacktestResult
-├── backtest_runner.py       # CLI backtest akisi ve JSON ciktilari
-├── backtest_compare.py      # Eski/yeni backtest karsilastirma araci
-├── dashboard.py             # Flask dashboard uygulamasi
-├── streamlit_app.py         # Streamlit arayuz giris noktasi
-├── streamlit_utils.py       # Streamlit yardimci fonksiyonlari
-├── dependencies.py          # Uygulama container kurulumlari
-├── config/
-│   ├── __init__.py          # `settings` export'u
-│   └── settings.py          # Ana ayarlar ve override mekanizmasi
-├── db/
-│   ├── database.py          # Veritabani modelleri ve manager
-│   └── repositories/        # Sinyal, portfoy ve config repository'leri
-├── ui/
-│   ├── runtime.py           # Streamlit runtime akisi
-│   ├── components/          # Ortak UI bilesenleri
-│   └── pages/               # Portfolio, Signals, Backtest, Settings sayfalari
-├── execution/               # Broker/paper execution arayuzleri
-├── data/                    # Veri ve backtest ciktilari
+├── main.py                  # CLI wrapper
+├── dashboard.py             # Flask wrapper
+├── streamlit_app.py         # Streamlit wrapper
+├── src/
+│   └── bist_bot/
+│       ├── main.py          # Ana CLI logic
+│       ├── scanner.py       # Tarama orkestrasyonu
+│       ├── scheduler.py     # Piyasa saati dongusu
+│       ├── backtest.py      # Backtester ve yardimcilar
+│       ├── dashboard.py     # Flask dashboard uygulamasi
+│       ├── config/          # Runtime config ve UI preference store
+│       ├── data/            # Veri fetcher kodu ve statik ticker listeleri
+│       ├── db/              # Veritabani modelleri ve repository katmani
+│       ├── execution/       # Broker/paper execution arayuzleri
+│       ├── risk/            # Risk domain modulleri
+│       ├── services/        # Scan side-effect servisleri
+│       ├── strategy/        # StrategyEngine, scoring ve signal modelleri
+│       └── ui/              # Streamlit runtime, sayfalar ve bilesenler
+├── data/                    # Backtest ve veri ciktilari
 ├── tests/                   # Pytest test paketi
 ├── requirements.txt
 └── dev-requirements.txt
@@ -93,31 +85,75 @@ python main.py                             # Varsayilan gelistirme akisi: bot + 
 python main.py --once                      # Tek tarama
 python main.py --backtest                  # Watchlist icin backtest calistirir
 python main.py --dashboard                 # Sadece Flask dashboard
+python main.py --worker                    # Sadece scanner/scheduler worker
 streamlit run streamlit_app.py             # Streamlit operator paneli
 python dashboard.py                        # Standalone Flask dashboard (opsiyonel)
-python backtest_compare.py --tickers THYAO.IS ASELS.IS
+python -m bist_bot.backtest_compare --tickers THYAO.IS ASELS.IS
 ```
+
+## Docker Compose
+
+- `docker-compose.yml` servis bazli yapidadir:
+  - `flask-api` -> Flask JSON API (`5000`)
+  - `streamlit-ui` -> Streamlit operator UI (`8501`)
+  - `scanner-worker` -> scheduler/scanner worker
+- Ortak image `Dockerfile` ile uretilir; local script kullanimi degismez.
+- Ortak veri `./data` volume'u uzerinden paylasilir, SQLite DB burada tutulur.
+
+```bash
+docker compose up --build
+```
+
+- UI: `http://localhost:8501`
+- API health: `http://localhost:5000/health`
+
+Healthcheckler:
+- `flask-api` -> `/health`
+- `streamlit-ui` -> `/_stcore/health`
+- `scanner-worker` -> container ana prosesi (`kill -0 1`)
 
 Backtest JSON ciktilari `data/` altina yazilir.
 
 ## Test & Lint
 
 ```bash
+export PYTHONPATH=src  # Windows'ta esdegeri: set PYTHONPATH=src
 pytest tests/ -v
 ruff check . --isolated
+```
+
+## Historical Universe
+
+- Point-in-time universe snapshot'lari `src/bist_bot/data/universe/` altinda JSON olarak tutulur.
+- `bist_bot.data.universe.get_universe_for_date(date)` ilgili tarih icin en yakin gecmis snapshot'i cozer.
+- Snapshot bulunamazsa sistem warning log atar ve mevcut `WATCHLIST`/current universe'e geri doner.
+- Backtest ve walk-forward icin opsiyonel kullanim:
+
+```bash
+python main.py --backtest --historical-universe-date 2024-01-01
+python main.py --backtest --walk-forward --historical-universe-date 2023-01-01
 ```
 
 ## Known Limitations
 
 - **Survivorship bias**: `yfinance` verisi delisted hisseleri her zaman icermeyebilir; backtest ve walk-forward sonuclarinda survivorship bias olasıdır.
+- **Point-in-time universe coverage**: Ilk surum snapshot tabanlidir; tum tarihleri kapsamaz. Snapshot olmayan tarihlerde sistem warning ile current universe'e fallback yapar.
 - **Intraday gecikme**: BIST verileri 15 dakika gecikmeli sunulur; gerçek zamanli emirde fiyat farkı oluşabilir.
 - **Rate limit**: yfinance ve BIST scraper için rate limit mevcuttur; coklu isteklerde 429 donusu alınabilir.
 
 ## Security
 
-- Flask API JWT tabanli auth ile korunur; `JWT_SECRET_KEY`, `ADMIN_EMAIL` ve `ADMIN_PASSWORD_HASH` olmadan API startup baslatilmaz.
+- Flask API JWT tabanli auth ile korunur; startup icin yalnizca `JWT_SECRET_KEY` zorunludur.
+- Kimlik dogrulama tek kaynak olarak `users` tablosundan yapilir; login endpoint env icindeki admin bilgilerini dogrudan kullanmaz.
+- `ADMIN_EMAIL` ve `ADMIN_PASSWORD_HASH` verilirse bunlar sadece bootstrap icin kullanilir: uygulama ilk acilista `users` tablosu bossa ilk admin kullanicisi olusturulur.
+- `users` tablosunda en az bir kullanici varsa env bootstrap ayarlari yok sayilir; mevcut DB kullanicilari source of truth olmaya devam eder.
 - CORS sadece `CORS_ORIGINS` whitelist'inden gelen origin'lere izin verir; `*` varsayilan olarak kullanilmaz.
 - Uretimde `.env` dosyasini repoya eklemeyin; hassas ayarlar ortam degiskenleri veya lokal `.env` ile saglanmalidir.
+
+Migration note:
+
+- Eski davranista env admin bilgileri startup icin zorunluydu; artik degil. Mevcut deployment'ta `users` tablosunda kullanici varsa ekstra degisiklik gerekmez.
+- Yeni kurulumda isterseniz ilk admin kullanicisini bir kez `ADMIN_EMAIL` + `ADMIN_PASSWORD_HASH` ile bootstrap edin; tablo dolduktan sonra bu env'leri kaldirabilirsiniz.
 
 ## Live Trading (Experimental)
 

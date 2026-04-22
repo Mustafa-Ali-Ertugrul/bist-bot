@@ -4,6 +4,7 @@ on: [push, pull_request]
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  PYTHONPATH: src
 
 jobs:
   lint-and-test:
@@ -38,8 +39,8 @@ jobs:
 
       - name: Type check with mypy
         run: |
-          mypy config settings state ui db data_fetcher.py strategy.py risk_manager.py streamlit_app.py --ignore-missing-imports || true
+          mypy src/bist_bot tests --ignore-missing-imports || true
 
       - name: Check imports
         run: |
-          python -m compileall config config_store.py db state ui data_fetcher.py strategy.py risk_manager.py streamlit_app.py
+          python -m compileall src/bist_bot main.py dashboard.py streamlit_app.py

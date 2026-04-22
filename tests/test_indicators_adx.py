@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from indicators import TechnicalIndicators
+from bist_bot.indicators import TechnicalIndicators
 
 
 def build_ohlc_frame() -> pd.DataFrame:
