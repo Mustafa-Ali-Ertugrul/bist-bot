@@ -1,9 +1,10 @@
 """Signal scoring and classification logic for BIST trading ideas."""
 
 from contextlib import AbstractContextManager
-import pandas as pd
-from typing import Optional, cast
 import logging
+from typing import Any, Optional, cast
+
+import pandas as pd
 
 from bist_bot.config.settings import settings
 from bist_bot.indicators import TechnicalIndicators
@@ -18,7 +19,12 @@ from bist_bot.strategy.regime import (
     detect_regime,
     get_trend_bias,
 )
-from bist_bot.strategy.scoring import score_momentum, score_structure, score_trend, score_volume
+from bist_bot.strategy.scoring import (
+    score_momentum,
+    score_structure,
+    score_trend,
+    score_volume,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +35,7 @@ class StrategyEngine:
         indicators: Optional[TechnicalIndicators] = None,
         risk_manager: Optional[RiskManager] = None,
         params: Optional[StrategyParams] = None,
+        meta_model: Any | None = None,
     ) -> None:
         """Initialize injectable indicator and risk-management dependencies."""
         self.indicators = indicators or TechnicalIndicators()
@@ -36,6 +43,7 @@ class StrategyEngine:
             capital=getattr(settings, "INITIAL_CAPITAL", 8500.0)
         )
         self.params = params or StrategyParams()
+        self.meta_model = meta_model
         self.STRONG_BUY_THRESHOLD = self.params.strong_buy_threshold
         self.BUY_THRESHOLD = self.params.buy_threshold
         self.WEAK_BUY_THRESHOLD = self.params.weak_buy_threshold
@@ -45,22 +53,30 @@ class StrategyEngine:
         self.SIDEWAYS_EXTRA_THRESHOLD = self.params.sideways_extra_threshold
         self.MOMENTUM_CONFIRMATION = self.params.momentum_confirmation_threshold
 
-    def _extract_timeframes(self, market_data: pd.DataFrame | dict[str, pd.DataFrame]) -> tuple[pd.DataFrame, pd.DataFrame, bool]:
+    def _extract_timeframes(
+        self, market_data: pd.DataFrame | dict[str, pd.DataFrame]
+    ) -> tuple[pd.DataFrame, pd.DataFrame, bool]:
         if isinstance(market_data, dict):
             trend_df = market_data.get("trend")
             trigger_df = market_data.get("trigger")
             if trend_df is None or trigger_df is None:
-                raise ValueError("Multi-timeframe veri 'trend' ve 'trigger' anahtarlarını içermeli")
+                raise ValueError(
+                    "Multi-timeframe veri 'trend' ve 'trigger' anahtarlarını içermeli"
+                )
             return trend_df, trigger_df, True
         return market_data, market_data, False
 
     def _get_trend_bias(self, df: pd.DataFrame) -> TrendBias:
         return get_trend_bias(self.indicators, df)
 
-    def _apply_confluence(self, signal_type: SignalType, trend_bias: TrendBias, reasons: list[str]) -> bool:
+    def _apply_confluence(
+        self, signal_type: SignalType, trend_bias: TrendBias, reasons: list[str]
+    ) -> bool:
         return apply_confluence(signal_type, trend_bias, reasons)
 
-    def _check_momentum_confirmation(self, df: pd.DataFrame, threshold: float = 4.0) -> bool:
+    def _check_momentum_confirmation(
+        self, df: pd.DataFrame, threshold: float = 4.0
+    ) -> bool:
         return check_momentum_confirmation(df, threshold)
 
     def _score_momentum(self, last, prev) -> tuple[float, list[str]]:
@@ -74,6 +90,34 @@ class StrategyEngine:
 
     def _score_structure(self, last) -> tuple[float, list[str]]:
         return score_structure(self.params, last)
+
+    def _build_meta_features(
+        self,
+        last: pd.Series,
+        *,
+        score: float,
+        trend_bias: TrendBias,
+        risk_levels,
+    ) -> dict[str, float]:
+        ema_long = float(
+            last.get(f"ema_{settings.EMA_LONG}", last.get("close", 0.0)) or 0.0
+        )
+        close_price = float(last.get("close", 0.0) or 0.0)
+        return {
+            "score": float(score),
+            "adx": float(last.get("adx", 0.0) or 0.0),
+            "rsi": float(last.get("rsi", 0.0) or 0.0),
+            "volume_ratio": float(last.get("volume_ratio", 0.0) or 0.0),
+            "atr_pct": float(risk_levels.atr_pct),
+            "risk_reward_ratio": float(risk_levels.risk_reward_ratio),
+            "volatility_scale": float(risk_levels.volatility_scale),
+            "correlation_scale": float(risk_levels.correlation_scale),
+            "trend_bias": float(trend_bias == TrendBias.LONG)
+            - float(trend_bias == TrendBias.SHORT),
+            "close_vs_ema_long": ((close_price / ema_long) - 1.0)
+            if ema_long > 0
+            else 0.0,
+        }
 
     def analyze(
         self,
@@ -95,11 +139,17 @@ class StrategyEngine:
         trend_df, trigger_df, multi_timeframe = self._extract_timeframes(df)
 
         if trigger_df is None or len(trigger_df) < 30:
-            logger.warning(f"  {ticker}: Yetersiz veri ({len(trigger_df) if trigger_df is not None else 0} mum)")
+            logger.warning(
+                f"  {ticker}: Yetersiz veri ({len(trigger_df) if trigger_df is not None else 0} mum)"
+            )
             return None
 
         df = self.indicators.add_all(trigger_df.copy())
-        trend_bias = self._get_trend_bias(trend_df) if multi_timeframe and getattr(settings, "MTF_ENABLED", True) else TrendBias.NEUTRAL
+        trend_bias = (
+            self._get_trend_bias(trend_df)
+            if multi_timeframe and getattr(settings, "MTF_ENABLED", True)
+            else TrendBias.NEUTRAL
+        )
 
         last = df.iloc[-1].copy()
         prev = df.iloc[-2]
@@ -110,7 +160,9 @@ class StrategyEngine:
         adx = last.get("adx")
         if pd.notna(adx):
             if adx < getattr(settings, "ADX_THRESHOLD", 20):
-                logger.debug(f"  {ticker}: ADX düşük ({adx:.1f}) - Trend yok, sinyal üretme")
+                logger.debug(
+                    f"  {ticker}: ADX düşük ({adx:.1f}) - Trend yok, sinyal üretme"
+                )
                 return None
 
         regime = detect_regime(df)
@@ -127,10 +179,14 @@ class StrategyEngine:
         if regime == MarketRegime.SIDEWAYS:
             score *= 0.6
             if abs(score) < self.BUY_THRESHOLD:
-                logger.debug(f"  {ticker}: Yatay piyasada skor zayıf ({score:.1f}) - sinyal yok")
+                logger.debug(
+                    f"  {ticker}: Yatay piyasada skor zayıf ({score:.1f}) - sinyal yok"
+                )
                 return None
 
-        if score > 0 and not self._check_momentum_confirmation(df, self.MOMENTUM_CONFIRMATION):
+        if score > 0 and not self._check_momentum_confirmation(
+            df, self.MOMENTUM_CONFIRMATION
+        ):
             if abs(score) < self.BUY_THRESHOLD + self.SIDEWAYS_EXTRA_THRESHOLD:
                 logger.debug(f"  {ticker}: Momentum onaysiz, sinyal atlandi")
                 return None
@@ -163,7 +219,9 @@ class StrategyEngine:
             confidence = "confidence.low"
 
         if signal_type in {SignalType.STRONG_BUY, SignalType.BUY, SignalType.WEAK_BUY}:
-            if enforce_sector_limit and not self.risk_manager.check_sector_limit(ticker):
+            if enforce_sector_limit and not self.risk_manager.check_sector_limit(
+                ticker
+            ):
                 logger.debug(f"  {ticker}: sektör limiti nedeniyle sinyal atlandı")
                 return None
 
@@ -171,14 +229,40 @@ class StrategyEngine:
         risk_levels = self.risk_manager.calculate(df)
 
         if signal_type in {SignalType.STRONG_BUY, SignalType.BUY, SignalType.WEAK_BUY}:
-            risk_levels = self.risk_manager.apply_portfolio_risk(ticker, df, risk_levels)
+            risk_levels = self.risk_manager.apply_portfolio_risk(
+                ticker, df, risk_levels
+            )
             if risk_levels.blocked_by_correlation or risk_levels.position_size <= 0:
                 logger.debug(f"  {ticker}: portföy riski nedeniyle sinyal atlandı")
                 return None
-        
+            if self.meta_model is not None and hasattr(
+                self.meta_model, "predict_probability"
+            ):
+                signal_probability = float(
+                    self.meta_model.predict_probability(
+                        self._build_meta_features(
+                            last,
+                            score=score,
+                            trend_bias=trend_bias,
+                            risk_levels=risk_levels,
+                        )
+                    )
+                )
+                risk_levels = self.risk_manager.apply_signal_probability(
+                    df,
+                    price,
+                    risk_levels,
+                    signal_probability,
+                )
+                if risk_levels.position_size <= 0:
+                    logger.debug(
+                        f"  {ticker}: meta-model sizing nedeniyle sinyal atlandı"
+                    )
+                    return None
+
         stop_loss = risk_levels.final_stop
         target_price = risk_levels.final_target
-        
+
         signal = Signal(
             ticker=ticker,
             signal_type=signal_type,
@@ -188,9 +272,13 @@ class StrategyEngine:
             stop_loss=round(stop_loss, 2),
             target_price=round(target_price, 2),
             position_size=risk_levels.position_size,
-            confidence=risk_levels.confidence if risk_levels.confidence != "confidence.low" else confidence,
+            signal_probability=risk_levels.signal_probability,
+            kelly_fraction=risk_levels.kelly_fraction,
+            confidence=risk_levels.confidence
+            if risk_levels.confidence != "confidence.low"
+            else confidence,
         )
-        
+
         signal.reasons.append(
             f"R/R: 1:{risk_levels.risk_reward_ratio:.1f} | {risk_levels.method_used}"
         )
@@ -198,15 +286,25 @@ class StrategyEngine:
             f"Pozisyon: {risk_levels.position_size} lot | Risk Bütçesi: ₺{risk_levels.risk_budget_tl:.2f}"
         )
         signal.reasons.append(
-            f"Volatilite throttle: x{risk_levels.volatility_scale:.2f} | ATR%: %{risk_levels.atr_pct*100:.2f}"
+            f"Volatilite throttle: x{risk_levels.volatility_scale:.2f} | ATR%: %{risk_levels.atr_pct * 100:.2f}"
         )
+        if risk_levels.signal_probability is not None:
+            signal.reasons.append(
+                f"Meta-model: P(up) %{risk_levels.signal_probability * 100:.1f} | Kelly %{risk_levels.kelly_fraction * 100:.2f}"
+            )
+        if risk_levels.liquidity_value > 0:
+            signal.reasons.append(
+                f"Likidite: ₺{risk_levels.liquidity_value:,.0f} ort. islem degeri"
+            )
         if risk_levels.correlated_tickers:
             signal.reasons.append(
                 f"Korelasyon limiti: x{risk_levels.correlation_scale:.2f} | İlişkili: {', '.join(risk_levels.correlated_tickers)}"
             )
 
         if multi_timeframe and getattr(settings, "MTF_ENABLED", True):
-            if not self._apply_confluence(signal.signal_type, trend_bias, signal.reasons):
+            if not self._apply_confluence(
+                signal.signal_type, trend_bias, signal.reasons
+            ):
                 logger.debug(f"  {ticker}: MTF confluence nedeniyle sinyal atlandı")
                 return None
 
@@ -216,8 +314,7 @@ class StrategyEngine:
         return signal
 
     def scan_all(
-        self,
-        data: dict[str, pd.DataFrame] | dict[str, dict[str, pd.DataFrame]]
+        self, data: dict[str, pd.DataFrame] | dict[str, dict[str, pd.DataFrame]]
     ) -> list[Signal]:
         """Analyze all fetched ticker data and return sorted signals.
 
@@ -249,10 +346,7 @@ class StrategyEngine:
 
         return signals
 
-    def get_actionable_signals(
-        self,
-        signals: list[Signal]
-    ) -> list[Signal]:
+    def get_actionable_signals(self, signals: list[Signal]) -> list[Signal]:
         """Filter out hold signals from the signal list.
 
         Args:
@@ -262,5 +356,3 @@ class StrategyEngine:
             Only actionable signals.
         """
         return [s for s in signals if s.signal_type != SignalType.HOLD]
-
-

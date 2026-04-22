@@ -35,13 +35,31 @@ class FakeRiskLevels:
     correlation_scale = 1.0
     correlated_tickers = []
     blocked_by_correlation = False
+    signal_probability: float | None = None
+    kelly_fraction: float = 0.0
+    liquidity_value: float = 0.0
 
 
 class FakeRiskManager:
     def calculate(self, df: pd.DataFrame) -> FakeRiskLevels:
         return FakeRiskLevels()
 
-    def apply_portfolio_risk(self, ticker: str, df: pd.DataFrame, levels: FakeRiskLevels) -> FakeRiskLevels:
+    def apply_portfolio_risk(
+        self, ticker: str, df: pd.DataFrame, levels: FakeRiskLevels
+    ) -> FakeRiskLevels:
+        return levels
+
+    def apply_signal_probability(
+        self,
+        df: pd.DataFrame,
+        price: float,
+        levels: FakeRiskLevels,
+        signal_probability: float,
+    ) -> FakeRiskLevels:
+        cast(Any, levels).signal_probability = signal_probability
+        cast(Any, levels).kelly_fraction = 0.125
+        cast(Any, levels).position_size = 6
+        cast(Any, levels).liquidity_value = 1500000.0
         return levels
 
     def reset_sectors(self) -> None:
@@ -167,7 +185,9 @@ def test_engine_thresholds_match_config():
 
 
 def test_engine_uses_configured_sideways_and_momentum_thresholds():
-    with settings.override(SIDEWAYS_EXTRA_THRESHOLD=9.0, MOMENTUM_CONFIRMATION_THRESHOLD=6.5):
+    with settings.override(
+        SIDEWAYS_EXTRA_THRESHOLD=9.0, MOMENTUM_CONFIRMATION_THRESHOLD=6.5
+    ):
         engine = StrategyEngine()
 
     assert engine.SIDEWAYS_EXTRA_THRESHOLD == 9.0
@@ -197,7 +217,9 @@ def test_score_classification_full_range():
     ]
 
     for score, expected in test_cases:
-        assert classify(score, engine) == expected, f"Score {score}: expected {expected}"
+        assert classify(score, engine) == expected, (
+            f"Score {score}: expected {expected}"
+        )
 
 
 def test_multi_timeframe_long_signal_requires_daily_long_confluence():
@@ -230,7 +252,9 @@ def test_multi_timeframe_long_signal_passes_with_daily_long_confluence():
 def test_rsi_low_and_macd_bullish_returns_buy_signal(bullish_frame):
     engine = BiasControlledStrategyEngine(TrendBias.LONG)
 
-    signal = engine.analyze("TEST.IS", {"trend": bullish_frame, "trigger": bullish_frame})
+    signal = engine.analyze(
+        "TEST.IS", {"trend": bullish_frame, "trigger": bullish_frame}
+    )
 
     assert signal is not None
     assert signal.signal_type.value in {"🟢 AL", "💰 GÜÇLÜ AL"}
@@ -239,7 +263,9 @@ def test_rsi_low_and_macd_bullish_returns_buy_signal(bullish_frame):
 def test_rsi_high_and_macd_bearish_returns_sell_signal(bearish_frame):
     engine = BiasControlledStrategyEngine(TrendBias.SHORT)
 
-    signal = engine.analyze("TEST.IS", {"trend": bearish_frame, "trigger": bearish_frame})
+    signal = engine.analyze(
+        "TEST.IS", {"trend": bearish_frame, "trigger": bearish_frame}
+    )
 
     assert signal is not None
     assert signal.signal_type.value in {"🔴 SAT", "🚨 GÜÇLÜ SAT"}
@@ -256,7 +282,9 @@ def test_empty_dataframe_does_not_crash():
 def test_score_stays_within_expected_bounds(bullish_frame):
     engine = BiasControlledStrategyEngine(TrendBias.LONG)
 
-    signal = engine.analyze("TEST.IS", {"trend": bullish_frame, "trigger": bullish_frame})
+    signal = engine.analyze(
+        "TEST.IS", {"trend": bullish_frame, "trigger": bullish_frame}
+    )
 
     assert signal is not None
     assert -100.0 <= signal.score <= 100.0
@@ -265,7 +293,35 @@ def test_score_stays_within_expected_bounds(bullish_frame):
 def test_analyze_carries_risk_manager_position_size_into_signal(bullish_frame):
     engine = BiasControlledStrategyEngine(TrendBias.LONG)
 
-    signal = engine.analyze("TEST.IS", {"trend": bullish_frame, "trigger": bullish_frame})
+    signal = engine.analyze(
+        "TEST.IS", {"trend": bullish_frame, "trigger": bullish_frame}
+    )
 
     assert signal is not None
     assert signal.position_size == 10
+
+
+def test_analyze_applies_meta_model_probability_and_kelly(bullish_frame):
+    class DummyMetaModel:
+        def predict_probability(self, features: dict[str, float]) -> float:
+            assert features["score"] > 0
+            return 0.64
+
+    class MetaBiasControlledEngine(StrategyEngine):
+        def _get_trend_bias(self, df: pd.DataFrame) -> TrendBias:
+            return TrendBias.LONG
+
+    engine = MetaBiasControlledEngine(
+        indicators=cast(Any, IdentityIndicators()),
+        risk_manager=cast(Any, FakeRiskManager()),
+        meta_model=DummyMetaModel(),
+    )
+
+    signal = engine.analyze(
+        "TEST.IS", {"trend": bullish_frame, "trigger": bullish_frame}
+    )
+
+    assert signal is not None
+    assert signal.signal_probability == 0.64
+    assert signal.kelly_fraction == 0.125
+    assert signal.position_size == 6

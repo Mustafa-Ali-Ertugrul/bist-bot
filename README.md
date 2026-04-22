@@ -227,6 +227,7 @@ Migration note:
 - `LOG_FORMAT=json` ayari ile loglar JSON olarak akar; varsayilan `console` modu lokal gelistirmede daha okunaklidir.
 - `LOG_LEVEL=INFO` veya `DEBUG` ile detay seviyesi ayarlanabilir.
 - Flask API `GET /metrics` endpoint'i uzerinden Prometheus text format metrikler sunar.
+- Metrik katmani thread-safe tutulur; `prometheus_client` mevcutsa resmi registry/exporter kullanilir, degilse uyumlu fallback registry devreye girer.
 
 ## Streamlit Cooldown
 
@@ -246,10 +247,17 @@ curl http://localhost:5000/metrics
 ## Live Trading (Experimental)
 
 - `BROKER_PROVIDER=algolab` ile AlgoLab broker iskeleti secilebilir; ancak resmi HTTP endpoint yollarinin guncelligi teyit edilmeden canli kullanim yapmayin.
+- AlgoLab tarafinda sandbox/mock HTTP akislari ile emir, iptal, durum sorgusu ve kimlik dogrulama adimlarini dogrulamadan `ALGOLAB_DRY_RUN=false` kullanmayin.
+- `DATA_PROVIDER=matriks|foreks|finnet` secenekleri icin de ayni ilke gecerlidir; endpoint path'leri ve rate-limit davranisi teyit edilmeden canli veri veya trade otomasyonu acmayin.
 - `ALGOLAB_DRY_RUN=true` varsayilan ve onerilen moddur; bu modda emirler sadece loglanir, gercekten gonderilmez.
 - Canli emir icin cift onay gerekir: `ALGOLAB_DRY_RUN=false` ve `CONFIRM_LIVE_TRADING=true` birlikte ayarlanmalidir.
 - `AUTO_EXECUTE` varsayilan olarak kapali gelir; acildiginda ilk asamada yalnizca `STRONG_BUY` ve `STRONG_SELL` sinyalleri broker'a iletilir.
 - Tum risk ve sorumluluk kullanicidadir; bu iskelet uretim oncesi broker sandbox/mock ortaminda ayrica dogrulanmalidir.
+
+## Data Storage Roadmap
+
+- Varsayilan kurulum SQLite ile basit tutulur; veri hacmi ve tarihsel saklama ihtiyaci buyudukce PostgreSQL + TimescaleDB gecisi planlanir.
+- Gecis planinda migration sirasiyla su adimlar izlenmelidir: tablo/sema esleme, tarihsel backfill, retention/compression politikasi, indeksleme, dual-write dogrulamasi ve kontrollu cutover.
 
 ## Contributing
 

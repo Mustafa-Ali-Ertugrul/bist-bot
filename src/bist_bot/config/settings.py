@@ -160,8 +160,12 @@ SECTOR_MAP = {
 
 @dataclass(frozen=True)
 class Settings:
-    DEFAULT_BIST100_WATCHLIST: list[str] = field(default_factory=lambda: list(DEFAULT_BIST100_WATCHLIST))
-    WATCHLIST: list[str] = field(default_factory=lambda: list(DEFAULT_BIST100_WATCHLIST))
+    DEFAULT_BIST100_WATCHLIST: list[str] = field(
+        default_factory=lambda: list(DEFAULT_BIST100_WATCHLIST)
+    )
+    WATCHLIST: list[str] = field(
+        default_factory=lambda: list(DEFAULT_BIST100_WATCHLIST)
+    )
     TICKER_NAMES: dict[str, str] = field(default_factory=lambda: dict(TICKER_NAMES))
     SECTOR_MAP: dict[str, str] = field(default_factory=lambda: dict(SECTOR_MAP))
 
@@ -202,7 +206,9 @@ class Settings:
     OFFICIAL_PASSWORD: str = _get_str_env("OFFICIAL_PASSWORD")
     OFFICIAL_TIMEOUT: float = _get_float_env("OFFICIAL_TIMEOUT", 30.0)
     OFFICIAL_MAX_RETRIES: int = _get_int_env("OFFICIAL_MAX_RETRIES", 3)
-    OFFICIAL_RETRY_BACKOFF_SECONDS: float = _get_float_env("OFFICIAL_RETRY_BACKOFF_SECONDS", 1.0)
+    OFFICIAL_RETRY_BACKOFF_SECONDS: float = _get_float_env(
+        "OFFICIAL_RETRY_BACKOFF_SECONDS", 1.0
+    )
     OFFICIAL_AUTH_ENDPOINT: str = _get_str_env("OFFICIAL_AUTH_ENDPOINT")
     OFFICIAL_HISTORY_ENDPOINT: str = _get_str_env("OFFICIAL_HISTORY_ENDPOINT")
     OFFICIAL_BATCH_ENDPOINT: str = _get_str_env("OFFICIAL_BATCH_ENDPOINT")
@@ -220,13 +226,24 @@ class Settings:
     CORRELATION_MAX_CLUSTER: int = _get_int_env("CORRELATION_MAX_CLUSTER", 2)
     ATR_BASELINE_PCT: float = _get_float_env("ATR_BASELINE_PCT", 0.025)
     ATR_MIN_RISK_SCALE: float = _get_float_env("ATR_MIN_RISK_SCALE", 0.35)
+    MAX_POSITION_CAP_PCT: float = _get_float_env("MAX_POSITION_CAP_PCT", 90.0)
+    KELLY_FRACTION_SCALE: float = _get_float_env("KELLY_FRACTION_SCALE", 0.25)
+    MIN_SIGNAL_PROBABILITY: float = _get_float_env("MIN_SIGNAL_PROBABILITY", 0.50)
+    MIN_LIQUIDITY_VALUE_TL: float = _get_float_env("MIN_LIQUIDITY_VALUE_TL", 0.0)
+    DAILY_LOSS_CAP_PCT: float = _get_float_env("DAILY_LOSS_CAP_PCT", 0.0)
 
     ENABLE_REALTIME_SCRAPING: bool = _get_bool_env("ENABLE_REALTIME_SCRAPING", True)
     RATE_LIMIT_SECONDS: float = _get_float_env("RATE_LIMIT_SECONDS", 2.0)
     FETCH_CACHE_TTL_SECONDS: float = _get_float_env("FETCH_CACHE_TTL_SECONDS", 900.0)
-    INTRADAY_FETCH_CACHE_TTL_SECONDS: float = _get_float_env("INTRADAY_FETCH_CACHE_TTL_SECONDS", 120.0)
-    ANALYSIS_CACHE_TTL_SECONDS: float = _get_float_env("ANALYSIS_CACHE_TTL_SECONDS", 180.0)
-    REALTIME_QUOTE_CACHE_TTL_SECONDS: float = _get_float_env("REALTIME_QUOTE_CACHE_TTL_SECONDS", 30.0)
+    INTRADAY_FETCH_CACHE_TTL_SECONDS: float = _get_float_env(
+        "INTRADAY_FETCH_CACHE_TTL_SECONDS", 120.0
+    )
+    ANALYSIS_CACHE_TTL_SECONDS: float = _get_float_env(
+        "ANALYSIS_CACHE_TTL_SECONDS", 180.0
+    )
+    REALTIME_QUOTE_CACHE_TTL_SECONDS: float = _get_float_env(
+        "REALTIME_QUOTE_CACHE_TTL_SECONDS", 30.0
+    )
     NOTIFICATION_MAX_RETRIES: int = _get_int_env("NOTIFICATION_MAX_RETRIES", 3)
     NOTIFICATION_RETRY_DELAY: int = _get_int_env("NOTIFICATION_RETRY_DELAY", 5)
 
@@ -234,14 +251,22 @@ class Settings:
     FLASK_DEBUG: bool = _get_bool_env("FLASK_DEBUG", False)
     LOG_FORMAT: str = _get_str_env("LOG_FORMAT", "console")
     LOG_LEVEL: str = _get_str_env("LOG_LEVEL", "INFO")
-    STREAMLIT_SCAN_COOLDOWN_SECONDS: float = _get_float_env("STREAMLIT_SCAN_COOLDOWN_SECONDS", 8.0)
-    STREAMLIT_ANALYZE_COOLDOWN_SECONDS: float = _get_float_env("STREAMLIT_ANALYZE_COOLDOWN_SECONDS", 4.0)
-    API_BASE_URL: str = _get_str_env("API_BASE_URL", f"http://localhost:{_get_int_env('FLASK_PORT', 5000)}")
+    STREAMLIT_SCAN_COOLDOWN_SECONDS: float = _get_float_env(
+        "STREAMLIT_SCAN_COOLDOWN_SECONDS", 8.0
+    )
+    STREAMLIT_ANALYZE_COOLDOWN_SECONDS: float = _get_float_env(
+        "STREAMLIT_ANALYZE_COOLDOWN_SECONDS", 4.0
+    )
+    API_BASE_URL: str = _get_str_env(
+        "API_BASE_URL", f"http://localhost:{_get_int_env('FLASK_PORT', 5000)}"
+    )
     RATE_LIMIT_STORAGE_URI: str = _get_str_env("RATE_LIMIT_STORAGE_URI", "memory://")
     JWT_SECRET_KEY: str = _get_str_env("JWT_SECRET_KEY")
     ADMIN_BOOTSTRAP_EMAIL: str = _get_str_env("ADMIN_BOOTSTRAP_EMAIL")
     ADMIN_BOOTSTRAP_PASSWORD_HASH: str = _get_str_env("ADMIN_BOOTSTRAP_PASSWORD_HASH")
-    CORS_ORIGINS: tuple[str, ...] = field(default_factory=lambda: _get_csv_env("CORS_ORIGINS"))
+    CORS_ORIGINS: tuple[str, ...] = field(
+        default_factory=lambda: _get_csv_env("CORS_ORIGINS")
+    )
 
     INITIAL_CAPITAL: float = _get_float_env("INITIAL_CAPITAL", 8500.0)
     ML_SEQUENCE_LENGTH: int = _get_int_env("ML_SEQUENCE_LENGTH", 60)
@@ -266,14 +291,20 @@ class Settings:
     ALGOLAB_PASSWORD: str = _get_str_env("ALGOLAB_PASSWORD")
     ALGOLAB_OTP_CODE: str = _get_str_env("ALGOLAB_OTP_CODE")
     ALGOLAB_DRY_RUN: bool = _get_bool_env("ALGOLAB_DRY_RUN", True)
-    AUTO_EXECUTE_WARN_MAX_QUANTITY: int = _get_int_env("AUTO_EXECUTE_WARN_MAX_QUANTITY", 100000)
+    AUTO_EXECUTE_WARN_MAX_QUANTITY: int = _get_int_env(
+        "AUTO_EXECUTE_WARN_MAX_QUANTITY", 100000
+    )
     SLIPPAGE: float = _get_float_env("SLIPPAGE", 0.001)
     SLIPPAGE_PCT: float = _get_float_env("SLIPPAGE_PCT", 0.001)
     SLIPPAGE_PENALTY_RATIO: float = _get_float_env("SLIPPAGE_PENALTY_RATIO", 0.15)
     SLIPPAGE_MAX_CAP: float = _get_float_env("SLIPPAGE_MAX_CAP", 0.02)
     BACKTEST_COMMISSION_PCT: float = _get_float_env("BACKTEST_COMMISSION_PCT", 0.001)
-    BACKTEST_COMMISSION_BUY_PCT: float = _get_float_env("BACKTEST_COMMISSION_BUY_PCT", _get_float_env("BACKTEST_COMMISSION_PCT", 0.001))
-    BACKTEST_COMMISSION_SELL_PCT: float = _get_float_env("BACKTEST_COMMISSION_SELL_PCT", _get_float_env("BACKTEST_COMMISSION_PCT", 0.001))
+    BACKTEST_COMMISSION_BUY_PCT: float = _get_float_env(
+        "BACKTEST_COMMISSION_BUY_PCT", _get_float_env("BACKTEST_COMMISSION_PCT", 0.001)
+    )
+    BACKTEST_COMMISSION_SELL_PCT: float = _get_float_env(
+        "BACKTEST_COMMISSION_SELL_PCT", _get_float_env("BACKTEST_COMMISSION_PCT", 0.001)
+    )
     BACKTEST_SLIPPAGE_PCT: float = _get_float_env("BACKTEST_SLIPPAGE_PCT", 0.0005)
 
     TELEGRAM_MIN_SCORE: int = _get_int_env("TELEGRAM_MIN_SCORE", 70)
@@ -285,7 +316,9 @@ class Settings:
     SELL_THRESHOLD: int = _get_int_env("SELL_THRESHOLD", -20)
     STRONG_SELL_THRESHOLD: int = _get_int_env("STRONG_SELL_THRESHOLD", -48)
     SIDEWAYS_EXTRA_THRESHOLD: float = _get_float_env("SIDEWAYS_EXTRA_THRESHOLD", 5.0)
-    MOMENTUM_CONFIRMATION_THRESHOLD: float = _get_float_env("MOMENTUM_CONFIRMATION_THRESHOLD", 4.0)
+    MOMENTUM_CONFIRMATION_THRESHOLD: float = _get_float_env(
+        "MOMENTUM_CONFIRMATION_THRESHOLD", 4.0
+    )
 
     WALKFORWARD_TRAIN_DAYS: int = _get_int_env("WALKFORWARD_TRAIN_DAYS", 180)
     WALKFORWARD_TEST_DAYS: int = _get_int_env("WALKFORWARD_TEST_DAYS", 30)
@@ -316,10 +349,18 @@ class Settings:
             raise RuntimeError(f"Unsupported BROKER_PROVIDER: {self.BROKER_PROVIDER}")
         if self.BROKER_PROVIDER != "algolab":
             return
-        if not self.ALGOLAB_API_KEY or not self.ALGOLAB_USERNAME or not self.ALGOLAB_PASSWORD:
-            raise RuntimeError("Missing required AlgoLab credentials for BROKER_PROVIDER=algolab")
+        if (
+            not self.ALGOLAB_API_KEY
+            or not self.ALGOLAB_USERNAME
+            or not self.ALGOLAB_PASSWORD
+        ):
+            raise RuntimeError(
+                "Missing required AlgoLab credentials for BROKER_PROVIDER=algolab"
+            )
         if not self.ALGOLAB_DRY_RUN and not self.CONFIRM_LIVE_TRADING:
-            raise RuntimeError("CONFIRM_LIVE_TRADING=true is required when ALGOLAB_DRY_RUN=false")
+            raise RuntimeError(
+                "CONFIRM_LIVE_TRADING=true is required when ALGOLAB_DRY_RUN=false"
+            )
 
     def validate_data_provider_config(self) -> None:
         if self.DATA_PROVIDER == "official":
@@ -333,7 +374,9 @@ class Settings:
             if not self.OFFICIAL_PASSWORD:
                 missing.append("OFFICIAL_PASSWORD")
             if missing:
-                raise RuntimeError(f"Missing required settings for DATA_PROVIDER=official: {', '.join(missing)}")
+                raise RuntimeError(
+                    f"Missing required settings for DATA_PROVIDER=official: {', '.join(missing)}"
+                )
 
 
 settings = Settings()

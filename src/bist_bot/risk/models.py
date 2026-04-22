@@ -30,8 +30,15 @@ class RiskLevels:
     atr_pct: float = 0.0
     volatility_scale: float = 1.0
     correlation_scale: float = 1.0
+    signal_probability: float | None = None
+    full_kelly_fraction: float = 0.0
+    kelly_fraction: float = 0.0
+    liquidity_value: float = 0.0
     correlated_tickers: list[str] = field(default_factory=list)
     blocked_by_correlation: bool = False
+    blocked_by_liquidity: bool = False
+    blocked_by_daily_loss: bool = False
+    blocked_by_probability: bool = False
 
     method_used: str = ""
     confidence: str = "confidence.low"

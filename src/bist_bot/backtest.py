@@ -10,17 +10,24 @@ import numpy as np
 import pandas as pd
 
 from bist_bot.app_logging import get_logger
+from bist_bot.config.settings import settings
+from bist_bot.risk.sizing import calculate_kelly_fraction
 
 try:
     import yfinance as yf
 except ImportError:
     yf = None
 
-from bist_bot.config.settings import settings
 from bist_bot import strategy as strategy_module
 from bist_bot.contracts import StrategyEngineProtocol
 from bist_bot.indicators import TechnicalIndicators
 from bist_bot.strategy.signal_models import SignalType
+
+try:  # pragma: no cover - optional dependency behavior
+    from sklearn.metrics import log_loss, roc_auc_score  # type: ignore[import-not-found]
+except ImportError:  # pragma: no cover
+    log_loss = None
+    roc_auc_score = None
 
 logger = get_logger(__name__, component="backtest")
 
@@ -31,8 +38,9 @@ class IntrabarExit(TypedDict):
 
 
 class SignalBuilder(Protocol):
-    def __call__(self, ticker: str, history: pd.DataFrame) -> dict[str, float | bool]:
-        ...
+    def __call__(
+        self, ticker: str, history: pd.DataFrame
+    ) -> dict[str, float | bool]: ...
 
 
 @dataclass
@@ -48,11 +56,14 @@ class BacktestTrade:
     holding_days: int
     exit_reason: str = ""
     gross_profit_tl: float = 0.0
+    entry_notional_tl: float = 0.0
     total_cost_tl: float = 0.0
     commission_tl: float = 0.0
     bsmv_tl: float = 0.0
     exchange_fee_tl: float = 0.0
     slippage_tl: float = 0.0
+    signal_probability: float | None = None
+    position_fraction: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -67,11 +78,14 @@ class BacktestTrade:
             "holding_days": self.holding_days,
             "exit_reason": self.exit_reason,
             "gross_profit_tl": self.gross_profit_tl,
+            "entry_notional_tl": self.entry_notional_tl,
             "total_cost_tl": self.total_cost_tl,
             "commission_tl": self.commission_tl,
             "bsmv_tl": self.bsmv_tl,
             "exchange_fee_tl": self.exchange_fee_tl,
             "slippage_tl": self.slippage_tl,
+            "signal_probability": self.signal_probability,
+            "position_fraction": self.position_fraction,
         }
 
 
@@ -124,8 +138,15 @@ class BacktestResult:
     sharpe_ratio: float
     sortino_ratio: float = 0.0
     cagr: float = 0.0
+    calmar_ratio: float = 0.0
     profit_factor: float = 0.0
     avg_trade_pct: float = 0.0
+    exposure_pct: float = 0.0
+    turnover_ratio: float = 0.0
+    tail_loss_pct: float = 0.0
+    longest_loss_streak: int = 0
+    probability_diagnostics: dict[str, Any] = field(default_factory=dict)
+    mode: str = "base_fixed_size"
     universe_as_of: str | None = None
     cost_breakdown: CostBreakdown = field(default_factory=CostBreakdown)
     trades: list[BacktestTrade] = field(default_factory=list)
@@ -147,12 +168,20 @@ class BacktestResult:
             "sharpe_ratio": self.sharpe_ratio,
             "sortino_ratio": self.sortino_ratio,
             "cagr": self.cagr,
+            "calmar_ratio": self.calmar_ratio,
             "profit_factor": self.profit_factor,
             "avg_trade_pct": self.avg_trade_pct,
+            "exposure_pct": self.exposure_pct,
+            "turnover_ratio": self.turnover_ratio,
+            "tail_loss_pct": self.tail_loss_pct,
+            "longest_loss_streak": self.longest_loss_streak,
+            "probability_diagnostics": self.probability_diagnostics,
+            "mode": self.mode,
             "universe_as_of": self.universe_as_of,
             "cost_breakdown": self.cost_breakdown.to_dict(),
             "trades": [trade.to_dict() for trade in self.trades],
         }
+
     def to_json(self, output_path: str | Path | None = None) -> str:
         payload = json.dumps(self.to_dict(), ensure_ascii=False, indent=2)
         if output_path is not None:
@@ -163,9 +192,9 @@ class BacktestResult:
 
     def __str__(self):
         return (
-            f"\n{'═'*55}\n"
+            f"\n{'═' * 55}\n"
             f"📊 BACKTEST SONUCU: {self.ticker}\n"
-            f"{'═'*55}\n"
+            f"{'═' * 55}\n"
             f"  Periyot         : {self.period}\n"
             f"  Başlangıç       : ₺{self.initial_capital:,.2f}\n"
             f"  Bitiş           : ₺{self.final_capital:,.2f}\n"
@@ -181,8 +210,9 @@ class BacktestResult:
             f"  Max Drawdown    : %{self.max_drawdown_pct:.2f}\n"
             f"  Sharpe Ratio    : {self.sharpe_ratio:.2f}\n"
             f"  Sortino Ratio   : {self.sortino_ratio:.2f}\n"
+            f"  Calmar Ratio    : {self.calmar_ratio:.2f}\n"
             f"  Profit Factor   : {self.profit_factor:.2f}\n"
-            f"{'═'*55}"
+            f"{'═' * 55}"
         )
 
 
@@ -203,6 +233,43 @@ class VectorizedSignals:
 class WindowMode(str, Enum):
     ROLLING = "rolling"
     ANCHORED = "anchored"
+
+
+class BacktestMode(str, Enum):
+    BASE_FIXED_SIZE = "base_fixed_size"
+    META_FILTER_FIXED_SIZE = "meta_filter_fixed_size"
+    META_FILTER_FRACTIONAL_KELLY = "meta_filter_fractional_kelly"
+
+
+@dataclass
+class AblationComparison:
+    base_metric: float
+    candidate_metric: float
+    delta: float
+
+
+@dataclass
+class BacktestAblationResult:
+    ticker: str
+    runs: dict[str, BacktestResult]
+    comparisons: dict[str, dict[str, AblationComparison]]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "ticker": self.ticker,
+            "runs": {name: result.to_dict() for name, result in self.runs.items()},
+            "comparisons": {
+                run_name: {
+                    metric: {
+                        "base_metric": comparison.base_metric,
+                        "candidate_metric": comparison.candidate_metric,
+                        "delta": comparison.delta,
+                    }
+                    for metric, comparison in metrics.items()
+                }
+                for run_name, metrics in self.comparisons.items()
+            },
+        }
 
 
 @dataclass
@@ -266,7 +333,9 @@ class WalkForwardResult:
 
 def _to_float(value: Any, default: float = 0.0) -> float:
     try:
-        if isinstance(value, (pd.Series, pd.DataFrame, np.ndarray, list, tuple, pd.Index)):
+        if isinstance(
+            value, (pd.Series, pd.DataFrame, np.ndarray, list, tuple, pd.Index)
+        ):
             return default
         if pd.isna(value):
             return default
@@ -292,11 +361,18 @@ def _annualized_ratios(returns: np.ndarray) -> tuple[float, float]:
 
     downside = returns[returns < 0]
     downside_std = float(np.std(downside)) if downside.size > 0 else 0.0
-    sortino = float(mean_return / downside_std * np.sqrt(252)) if downside_std > 0 else 0.0
+    sortino = (
+        float(mean_return / downside_std * np.sqrt(252)) if downside_std > 0 else 0.0
+    )
     return sharpe, sortino
 
 
-def _calculate_cagr(initial_capital: float, final_capital: float, start_date: datetime, end_date: datetime) -> float:
+def _calculate_cagr(
+    initial_capital: float,
+    final_capital: float,
+    start_date: datetime,
+    end_date: datetime,
+) -> float:
     total_days = max((end_date - start_date).days, 0)
     if total_days <= 0 or initial_capital <= 0 or final_capital <= 0:
         return 0.0
@@ -306,7 +382,112 @@ def _calculate_cagr(initial_capital: float, final_capital: float, start_date: da
     return (final_capital / initial_capital) ** (1 / years) - 1
 
 
-def _build_cost_breakdown(initial_capital: float, final_capital: float, trades: list[BacktestTrade]) -> CostBreakdown:
+def _longest_loss_streak(trades: list[BacktestTrade]) -> int:
+    streak = 0
+    longest = 0
+    for trade in trades:
+        if trade.profit_pct <= 0:
+            streak += 1
+            longest = max(longest, streak)
+        else:
+            streak = 0
+    return longest
+
+
+def _probability_diagnostics(trades: list[BacktestTrade]) -> dict[str, Any]:
+    probability_trades = [
+        trade for trade in trades if trade.signal_probability is not None
+    ]
+    if not probability_trades:
+        return {}
+
+    probabilities = np.clip(
+        np.array(
+            [cast(float, trade.signal_probability) for trade in probability_trades],
+            dtype=float,
+        ),
+        1e-6,
+        1.0 - 1e-6,
+    )
+    labels = np.array(
+        [1 if trade.profit_pct > 0 else 0 for trade in probability_trades], dtype=int
+    )
+    diagnostics: dict[str, Any] = {
+        "count": int(len(probability_trades)),
+        "brier_score": round(float(np.mean((probabilities - labels) ** 2)), 4),
+    }
+    if log_loss is not None:
+        diagnostics["log_loss"] = round(
+            float(log_loss(labels, probabilities, labels=[0, 1])), 4
+        )
+    if roc_auc_score is not None and len(np.unique(labels)) > 1:
+        diagnostics["roc_auc"] = round(float(roc_auc_score(labels, probabilities)), 4)
+
+    threshold_rows = []
+    for threshold in [0.50, 0.55, 0.60, 0.65]:
+        predicted_positive = probabilities >= threshold
+        tp = int(np.sum(predicted_positive & (labels == 1)))
+        fp = int(np.sum(predicted_positive & (labels == 0)))
+        fn = int(np.sum((~predicted_positive) & (labels == 1)))
+        precision = tp / (tp + fp) if (tp + fp) else 0.0
+        recall = tp / (tp + fn) if (tp + fn) else 0.0
+        threshold_rows.append(
+            {
+                "threshold": threshold,
+                "precision": round(float(precision), 4),
+                "recall": round(float(recall), 4),
+                "support": int(np.sum(predicted_positive)),
+            }
+        )
+    diagnostics["precision_recall_by_threshold"] = threshold_rows
+
+    bucket_rows: list[dict[str, Any]] = []
+    for low, high in [(0.50, 0.55), (0.55, 0.60), (0.60, 0.65), (0.65, 1.01)]:
+        mask = (probabilities >= low) & (probabilities < high)
+        if not np.any(mask):
+            bucket_rows.append(
+                {
+                    "bucket": f"{low:.2f}-{min(high, 1.0):.2f}",
+                    "count": 0,
+                    "avg_probability": 0.0,
+                    "realized_win_rate": 0.0,
+                    "avg_profit_pct": 0.0,
+                }
+            )
+            continue
+        bucket_trade_returns = np.array(
+            [
+                trade.profit_pct
+                for idx, trade in enumerate(probability_trades)
+                if mask[idx]
+            ],
+            dtype=float,
+        )
+        bucket_rows.append(
+            {
+                "bucket": f"{low:.2f}-{min(high, 1.0):.2f}",
+                "count": int(mask.sum()),
+                "avg_probability": round(float(np.mean(probabilities[mask])), 4),
+                "realized_win_rate": round(float(np.mean(labels[mask])), 4),
+                "avg_profit_pct": round(float(np.mean(bucket_trade_returns)), 4),
+            }
+        )
+    diagnostics["probability_buckets"] = bucket_rows
+    diagnostics["calibration_curve"] = [
+        {
+            "bucket": row["bucket"],
+            "predicted": row["avg_probability"],
+            "observed": row["realized_win_rate"],
+        }
+        for row in bucket_rows
+        if row["count"] > 0
+    ]
+    return diagnostics
+
+
+def _build_cost_breakdown(
+    initial_capital: float, final_capital: float, trades: list[BacktestTrade]
+) -> CostBreakdown:
     total_commission = sum(trade.commission_tl for trade in trades)
     total_bsmv = sum(trade.bsmv_tl for trade in trades)
     total_exchange_fee = sum(trade.exchange_fee_tl for trade in trades)
@@ -333,7 +514,11 @@ def _summarize_trades_and_equity(
     trades: list[BacktestTrade],
     equity_history: list[float],
 ) -> dict[str, Any]:
-    total_return_pct = (final_capital - initial_capital) / initial_capital * 100 if initial_capital else 0.0
+    total_return_pct = (
+        (final_capital - initial_capital) / initial_capital * 100
+        if initial_capital
+        else 0.0
+    )
     winning = [trade for trade in trades if trade.profit_pct > 0]
     losing = [trade for trade in trades if trade.profit_pct <= 0]
 
@@ -349,6 +534,17 @@ def _summarize_trades_and_equity(
     gross_loss = abs(sum(trade.profit_tl for trade in losing))
     profit_factor = gross_profit / gross_loss if gross_loss > 0 else 0.0
     cagr = _calculate_cagr(initial_capital, final_capital, start_date, end_date)
+    calmar_ratio = cagr / abs(max_drawdown_pct / 100) if max_drawdown_pct < 0 else 0.0
+    total_days = max((_to_datetime(end_date) - _to_datetime(start_date)).days, 1)
+    total_holding_days = sum(trade.holding_days for trade in trades)
+    exposure_pct = min(100.0, total_holding_days / total_days * 100)
+    turnover_ratio = (
+        sum(trade.entry_notional_tl for trade in trades) / initial_capital
+        if initial_capital > 0
+        else 0.0
+    )
+    tail_loss_pct = float(np.percentile(returns, 5)) if returns.size else 0.0
+    probability_diagnostics = _probability_diagnostics(trades)
 
     return {
         "ticker": ticker,
@@ -360,14 +556,26 @@ def _summarize_trades_and_equity(
         "winning_trades": len(winning),
         "losing_trades": len(losing),
         "win_rate": round(len(winning) / len(trades) * 100, 1) if trades else 0.0,
-        "avg_profit_pct": round(float(np.mean([trade.profit_pct for trade in winning])), 2) if winning else 0.0,
-        "avg_loss_pct": round(float(np.mean([trade.profit_pct for trade in losing])), 2) if losing else 0.0,
+        "avg_profit_pct": round(
+            float(np.mean([trade.profit_pct for trade in winning])), 2
+        )
+        if winning
+        else 0.0,
+        "avg_loss_pct": round(float(np.mean([trade.profit_pct for trade in losing])), 2)
+        if losing
+        else 0.0,
         "max_drawdown_pct": round(max_drawdown_pct, 2),
         "sharpe_ratio": round(sharpe_ratio, 2),
         "sortino_ratio": round(sortino_ratio, 2),
         "cagr": round(cagr * 100, 2),
+        "calmar_ratio": round(calmar_ratio, 2),
         "profit_factor": round(profit_factor, 2),
         "avg_trade_pct": round(avg_trade_pct, 2),
+        "exposure_pct": round(exposure_pct, 2),
+        "turnover_ratio": round(turnover_ratio, 2),
+        "tail_loss_pct": round(tail_loss_pct, 2),
+        "longest_loss_streak": _longest_loss_streak(trades),
+        "probability_diagnostics": probability_diagnostics,
         "cost_breakdown": _build_cost_breakdown(initial_capital, final_capital, trades),
     }
 
@@ -384,9 +592,16 @@ class Backtester:
         target_rr: float = 2.0,
         indicators: Optional[TechnicalIndicators] = None,
         cost_model: Optional[CostModel] = None,
+        meta_model: Any | None = None,
+        mode: BacktestMode | str = BacktestMode.BASE_FIXED_SIZE,
+        min_probability: float | None = None,
+        fractional_kelly: float | None = None,
+        max_position_cap_pct: float | None = None,
     ):
         self.initial_capital = float(
-            initial_capital if initial_capital is not None else getattr(settings, "INITIAL_CAPITAL", 8500.0)
+            initial_capital
+            if initial_capital is not None
+            else getattr(settings, "INITIAL_CAPITAL", 8500.0)
         )
         default_commission = float(getattr(settings, "BACKTEST_COMMISSION_PCT", 0.001))
         self.commission_buy_pct = float(
@@ -400,11 +615,17 @@ class Backtester:
             else getattr(settings, "BACKTEST_COMMISSION_SELL_PCT", default_commission)
         )
         self.slippage_pct = float(
-            slippage_pct if slippage_pct is not None else getattr(settings, "BACKTEST_SLIPPAGE_PCT", 0.0005)
+            slippage_pct
+            if slippage_pct is not None
+            else getattr(settings, "BACKTEST_SLIPPAGE_PCT", 0.0005)
         )
-        use_legacy_costs = any(
-            value is not None for value in (commission_buy_pct, commission_sell_pct, slippage_pct)
-        ) and cost_model is None
+        use_legacy_costs = (
+            any(
+                value is not None
+                for value in (commission_buy_pct, commission_sell_pct, slippage_pct)
+            )
+            and cost_model is None
+        )
         self.cost_model = None if use_legacy_costs else (cost_model or CostModel())
         self.buy_threshold = float(
             buy_threshold if buy_threshold is not None else settings.BUY_THRESHOLD
@@ -416,6 +637,23 @@ class Backtester:
         self.indicators = indicators or TechnicalIndicators()
         self.avg_holding_days = 0.0
         self.signal_builder: Optional[SignalBuilder] = None
+        self.meta_model = meta_model
+        self.mode = BacktestMode(mode)
+        self.min_probability = float(
+            min_probability
+            if min_probability is not None
+            else getattr(settings, "MIN_SIGNAL_PROBABILITY", 0.5)
+        )
+        self.fractional_kelly = float(
+            fractional_kelly
+            if fractional_kelly is not None
+            else getattr(settings, "KELLY_FRACTION_SCALE", 0.25)
+        )
+        self.max_position_cap_pct = float(
+            max_position_cap_pct
+            if max_position_cap_pct is not None
+            else getattr(settings, "MAX_POSITION_CAP_PCT", 90.0)
+        )
 
     def _precalculate_signals(self, df: pd.DataFrame) -> pd.DataFrame:
         """Precompute default backtest signals in a vectorized form."""
@@ -456,8 +694,12 @@ class Backtester:
         else:
             df["calculated_stop"] = df["close"] * 0.95
 
-        df["risk_per_share"] = np.maximum(df["close"] - df["calculated_stop"], df["close"] * 0.01)
-        df["target_price"] = np.maximum(df["close"] + (df["risk_per_share"] * self.target_rr), df["close"])
+        df["risk_per_share"] = np.maximum(
+            df["close"] - df["calculated_stop"], df["close"] * 0.01
+        )
+        df["target_price"] = np.maximum(
+            df["close"] + (df["risk_per_share"] * self.target_rr), df["close"]
+        )
         df["enter_signal"] = df["score"] >= self.buy_threshold
         df["exit_signal"] = df["score"] <= self.sell_threshold
 
@@ -469,18 +711,30 @@ class Backtester:
         close_series = cast(pd.Series, df["close"])
 
         df["score"] = score_series.shift(1, fill_value=0.0)
-        df["calculated_stop"] = stop_series.shift(1, fill_value=float(close_series.iloc[0]) * 0.95)
-        df["target_price"] = target_series.shift(1, fill_value=float(close_series.iloc[0]))
+        df["calculated_stop"] = stop_series.shift(
+            1, fill_value=float(close_series.iloc[0]) * 0.95
+        )
+        df["target_price"] = target_series.shift(
+            1, fill_value=float(close_series.iloc[0])
+        )
         df["enter_signal"] = enter_series.shift(1, fill_value=False).astype(bool)
         df["exit_signal"] = exit_series.shift(1, fill_value=False).astype(bool)
         if len(df) >= 2:
             df.loc[df.index[:2], "score"] = 0.0
             df.loc[df.index[:2], "enter_signal"] = False
             df.loc[df.index[:2], "exit_signal"] = False
-        df["stop_gap_candidate"] = (cast(pd.Series, df["calculated_stop"]) > 0) & (cast(pd.Series, df["open"]) <= cast(pd.Series, df["calculated_stop"]))
-        df["target_gap_candidate"] = (cast(pd.Series, df["target_price"]) > 0) & (cast(pd.Series, df["open"]) >= cast(pd.Series, df["target_price"]))
-        df["stop_hit_candidate"] = (cast(pd.Series, df["calculated_stop"]) > 0) & (cast(pd.Series, df["low"]) <= cast(pd.Series, df["calculated_stop"]))
-        df["target_hit_candidate"] = (cast(pd.Series, df["target_price"]) > 0) & (cast(pd.Series, df["high"]) >= cast(pd.Series, df["target_price"]))
+        df["stop_gap_candidate"] = (cast(pd.Series, df["calculated_stop"]) > 0) & (
+            cast(pd.Series, df["open"]) <= cast(pd.Series, df["calculated_stop"])
+        )
+        df["target_gap_candidate"] = (cast(pd.Series, df["target_price"]) > 0) & (
+            cast(pd.Series, df["open"]) >= cast(pd.Series, df["target_price"])
+        )
+        df["stop_hit_candidate"] = (cast(pd.Series, df["calculated_stop"]) > 0) & (
+            cast(pd.Series, df["low"]) <= cast(pd.Series, df["calculated_stop"])
+        )
+        df["target_hit_candidate"] = (cast(pd.Series, df["target_price"]) > 0) & (
+            cast(pd.Series, df["high"]) >= cast(pd.Series, df["target_price"])
+        )
 
         return df
 
@@ -499,7 +753,11 @@ class Backtester:
         )
 
     def _use_vectorized_path(self) -> bool:
-        if self.signal_builder is not None:
+        if (
+            self.signal_builder is not None
+            or self.meta_model is not None
+            or self.mode is not BacktestMode.BASE_FIXED_SIZE
+        ):
             return False
         signal_context_builder = getattr(self._build_signal_context, "__func__", None)
         return signal_context_builder is Backtester._build_signal_context
@@ -605,6 +863,78 @@ class Backtester:
             result.to_json(output_path)
         return result
 
+    def run_ablation(
+        self,
+        ticker: str,
+        df: pd.DataFrame,
+        *,
+        verbose: bool = False,
+    ) -> BacktestAblationResult:
+        runs: dict[str, BacktestResult] = {}
+        for mode in (
+            BacktestMode.BASE_FIXED_SIZE,
+            BacktestMode.META_FILTER_FIXED_SIZE,
+            BacktestMode.META_FILTER_FRACTIONAL_KELLY,
+        ):
+            backtester = self._clone_for_mode(mode)
+            result = backtester.run(ticker, df, verbose=verbose)
+            if result is not None:
+                runs[mode.value] = result
+
+        base = runs.get(BacktestMode.BASE_FIXED_SIZE.value)
+        comparisons: dict[str, dict[str, AblationComparison]] = {}
+        if base is not None:
+            for mode_name, result in runs.items():
+                if mode_name == BacktestMode.BASE_FIXED_SIZE.value:
+                    continue
+                comparisons[mode_name] = {
+                    metric: AblationComparison(
+                        base_metric=float(getattr(base, metric)),
+                        candidate_metric=float(getattr(result, metric)),
+                        delta=float(getattr(result, metric))
+                        - float(getattr(base, metric)),
+                    )
+                    for metric in (
+                        "cagr",
+                        "sharpe_ratio",
+                        "sortino_ratio",
+                        "max_drawdown_pct",
+                        "calmar_ratio",
+                        "win_rate",
+                        "profit_factor",
+                        "turnover_ratio",
+                        "exposure_pct",
+                        "tail_loss_pct",
+                    )
+                }
+        return BacktestAblationResult(ticker=ticker, runs=runs, comparisons=comparisons)
+
+    def _clone_for_mode(self, mode: BacktestMode) -> "Backtester":
+        clone = Backtester(
+            initial_capital=self.initial_capital,
+            commission_buy_pct=self.commission_buy_pct
+            if self.cost_model is None
+            else None,
+            commission_sell_pct=self.commission_sell_pct
+            if self.cost_model is None
+            else None,
+            buy_threshold=self.buy_threshold,
+            sell_threshold=self.sell_threshold,
+            slippage_pct=self.slippage_pct if self.cost_model is None else None,
+            target_rr=self.target_rr,
+            indicators=self.indicators,
+            cost_model=self.cost_model,
+            meta_model=(
+                self.meta_model if mode is not BacktestMode.BASE_FIXED_SIZE else None
+            ),
+            mode=mode,
+            min_probability=self.min_probability,
+            fractional_kelly=self.fractional_kelly,
+            max_position_cap_pct=self.max_position_cap_pct,
+        )
+        clone.signal_builder = self.signal_builder
+        return clone
+
     def _run_vectorized(
         self,
         ticker: str,
@@ -623,7 +953,9 @@ class Backtester:
         cursor = 0
 
         while cursor < len(df):
-            entry_idx = self._find_next_entry_index(entry_candidates, cursor, vectors.dates, last_buy_date)
+            entry_idx = self._find_next_entry_index(
+                entry_candidates, cursor, vectors.dates, last_buy_date
+            )
             if entry_idx is None:
                 capital_history[cursor + 1 :] = capital
                 break
@@ -642,9 +974,17 @@ class Backtester:
                 "target_price": float(vectors.target_prices[entry_idx]),
             }
             row = df.iloc[entry_idx]
-            estimated_shares = self._estimate_entry_shares(capital, open_price)
-            entry_fill_price = self._calculate_fill_price(open_price, row, is_buy=True, shares=estimated_shares)
-            position = self._open_position(signal, entry_fill_price, open_price, date, capital)
+            estimated_shares = self._estimate_entry_shares(
+                capital,
+                open_price,
+                _to_float(signal.get("position_fraction"), 1.0),
+            )
+            entry_fill_price = self._calculate_fill_price(
+                open_price, row, is_buy=True, shares=estimated_shares
+            )
+            position = self._open_position(
+                signal, entry_fill_price, open_price, date, capital
+            )
 
             if position is None:
                 capital_history[entry_idx + 1] = capital
@@ -675,7 +1015,9 @@ class Backtester:
                     trades=trades,
                     ticker=ticker,
                     exit_date=date,
-                    fill_price=self._calculate_fill_price(ref_price, row, is_buy=False, shares=int(position["shares"])),
+                    fill_price=self._calculate_fill_price(
+                        ref_price, row, is_buy=False, shares=int(position["shares"])
+                    ),
                     reference_price=ref_price,
                     reason=same_bar_exit["reason"],
                     verbose=verbose,
@@ -684,8 +1026,12 @@ class Backtester:
                 cursor = entry_idx + 1
                 continue
 
-            exit_idx, exit_reason, reference_price = self._find_exit_index(vectors, entry_idx, position)
-            held_equity = capital + float(position["shares"]) * vectors.closes[entry_idx:]
+            exit_idx, exit_reason, reference_price = self._find_exit_index(
+                vectors, entry_idx, position
+            )
+            held_equity = (
+                capital + float(position["shares"]) * vectors.closes[entry_idx:]
+            )
 
             if exit_idx is None or exit_reason is None or reference_price is None:
                 capital_history[entry_idx + 1 :] = held_equity
@@ -699,7 +1045,12 @@ class Backtester:
                     trades=trades,
                     ticker=ticker,
                     exit_date=last_date,
-                    fill_price=self._calculate_fill_price(last_close, last_row, is_buy=False, shares=int(position["shares"])),
+                    fill_price=self._calculate_fill_price(
+                        last_close,
+                        last_row,
+                        is_buy=False,
+                        shares=int(position["shares"]),
+                    ),
                     reference_price=last_close,
                     reason="FINAL_CLOSE",
                     verbose=False,
@@ -708,7 +1059,9 @@ class Backtester:
                 cursor = len(df)
                 break
 
-            capital_history[entry_idx + 1 : exit_idx + 1] = held_equity[: exit_idx - entry_idx]
+            capital_history[entry_idx + 1 : exit_idx + 1] = held_equity[
+                : exit_idx - entry_idx
+            ]
             exit_row = df.iloc[exit_idx]
             exit_date = _to_datetime(vectors.dates[exit_idx])
             capital = self._close_position(
@@ -717,7 +1070,12 @@ class Backtester:
                 trades=trades,
                 ticker=ticker,
                 exit_date=exit_date,
-                fill_price=self._calculate_fill_price(reference_price, exit_row, is_buy=False, shares=int(position["shares"])),
+                fill_price=self._calculate_fill_price(
+                    reference_price,
+                    exit_row,
+                    is_buy=False,
+                    shares=int(position["shares"]),
+                ),
                 reference_price=reference_price,
                 reason=exit_reason,
                 verbose=verbose,
@@ -772,14 +1130,20 @@ class Backtester:
 
             if position is None and self._should_enter_on_open(signal):
                 if last_buy_date is None or (date - last_buy_date).days >= 1:
-                    estimated_shares = self._estimate_entry_shares(capital, open_price)
+                    estimated_shares = self._estimate_entry_shares(
+                        capital,
+                        open_price,
+                        _to_float(signal.get("position_fraction"), 1.0),
+                    )
                     entry_fill_price = self._calculate_fill_price(
                         open_price,
                         bar,
                         is_buy=True,
                         shares=estimated_shares,
                     )
-                    position = self._open_position(signal, entry_fill_price, open_price, date, capital)
+                    position = self._open_position(
+                        signal, entry_fill_price, open_price, date, capital
+                    )
                     if position is not None:
                         capital -= position["cost"]
                         last_buy_date = date
@@ -791,7 +1155,9 @@ class Backtester:
                             )
 
             if position is not None:
-                intrabar_exit = self._simulate_intrabar_exit(position, open_price, high_price, low_price, close_price)
+                intrabar_exit = self._simulate_intrabar_exit(
+                    position, open_price, high_price, low_price, close_price
+                )
                 if intrabar_exit is not None:
                     ref_price = intrabar_exit["reference_price"]
                     exit_fill_price = self._calculate_fill_price(
@@ -813,7 +1179,11 @@ class Backtester:
                     )
                     position = None
 
-            equity = capital if position is None else capital + position["shares"] * close_price
+            equity = (
+                capital
+                if position is None
+                else capital + position["shares"] * close_price
+            )
             capital_history.append(equity)
 
         if position is not None:
@@ -840,7 +1210,9 @@ class Backtester:
 
         return self._build_result(ticker, df, capital, trades, capital_history)
 
-    def _build_signal_context(self, ticker: str, history: pd.DataFrame) -> dict[str, float | bool]:
+    def _build_signal_context(
+        self, ticker: str, history: pd.DataFrame
+    ) -> dict[str, float | bool]:
         if self.signal_builder is not None:
             return self.signal_builder(ticker, history)
         score = self._calculate_score(history)
@@ -848,13 +1220,75 @@ class Backtester:
         stop_loss = _to_float(history.iloc[-1].get("stop_loss_atr"), last_close * 0.95)
         risk_per_share = max(last_close - stop_loss, last_close * 0.01)
         target_price = max(last_close + risk_per_share * self.target_rr, last_close)
-        return {
+        signal: dict[str, float | bool] = {
             "enter": score >= self.buy_threshold,
             "exit": score <= self.sell_threshold,
             "score": score,
             "stop_loss": stop_loss,
             "target_price": target_price,
         }
+        signal.update(self._meta_signal_fields(history, score, stop_loss, target_price))
+        return signal
+
+    def _meta_signal_fields(
+        self,
+        history: pd.DataFrame,
+        score: float,
+        stop_loss: float,
+        target_price: float,
+    ) -> dict[str, float | bool]:
+        if self.meta_model is None or history.empty:
+            return {}
+        last = history.iloc[-1]
+        last_close = _to_float(last.get("close"))
+        if last_close <= 0:
+            return {}
+        risk_per_share = max(last_close - stop_loss, last_close * 0.01)
+        reward_per_share = max(target_price - last_close, 0.0)
+        reward_to_risk = (
+            reward_per_share / risk_per_share if risk_per_share > 0 else 0.0
+        )
+        ema_long = _to_float(last.get(f"ema_{settings.EMA_LONG}"), last_close)
+        probability = float(
+            self.meta_model.predict_probability(
+                {
+                    "score": score,
+                    "adx": _to_float(last.get("adx")),
+                    "rsi": _to_float(last.get("rsi")),
+                    "volume_ratio": _to_float(last.get("volume_ratio")),
+                    "atr_pct": _to_float(last.get("atr")) / last_close
+                    if last_close > 0
+                    else 0.0,
+                    "risk_reward_ratio": reward_to_risk,
+                    "volatility_scale": 1.0,
+                    "correlation_scale": 1.0,
+                    "trend_bias": 1.0 if score > 0 else -1.0 if score < 0 else 0.0,
+                    "close_vs_ema_long": (last_close / ema_long) - 1.0
+                    if ema_long > 0
+                    else 0.0,
+                }
+            )
+        )
+        fields: dict[str, float | bool] = {"signal_probability": probability}
+        if self.mode is BacktestMode.META_FILTER_FIXED_SIZE:
+            fields["enter"] = bool(
+                score >= self.buy_threshold and probability >= self.min_probability
+            )
+            fields["position_fraction"] = 1.0
+        elif self.mode is BacktestMode.META_FILTER_FRACTIONAL_KELLY:
+            full_kelly = calculate_kelly_fraction(probability, reward_to_risk)
+            kelly_fraction = min(
+                self.max_position_cap_pct / 100.0,
+                max(0.0, full_kelly * self.fractional_kelly),
+            )
+            fields["enter"] = bool(
+                score >= self.buy_threshold
+                and probability >= self.min_probability
+                and kelly_fraction > 0
+            )
+            fields["position_fraction"] = kelly_fraction
+            fields["kelly_fraction"] = kelly_fraction
+        return fields
 
     def _should_enter_on_open(self, signal: dict[str, float | bool]) -> bool:
         return bool(signal.get("enter"))
@@ -903,29 +1337,41 @@ class Backtester:
             if avg_daily_volume <= 0:
                 return model.fixed_slippage_bps
             volume_ratio = shares / avg_daily_volume
-            return min(volume_ratio * model.volume_slippage_bps_per_volume_ratio, model.max_slippage_bps)
+            return min(
+                volume_ratio * model.volume_slippage_bps_per_volume_ratio,
+                model.max_slippage_bps,
+            )
 
         if model.slippage_model == "atr_aware":
             atr_value = self._extract_row_value(row, "atr", 0.0)
             if atr_value <= 0 or price <= 0:
                 return model.fixed_slippage_bps
             atr_ratio = atr_value / price
-            return min(atr_ratio * model.atr_slippage_ratio * 10_000, model.max_slippage_bps)
+            return min(
+                atr_ratio * model.atr_slippage_ratio * 10_000, model.max_slippage_bps
+            )
 
         return model.fixed_slippage_bps
 
-    def _estimate_entry_shares(self, capital: float, price: float) -> int:
+    def _estimate_entry_shares(
+        self, capital: float, price: float, position_fraction: float = 1.0
+    ) -> int:
         if price <= 0:
             return 0
-        return max(int(capital / price), 1)
+        deployable_capital = capital * max(0.0, min(1.0, position_fraction))
+        return max(int(deployable_capital / price), 1) if deployable_capital > 0 else 0
 
-    def _calculate_fill_price(self, price: float, row: Any, is_buy: bool, shares: int) -> float:
+    def _calculate_fill_price(
+        self, price: float, row: Any, is_buy: bool, shares: int
+    ) -> float:
         if self.cost_model is not None:
             slippage_pct = self._calculate_slippage_bps(price, row, shares) / 10_000
             return price * (1 + slippage_pct if is_buy else 1 - slippage_pct)
         return self._calculate_dynamic_slippage(price, row, is_buy=is_buy)
 
-    def _calculate_dynamic_slippage(self, price: float, row: Any, is_buy: bool) -> float:
+    def _calculate_dynamic_slippage(
+        self, price: float, row: Any, is_buy: bool
+    ) -> float:
         """Calculate volatility-aware slippage using ATR when available."""
         base_slippage = float(getattr(settings, "SLIPPAGE_PCT", 0.001))
         penalty_ratio = float(getattr(settings, "SLIPPAGE_PENALTY_RATIO", 0.15))
@@ -959,9 +1405,13 @@ class Backtester:
         capital: float,
     ) -> Optional[dict[str, Any]]:
         entry_price = fill_price
+        position_fraction = max(
+            0.0, min(1.0, _to_float(signal.get("position_fraction"), 1.0))
+        )
+        capital_to_deploy = capital * position_fraction
         if self.cost_model is None:
             unit_cost = entry_price * (1 + self.commission_buy_pct)
-            shares = int(capital / unit_cost) if unit_cost > 0 else 0
+            shares = int(capital_to_deploy / unit_cost) if unit_cost > 0 else 0
             entry_fee_tl = shares * entry_price * self.commission_buy_pct
             entry_bsmv_tl = 0.0
             entry_exchange_fee_tl = 0.0
@@ -972,7 +1422,7 @@ class Backtester:
                 + self.cost_model.exchange_fee_bps
             ) / 10_000
             unit_cost = entry_price * (1 + fee_pct)
-            shares = int(capital / unit_cost) if unit_cost > 0 else 0
+            shares = int(capital_to_deploy / unit_cost) if unit_cost > 0 else 0
             fee_components = self._fee_components(shares * entry_price)
             entry_fee_tl = fee_components["commission"]
             entry_bsmv_tl = fee_components["bsmv"]
@@ -983,7 +1433,12 @@ class Backtester:
         if self.cost_model is None:
             cost = shares * unit_cost
         else:
-            cost = shares * entry_price + entry_fee_tl + entry_bsmv_tl + entry_exchange_fee_tl
+            cost = (
+                shares * entry_price
+                + entry_fee_tl
+                + entry_bsmv_tl
+                + entry_exchange_fee_tl
+            )
         entry_slippage_tl = shares * max(entry_price - reference_price, 0.0)
         return {
             "entry_date": entry_date,
@@ -994,10 +1449,13 @@ class Backtester:
             "stop_loss": _to_float(signal.get("stop_loss"), entry_price * 0.95),
             "target_price": _to_float(signal.get("target_price"), 0.0),
             "score": _to_float(signal.get("score"), 0.0),
+            "signal_probability": signal.get("signal_probability"),
+            "position_fraction": position_fraction,
             "entry_fee_tl": entry_fee_tl,
             "entry_bsmv_tl": entry_bsmv_tl,
             "entry_exchange_fee_tl": entry_exchange_fee_tl,
             "entry_slippage_tl": entry_slippage_tl,
+            "entry_notional_tl": shares * entry_price,
         }
 
     def _simulate_intrabar_exit(
@@ -1074,13 +1532,20 @@ class Backtester:
         profit_tl = revenue - position["cost"]
         profit_pct = (profit_tl / position["cost"]) * 100 if position["cost"] else 0.0
         holding_days = max((exit_date - position["entry_date"]).days, 0)
-        gross_profit_tl = position["shares"] * (reference_price - position["reference_entry_price"])
+        gross_profit_tl = position["shares"] * (
+            reference_price - position["reference_entry_price"]
+        )
         exit_slippage_tl = position["shares"] * max(reference_price - fill_price, 0.0)
         total_commission_tl = position["entry_fee_tl"] + exit_fee_tl
         total_bsmv_tl = position["entry_bsmv_tl"] + exit_bsmv_tl
         total_exchange_fee_tl = position["entry_exchange_fee_tl"] + exit_exchange_fee_tl
         total_slippage_tl = position["entry_slippage_tl"] + exit_slippage_tl
-        total_cost_tl = total_commission_tl + total_bsmv_tl + total_exchange_fee_tl + total_slippage_tl
+        total_cost_tl = (
+            total_commission_tl
+            + total_bsmv_tl
+            + total_exchange_fee_tl
+            + total_slippage_tl
+        )
 
         trades.append(
             BacktestTrade(
@@ -1095,11 +1560,22 @@ class Backtester:
                 holding_days=holding_days,
                 exit_reason=reason,
                 gross_profit_tl=round(gross_profit_tl, 2),
+                entry_notional_tl=round(
+                    float(position.get("entry_notional_tl", 0.0)), 2
+                ),
                 total_cost_tl=round(total_cost_tl, 2),
                 commission_tl=round(total_commission_tl, 2),
                 bsmv_tl=round(total_bsmv_tl, 2),
                 exchange_fee_tl=round(total_exchange_fee_tl, 2),
                 slippage_tl=round(total_slippage_tl, 2),
+                signal_probability=(
+                    round(_to_float(cast(Any, position.get("signal_probability"))), 4)
+                    if position.get("signal_probability") is not None
+                    else None
+                ),
+                position_fraction=round(
+                    float(position.get("position_fraction", 1.0)), 4
+                ),
             )
         )
 
@@ -1128,7 +1604,9 @@ class Backtester:
             avg_holding = round(float(np.mean(holding_days)), 1)
             total_days = (_to_datetime(df.index[-1]) - _to_datetime(df.index[0])).days
             if total_days > 0:
-                idle_ratio = round((total_days - sum(holding_days)) / total_days * 100, 1)
+                idle_ratio = round(
+                    (total_days - sum(holding_days)) / total_days * 100, 1
+                )
 
         self.avg_holding_days = avg_holding
         logger.info(f"  📊 Ort. holding: {avg_holding} gün, Idle: %{idle_ratio}")
@@ -1159,8 +1637,15 @@ class Backtester:
             sharpe_ratio=summary["sharpe_ratio"],
             sortino_ratio=summary["sortino_ratio"],
             cagr=summary["cagr"],
+            calmar_ratio=summary["calmar_ratio"],
             profit_factor=summary["profit_factor"],
             avg_trade_pct=summary["avg_trade_pct"],
+            exposure_pct=summary["exposure_pct"],
+            turnover_ratio=summary["turnover_ratio"],
+            tail_loss_pct=summary["tail_loss_pct"],
+            longest_loss_streak=summary["longest_loss_streak"],
+            probability_diagnostics=summary["probability_diagnostics"],
+            mode=self.mode.value,
             cost_breakdown=cast(CostBreakdown, summary["cost_breakdown"]),
             trades=trades,
         )
@@ -1229,16 +1714,26 @@ class StrategyBacktester:
             "target_price": 0.0,
         }
 
-    def run(self, ticker: str, df: pd.DataFrame, verbose: bool = False) -> Optional[BacktestResult]:
+    def run(
+        self, ticker: str, df: pd.DataFrame, verbose: bool = False
+    ) -> Optional[BacktestResult]:
         self._enriched_cache = TechnicalIndicators().add_all(df.copy())
 
-        def signal_builder(ticker: str, history: pd.DataFrame) -> dict[str, float | bool]:
+        def signal_builder(
+            ticker: str, history: pd.DataFrame
+        ) -> dict[str, float | bool]:
             idx = len(history) - 1
-            if self._enriched_cache is None or idx < 0 or idx >= len(self._enriched_cache):
+            if (
+                self._enriched_cache is None
+                or idx < 0
+                or idx >= len(self._enriched_cache)
+            ):
                 return self._empty_signal_context()
 
             enriched_slice = self._enriched_cache.iloc[: idx + 1]
-            signal = self.engine.analyze(ticker, enriched_slice, enforce_sector_limit=False)
+            signal = self.engine.analyze(
+                ticker, enriched_slice, enforce_sector_limit=False
+            )
             if signal is None:
                 return self._empty_signal_context()
             return {
@@ -1283,7 +1778,9 @@ class WalkForwardValidator:
         self.optimizer_factory = optimizer_factory
         self.backtester_factory = backtester_factory
 
-    def _build_windows(self, df: pd.DataFrame) -> list[tuple[pd.DataFrame, pd.DataFrame]]:
+    def _build_windows(
+        self, df: pd.DataFrame
+    ) -> list[tuple[pd.DataFrame, pd.DataFrame]]:
         windows: list[tuple[pd.DataFrame, pd.DataFrame]] = []
         if df.empty:
             return windows
@@ -1300,26 +1797,34 @@ class WalkForwardValidator:
             if test_end > end_date:
                 break
 
-            train_df = df.loc[(df.index >= current_train_start) & (df.index < train_end)]
+            train_df = df.loc[
+                (df.index >= current_train_start) & (df.index < train_end)
+            ]
             test_df = df.loc[(df.index >= train_end) & (df.index < test_end)]
             if not train_df.empty and not test_df.empty:
                 windows.append((train_df, test_df))
 
             if self.mode is WindowMode.ROLLING:
-                current_train_start = current_train_start + pd.DateOffset(months=self.step)
+                current_train_start = current_train_start + pd.DateOffset(
+                    months=self.step
+                )
             else:
                 current_train_start = pd.Timestamp(start_date)
                 current_train_months += self.step
 
         return windows
 
-    def _optimizer(self, ticker: str, train_df: pd.DataFrame, initial_capital: float) -> Any:
+    def _optimizer(
+        self, ticker: str, train_df: pd.DataFrame, initial_capital: float
+    ) -> Any:
         if self.optimizer_factory is not None:
             return self.optimizer_factory(ticker, train_df, initial_capital)
 
         from optimizer import StrategyOptimizer
 
-        return StrategyOptimizer(ticker=ticker, df=train_df, initial_capital=initial_capital)
+        return StrategyOptimizer(
+            ticker=ticker, df=train_df, initial_capital=initial_capital
+        )
 
     def _backtester(self, initial_capital: float, params: Any) -> StrategyBacktester:
         if self.backtester_factory is not None:
@@ -1352,7 +1857,9 @@ class WalkForwardValidator:
 
         for idx, (train_df, test_df) in enumerate(windows, start=1):
             optimizer = self._optimizer(ticker, train_df, initial)
-            best_params, _ = optimizer.random_search(self.param_grid, n_iter=self.optimizer_iterations)
+            best_params, _ = optimizer.random_search(
+                self.param_grid, n_iter=self.optimizer_iterations
+            )
             if best_params is None:
                 continue
 
@@ -1373,7 +1880,11 @@ class WalkForwardValidator:
                     test_period=f"{_to_datetime(test_df.index[0]).strftime('%Y-%m-%d')} -> {_to_datetime(test_df.index[-1]).strftime('%Y-%m-%d')}",
                     train_rows=len(train_df),
                     test_rows=len(test_df),
-                    params={key: value for key, value in params_dict.items() if key in self.param_grid},
+                    params={
+                        key: value
+                        for key, value in params_dict.items()
+                        if key in self.param_grid
+                    },
                     metrics=test_result.to_dict(),
                 )
             )
@@ -1476,7 +1987,9 @@ def calculate_metrics(trades, benchmark_return: Optional[float] = None) -> dict:
     }
 
 
-def generate_report(result: BacktestResult, benchmark_return: Optional[float] = None) -> str:
+def generate_report(
+    result: BacktestResult, benchmark_return: Optional[float] = None
+) -> str:
     metrics = calculate_metrics(result.trades, benchmark_return)
 
     bot_return = result.total_return_pct
@@ -1498,9 +2011,9 @@ def generate_report(result: BacktestResult, benchmark_return: Optional[float] = 
   {emoji} Alfa       : %{alpha:+.2f}
   ─────────────────────────────────────
   Win Rate      : %{result.win_rate:.1f}
-  Ort. R        : {metrics['avg_r']:.2f}
-  Ort. Kazanç    : %{metrics['avg_win']:.2f}
-  Ort. Kayıp    : %{metrics['avg_loss']:.2f}
+  Ort. R        : {metrics["avg_r"]:.2f}
+  Ort. Kazanç    : %{metrics["avg_win"]:.2f}
+  Ort. Kayıp    : %{metrics["avg_loss"]:.2f}
   Max Drawdown  : %{result.max_drawdown_pct:.2f}
   Sharpe       : {result.sharpe_ratio:.2f}
 ╚══════════════════════════════════════════╝

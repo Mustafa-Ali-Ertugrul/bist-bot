@@ -35,6 +35,7 @@ class SignalType(Enum):
     @property
     def display(self) -> str:
         from bist_bot.locales import DEFAULT_LOCALE
+
         return get_message(self.key, DEFAULT_LOCALE)
 
     @staticmethod
@@ -57,6 +58,8 @@ class Signal:
     stop_loss: float = 0.0
     target_price: float = 0.0
     position_size: int | None = None
+    signal_probability: float | None = None
+    kelly_fraction: float | None = None
     timestamp: datetime = field(default_factory=datetime.now)
     confidence: str = "confidence.low"
 
@@ -78,6 +81,8 @@ class Signal:
             stop_loss=self.stop_loss,
             target_price=self.target_price,
             position_size=self.position_size,
+            signal_probability=self.signal_probability,
+            kelly_fraction=self.kelly_fraction,
             timestamp=self.timestamp,
             confidence=self.confidence,
         )
@@ -86,17 +91,19 @@ class Signal:
         name = settings.TICKER_NAMES.get(self.ticker, self.ticker)
         reasons_str = "\n    ".join(self.reasons)
         return (
-            f"\n{'='*50}\n"
+            f"\n{'=' * 50}\n"
             f"📊 {name} ({self.ticker})\n"
-            f"{'='*50}\n"
+            f"{'=' * 50}\n"
             f"  Sinyal  : {self.signal_type.display}\n"
             f"  Skor    : {self.score:+.1f}/100\n"
             f"  Fiyat   : ₺{self.price:.2f}\n"
             f"  Güven   : {self.confidence_display}\n"
+            f"  Olasılık: %{(self.signal_probability or 0.0) * 100:.1f}\n"
             f"  Stop-Loss: ₺{self.stop_loss:.2f}\n"
             f"  Hedef   : ₺{self.target_price:.2f}\n"
             f"  Lot     : {self.position_size if self.position_size is not None else '-'}\n"
+            f"  Kelly   : %{(self.kelly_fraction or 0.0) * 100:.2f}\n"
             f"  Nedenler:\n    {reasons_str}\n"
             f"  Zaman   : {self.timestamp.strftime('%d.%m.%Y %H:%M')}\n"
-            f"{'='*50}"
+            f"{'=' * 50}"
         )
