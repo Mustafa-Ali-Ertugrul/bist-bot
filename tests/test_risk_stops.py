@@ -6,7 +6,6 @@ import os
 import sys
 
 import pandas as pd
-import pytest
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:
@@ -42,7 +41,9 @@ class TestCalcAtrLevels:
     def test_atr_levels_calculation(self):
         df = _make_frame([100.0] * 15, atr=2.0)
         levels = RiskLevels()
-        result = calc_atr_levels(df, price=100.0, levels=levels, atr_stop_mult=2.0, atr_target_mult=3.0)
+        result = calc_atr_levels(
+            df, price=100.0, levels=levels, atr_stop_mult=2.0, atr_target_mult=3.0
+        )
 
         assert result.stop_atr == 96.0
         assert result.target_atr == 106.0
@@ -50,7 +51,9 @@ class TestCalcAtrLevels:
     def test_atr_none_returns_unchanged_levels(self):
         df = _make_frame([100.0] * 15, atr=None)
         levels = RiskLevels()
-        result = calc_atr_levels(df, price=100.0, levels=levels, atr_stop_mult=2.0, atr_target_mult=3.0)
+        result = calc_atr_levels(
+            df, price=100.0, levels=levels, atr_stop_mult=2.0, atr_target_mult=3.0
+        )
 
         assert result.stop_atr == 0.0
         assert result.target_atr == 0.0
@@ -97,14 +100,18 @@ class TestCalcFibonacci:
 class TestCalcFixedPercent:
     def test_fixed_percent_levels(self):
         levels = RiskLevels()
-        result = calc_fixed_percent(price=100.0, levels=levels, fixed_stop_pct=5.0, fixed_target_pct=10.0)
+        result = calc_fixed_percent(
+            price=100.0, levels=levels, fixed_stop_pct=5.0, fixed_target_pct=10.0
+        )
 
         assert result.stop_percent == 95.0
         assert result.target_percent == 110.0
 
     def test_fixed_percent_negative_prices(self):
         levels = RiskLevels()
-        result = calc_fixed_percent(price=50.0, levels=levels, fixed_stop_pct=5.0, fixed_target_pct=10.0)
+        result = calc_fixed_percent(
+            price=50.0, levels=levels, fixed_stop_pct=5.0, fixed_target_pct=10.0
+        )
 
         assert result.stop_percent == 47.5
         assert result.target_percent == 55.0

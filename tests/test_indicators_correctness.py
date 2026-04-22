@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import numpy as np
 import pandas as pd
-import pytest
 
 from bist_bot.indicators import TechnicalIndicators
 
@@ -89,7 +87,14 @@ class TestRSI:
         df = _base_frame()
         result = TechnicalIndicators.add_rsi(df, period=14)
 
-        valid_zones = {"UNKNOWN", "OVERSOLD", "NEAR_OVERSOLD", "NEUTRAL", "NEAR_OVERBOUGHT", "OVERBOUGHT"}
+        valid_zones = {
+            "UNKNOWN",
+            "OVERSOLD",
+            "NEAR_OVERSOLD",
+            "NEUTRAL",
+            "NEAR_OVERBOUGHT",
+            "OVERBOUGHT",
+        }
         actual_zones = set(result["rsi_zone"].unique())
         assert actual_zones.issubset(valid_zones)
 
