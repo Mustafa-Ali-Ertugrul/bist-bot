@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, NamedTuple, Optional
 
 from sqlalchemy import select
@@ -13,7 +13,7 @@ class PaperTrade(NamedTuple):
     ticker: str
     signal_type: str
     signal_price: float
-    signal_time: str
+    signal_time: datetime
     stop_loss: Optional[float]
     target_price: Optional[float]
     close_price: Optional[float]
@@ -23,9 +23,9 @@ class PaperTrade(NamedTuple):
     outcome: str
     actual_profit_pct: Optional[float]
     exit_price: Optional[float]
-    exit_date: Optional[str]
+    exit_date: Optional[datetime]
     close_reason: Optional[str]
-    close_time: Optional[str]
+    close_time: Optional[datetime]
 
 
 class PortfolioRepository:
@@ -37,7 +37,7 @@ class PortfolioRepository:
         ticker: str,
         signal_type: str,
         signal_price: float,
-        signal_time: Optional[str] = None,
+        signal_time: Optional[datetime] = None,
         stop_loss: Optional[float] = None,
         target_price: Optional[float] = None,
         score: int = 0,
@@ -49,8 +49,7 @@ class PortfolioRepository:
                     ticker=ticker,
                     signal_type=signal_type,
                     signal_price=signal_price,
-                    signal_time=signal_time
-                    or datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    signal_time=signal_time or datetime.now(UTC),
                     stop_loss=stop_loss,
                     target_price=target_price,
                     score=score,
@@ -103,7 +102,7 @@ class PortfolioRepository:
                 ticker=row.ticker,
                 signal_type=row.signal_type,
                 signal_price=row.signal_price,
-                signal_time=row.signal_time,
+                signal_time=row.signal_time if isinstance(row.signal_time, datetime) else datetime.now(UTC),
                 stop_loss=row.stop_loss,
                 target_price=row.target_price,
                 close_price=row.close_price,
@@ -113,9 +112,9 @@ class PortfolioRepository:
                 outcome=row.outcome,
                 actual_profit_pct=row.actual_profit_pct,
                 exit_price=row.exit_price,
-                exit_date=row.exit_date,
+                exit_date=row.exit_date if isinstance(row.exit_date, datetime) else None,
                 close_reason=row.close_reason,
-                close_time=row.close_time,
+                close_time=row.close_time if isinstance(row.close_time, datetime) else None,
             )
             for row in rows
         ]
@@ -127,7 +126,7 @@ class PortfolioRepository:
         self,
         ticker: str,
         exit_price: float,
-        exit_date: str,
+        close_reason: str,
         actual_profit_pct: Optional[float] = None,
     ) -> None:
         def _write(session):
@@ -142,8 +141,11 @@ class PortfolioRepository:
             )
             if trade is None:
                 return
+            now = datetime.now(UTC)
             trade.exit_price = exit_price
-            trade.exit_date = exit_date
+            trade.exit_date = now
+            trade.close_reason = close_reason
+            trade.close_time = now
             trade.outcome = "CLOSED"
             trade.actual_profit_pct = actual_profit_pct
             return None

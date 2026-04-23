@@ -33,8 +33,8 @@ logger = get_logger(__name__, component="dashboard")
 
 
 class _SilentNotifier:
-    def send_message(self, text: str, parse_mode: str = "HTML") -> bool:
-        _ = text, parse_mode
+    def send_message(self, message_text: str, parse_mode: str = "HTML") -> bool:
+        _ = message_text, parse_mode
         return True
 
     def send_signal(self, signal) -> bool:
@@ -72,6 +72,15 @@ def _coerce_bool(value: Any) -> bool:
 
 def _cors_origins() -> list[str]:
     return [origin for origin in settings.CORS_ORIGINS if origin and origin != "*"]
+
+
+def _auth_rate_limit_key() -> str:
+    payload = request.get_json(silent=True) or {}
+    email = str(payload.get("email", "")).strip().lower()
+    remote_addr = get_remote_address()
+    if email:
+        return f"{remote_addr}:{email}"
+    return str(remote_addr)
 
 
 def create_dashboard_app(
@@ -149,7 +158,7 @@ def create_dashboard_app(
                     {
                         "id": int(row["id"]),
                         "password_hash": upgraded_hash,
-                        "updated_at": datetime.now(TR).isoformat(),
+                        "updated_at": datetime.now(TR),
                     },
                 )
         return True
@@ -163,7 +172,7 @@ def create_dashboard_app(
         if len(password) < 8:
             return False, get_message("api.password_too_short")
 
-        timestamp = datetime.now(TR).isoformat()
+        timestamp = datetime.now(TR)
         try:
             with manager.engine.begin() as conn:
                 conn.execute(
@@ -219,7 +228,7 @@ def create_dashboard_app(
         )
 
     @app.route("/api/auth/login", methods=["POST"])
-    @limiter.limit("5 per minute")
+    @limiter.limit("5 per minute", key_func=_auth_rate_limit_key)
     def api_auth_login():
         payload = request.get_json(silent=True) or {}
         email = str(payload.get("email", "")).strip().lower()
@@ -233,7 +242,7 @@ def create_dashboard_app(
         return jsonify({"status": "ok", "access_token": token, "expires_in_hours": 12})
 
     @app.route("/api/auth/register", methods=["POST"])
-    @limiter.limit("5 per minute")
+    @limiter.limit("5 per minute", key_func=_auth_rate_limit_key)
     def api_auth_register():
         payload = request.get_json(silent=True) or {}
         email = str(payload.get("email", "")).strip().lower()

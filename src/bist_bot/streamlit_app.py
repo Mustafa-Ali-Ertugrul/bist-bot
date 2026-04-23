@@ -1,21 +1,23 @@
 """Streamlit entry point for the interactive operator dashboard."""
 
+from __future__ import annotations
+
 import streamlit as st
 
 from bist_bot.state.session_state import init_session_state
+from bist_bot.ui.components.app_shell import get_active_page, render_shell
 from bist_bot.ui.pages.analyze_page import render_analyze_page
-from bist_bot.ui.pages.backtest_page import render_backtest_page
 from bist_bot.ui.pages.overview_page import render_overview_page
-from bist_bot.ui.pages.portfolio_page import render_portfolio_page
 from bist_bot.ui.pages.settings_page import render_settings_page
 from bist_bot.ui.pages.signals_page import render_signals_page
 from bist_bot.ui.runtime import api_request, prepare_streamlit_runtime
+from bist_bot.ui.runtime_styles import inject_styles
 
 st.set_page_config(
     page_title="BIST Bot",
     page_icon="🤖",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
 
@@ -30,9 +32,35 @@ def _response_message(response, default: str) -> str:
     return default
 
 
+def _handle_query_actions() -> None:
+    action = str(st.query_params.get("action", "")).lower().strip()
+    if action != "logout":
+        return
+    st.session_state.auth_token = None
+    st.session_state.auth_email = ""
+    st.session_state.is_authenticated = False
+    try:
+        del st.query_params["action"]
+    except KeyError:
+        pass
+    st.rerun()
+
+
 def _login_form() -> bool:
-    st.title("BIST Bot Giris")
-    st.caption("Operator paneline erismek icin kimlik dogrulamasi yapin.")
+    st.markdown(
+        """
+        <section class="bb-hero bb-hero-secondary">
+          <div class="bb-kicker">BIST Bot Access</div>
+          <div class="bb-title">Operator authentication for the premium trading console</div>
+          <div class="bb-subtitle">Neon dark fintech arayuzu artik giris ekraninda da devam ediyor. Hesabinizla oturum acip dashboard, signals, analysis ve settings yuzeylerine erisebilirsiniz.</div>
+          <div class="bb-chip-row">
+            <span class="bb-chip">Secure JWT Access</span>
+            <span class="bb-chip bb-chip-secondary">Mobile-first UI</span>
+          </div>
+        </section>
+        """,
+        unsafe_allow_html=True,
+    )
     login_tab, register_tab = st.tabs(["Giris", "Kaydol"])
 
     with login_tab:
@@ -106,35 +134,23 @@ def _login_form() -> bool:
 def main() -> None:
     """Render the Streamlit UI pages and initialize shared runtime state."""
     init_session_state()
+    _handle_query_actions()
     if not st.session_state.get("is_authenticated"):
+        inject_styles()
         _login_form()
         return
 
     prepare_streamlit_runtime()
 
-    st.sidebar.caption(f"Oturum: {st.session_state.get('auth_email', '')}")
-    if st.sidebar.button("Logout", use_container_width=True):
-        st.session_state.auth_token = None
-        st.session_state.auth_email = ""
-        st.session_state.is_authenticated = False
-        st.rerun()
+    page = get_active_page()
+    render_shell(page, email=st.session_state.get("auth_email", ""))
 
-    page = st.sidebar.radio(
-        "Navigasyon",
-        options=["Overview", "Analyze", "Portfolio", "Signals", "Backtest", "Settings"],
-        index=0,
-    )
-
-    if page == "Overview":
+    if page == "dashboard":
         render_overview_page()
-    elif page == "Analyze":
-        render_analyze_page()
-    elif page == "Portfolio":
-        render_portfolio_page()
-    elif page == "Signals":
+    elif page == "signals":
         render_signals_page()
-    elif page == "Backtest":
-        render_backtest_page()
+    elif page == "analysis":
+        render_analyze_page()
     else:
         render_settings_page()
 

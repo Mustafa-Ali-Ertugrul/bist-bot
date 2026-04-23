@@ -194,6 +194,16 @@ def test_engine_uses_configured_sideways_and_momentum_thresholds():
     assert engine.MOMENTUM_CONFIRMATION == 6.5
 
 
+def test_engine_filters_when_adx_is_missing():
+    engine = BiasControlledStrategyEngine(TrendBias.LONG)
+    trigger_df = build_signal_frame()
+    trigger_df.loc[:, "adx"] = float("nan")
+
+    signal = engine.analyze("TEST.IS", trigger_df)
+
+    assert signal is None
+
+
 def test_score_classification_full_range():
     engine = StrategyEngine()
     test_cases = [

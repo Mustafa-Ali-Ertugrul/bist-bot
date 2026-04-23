@@ -1,17 +1,23 @@
 """Scan orchestration service shared by CLI and dashboard flows."""
 
 import time
-from typing import Any, cast
+from typing import cast
 
 from bist_bot.app_logging import get_logger
 from bist_bot.app_metrics import inc_counter, set_gauge
-from bist_bot.config.settings import settings as default_settings
+from bist_bot.config.settings import Settings, settings as default_settings
+from bist_bot.contracts import (
+    DataFetcherProtocol,
+    NotifierProtocol,
+    SignalRepositoryProtocol,
+    StrategyEngineProtocol,
+)
+from bist_bot.contracts import ExecutionProviderProtocol
 from bist_bot.services.execution_service import ExecutionService
 from bist_bot.services.notification_service import NotificationDispatchService
 from bist_bot.services.paper_trade_service import PaperTradeService
 from bist_bot.services.signal_change_service import SignalChangeService
 from bist_bot.strategy.signal_models import Signal, SignalType
-
 
 logger = get_logger(__name__, component="scanner")
 
@@ -19,12 +25,12 @@ logger = get_logger(__name__, component="scanner")
 class ScanService:
     def __init__(
         self,
-        fetcher,
-        engine,
-        notifier,
-        db,
-        broker=None,
-        settings: Any | None = None,
+        fetcher: DataFetcherProtocol,
+        engine: StrategyEngineProtocol,
+        notifier: NotifierProtocol,
+        db: SignalRepositoryProtocol,
+        broker: ExecutionProviderProtocol | None = None,
+        settings: Settings | None = None,
         signal_change_service: SignalChangeService | None = None,
         execution_service: ExecutionService | None = None,
         paper_trade_service: PaperTradeService | None = None,

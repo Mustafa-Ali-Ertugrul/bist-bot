@@ -40,10 +40,14 @@ def score_momentum(params, last, prev) -> tuple[float, list[str]]:
         stoch_cross = last.get("stoch_cross", "NONE")
         if stoch_cross == "BULLISH":
             score += params.score_stoch_cross
-            reasons.append(f"Stochastic Bullish Cross (K:{stoch_k:.0f}, D:{stoch_d:.0f})")
+            reasons.append(
+                f"Stochastic Bullish Cross (K:{stoch_k:.0f}, D:{stoch_d:.0f})"
+            )
         elif stoch_cross == "BEARISH":
             score -= params.score_stoch_cross
-            reasons.append(f"Stochastic Bearish Cross (K:{stoch_k:.0f}, D:{stoch_d:.0f})")
+            reasons.append(
+                f"Stochastic Bearish Cross (K:{stoch_k:.0f}, D:{stoch_d:.0f})"
+            )
 
         if stoch_k < 20 and stoch_d < 20:
             score += params.score_stoch_extreme
@@ -90,7 +94,7 @@ def score_trend(params, last, prev) -> tuple[float, list[str]]:
         if above_ema and not last_above_ema:
             reasons.append(f"Fiyat EMA{settings.EMA_LONG}'i kesti (yukarı)")
         elif above_ema:
-            if adx >= getattr(settings, "ADX_THRESHOLD", 20):
+            if pd.notna(adx) and adx >= getattr(settings, "ADX_THRESHOLD", 20):
                 score += params.score_ema_cross
                 reasons.append(f"yükseliş trendi (EMA{settings.EMA_LONG} üzerinde)")
         elif not above_ema and last_above_ema:
@@ -153,7 +157,9 @@ def score_trend(params, last, prev) -> tuple[float, list[str]]:
         if adx > 25:
             if plus_di > minus_di:
                 score += params.score_adx_strong
-                reasons.append(f"Güçlü yükseliş trendi (ADX:{adx:.0f}, +DI>{minus_di:.0f})")
+                reasons.append(
+                    f"Güçlü yükseliş trendi (ADX:{adx:.0f}, +DI>{minus_di:.0f})"
+                )
             else:
                 score -= params.score_adx_strong
                 reasons.append(f"Güçlü düşüş trendi (ADX:{adx:.0f}, -DI>{plus_di:.0f})")
@@ -195,7 +201,9 @@ def score_volume(params, last) -> tuple[float, list[str]]:
     vol_trend = last.get("volume_trend", "FLAT")
 
     if vol_spike:
-        price_change = last["close"] - last.get("_prev_close_for_scoring", last["close"])
+        price_change = last["close"] - last.get(
+            "_prev_close_for_scoring", last["close"]
+        )
         if price_change > 0:
             score += params.score_volume_spike
             reasons.append(f"Hacim patlaması + yükseliş ({vol_ratio:.1f}x)")

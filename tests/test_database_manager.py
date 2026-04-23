@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import sys
 from datetime import datetime
+from unittest.mock import MagicMock, patch
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:
@@ -44,3 +45,29 @@ def test_signal_database_saves_and_reads_signal(tmp_path):
     assert latest["signal_type"] == SignalType.BUY.value
     assert latest["conditions"] == ["RSI low", "Volume confirmation"]
     assert latest["target_price"] == 135.0
+
+
+def test_database_manager_uses_database_url_for_non_sqlite_backends():
+    mock_engine = MagicMock()
+    mock_engine.begin.return_value.__enter__.return_value = MagicMock()
+    mock_engine.begin.return_value.__exit__.return_value = False
+    mock_session_factory = MagicMock()
+
+    with patch(
+        "bist_bot.db.database.create_engine", return_value=mock_engine
+    ) as create_engine_mock:
+        with patch(
+            "bist_bot.db.database.scoped_session", return_value=mock_session_factory
+        ):
+            with patch.object(DatabaseManager, "initialize", return_value=None):
+                manager = DatabaseManager(
+                    database_url="postgresql+psycopg2://user:pass@host/db"
+                )
+
+    assert manager.get_journal_mode() == "n/a"
+    create_engine_mock.assert_called_once()
+    engine_url = create_engine_mock.call_args.args[0]
+    engine_kwargs = create_engine_mock.call_args.kwargs
+    assert engine_url == "postgresql+psycopg2://user:pass@host/db"
+    assert engine_kwargs["pool_pre_ping"] is True
+    assert "connect_args" not in engine_kwargs

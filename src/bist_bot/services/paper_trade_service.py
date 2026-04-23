@@ -29,7 +29,7 @@ class PaperTradeService:
                 ticker=signal.ticker,
                 signal_type=signal.signal_type.value,
                 signal_price=signal.price,
-                signal_time=signal.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+                signal_time=signal.timestamp,
                 stop_loss=signal.stop_loss,
                 target_price=signal.target_price,
                 score=int(signal.score),
@@ -59,14 +59,14 @@ class PaperTradeService:
             if current is None:
                 continue
             if trade.stop_loss and current <= trade.stop_loss:
-                self.db.close_paper_trade(trade.id, current, "STOP_HIT")
+                self.db.close_paper_trade(trade.ticker, current, "STOP_HIT")
                 logger.info(
                     "paper_trade_stop_hit",
                     ticker=trade.ticker,
                     current_price=round(current, 2),
                 )
             elif trade.target_price and current >= trade.target_price:
-                self.db.close_paper_trade(trade.id, current, "TARGET_HIT")
+                self.db.close_paper_trade(trade.ticker, current, "TARGET_HIT")
                 logger.info(
                     "paper_trade_target_hit",
                     ticker=trade.ticker,

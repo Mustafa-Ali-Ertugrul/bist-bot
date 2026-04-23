@@ -72,7 +72,7 @@ def load_settings() -> dict:
             data = json.load(f)
         return _merge_with_defaults(data)
     except Exception as e:
-        logger.warning(f"Settings load failed: {e}, using defaults")
+        logger.warning("settings_load_failed", error=str(e))
         return _deepcopy_defaults()
 
 
@@ -87,7 +87,7 @@ def save_settings(settings: dict) -> bool:
             json.dump(settings, f, indent=2, ensure_ascii=False)
         return True
     except Exception as e:
-        logger.error(f"Settings save failed: {e}")
+        logger.error("settings_save_failed", error=str(e))
         return False
 
 
@@ -98,7 +98,7 @@ def reset_settings() -> bool:
             CONFIG_FILE.unlink()
         return True
     except Exception as e:
-        logger.error(f"Settings reset failed: {e}")
+        logger.error("settings_reset_failed", error=str(e))
         return False
 
 

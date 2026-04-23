@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import logging
 from contextlib import contextmanager
-from typing import Any, Optional, cast
+from datetime import datetime, timedelta, timezone
+from typing import Optional, cast, Protocol
 
 import pandas as pd
 
@@ -15,6 +16,11 @@ from bist_bot.risk import sizing as sizing_helpers
 from bist_bot.risk import stops as stop_helpers
 
 logger = logging.getLogger(__name__)
+TR = timezone(timedelta(hours=3))
+
+
+class _HasActivePositions(Protocol):
+    def get_active_position_tickers(self) -> list[str]: ...
 
 
 class RiskManager:
@@ -26,7 +32,7 @@ class RiskManager:
         atr_target_multiplier: float = 3.0,
         fixed_stop_pct: float = 5.0,
         fixed_target_pct: float = 8.0,
-        position_repository: Any | None = None,
+        position_repository: _HasActivePositions | None = None,
     ):
         if capital is not None and capital <= 0:
             raise ValueError("capital must be greater than zero")
@@ -73,6 +79,16 @@ class RiskManager:
         )
         self.daily_loss_cap_pct = float(getattr(settings, "DAILY_LOSS_CAP_PCT", 0.0))
         self.daily_realized_pnl = 0.0
+        self._daily_realized_pnl_date = self._today()
+
+    def _today(self):
+        return datetime.now(TR).date()
+
+    def _roll_daily_realized_pnl_if_needed(self) -> None:
+        today = self._today()
+        if today != self._daily_realized_pnl_date:
+            self.daily_realized_pnl = 0.0
+            self._daily_realized_pnl_date = today
 
     def check_sector_limit(self, ticker: str) -> bool:
         sector = getattr(settings, "SECTOR_MAP", {}).get(ticker)
@@ -102,9 +118,11 @@ class RiskManager:
         self._global_corr_cache = None
 
     def set_daily_realized_pnl(self, amount: float) -> None:
+        self._roll_daily_realized_pnl_if_needed()
         self.daily_realized_pnl = float(amount)
 
     def daily_loss_limit_reached(self) -> bool:
+        self._roll_daily_realized_pnl_if_needed()
         if self.daily_loss_cap_pct <= 0:
             return False
         return self.daily_realized_pnl <= -(

@@ -58,7 +58,7 @@ def get_bist100_tickers(rate_limiter: RateLimiterProtocol, force_refresh: bool =
         cached = _BIST100_CACHE
         cached_time = _BIST100_CACHE_TIME
         if cached and cached_time and (datetime.now() - cached_time).total_seconds() < 3600:
-            logger.info(f"Demo/watchlist cache hit: {len(cached)} tickers")
+            logger.info("watchlist_cache_hit", ticker_count=len(cached))
             return cached
 
     tickers: list[str] = []
@@ -81,17 +81,17 @@ def get_bist100_tickers(rate_limiter: RateLimiterProtocol, force_refresh: bool =
                     if symbol.endswith(".IS"):
                         tickers.append(symbol)
     except Exception as exc:
-        logger.warning(f"Demo/watchlist dynamic fetch hatasi: {exc}")
+        logger.warning("watchlist_dynamic_fetch_error", error=str(exc))
 
     tickers = clean_ticker_list(tickers)
 
     if len(tickers) >= 50:
         _BIST100_CACHE = tickers
         _BIST100_CACHE_TIME = datetime.now()
-        logger.info(f"Demo/watchlist dynamic yüklendi: {len(tickers)} hisse")
+        logger.info("watchlist_dynamic_loaded", ticker_count=len(tickers))
         return tickers
 
-    logger.info(f"Demo/watchlist dynamic yetersiz ({len(tickers)}), fallback kullaniliyor")
+    logger.info("watchlist_dynamic_insufficient", ticker_count=len(tickers))
     if BIST100_TICKERS:
         fallback_clean = clean_ticker_list(BIST100_TICKERS)
         _BIST100_CACHE = fallback_clean

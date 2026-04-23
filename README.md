@@ -70,7 +70,16 @@ Ortam degiskenleri icin `.env.example` dosyasini baz alarak `.env` olusturabilir
 ```env
 TELEGRAM_BOT_TOKEN=...
 TELEGRAM_CHAT_ID=...
+ADMIN_BOOTSTRAP_EMAIL=admin@bistbot.local
+ADMIN_BOOTSTRAP_PASSWORD_HASH=<scrypt_hash>
+INITIAL_CAPITAL=100000
 ```
+
+Onemli notlar:
+
+- Eski `ADMIN_EMAIL` ve `ADMIN_PASSWORD_HASH` env adlari okunmaz; sadece `ADMIN_BOOTSTRAP_EMAIL` ve `ADMIN_BOOTSTRAP_PASSWORD_HASH` kullanilir.
+- `TELEGRAM_MIN_SCORE` varsayilan olarak `STRONG_BUY_THRESHOLD` ile hizalanmistir; varsayilan esik `48`'dir.
+- Cloud Run / Cloud SQL kullaniminda `DATABASE_URL` tercih edin; lokal SQLite fallback icin `DB_PATH` kullanilabilir.
 
 ## Kullanım
 
@@ -178,6 +187,39 @@ gcloud run services update bist-bot-api \
   --region YOUR_REGION \
   --update-env-vars CORS_ORIGINS=https://YOUR_UI_URL
 ```
+
+### Cloud SQL
+
+- `DB_PATH=/tmp/bist_signals.db` sadece gecici/demo kullanim icindir.
+- Kalici ve iki servis tarafindan ortak kullanilan veritabani icin `DATABASE_URL` kullanin.
+- Kod tarafinda `DATABASE_URL` varsa SQLAlchemy dogrudan bu baglantiyle calisir; yoksa SQLite fallback devam eder.
+
+PostgreSQL baglanti string ornegi:
+
+```env
+DATABASE_URL=postgresql+psycopg2://bist_bot_app:YOUR_PASSWORD@/bist_bot?host=/cloudsql/YOUR_PROJECT:YOUR_REGION:YOUR_INSTANCE
+```
+
+Cloud Run servislerine Cloud SQL baglantisi ekleyip `DATABASE_URL` secret olarak verin:
+
+```bash
+gcloud run services update bist-bot-api \
+  --region YOUR_REGION \
+  --add-cloudsql-instances YOUR_PROJECT:YOUR_REGION:YOUR_INSTANCE \
+  --set-secrets DATABASE_URL=database-url:latest,JWT_SECRET_KEY=jwt-secret-key:latest
+
+gcloud run services update bist-bot \
+  --region YOUR_REGION \
+  --add-cloudsql-instances YOUR_PROJECT:YOUR_REGION:YOUR_INSTANCE \
+  --set-secrets DATABASE_URL=database-url:latest \
+  --update-env-vars API_BASE_URL=https://YOUR_API_URL,PYTHONPATH=/app/src
+```
+
+Notlar:
+
+- `DATABASE_URL` verildiginde `DB_PATH` gereksiz hale gelir.
+- UI ve API ayni Cloud SQL instance/database kullandigi icin login ve kaydol verileri ortak olur.
+- Ilk geciste eski SQLite verisini tasimak gerekiyorsa ayri bir migration/export-import adimi planlayin.
 
 ## Official Data Provider
 

@@ -657,36 +657,204 @@ class Backtester:
         )
 
     def _precalculate_signals(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Precompute default backtest signals in a vectorized form."""
+        """Precompute default backtest signals in a vectorized form.
+
+        Aligned with ``strategy.scoring`` / ``StrategyParams`` weights so that
+        the default vectorized backtest path produces scores comparable to the
+        live ``StrategyEngine``.
+        """
+        from bist_bot.strategy.params import StrategyParams
+
         df = df.copy()
+        p = StrategyParams()
         score = np.zeros(len(df), dtype=float)
 
+        # ── Momentum ──────────────────────────────────────────────────
         if "rsi" in df.columns:
-            rsi = cast(pd.Series, df["rsi"])
-            score += np.where(rsi.to_numpy() < settings.RSI_OVERSOLD, 20.0, 0.0)
-            score += np.where(rsi.to_numpy() > settings.RSI_OVERBOUGHT, -20.0, 0.0)
+            rsi = cast(pd.Series, df["rsi"]).to_numpy(dtype=float)
+            score += np.where(rsi < p.rsi_oversold_extreme, p.score_rsi_extreme, 0.0)
+            score += np.where(
+                (rsi >= p.rsi_oversold_extreme) & (rsi < p.rsi_oversold),
+                p.score_rsi_normal, 0.0,
+            )
+            score += np.where(
+                (rsi >= p.rsi_oversold) & (rsi < p.rsi_neutral_low),
+                p.score_rsi_weak_low, 0.0,
+            )
+            score -= np.where(rsi > p.rsi_overbought_extreme, p.score_rsi_extreme, 0.0)
+            score -= np.where(
+                (rsi <= p.rsi_overbought_extreme) & (rsi > p.rsi_overbought),
+                p.score_rsi_normal, 0.0,
+            )
+            score -= np.where(
+                (rsi <= p.rsi_overbought) & (rsi > p.rsi_neutral_high),
+                p.score_rsi_weak_high, 0.0,
+            )
+
+        if "stoch_k" in df.columns and "stoch_d" in df.columns:
+            sk = cast(pd.Series, df["stoch_k"]).to_numpy(dtype=float)
+            sd = cast(pd.Series, df["stoch_d"]).to_numpy(dtype=float)
+            if "stoch_cross" in df.columns:
+                sc = cast(pd.Series, df["stoch_cross"]).astype(str).to_numpy()
+                score += np.where(sc == "BULLISH", p.score_stoch_cross, 0.0)
+                score -= np.where(sc == "BEARISH", p.score_stoch_cross, 0.0)
+            score += np.where(
+                np.isnan(sk) | np.isnan(sd), 0.0,
+                np.where((sk < 20) & (sd < 20), p.score_stoch_extreme, 0.0),
+            )
+            score -= np.where(
+                np.isnan(sk) | np.isnan(sd), 0.0,
+                np.where((sk > 80) & (sd > 80), p.score_stoch_extreme, 0.0),
+            )
+            score += np.where(
+                np.isnan(sk) | np.isnan(sd), 0.0,
+                np.where((sk > sd) & (sk < 50), p.score_stoch_trend, 0.0),
+            )
+            score -= np.where(
+                np.isnan(sk) | np.isnan(sd), 0.0,
+                np.where((sk < sd) & (sk > 50), p.score_stoch_trend, 0.0),
+            )
+
+        if "cci" in df.columns:
+            cci = cast(pd.Series, df["cci"]).to_numpy(dtype=float)
+            score += np.where(cci < -100, p.score_cci_extreme, 0.0)
+            score += np.where((cci >= -100) & (cci < -50), p.score_cci_normal, 0.0)
+            score -= np.where(cci > 100, p.score_cci_extreme, 0.0)
+            score -= np.where((cci <= 100) & (cci > 50), p.score_cci_normal, 0.0)
+
+        # ── Trend ─────────────────────────────────────────────────────
+        ema_long_col = f"ema_{settings.EMA_LONG}"
+        if ema_long_col in df.columns:
+            price = df["close"].to_numpy(dtype=float)
+            ema_long = cast(pd.Series, df[ema_long_col]).to_numpy(dtype=float)
+            above = ~np.isnan(ema_long) & (price > ema_long)
+            score += np.where(above, p.score_ema_cross, 0.0)
+            score -= np.where(~above & ~np.isnan(ema_long), p.score_ema_cross, 0.0)
 
         if "sma_cross" in df.columns:
             sma_cross = cast(pd.Series, df["sma_cross"]).astype(str).to_numpy()
-            score += np.where(sma_cross == "GOLDEN_CROSS", 20.0, 0.0)
-            score += np.where(sma_cross == "DEATH_CROSS", -20.0, 0.0)
+            score += np.where(sma_cross == "GOLDEN_CROSS", p.score_sma_golden_cross, 0.0)
+            score -= np.where(sma_cross == "DEATH_CROSS", p.score_sma_golden_cross, 0.0)
+        else:
+            sma_fast_col = f"sma_{settings.SMA_FAST}"
+            sma_slow_col = f"sma_{settings.SMA_SLOW}"
+            if sma_fast_col in df.columns and sma_slow_col in df.columns:
+                sma_fast = cast(pd.Series, df[sma_fast_col]).to_numpy(dtype=float)
+                sma_slow = cast(pd.Series, df[sma_slow_col]).to_numpy(dtype=float)
+                valid = ~np.isnan(sma_fast) & ~np.isnan(sma_slow)
+                score += np.where(valid & (sma_fast > sma_slow), p.score_sma_trend, 0.0)
+                score -= np.where(valid & (sma_fast <= sma_slow), p.score_sma_trend, 0.0)
 
-        sma_fast_col = f"sma_{settings.SMA_FAST}"
-        sma_slow_col = f"sma_{settings.SMA_SLOW}"
-        if sma_fast_col in df.columns and sma_slow_col in df.columns:
-            sma_fast = cast(pd.Series, df[sma_fast_col]).to_numpy(dtype=float)
-            sma_slow = cast(pd.Series, df[sma_slow_col]).to_numpy(dtype=float)
-            score += np.where(sma_fast > sma_slow, 5.0, -5.0)
+        if "ema_cross" in df.columns:
+            ema_cross = cast(pd.Series, df["ema_cross"]).astype(str).to_numpy()
+            score += np.where(ema_cross == "BULLISH", p.score_ema_cross, 0.0)
+            score -= np.where(ema_cross == "BEARISH", p.score_ema_cross, 0.0)
 
         if "macd_cross" in df.columns:
             macd_cross = cast(pd.Series, df["macd_cross"]).astype(str).to_numpy()
-            score += np.where(macd_cross == "BULLISH", 15.0, 0.0)
-            score += np.where(macd_cross == "BEARISH", -15.0, 0.0)
+            score += np.where(macd_cross == "BULLISH", p.score_macd_cross, 0.0)
+            score -= np.where(macd_cross == "BEARISH", p.score_macd_cross, 0.0)
 
+        if "macd_histogram" in df.columns:
+            hist = cast(pd.Series, df["macd_histogram"]).to_numpy(dtype=float)
+            hist_inc = (
+                cast(pd.Series, df["macd_hist_increasing"]).to_numpy(dtype=bool)
+                if "macd_hist_increasing" in df.columns
+                else np.zeros(len(df), dtype=bool)
+            )
+            score += np.where((hist > 0) & hist_inc, p.score_macd_hist_strong, 0.0)
+            score += np.where((hist > 0) & ~hist_inc, p.score_macd_hist_weak, 0.0)
+            score -= np.where((hist < 0) & ~hist_inc, p.score_macd_hist_strong, 0.0)
+            score -= np.where((hist < 0) & hist_inc, p.score_macd_hist_weak, 0.0)
+
+        if "adx" in df.columns and "plus_di" in df.columns and "minus_di" in df.columns:
+            adx = cast(pd.Series, df["adx"]).to_numpy(dtype=float)
+            plus_di = cast(pd.Series, df["plus_di"]).to_numpy(dtype=float)
+            minus_di = cast(pd.Series, df["minus_di"]).to_numpy(dtype=float)
+            valid = ~np.isnan(adx)
+            strong = valid & (adx > 25)
+            weak = valid & (adx <= 25)
+            score += np.where(strong & (plus_di > minus_di), p.score_adx_strong, 0.0)
+            score -= np.where(strong & (plus_di <= minus_di), p.score_adx_strong, 0.0)
+            score += np.where(weak & (plus_di > minus_di), p.score_adx_weak, 0.0)
+            score -= np.where(weak & (plus_di <= minus_di), p.score_adx_weak, 0.0)
+
+        if "di_cross" in df.columns:
+            di_cross = cast(pd.Series, df["di_cross"]).astype(str).to_numpy()
+            score += np.where(di_cross == "BULLISH", p.score_di_cross, 0.0)
+            score -= np.where(di_cross == "BEARISH", p.score_di_cross, 0.0)
+
+        # ── Volume ────────────────────────────────────────────────────
+        if "volume_sma_20" in df.columns and "volume" in df.columns:
+            vol = cast(pd.Series, df["volume"]).to_numpy(dtype=float)
+            vol_sma = cast(pd.Series, df["volume_sma_20"]).to_numpy(dtype=float)
+            min_ratio = getattr(settings, "VOLUME_CONFIRM_MULTIPLIER", 1.5)
+            valid = ~np.isnan(vol_sma) & (vol_sma > 0)
+            score += np.where(
+                valid & (vol / np.where(vol_sma == 0, 1, vol_sma) >= min_ratio),
+                p.score_volume_confirm, 0.0,
+            )
+
+        if "volume_spike" in df.columns:
+            vol_spike = cast(pd.Series, df["volume_spike"]).to_numpy(dtype=bool)
+            if "_prev_close_for_scoring" in df.columns:
+                price_chg = (
+                    df["close"].to_numpy(dtype=float)
+                    - df["_prev_close_for_scoring"].to_numpy(dtype=float)
+                )
+            else:
+                price_chg = np.zeros(len(df), dtype=float)
+            score += np.where(vol_spike & (price_chg > 0), p.score_volume_spike, 0.0)
+            score -= np.where(vol_spike & (price_chg <= 0), p.score_volume_spike, 0.0)
+
+        if "price_volume_confirm" in df.columns:
+            pvc = cast(pd.Series, df["price_volume_confirm"]).to_numpy(dtype=bool)
+            score += np.where(pvc, p.score_price_volume_confirm, 0.0)
+
+        if "volume_trend" in df.columns:
+            vt = cast(pd.Series, df["volume_trend"]).astype(str).to_numpy()
+            score += np.where(vt == "INCREASING", p.score_volume_trend, 0.0)
+            score -= np.where(vt == "DECREASING", p.score_volume_trend, 0.0)
+
+        if "obv_trend" in df.columns:
+            obv = cast(pd.Series, df["obv_trend"]).astype(str).to_numpy()
+            score += np.where(obv == "UP", p.score_obv_trend, 0.0)
+            score -= np.where(obv == "DOWN", p.score_obv_trend, 0.0)
+
+        # ── Structure ─────────────────────────────────────────────────
         if "bb_position" in df.columns:
             bb_position = cast(pd.Series, df["bb_position"]).astype(str).to_numpy()
-            score += np.where(bb_position == "BELOW_LOWER", 10.0, 0.0)
-            score += np.where(bb_position == "ABOVE_UPPER", -10.0, 0.0)
+            score += np.where(bb_position == "BELOW_LOWER", p.score_bollinger_extreme, 0.0)
+            score -= np.where(bb_position == "ABOVE_UPPER", p.score_bollinger_extreme, 0.0)
+        if "bb_percent" in df.columns:
+            bb_pct = cast(pd.Series, df["bb_percent"]).to_numpy(dtype=float)
+            score += np.where(
+                ~np.isnan(bb_pct) & (bb_pct < 0.2), p.score_bollinger_percent, 0.0,
+            )
+            score -= np.where(
+                ~np.isnan(bb_pct) & (bb_pct > 0.8), p.score_bollinger_percent, 0.0,
+            )
+
+        if "dist_to_support_pct" in df.columns:
+            ds = cast(pd.Series, df["dist_to_support_pct"]).to_numpy(dtype=float)
+            score += np.where(
+                ~np.isnan(ds) & (ds < 2), p.score_sr_distance, 0.0,
+            )
+        if "dist_to_resistance_pct" in df.columns:
+            dr = cast(pd.Series, df["dist_to_resistance_pct"]).to_numpy(dtype=float)
+            score -= np.where(
+                ~np.isnan(dr) & (dr < 2), p.score_sr_distance, 0.0,
+            )
+
+        if "rsi_divergence" in df.columns:
+            rd = cast(pd.Series, df["rsi_divergence"]).astype(str).to_numpy()
+            score += np.where(rd == "BULLISH", p.score_rsi_divergence, 0.0)
+            score -= np.where(rd == "BEARISH", p.score_rsi_divergence, 0.0)
+
+        if "macd_divergence" in df.columns:
+            md = cast(pd.Series, df["macd_divergence"]).astype(str).to_numpy()
+            score += np.where(md == "BULLISH", p.score_macd_divergence, 0.0)
+            score -= np.where(md == "BEARISH", p.score_macd_divergence, 0.0)
 
         df["score"] = np.clip(score, -100.0, 100.0)
 
@@ -843,7 +1011,7 @@ class Backtester:
         universe_as_of: str | None = None,
     ) -> Optional[BacktestResult]:
         if df is None or len(df) < 50:
-            logger.warning(f"  Yetersiz veri: {len(df) if df is not None else 0}")
+            logger.warning("insufficient_data", row_count=len(df) if df is not None else 0)
             return None
 
         df = df.copy()
@@ -1599,7 +1767,7 @@ class Backtester:
                 )
 
         self.avg_holding_days = avg_holding
-        logger.info(f"  📊 Ort. holding: {avg_holding} gün, Idle: %{idle_ratio}")
+        logger.info("avg_holding_stats", avg_holding_days=avg_holding, idle_pct=idle_ratio)
 
         summary = _summarize_trades_and_equity(
             ticker=ticker,
@@ -1641,43 +1809,27 @@ class Backtester:
         )
 
     def _calculate_score(self, df: pd.DataFrame) -> float:
+        from bist_bot.strategy.params import StrategyParams
+        from bist_bot.strategy.scoring import (
+            score_momentum,
+            score_trend,
+            score_volume,
+            score_structure,
+        )
+
         if len(df) < 2:
             return 0.0
 
         last = df.iloc[-1]
-        score = 0.0
+        prev = df.iloc[-2]
+        p = StrategyParams()
 
-        rsi = last.get("rsi")
-        if pd.notna(rsi):
-            if rsi < settings.RSI_OVERSOLD:
-                score += 20
-            elif rsi > settings.RSI_OVERBOUGHT:
-                score -= 20
+        s1, _ = score_momentum(p, last, prev)
+        s2, _ = score_trend(p, last, prev)
+        s3, _ = score_volume(p, last)
+        s4, _ = score_structure(p, last)
 
-        sma_cross = last.get("sma_cross", "NONE")
-        if sma_cross == "GOLDEN_CROSS":
-            score += 20
-        elif sma_cross == "DEATH_CROSS":
-            score -= 20
-
-        sma_fast = last.get(f"sma_{settings.SMA_FAST}")
-        sma_slow = last.get(f"sma_{settings.SMA_SLOW}")
-        if pd.notna(sma_fast) and pd.notna(sma_slow):
-            score += 5 if float(sma_fast) > float(sma_slow) else -5
-
-        macd_cross = last.get("macd_cross", "NONE")
-        if macd_cross == "BULLISH":
-            score += 15
-        elif macd_cross == "BEARISH":
-            score -= 15
-
-        bb_pos = last.get("bb_position", "MIDDLE")
-        if bb_pos == "BELOW_LOWER":
-            score += 10
-        elif bb_pos == "ABOVE_UPPER":
-            score -= 10
-
-        return max(-100.0, min(100.0, score))
+        return max(-100.0, min(100.0, s1 + s2 + s3 + s4))
 
 
 class StrategyBacktester:
@@ -2027,5 +2179,5 @@ def compare_benchmark(ticker: str, df: pd.DataFrame) -> float:
             close_series = bench[close_col]
             return float((close_series.iloc[-1] / close_series.iloc[0] - 1) * 100)
     except Exception as e:
-        logger.warning(f"Benchmark veri hatası: {e}")
+            logger.warning("benchmark_data_error", error=str(e))
     return 0.0

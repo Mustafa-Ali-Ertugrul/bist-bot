@@ -321,10 +321,15 @@ class TechnicalIndicators:
     def add_macd(df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
 
-        ema12 = df["close"].ewm(span=12, adjust=False).mean()
-        ema26 = df["close"].ewm(span=26, adjust=False).mean()
-        df["macd"] = ema12 - ema26
-        df["macd_signal"] = df["macd"].ewm(span=26, adjust=False, min_periods=1).mean()
+        fast = settings.MACD_FAST
+        slow = settings.MACD_SLOW
+        signal_period = settings.MACD_SIGNAL
+        ema_fast = df["close"].ewm(span=fast, adjust=False).mean()
+        ema_slow = df["close"].ewm(span=slow, adjust=False).mean()
+        df["macd"] = ema_fast - ema_slow
+        df["macd_signal"] = (
+            df["macd"].ewm(span=signal_period, adjust=False, min_periods=1).mean()
+        )
         df["macd_histogram"] = df["macd"] - df["macd_signal"]
         df["macd_hist"] = df["macd_histogram"]
 

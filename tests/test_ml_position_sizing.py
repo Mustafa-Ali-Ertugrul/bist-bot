@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import timedelta
+
 import pandas as pd
 
 from bist_bot.risk import RiskLevels, RiskManager
@@ -66,3 +68,13 @@ def test_probability_sizing_blocks_when_daily_loss_cap_is_hit() -> None:
 
     assert adjusted.blocked_by_daily_loss is True
     assert adjusted.position_size == 0
+
+
+def test_daily_realized_pnl_resets_when_day_rolls_over() -> None:
+    manager = RiskManager(capital=10000)
+    manager.daily_loss_cap_pct = 2.0
+    manager.daily_realized_pnl = -250.0
+    manager._daily_realized_pnl_date = manager._today() - timedelta(days=1)
+
+    assert manager.daily_loss_limit_reached() is False
+    assert manager.daily_realized_pnl == 0.0

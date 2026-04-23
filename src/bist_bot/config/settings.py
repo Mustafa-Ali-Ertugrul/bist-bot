@@ -18,10 +18,6 @@ except ImportError:
     pass
 
 
-_SETTINGS_OVERRIDES: ContextVar[tuple[dict[str, Any], ...]] = ContextVar(
-    "settings_overrides",
-    default=(),
-)
 _SETTINGS_MERGED_OVERRIDE: ContextVar[dict[str, Any] | None] = ContextVar(
     "settings_merged_override",
     default=None,
@@ -36,15 +32,12 @@ class SettingsOverride:
             unknown = ", ".join(unknown_fields)
             raise AttributeError(f"Unknown settings override(s): {unknown}")
         self._overrides = overrides
-        self._token: Token[tuple[dict[str, Any], ...]] | None = None
         self._merged_token: Token[dict[str, Any] | None] | None = None
 
     def __enter__(self) -> "Settings":
-        current = _SETTINGS_OVERRIDES.get()
-        merged = _SETTINGS_MERGED_OVERRIDE.get()
-        next_merged = dict(merged) if merged else {}
+        current = _SETTINGS_MERGED_OVERRIDE.get()
+        next_merged = dict(current) if current else {}
         next_merged.update(self._overrides)
-        self._token = _SETTINGS_OVERRIDES.set(current + (self._overrides,))
         self._merged_token = _SETTINGS_MERGED_OVERRIDE.set(next_merged)
         return settings
 
@@ -52,9 +45,6 @@ class SettingsOverride:
         if self._merged_token is not None:
             _SETTINGS_MERGED_OVERRIDE.reset(self._merged_token)
             self._merged_token = None
-        if self._token is not None:
-            _SETTINGS_OVERRIDES.reset(self._token)
-            self._token = None
 
 
 def _get_bool_env(name: str, default: bool = False) -> bool:
@@ -144,14 +134,14 @@ TICKER_NAMES = {
     "ENJSA.IS": "Enerjisa Enerji",
     "ERBOS.IS": "Erbos",
     "FENIS.IS": "Feniş",
-    "FMIZP.IS": "Formpi",
+    "FMIZP.IS": "Federal-Mogul Izmit Piston",
     "FORMT.IS": "Formet",
-    "GENTS.IS": "Gents",
+    "GENTS.IS": "Gentas",
     "GLYHO.IS": "Gülho",
     "IPEKE.IS": "İpek",
     "IZMDC.IS": "İzdemir",
     "KARSN.IS": "Karsan",
-    "KAYSE.IS": "Kayse",
+    "KAYSE.IS": "Kayseri Seker",
     "KONTR.IS": "Kontrol",
     "KORFM.IS": "Korfm",
     "LKMNH.IS": "Lokman",
@@ -160,7 +150,7 @@ TICKER_NAMES = {
     "MRGYO.IS": "Merit Gayrimenkul",
     "ODAS.IS": "Odas",
     "PNLSN.IS": "Pınar",
-    "PSDTC.IS": "Panda",
+    "PSDTC.IS": "Pasifik Donanim",
     "SEKFK.IS": "Şeker",
     "SEKFS.IS": "Şeker Finans",
     "SOKM.IS": "ŞOK Marketler",
@@ -171,12 +161,31 @@ SECTOR_MAP = {
     "ASELS.IS": "TEKNO",
     "SASA.IS": "KIMYA",
     "KCHOL.IS": "HOLDI",
-    "EREGL.IS": "KIMYA",
+    "EREGL.IS": "DEMIR",
     "BIMAS.IS": "PERAK",
-    "TUPRS.IS": "KIMYA",
+    "TUPRS.IS": "ENERJI",
     "SAHOL.IS": "HOLDI",
     "GARAN.IS": "FINANS",
     "AKBNK.IS": "FINANS",
+    "ISCTR.IS": "FINANS",
+    "YKBNK.IS": "FINANS",
+    "HALKB.IS": "FINANS",
+    "VAKBN.IS": "FINANS",
+    "TAVHL.IS": "HAVA",
+    "TOASO.IS": "OTOMOTIV",
+    "FROTO.IS": "OTOMOTIV",
+    "ARCLK.IS": "DAYANIKLI",
+    "CCOLA.IS": "GIDA",
+    "MGROS.IS": "PERAK",
+    "SOKM.IS": "PERAK",
+    "PETKM.IS": "KIMYA",
+    "KRDMD.IS": "DEMIR",
+    "HEKTS.IS": "TARIM",
+    "AYGAZ.IS": "ENERJI",
+    "ENJSA.IS": "ENERJI",
+    "ODAS.IS": "ENERJI",
+    "KARSN.IS": "OTOMOTIV",
+    "KONTR.IS": "TEKNO",
 }
 
 
@@ -193,6 +202,7 @@ class Settings:
 
     TELEGRAM_BOT_TOKEN: str = _get_str_env("TELEGRAM_BOT_TOKEN")
     TELEGRAM_CHAT_ID: str = _get_str_env("TELEGRAM_CHAT_ID")
+    DATABASE_URL: str = _get_str_env("DATABASE_URL")
     DB_PATH: str = _get_str_env("DB_PATH", "bist_signals.db")
 
     SCAN_INTERVAL_MINUTES: int = _get_int_env("SCAN_INTERVAL_MINUTES", 15)
@@ -292,7 +302,7 @@ class Settings:
         default_factory=lambda: _get_csv_env("CORS_ORIGINS")
     )
 
-    INITIAL_CAPITAL: float = _get_float_env("INITIAL_CAPITAL", 8500.0)
+    INITIAL_CAPITAL: float = _get_float_env("INITIAL_CAPITAL", 100000.0)
     ML_SEQUENCE_LENGTH: int = _get_int_env("ML_SEQUENCE_LENGTH", 60)
     ML_EPOCHS: int = _get_int_env("ML_EPOCHS", 50)
     ML_BATCH_SIZE: int = _get_int_env("ML_BATCH_SIZE", 32)
@@ -331,7 +341,9 @@ class Settings:
     )
     BACKTEST_SLIPPAGE_PCT: float = _get_float_env("BACKTEST_SLIPPAGE_PCT", 0.0005)
 
-    TELEGRAM_MIN_SCORE: int = _get_int_env("TELEGRAM_MIN_SCORE", 70)
+    TELEGRAM_MIN_SCORE: int = _get_int_env(
+        "TELEGRAM_MIN_SCORE", _get_int_env("STRONG_BUY_THRESHOLD", 48)
+    )
 
     STRONG_BUY_THRESHOLD: int = _get_int_env("STRONG_BUY_THRESHOLD", 48)
     BUY_THRESHOLD: int = _get_int_env("BUY_THRESHOLD", 20)

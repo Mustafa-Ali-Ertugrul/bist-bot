@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Optional
 
 from sqlalchemy import select
@@ -23,7 +24,7 @@ class OrdersRepository:
         filled_qty: float = 0.0,
         avg_fill_price: float | None = None,
     ) -> dict[str, Any]:
-        now = self.manager.now_iso()
+        now = self.manager.now_utc()
 
         def _write(session):
             row = OrderRecord(
@@ -66,7 +67,7 @@ class OrdersRepository:
                 row.filled_qty = filled_qty
             if avg_fill_price is not None:
                 row.avg_fill_price = avg_fill_price
-            row.updated_at = self.manager.now_iso()
+            row.updated_at = self.manager.now_utc()
             session.flush()
             return self._to_dict(row)
 
@@ -122,8 +123,8 @@ class OrdersRepository:
             "price": row.price,
             "state": row.state,
             "broker_order_id": row.broker_order_id,
-            "created_at": row.created_at,
-            "updated_at": row.updated_at,
+            "created_at": row.created_at.isoformat() if isinstance(row.created_at, datetime) else row.created_at,
+            "updated_at": row.updated_at.isoformat() if isinstance(row.updated_at, datetime) else row.updated_at,
             "filled_qty": row.filled_qty,
             "avg_fill_price": row.avg_fill_price,
         }

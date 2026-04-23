@@ -20,12 +20,12 @@ class ConfigRepository:
             if record is None:
                 session.add(
                     ConfigRecord(
-                        key=key, value=payload, updated_at=self.manager.now_iso()
+                        key=key, value=payload, updated_at=self.manager.now_utc()
                     )
                 )
             else:
                 record.value = payload
-                record.updated_at = self.manager.now_iso()
+                record.updated_at = self.manager.now_utc()
             return None
 
         self.manager.run_session(_write)

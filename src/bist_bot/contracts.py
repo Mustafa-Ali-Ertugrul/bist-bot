@@ -63,7 +63,7 @@ class SignalRepositoryProtocol(Protocol):
         ticker: str,
         signal_type: str,
         signal_price: float,
-        signal_time: Optional[str] = ...,
+        signal_time: Any = ...,
         score: int = ...,
         regime: str = ...,
     ) -> None: ...

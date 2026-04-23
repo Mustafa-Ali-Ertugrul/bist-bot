@@ -126,7 +126,7 @@ class BISTDataFetcher:
         self._analysis_cache: dict[str, CacheEntry] = {}
         self._quote_cache: dict[str, CacheEntry] = {}
         self._max_workers = min(8, max(2, len(self.watchlist)))
-        logger.info(f"BISTDataFetcher baslatildi: {len(self.watchlist)} hisse")
+        logger.info("fetcher_initialized", watchlist_size=len(self.watchlist))
 
     def _cache_key(
         self, ticker: str, period: str, interval: str
@@ -196,7 +196,7 @@ class BISTDataFetcher:
             self._history_cache, cache_key, self._history_ttl(interval)
         )
         if cached is not None:
-            logger.debug(f"  {ticker} cache'den döndürüldü ({interval}/{period})")
+            logger.debug("cache_hit", ticker=ticker, interval=interval, period=period)
             return cast(pd.DataFrame, cached)
         return None
 
@@ -213,7 +213,7 @@ class BISTDataFetcher:
             Cleaned dataframe or ``None`` when the payload is unusable.
         """
         if df is None or df.empty:
-            logger.warning(f"⚠️  {ticker} için veri bulunamadı!")
+            logger.warning("no_data_for_ticker", ticker=ticker)
             return None
 
         normalized = cast(pd.DataFrame, df.copy())
@@ -226,7 +226,7 @@ class BISTDataFetcher:
         )
 
         if normalized.empty:
-            logger.warning(f"⚠️  {ticker} için uygun fiyat kolonu bulunamadı!")
+            logger.warning("no_price_columns", ticker=ticker)
             return None
 
         normalized.index = pd.DatetimeIndex(
@@ -235,10 +235,10 @@ class BISTDataFetcher:
 
         if bool(normalized.isnull().to_numpy().sum()):
             normalized = cast(pd.DataFrame, normalized.dropna())
-            logger.info(f"  {ticker}: NaN satırlar temizlendi")
+            logger.info("nan_rows_dropped", ticker=ticker)
 
         if normalized.empty:
-            logger.warning(f"⚠️  {ticker} için temizleme sonrası veri kalmadı!")
+            logger.warning("empty_after_cleanup", ticker=ticker)
             return None
 
         return cast(pd.DataFrame, normalized)
@@ -570,7 +570,7 @@ class BISTDataFetcher:
                 "52w_low": info.get("fiftyTwoWeekLow", None),
             }
         except Exception as e:
-            logger.error(f"Bilgi çekme hatası ({ticker}): {e}")
+            logger.error("info_fetch_error", ticker=ticker, error=str(e))
             return {}
 
     def clear_cache(

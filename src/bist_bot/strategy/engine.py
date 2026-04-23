@@ -142,7 +142,8 @@ class StrategyEngine:
     def _passes_adx_filter(self, ticker: str, last: pd.Series) -> bool:
         adx_raw = last.get("adx")
         if pd.isna(adx_raw):
-            return True
+            logger.debug("strategy_adx_missing", ticker=ticker)
+            return False
         adx = float(adx_raw)
         if adx >= getattr(settings, "ADX_THRESHOLD", 20):
             return True

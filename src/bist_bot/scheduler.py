@@ -1,6 +1,6 @@
 """Market-hours scheduler for the CLI bot runtime."""
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from time import sleep
 
 from bist_bot.app_logging import get_logger
@@ -8,6 +8,7 @@ from bist_bot.config.settings import settings as default_settings
 
 
 logger = get_logger(__name__, component="scheduler")
+TR = timezone(timedelta(hours=3))
 
 
 class MarketScheduler:
@@ -17,6 +18,9 @@ class MarketScheduler:
         self.settings = settings
         self.running = False
 
+    def _now(self) -> datetime:
+        return datetime.now(TR)
+
     def run_loop(self):
         self.running = True
 
@@ -24,7 +28,7 @@ class MarketScheduler:
         self.notifier.send_startup_message()
 
         while self.running:
-            now = datetime.now()
+            now = self._now()
             hour = now.hour
             minute = now.minute
 
@@ -67,11 +71,23 @@ class MarketScheduler:
                 sleep(3600 * (self.settings.MARKET_CLOSE_HOUR - half_day_hour))
                 continue
 
-            try:
-                self.scanner.scan_once()
-            except Exception as e:
-                logger.error("scheduler_scan_failed", error_type=type(e).__name__)
-                self.notifier.send_message(f"⚠️ Bot hatası: {e}")
+        try:
+            self.scanner.scan_once()
+        except Exception as e:
+            logger.error("scheduler_scan_failed", error_type=type(e).__name__)
+            self.notifier.send_message(f"⚠️ Bot hatası: {e}")
+            for attempt in range(1, 4):
+                try:
+                    logger.info("scheduler_scan_retry", attempt=attempt)
+                    sleep(30 * attempt)
+                    self.scanner.scan_once()
+                    break
+                except Exception as retry_exc:
+                    logger.error(
+                        "scheduler_scan_retry_failed",
+                        attempt=attempt,
+                        error_type=type(retry_exc).__name__,
+                    )
 
             logger.info(
                 "scheduler_next_scan_wait",
