@@ -3,8 +3,9 @@ from __future__ import annotations
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-import time
 import random
+import threading
+import time
 from typing import Callable, Iterator, Optional, TypeVar
 
 from sqlalchemy import Float, Integer, String, Text, create_engine, event, text
@@ -120,6 +121,7 @@ class OrderRecord(Base):
 
 
 _T = TypeVar("_T")
+_INIT_LOCK = threading.RLock()
 
 
 class DatabaseManager:
@@ -177,9 +179,14 @@ class DatabaseManager:
             cursor.close()
 
     def initialize(self) -> None:
-        Base.metadata.create_all(self.engine)
-        self._migrate_legacy_schema()
-        self._seed_admin_user()
+        with _INIT_LOCK:
+            try:
+                Base.metadata.create_all(self.engine)
+            except OperationalError as exc:
+                if "already exists" not in str(exc).lower():
+                    raise
+            self._migrate_legacy_schema()
+            self._seed_admin_user()
 
     def _migrate_legacy_schema(self) -> None:
         with self.engine.begin() as conn:
