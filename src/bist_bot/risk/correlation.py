@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import logging
+from bist_bot.app_logging import get_logger
 from typing import Optional
 
 import pandas as pd
@@ -10,7 +10,7 @@ import pandas as pd
 from bist_bot.risk.models import RiskLevels
 from bist_bot.risk.sizing import apply_position_budget
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__, component="risk_correlation")
 
 
 def build_global_correlation_cache(data: dict) -> pd.DataFrame | None:
@@ -27,7 +27,7 @@ def build_global_correlation_cache(data: dict) -> pd.DataFrame | None:
         close_frame = pd.concat(closes.values(), axis=1, join="inner").dropna()
         if not close_frame.empty:
             cache = close_frame.pct_change().dropna().corr()
-            logger.info("🚀 Global korelasyon önbelleği hazırlandı. Matris boyutu: %s", cache.shape)
+            logger.info("correlation_cache_ready", matrix_shape=str(cache.shape))
             return cache
     return None
 
@@ -86,7 +86,7 @@ def apply_portfolio_risk(ticker: str, df: pd.DataFrame, levels: RiskLevels, port
         levels.position_size = 0
         levels.max_loss_tl = 0.0
         levels.risk_budget_tl = 0.0
-        logger.warning("  Korelasyon limiti: %s -> %s", ticker, ", ".join(correlated))
+        logger.warning("correlation_limit_applied", ticker=ticker, correlated_tickers=", ".join(correlated))
         return levels
 
     correlation_scale = max(correlation_min_scale, 1.0 - (len(correlated) * correlation_risk_step))

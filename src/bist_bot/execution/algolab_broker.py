@@ -14,7 +14,7 @@ Features:
 
 from __future__ import annotations
 
-import logging
+from bist_bot.app_logging import get_logger
 import threading
 import time
 from dataclasses import dataclass, field
@@ -35,7 +35,7 @@ from bist_bot.execution.base import (
     Position,
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__, component="algolab_broker")
 
 
 class _CircuitState(str, Enum):
@@ -72,7 +72,7 @@ class _CircuitBreaker:
             self._last_failure_at = time.monotonic()
             if self._failure_count >= self.failure_threshold:
                 self._state = _CircuitState.OPEN
-                logger.warning("Circuit breaker OPEN – %d consecutive failures", self._failure_count)
+                logger.warning("circuit_breaker_open", consecutive_failures=self._failure_count)
 
     def allow_request(self) -> bool:
         return self.state in {_CircuitState.CLOSED, _CircuitState.HALF_OPEN}
@@ -206,7 +206,7 @@ class AlgoLabBroker(BaseExecutionProvider):
         stop_price: float | None = None,
     ) -> OrderResult:
         if self.dry_run:
-            logger.info("[DRY RUN] %s %s %.2f @ %s", side.value, ticker, quantity, order_type.value)
+            logger.info("dry_run_order", side=side.value, ticker=ticker, quantity=quantity, order_type=order_type.value)
             return OrderResult(
                 accepted=True,
                 order_id=f"dryrun-{ticker}-{int(time.time() * 1000)}",

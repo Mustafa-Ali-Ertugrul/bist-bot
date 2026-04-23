@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bist-Bot Settings</title>
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            secondary: "#48ddbc",
+            "surface-container": "#1c2026",
+            "outline-variant": "#414755",
+            "surface-variant": "#31353c",
+            "surface-container-lowest": "#0a0e14",
+            "surface-container-low": "#181c22",
+            "surface-container-high": "#262a31",
+            background: "#10141a",
+            "on-surface": "#dfe2eb",
+            "on-surface-variant": "#c1c6d7",
+            primary: "#adc6ff",
+            "primary-container": "#4b8eff",
+            tertiary: "#ffb4aa"
+          },
+          borderRadius: {
+            DEFAULT: "0.25rem",
+            lg: "0.5rem",
+            xl: "0.75rem",
+            full: "9999px"
+          },
+          fontFamily: {
+            headline: ["Inter"],
+            body: ["Inter"],
+            label: ["Space Grotesk"]
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+    body {
+      background-color: #10141a;
+      color: #dfe2eb;
+      font-family: 'Inter', sans-serif;
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="bg-background text-on-surface">
+  <nav class="fixed top-0 z-50 flex h-16 w-full items-center justify-between bg-[#10141a]/80 px-6 backdrop-blur-xl">
+    <div class="flex items-center gap-3">
+      <div class="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-outline-variant/20 bg-surface-container-high">
+        <img alt="bot_status_indicator" class="h-8 w-8" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB60lsp-N_XewCJvXA-sRYPQ0J5FLbWesTWPPS3ByzP1dWjAGzX0Y1y10LImF9ohnxQ1usiNWbFz00gf3lGbrXv_NJOAUfqnsPFEOPi47GqF6dQN0PmN8LMTwQkDqlOo_7AB4UFQb2BKcYH6CBVd6IdIvQFWwWGf27fT-9GpRKlOIaCDHTO6N4XCAh9GTvb0nB-pOD1F0v31710WFWg-_avVLnXmlcvd-_HWaD_JvelGh7CiVV5f1GYYTrUW2G9n4lSvIJRga_sFgkf" />
+      </div>
+      <span class="text-xl font-black tracking-tighter text-[#adc6ff]">Bist-Bot</span>
+    </div>
+    <div class="flex items-center gap-4">
+      <button class="rounded-lg p-2 text-[#adc6ff] transition-colors duration-150 hover:bg-[#353940] active:scale-95">
+        <span class="material-symbols-outlined">sensors</span>
+      </button>
+    </div>
+  </nav>
+
+  <main class="mx-auto max-w-5xl px-6 pb-32 pt-24">
+    <header class="mb-10">
+      <h1 class="mb-2 font-headline text-3xl font-bold tracking-tight text-on-surface">Bot Parameters</h1>
+      <p class="font-body text-on-surface-variant">Fine-tune your algorithmic execution strategy and connection hooks.</p>
+    </header>
+
+    <div class="grid grid-cols-1 gap-8 lg:grid-cols-12">
+      <section class="space-y-6 lg:col-span-7">
+        <div class="overflow-hidden rounded-xl bg-surface-container">
+          <div class="flex items-center justify-between bg-surface-container-high px-6 py-4">
+            <div class="flex items-center gap-3"><span class="material-symbols-outlined text-primary">monitoring</span><h2 class="font-headline font-bold">Technical Indicators</h2></div>
+            <span class="rounded bg-secondary/10 px-2 py-0.5 font-label text-[10px] uppercase tracking-widest text-secondary">Active</span>
+          </div>
+          <div class="space-y-8 p-6">
+            <div>
+              <label class="mb-4 block font-label text-sm font-medium uppercase tracking-wider text-on-surface-variant">Relative Strength Index (RSI)</label>
+              <div class="grid grid-cols-2 gap-4">
+                <div class="space-y-2"><span class="font-label text-[10px] uppercase text-[#8b90a0]">Overbought Threshold</span><input class="w-full rounded-lg border-none bg-surface-container-lowest px-4 py-3 font-label text-primary focus:ring-2 focus:ring-primary/20" type="number" value="70" /></div>
+                <div class="space-y-2"><span class="font-label text-[10px] uppercase text-[#8b90a0]">Oversold Threshold</span><input class="w-full rounded-lg border-none bg-surface-container-lowest px-4 py-3 font-label text-primary focus:ring-2 focus:ring-primary/20" type="number" value="30" /></div>
+              </div>
+            </div>
+            <div class="space-y-4">
+              <label class="block font-label text-sm font-medium uppercase tracking-wider text-on-surface-variant">Simple Moving Averages (SMA)</label>
+              <div class="flex items-center justify-between rounded-lg bg-surface-container-low p-4"><div class="flex items-center gap-3"><div class="h-8 w-2 rounded-full bg-secondary"></div><div><div class="text-sm font-bold">Fast Period</div><div class="text-xs text-[#8b90a0]">Short-term momentum</div></div></div><input class="w-20 rounded-lg border-none bg-surface-container-lowest text-right font-label text-secondary focus:ring-2 focus:ring-secondary/20" type="number" value="20" /></div>
+              <div class="flex items-center justify-between rounded-lg bg-surface-container-low p-4"><div class="flex items-center gap-3"><div class="h-8 w-2 rounded-full bg-primary"></div><div><div class="text-sm font-bold">Slow Period</div><div class="text-xs text-[#8b90a0]">Trend baseline</div></div></div><input class="w-20 rounded-lg border-none bg-surface-container-lowest text-right font-label text-primary focus:ring-2 focus:ring-primary/20" type="number" value="50" /></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="overflow-hidden rounded-xl bg-surface-container">
+          <div class="bg-surface-container-high px-6 py-4"><div class="flex items-center gap-3"><span class="material-symbols-outlined text-primary">hub</span><h2 class="font-headline font-bold">Connectivity &amp; Alerts</h2></div></div>
+          <div class="space-y-4 p-6">
+            <div class="space-y-2">
+              <label class="font-label text-[10px] uppercase tracking-widest text-[#8b90a0]">Telegram Bot Token</label>
+              <div class="relative">
+                <input class="w-full rounded-lg border-none bg-surface-container-lowest py-3 pl-4 pr-12 font-label text-on-surface-variant focus:ring-2 focus:ring-primary/20" type="password" value="telegram-bot-token" />
+                <button class="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-[#8b90a0]"><span class="material-symbols-outlined">visibility</span></button>
+              </div>
+            </div>
+            <div class="flex items-center justify-between py-2">
+              <div><div class="font-bold">Push Notifications</div><div class="text-xs text-[#8b90a0]">Send signal alerts via Telegram</div></div>
+              <div class="relative inline-flex cursor-pointer items-center"><input checked class="peer sr-only" type="checkbox" /><div class="h-6 w-11 rounded-full bg-surface-variant after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-secondary peer-checked:after:translate-x-full"></div></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="space-y-6 lg:col-span-5">
+        <div class="overflow-hidden rounded-xl border border-tertiary/10 bg-surface-container">
+          <div class="border-b border-surface-container-lowest bg-surface-container-high px-6 py-4"><div class="flex items-center gap-3"><span class="material-symbols-outlined text-tertiary">shield</span><h2 class="font-headline font-bold">Risk Mitigation</h2></div></div>
+          <div class="space-y-6 p-6">
+            <div class="rounded-xl border border-tertiary/10 bg-tertiary/5 p-4"><div class="mb-4 flex items-center justify-between"><span class="font-label text-xs font-bold uppercase tracking-widest text-tertiary">Stop-Loss (SL)</span><span class="font-label text-lg font-bold text-tertiary">-2.5%</span></div><input class="h-1.5 w-full cursor-pointer appearance-none rounded-lg bg-tertiary/20 accent-tertiary" max="10" min="0.5" step="0.1" type="range" value="2.5" /><div class="mt-2 flex justify-between font-label text-[10px] text-[#8b90a0]"><span>CONSERVATIVE</span><span>AGGRESSIVE</span></div></div>
+            <div class="rounded-xl border border-secondary/10 bg-secondary/5 p-4"><div class="mb-4 flex items-center justify-between"><span class="font-label text-xs font-bold uppercase tracking-widest text-secondary">Take-Profit (TP)</span><span class="font-label text-lg font-bold text-secondary">+5.0%</span></div><input class="h-1.5 w-full cursor-pointer appearance-none rounded-lg bg-secondary/20 accent-secondary" max="20" min="1" step="0.5" type="range" value="5" /><div class="mt-2 flex justify-between font-label text-[10px] text-[#8b90a0]"><span>MINIMUM</span><span>EXTREME</span></div></div>
+            <div class="space-y-4 pt-4">
+              <div class="flex items-center justify-between"><div class="text-sm">Trailing Stop</div><div class="relative inline-flex cursor-pointer items-center"><input class="peer sr-only" type="checkbox" /><div class="h-6 w-11 rounded-full bg-surface-variant after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-secondary peer-checked:after:translate-x-full"></div></div></div>
+              <div class="flex items-center justify-between"><div class="text-sm">Position Sizing</div><div class="flex items-center gap-2"><span class="font-label text-xs text-[#8b90a0]">Fixed %</span><input class="w-16 rounded-lg border-none bg-surface-container-lowest p-1 text-center text-sm font-label text-primary" type="number" value="10" /></div></div>
+            </div>
+          </div>
+        </div>
+        <button class="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-primary to-primary-container py-4 font-black text-[#00285c] shadow-lg shadow-primary/10 transition-transform active:scale-[0.98]"><span class="material-symbols-outlined">save</span>DEPLOY CONFIGURATION</button>
+      </aside>
+    </div>
+  </main>
+
+  <nav class="fixed bottom-0 left-0 z-50 flex w-full items-center justify-around border-t border-[#353940]/15 bg-[#10141a]/90 px-4 py-3 backdrop-blur-2xl">
+    <a class="flex flex-col items-center justify-center text-[#c1c6d7] opacity-60 transition-colors duration-200 hover:text-[#adc6ff]" href="file:///android_asset/dashboard.html"><span class="material-symbols-outlined">dashboard</span><span class="mt-1 font-['Space_Grotesk'] text-[10px] uppercase tracking-widest">Dashboard</span></a>
+    <a class="flex flex-col items-center justify-center text-[#c1c6d7] opacity-60 transition-colors duration-200 hover:text-[#adc6ff]" href="file:///android_asset/signals.html"><span class="material-symbols-outlined">query_stats</span><span class="mt-1 font-['Space_Grotesk'] text-[10px] uppercase tracking-widest">Signals</span></a>
+    <a class="flex flex-col items-center justify-center text-[#c1c6d7] opacity-60 transition-colors duration-200 hover:text-[#adc6ff]" href="file:///android_asset/analysis.html"><span class="material-symbols-outlined">analytics</span><span class="mt-1 font-['Space_Grotesk'] text-[10px] uppercase tracking-widest">Analysis</span></a>
+    <a class="flex flex-col items-center justify-center rounded-xl bg-[#48ddbc]/10 px-3 py-1 text-[#48ddbc] transition-colors duration-200" href="file:///android_asset/settings.html"><span class="material-symbols-outlined">settings</span><span class="mt-1 font-['Space_Grotesk'] text-[10px] uppercase tracking-widest">Settings</span></a>
+  </nav>
+</body>
+</html>

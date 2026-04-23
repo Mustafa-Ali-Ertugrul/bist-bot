@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import logging
+from bist_bot.app_logging import get_logger
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Optional, cast, Protocol
@@ -15,7 +15,7 @@ from bist_bot.risk.models import RiskLevels
 from bist_bot.risk import sizing as sizing_helpers
 from bist_bot.risk import stops as stop_helpers
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__, component="risk_manager")
 TR = timezone(timedelta(hours=3))
 
 
@@ -97,7 +97,7 @@ class RiskManager:
         sector_limit = getattr(settings, "SECTOR_LIMIT", 2)
         current = self._sector_signal_counts.get(sector, 0)
         if current >= sector_limit:
-            logger.warning("  Sektör limiti: %s (%s/%s)", sector, current, sector_limit)
+            logger.warning("sector_limit_reached", sector=sector, current=current, limit=sector_limit)
             return False
         self._sector_signal_counts[sector] = current + 1
         return True

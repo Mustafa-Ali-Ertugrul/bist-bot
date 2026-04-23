@@ -71,23 +71,35 @@ class MarketScheduler:
                 sleep(3600 * (self.settings.MARKET_CLOSE_HOUR - half_day_hour))
                 continue
 
-        try:
-            self.scanner.scan_once()
-        except Exception as e:
-            logger.error("scheduler_scan_failed", error_type=type(e).__name__)
-            self.notifier.send_message(f"⚠️ Bot hatası: {e}")
-            for attempt in range(1, 4):
-                try:
-                    logger.info("scheduler_scan_retry", attempt=attempt)
-                    sleep(30 * attempt)
-                    self.scanner.scan_once()
-                    break
-                except Exception as retry_exc:
-                    logger.error(
-                        "scheduler_scan_retry_failed",
+            try:
+                self.scanner.scan_once()
+            except Exception as e:
+                logger.error("scheduler_scan_failed", error_type=type(e).__name__)
+                self.notifier.send_message(f"⚠️ Bot hatası: {e}")
+                for attempt in range(1, 4):
+                    if not self.running:
+                        break
+                    backoff = 30 * attempt
+                    logger.info(
+                        "scheduler_scan_retry",
                         attempt=attempt,
-                        error_type=type(retry_exc).__name__,
+                        backoff_seconds=backoff,
                     )
+                    sleep(backoff)
+                    try:
+                        self.scanner.scan_once()
+                        logger.info(
+                            "scheduler_scan_retry_succeeded", attempt=attempt
+                        )
+                        break
+                    except Exception as retry_exc:
+                        logger.error(
+                            "scheduler_scan_retry_failed",
+                            attempt=attempt,
+                            error_type=type(retry_exc).__name__,
+                        )
+                else:
+                    logger.error("scheduler_scan_exhausted_retries")
 
             logger.info(
                 "scheduler_next_scan_wait",

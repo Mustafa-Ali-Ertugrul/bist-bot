@@ -179,9 +179,12 @@ def render_analyze_page() -> None:
             f"<div class='bb-list-row'><div class='bb-list-row-subtitle'>{html.escape(str(reason))}</div></div>"
             for reason in reasons
         )
+        reasons_html = (
+            reason_rows or "<div class='bb-note'>No analysis reasons returned.</div>"
+        )
         render_html_panel(
             (
                 "<div class='bb-section-caption'>Model rationale</div>"
-                f"<div class='bb-list' style='margin-top:12px;'>{reason_rows or '<div class="bb-note">No analysis reasons returned.</div>'}</div>"
+                f"<div class='bb-list' style='margin-top:12px;'>{reasons_html}</div>"
             )
         )

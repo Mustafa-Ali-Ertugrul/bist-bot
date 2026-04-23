@@ -112,6 +112,9 @@ def render_overview_page() -> None:
                 "</div>"
                 "</div>"
             )
+        radar_html = (
+            "".join(radar_rows) or "<div class='bb-note'>Scan data not ready yet.</div>"
+        )
         render_html_panel(
             (
                 f"<div class='bb-section-caption'>Scan coverage {summary.get('total_analyzed', 0)} assets</div>"
@@ -119,7 +122,7 @@ def render_overview_page() -> None:
                 f"<div class='bb-list-row'><div><div class='bb-label'>Average RSI</div><div class='bb-note-strong'>{summary.get('avg_rsi', 50):.1f}</div></div></div>"
                 f"<div class='bb-list-row'><div><div class='bb-label'>Volume ratio</div><div class='bb-note-strong'>{summary.get('avg_vol_ratio', 1.0):.2f}x</div></div></div>"
                 "</div>"
-                f"<div class='bb-list'>{''.join(radar_rows) or '<div class="bb-note">Scan data not ready yet.</div>'}</div>"
+                f"<div class='bb-list'>{radar_html}</div>"
             ),
             accent="positive",
         )

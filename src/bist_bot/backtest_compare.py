@@ -11,14 +11,14 @@ Kullanim:
 """
 
 import argparse
-import logging
+import logging as _logging
 import sys
 from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
 
-from bist_bot.app_logging import configure_logging
+from bist_bot.app_logging import configure_logging, get_logger
 from bist_bot.backtest import Backtester, StrategyBacktester, compare_benchmark
 from bist_bot.config.settings import settings
 from bist_bot.data.fetcher import BISTDataFetcher
@@ -26,7 +26,7 @@ from bist_bot.indicators import TechnicalIndicators
 from bist_bot.strategy import StrategyEngine
 from bist_bot.strategy.regime import MarketRegime, detect_regime
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__, component="backtest_compare")
 
 
 @dataclass
@@ -118,7 +118,7 @@ def run_slippage_sweep(
     penalties: list[float] | tuple[float, ...] = (0.0, 0.15, 0.50),
 ) -> pd.DataFrame:
     """Stress test strategy sensitivity against multiple slippage penalties."""
-    logger.warning("\n🧹 %s için slippage sweep başlıyor...", ticker)
+    logger.warning("slippage_sweep_started", ticker=ticker)
     results: list[dict[str, float | int]] = []
 
     for penalty in penalties:

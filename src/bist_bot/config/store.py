@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import copy
 import json
-import logging
+from bist_bot.app_logging import get_logger
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__, component="config_store")
 
 CONFIG_DIR = Path(__file__).parent
 CONFIG_FILE = CONFIG_DIR / "user_settings.json"

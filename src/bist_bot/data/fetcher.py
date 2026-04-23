@@ -116,9 +116,10 @@ class BISTDataFetcher:
             tickers = self.provider.fetch_universe()
             if len(tickers) < 90:
                 logger.warning(
-                    f"⚠️ Watchlist yetersiz ({len(tickers)}), fallback kullaniliyor"
+                    "watchlist_insufficient_fallback",
+                    provider_count=len(tickers),
                 )
-                tickers = _clean_ticker_list(BIST100_TICKERS)
+            tickers = _clean_ticker_list(BIST100_TICKERS)
             self.watchlist = tickers
         else:
             self.watchlist = _clean_ticker_list(watchlist)
@@ -610,7 +611,7 @@ class BISTDataFetcher:
             else:
                 self._quote_cache.pop(normalized_ticker, None)
 
-        logger.info("🗑️  Cache temizlendi (scope=%s)", scope)
+        logger.info("cache_cleared", scope=scope)
 
     def fetch_multi_timeframe_all(
         self,

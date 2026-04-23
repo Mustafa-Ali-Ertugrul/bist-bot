@@ -373,7 +373,7 @@ class BaseOfficialProvider(ABC):
                 },
             )
         except OfficialProviderError:
-            logger.exception("fetch_history failed for %s", ticker)
+            logger.exception("fetch_history_failed", ticker=ticker)
             return None
         records = resp.get("data", [])
         return self._ohlcv_from_records(records)
@@ -413,7 +413,7 @@ class BaseOfficialProvider(ABC):
                 params={"ticker": ticker},
             )
         except OfficialProviderError:
-            logger.exception("fetch_quote failed for %s", ticker)
+            logger.exception("fetch_quote_failed", ticker=ticker)
             return None
         price = resp.get("data", {}).get("price")
         return float(price) if price is not None else None

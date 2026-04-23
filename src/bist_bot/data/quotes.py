@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import logging
+from bist_bot.app_logging import get_logger
 import time
 from datetime import datetime
 from typing import Protocol
@@ -13,7 +13,7 @@ from bist_bot.data.bist100 import BIST100_TICKERS
 from bist_bot.data.helpers import clean_ticker_list
 from bist_bot.data.scraper import _parse_number, scrape_bist_quote
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__, component="data_quotes")
 
 _BIST100_CACHE: list[str] | None = None
 _BIST100_CACHE_TIME: datetime | None = None

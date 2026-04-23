@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import logging
+from bist_bot.app_logging import get_logger
 import threading
 
 from bist_bot.contracts import ExecutionProviderProtocol, SignalRepositoryProtocol
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__, component="order_tracker")
 
 
 class OrderTracker:
@@ -54,5 +54,5 @@ class OrderTracker:
             try:
                 self.poll_once()
             except Exception as exc:
-                logger.warning("Order tracker poll failed: %s", exc)
+                logger.warning("order_tracker_poll_failed", error=str(exc))
             self._stop_event.wait(self.poll_interval_seconds)

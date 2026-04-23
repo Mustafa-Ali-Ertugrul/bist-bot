@@ -1,5 +1,5 @@
 import requests
-import logging
+from bist_bot.app_logging import get_logger
 import time
 from datetime import datetime, timezone, timedelta
 from typing import Callable
@@ -9,7 +9,7 @@ from bist_bot.strategy.signal_models import Signal, SignalType
 
 TR = timezone(timedelta(hours=3))
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__, component="notifier")
 
 
 def send_telegram_with_retry(
@@ -71,9 +71,8 @@ class TelegramNotifier:
 
         if not self.enabled:
             logger.warning(
-                "⚠️  Telegram ayarlanmamış. "
-                ".env dosyasına TELEGRAM_BOT_TOKEN ve "
-                "TELEGRAM_CHAT_ID ekle."
+                "telegram_not_configured",
+                detail="Telegram ayarlanmamış. .env dosyasına TELEGRAM_BOT_TOKEN ve TELEGRAM_CHAT_ID ekle.",
             )
 
     def send_message(self, text: str, parse_mode: str = "HTML") -> bool:
@@ -91,7 +90,7 @@ class TelegramNotifier:
                 retry_delay=getattr(settings, "NOTIFICATION_RETRY_DELAY", 5),
             )
             if sent:
-                logger.info("📨 Telegram mesajı gönderildi")
+                logger.info("telegram_message_sent", preview=text[:80])
                 return True
             return False
 

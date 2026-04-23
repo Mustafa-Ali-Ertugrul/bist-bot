@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import logging
+from bist_bot.app_logging import get_logger
 import re
 from typing import Protocol
 
 import requests
 from bs4 import BeautifulSoup
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__, component="scraper")
 
 
 class RateLimiterProtocol(Protocol):
@@ -102,24 +102,19 @@ def scrape_bist_quote(ticker: str, rate_limiter: RateLimiterProtocol) -> ScrapeQ
             response.raise_for_status()
         except requests.exceptions.Timeout:
             last_failure = f"timeout:{url}"
-            logger.warning("Scrape timeout (%s): %s", symbol, url)
+            logger.warning("scrape_timeout", symbol=symbol, url=url)
             continue
         except requests.exceptions.RequestException as exc:
             last_failure = f"ag-hatasi:{url}"
-            logger.warning("Scrape request failed (%s): %s", symbol, exc)
+            logger.warning("scrape_request_failed", symbol=symbol, error=str(exc))
             continue
 
         result = _extract_quote_from_html(response.text)
         if result.success:
-            logger.info("Scraped realtime quote succeeded (%s) from %s", symbol, url)
+            logger.info("scrape_succeeded", symbol=symbol, url=url)
             return result
 
-        last_failure = f"parse-hatasi:{result.detail}"
-        logger.warning(
-            "Scrape parse failed (%s): %s [%s]",
-            symbol,
-            result.detail,
-            url,
-        )
+    last_failure = f"parse-hatasi:{result.detail}"
+    logger.warning("scrape_parse_failed", symbol=symbol, detail=result.detail, url=url)
 
     return ScrapeQuoteResult(success=False, detail=last_failure)

@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bist-Bot | ASELS Technical Analysis</title>
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            secondary: "#48ddbc",
+            "surface-container": "#1c2026",
+            "outline-variant": "#414755",
+            "surface-variant": "#31353c",
+            "surface-bright": "#353940",
+            "surface-container-lowest": "#0a0e14",
+            "surface-container-low": "#181c22",
+            "surface-container-highest": "#31353c",
+            "surface-container-high": "#262a31",
+            background: "#10141a",
+            "on-surface": "#dfe2eb",
+            "on-surface-variant": "#c1c6d7",
+            primary: "#adc6ff",
+            "primary-container": "#4b8eff",
+            tertiary: "#ffb4aa",
+            error: "#ffb4ab"
+          },
+          borderRadius: {
+            DEFAULT: "0.25rem",
+            lg: "0.5rem",
+            xl: "0.75rem",
+            full: "9999px"
+          },
+          fontFamily: {
+            headline: ["Inter"],
+            body: ["Inter"],
+            label: ["Space Grotesk"]
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+    .chart-grid {
+      background-image: linear-gradient(to right, #1c2026 1px, transparent 1px), linear-gradient(to bottom, #1c2026 1px, transparent 1px);
+      background-size: 40px 40px;
+    }
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="bg-background font-body text-on-surface selection:bg-primary/30">
+  <nav class="fixed top-0 z-50 flex h-16 w-full items-center justify-between bg-[#10141a]/80 px-6 backdrop-blur-xl">
+    <div class="flex items-center gap-3">
+      <div class="flex h-8 w-8 items-center justify-center rounded-full bg-primary-container text-[#00285c]">
+        <span class="material-symbols-outlined text-sm">phone_in_talk_watchface_indicator</span>
+      </div>
+      <span class="text-xl font-black tracking-tighter text-[#adc6ff]">Bist-Bot</span>
+    </div>
+    <div class="flex items-center gap-4">
+      <button class="rounded-full p-2 text-[#adc6ff] transition-colors hover:bg-[#353940] active:scale-95">
+        <span class="material-symbols-outlined">sensors</span>
+      </button>
+    </div>
+  </nav>
+
+  <main class="mx-auto max-w-7xl space-y-6 px-4 pb-28 pt-20 md:px-8">
+    <header class="flex flex-col justify-between gap-4 md:flex-row md:items-end">
+      <div>
+        <div class="mb-1 flex items-center gap-2">
+          <span class="rounded bg-primary/10 px-2 py-0.5 font-label text-xs uppercase tracking-widest text-primary">BIST:ASELS</span>
+          <span class="font-label text-xs uppercase tracking-widest text-on-surface-variant">Technology / Defense</span>
+        </div>
+        <h1 class="text-3xl font-extrabold tracking-tight text-on-surface">Aselsan Elektronik</h1>
+      </div>
+      <div class="flex flex-col items-end">
+        <div class="font-label text-3xl font-bold text-secondary">₺78.45</div>
+        <div class="flex items-center gap-1 font-label text-sm text-secondary">
+          <span class="material-symbols-outlined text-sm" style="font-variation-settings: 'FILL' 1;">arrow_drop_up</span>
+          +2.34% (Today)
+        </div>
+      </div>
+    </header>
+
+    <div class="grid grid-cols-1 gap-6 lg:grid-cols-12">
+      <div class="flex flex-col overflow-hidden rounded-xl bg-surface-container lg:col-span-8">
+        <div class="flex items-center justify-between bg-surface-container-high p-4">
+          <div class="flex gap-4">
+            <span class="text-sm font-bold text-on-surface">Technical Chart</span>
+            <div class="flex gap-2">
+              <span class="flex items-center rounded-full bg-primary/10 px-2 font-label text-[10px] text-primary">MA(20)</span>
+              <span class="flex items-center rounded-full bg-tertiary/10 px-2 font-label text-[10px] text-tertiary">EMA(50)</span>
+              <span class="flex items-center rounded-full bg-secondary/10 px-2 font-label text-[10px] text-secondary">BB</span>
+            </div>
+          </div>
+          <div class="flex gap-2 font-label text-[10px]">
+            <button class="rounded bg-surface-bright px-3 py-1 transition-colors hover:bg-outline-variant">1H</button>
+            <button class="rounded bg-primary px-3 py-1 text-[#002e69]">1D</button>
+            <button class="rounded bg-surface-bright px-3 py-1 transition-colors hover:bg-outline-variant">1W</button>
+          </div>
+        </div>
+        <div class="chart-grid relative flex h-96 flex-grow flex-col justify-end p-6">
+          <div class="absolute inset-0 flex items-end justify-around px-8 pb-12">
+            <div class="relative h-32 w-2 rounded-t-sm bg-error"><div class="absolute -top-4 left-1/2 h-16 w-0.5 -translate-x-1/2 bg-error"></div></div>
+            <div class="relative h-40 w-2 rounded-t-sm bg-secondary"><div class="absolute -top-6 left-1/2 h-20 w-0.5 -translate-x-1/2 bg-secondary"></div></div>
+            <div class="relative h-48 w-2 rounded-t-sm bg-secondary"><div class="absolute -top-2 left-1/2 h-12 w-0.5 -translate-x-1/2 bg-secondary"></div></div>
+            <div class="relative h-44 w-2 rounded-t-sm bg-error"><div class="absolute -top-8 left-1/2 h-24 w-0.5 -translate-x-1/2 bg-error"></div></div>
+            <div class="relative h-56 w-2 rounded-t-sm bg-secondary"><div class="absolute -top-4 left-1/2 h-16 w-0.5 -translate-x-1/2 bg-secondary"></div></div>
+            <div class="relative h-64 w-2 rounded-t-sm bg-secondary"><div class="absolute -top-2 left-1/2 h-12 w-0.5 -translate-x-1/2 bg-secondary"></div></div>
+            <div class="relative h-52 w-2 rounded-t-sm bg-error"><div class="absolute -top-6 left-1/2 h-20 w-0.5 -translate-x-1/2 bg-error"></div></div>
+            <div class="relative h-60 w-2 rounded-t-sm bg-secondary"><div class="absolute -top-4 left-1/2 h-16 w-0.5 -translate-x-1/2 bg-secondary"></div></div>
+            <div class="relative h-72 w-2 rounded-t-sm bg-secondary"><div class="absolute -top-8 left-1/2 h-24 w-0.5 -translate-x-1/2 bg-secondary"></div></div>
+          </div>
+          <svg class="pointer-events-none absolute inset-0 h-full w-full opacity-40" viewBox="0 0 800 400">
+            <path d="M0,300 Q200,250 400,280 T800,150" fill="none" stroke="#adc6ff" stroke-width="2"></path>
+            <path d="M0,320 Q200,270 400,300 T800,170" fill="none" stroke="#48ddbc" stroke-dasharray="4" stroke-width="1"></path>
+            <path d="M0,280 Q200,230 400,260 T800,130" fill="none" stroke="#48ddbc" stroke-dasharray="4" stroke-width="1"></path>
+          </svg>
+          <div class="absolute bottom-0 right-2 top-0 flex flex-col justify-between py-6 font-label text-[10px] text-[#8b90a0]">
+            <span>82.00</span><span>80.00</span><span>78.00</span><span>76.00</span><span>74.00</span>
+          </div>
+        </div>
+        <div class="flex h-32 flex-col gap-2 border-t border-outline-variant/15 bg-surface-container-lowest p-4">
+          <div class="mb-1 flex items-center justify-between">
+            <span class="font-label text-[10px] uppercase tracking-tighter text-on-surface-variant">RSI (14): 64.2</span>
+            <div class="h-1 w-32 overflow-hidden rounded-full bg-surface-variant"><div class="h-full w-[64%] bg-secondary"></div></div>
+          </div>
+          <div class="relative flex-grow overflow-hidden">
+            <svg class="absolute inset-0 h-full w-full" viewBox="0 0 800 60">
+              <path d="M0,40 Q100,30 200,45 T400,20 T600,35 T800,25" fill="none" stroke="#48ddbc" stroke-width="1.5"></path>
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex flex-col gap-6 lg:col-span-4">
+        <div class="group relative overflow-hidden rounded-xl bg-surface-container p-6">
+          <div class="absolute right-0 top-0 p-4 opacity-10 transition-opacity group-hover:opacity-20">
+            <span class="material-symbols-outlined text-6xl">analytics</span>
+          </div>
+          <h3 class="mb-2 font-label text-[10px] uppercase tracking-[0.2em] text-primary">Verdict Oracle</h3>
+          <div class="mb-1 text-4xl font-black text-secondary">STRONG BUY</div>
+          <p class="mb-4 text-sm leading-relaxed text-on-surface-variant">Current momentum indicators suggest a breakout above the ₺80.00 psychological resistance level.</p>
+          <div class="flex gap-2">
+            <span class="rounded-full border border-secondary/20 bg-secondary/10 px-3 py-1 font-label text-[10px] text-secondary">Confidence: 89%</span>
+            <span class="rounded-full bg-surface-variant px-3 py-1 font-label text-[10px] text-on-surface">Trend: Bullish</span>
+          </div>
+        </div>
+
+        <div class="flex flex-grow flex-col overflow-hidden rounded-xl bg-surface-container">
+          <div class="bg-surface-container-high px-6 py-4"><h3 class="text-sm font-bold">Technical Indicators</h3></div>
+          <div class="divide-y divide-outline-variant/10 px-6">
+            <div class="flex items-center justify-between py-3"><span class="font-label text-sm text-on-surface-variant">SMA Cross (20/50)</span><span class="rounded bg-secondary/10 px-2 py-0.5 font-label text-xs text-secondary">Bullish</span></div>
+            <div class="flex items-center justify-between py-3"><span class="font-label text-sm text-on-surface-variant">EMA Cross (12/26)</span><span class="rounded bg-secondary/10 px-2 py-0.5 font-label text-xs text-secondary">Bullish</span></div>
+            <div class="flex items-center justify-between py-3"><span class="font-label text-sm text-on-surface-variant">RSI Status</span><span class="rounded bg-primary/10 px-2 py-0.5 font-label text-xs text-primary">Neutral</span></div>
+            <div class="flex items-center justify-between py-3"><span class="font-label text-sm text-on-surface-variant">MACD Divergence</span><span class="rounded bg-secondary/10 px-2 py-0.5 font-label text-xs text-secondary">Buy</span></div>
+            <div class="flex items-center justify-between py-3"><span class="font-label text-sm text-on-surface-variant">Bollinger Bands</span><span class="rounded bg-tertiary/10 px-2 py-0.5 font-label text-xs text-tertiary">Overbought</span></div>
+            <div class="flex items-center justify-between py-3"><span class="font-label text-sm text-on-surface-variant">Stochastic Osc.</span><span class="rounded bg-secondary/10 px-2 py-0.5 font-label text-xs text-secondary">Bullish</span></div>
+          </div>
+          <div class="mt-auto p-6">
+            <button class="flex w-full items-center justify-center gap-2 rounded-lg bg-primary py-3 font-bold text-[#002e69] transition-all hover:opacity-90 active:scale-[0.98]">
+              <span class="material-symbols-outlined text-sm">notifications_active</span>
+              Set Alert
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 gap-6 md:grid-cols-3">
+      <div class="rounded-xl bg-surface-container p-6">
+        <div class="mb-2 font-label text-xs uppercase tracking-widest text-on-surface-variant">Volume (24h)</div>
+        <div class="font-label text-2xl font-bold">12.4M</div>
+        <div class="mt-1 flex items-center gap-1 text-[10px] text-secondary"><span class="material-symbols-outlined text-xs">trending_up</span>14% vs avg</div>
+      </div>
+      <div class="rounded-xl bg-surface-container p-6">
+        <div class="mb-2 font-label text-xs uppercase tracking-widest text-on-surface-variant">Market Cap</div>
+        <div class="font-label text-2xl font-bold">₺178.2B</div>
+        <div class="mt-1 text-[10px] text-on-surface-variant">Rank: #4 in Sector</div>
+      </div>
+      <div class="rounded-xl bg-surface-container p-6">
+        <div class="mb-2 font-label text-xs uppercase tracking-widest text-on-surface-variant">P/E Ratio</div>
+        <div class="font-label text-2xl font-bold">14.22</div>
+        <div class="mt-1 flex items-center gap-1 text-[10px] text-tertiary"><span class="material-symbols-outlined text-xs">priority_high</span>Sector High: 18.1</div>
+      </div>
+    </div>
+  </main>
+
+  <nav class="fixed bottom-0 left-0 z-50 flex w-full items-center justify-around border-t border-[#353940]/15 bg-[#10141a]/90 px-4 py-3 backdrop-blur-2xl">
+    <a class="flex flex-col items-center justify-center text-[#c1c6d7] opacity-60 duration-200 hover:text-[#adc6ff]" href="file:///android_asset/dashboard.html">
+      <span class="material-symbols-outlined">dashboard</span>
+      <span class="mt-1 font-['Space_Grotesk'] text-[10px] uppercase tracking-widest">Dashboard</span>
+    </a>
+    <a class="flex flex-col items-center justify-center text-[#c1c6d7] opacity-60 duration-200 hover:text-[#adc6ff]" href="file:///android_asset/signals.html">
+      <span class="material-symbols-outlined">query_stats</span>
+      <span class="mt-1 font-['Space_Grotesk'] text-[10px] uppercase tracking-widest">Signals</span>
+    </a>
+    <a class="flex flex-col items-center justify-center rounded-xl bg-[#48ddbc]/10 px-3 py-1 text-[#48ddbc] duration-200" href="file:///android_asset/analysis.html">
+      <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">analytics</span>
+      <span class="mt-1 font-['Space_Grotesk'] text-[10px] uppercase tracking-widest">Analysis</span>
+    </a>
+    <a class="flex flex-col items-center justify-center text-[#c1c6d7] opacity-60 duration-200 hover:text-[#adc6ff]" href="file:///android_asset/settings.html">
+      <span class="material-symbols-outlined">settings</span>
+      <span class="mt-1 font-['Space_Grotesk'] text-[10px] uppercase tracking-widest">Settings</span>
+    </a>
+  </nav>
+</body>
+</html>
