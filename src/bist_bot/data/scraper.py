@@ -114,7 +114,9 @@ def scrape_bist_quote(ticker: str, rate_limiter: RateLimiterProtocol) -> ScrapeQ
             logger.info("scrape_succeeded", symbol=symbol, url=url)
             return result
 
-    last_failure = f"parse-hatasi:{result.detail}"
-    logger.warning("scrape_parse_failed", symbol=symbol, detail=result.detail, url=url)
+        last_failure = f"parse-hatasi:{result.detail}"
+        logger.warning(
+            "scrape_parse_failed", symbol=symbol, detail=result.detail, url=url
+        )
 
     return ScrapeQuoteResult(success=False, detail=last_failure)
