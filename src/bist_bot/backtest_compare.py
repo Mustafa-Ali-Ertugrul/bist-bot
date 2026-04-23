@@ -213,7 +213,7 @@ def run(tickers: list[str], period: str = "1y") -> list[CompareRow]:
 
 
 def main():
-    configure_logging(level=logging.WARNING, fmt="%(levelname)s | %(message)s")
+    configure_logging(level=_logging.WARNING, fmt="%(levelname)s | %(message)s")
     parser = argparse.ArgumentParser(
         description="Eski vs Yeni backtest karşılaştırması"
     )
