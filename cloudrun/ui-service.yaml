@@ -17,6 +17,8 @@ spec:
               value: "8080"
             - name: PYTHONPATH
               value: "/app/src"
+            - name: DB_PATH
+              value: "/tmp/bist_signals.db"
             - name: API_BASE_URL
               value: "https://bist-bot-api-REPLACE.a.run.app"
           ports:

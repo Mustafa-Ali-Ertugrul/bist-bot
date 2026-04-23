@@ -134,6 +134,7 @@ class DatabaseManager:
         write_retry_backoff_seconds: float = 0.05,
     ) -> None:
         self.sqlite_path = sqlite_path or settings.DB_PATH
+        self._ensure_sqlite_parent_dir()
         self.busy_timeout_ms = busy_timeout_ms
         self.write_retry_attempts = max(int(write_retry_attempts), 1)
         self.write_retry_backoff_seconds = max(float(write_retry_backoff_seconds), 0.0)
@@ -156,6 +157,13 @@ class DatabaseManager:
             )
         )
         self.initialize()
+
+    def _ensure_sqlite_parent_dir(self) -> None:
+        db_path = Path(self.sqlite_path)
+        parent = db_path.parent
+        if str(parent) in {"", "."}:
+            return
+        parent.mkdir(parents=True, exist_ok=True)
 
     def _register_pragmas(self) -> None:
         @event.listens_for(self.engine, "connect")

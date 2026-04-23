@@ -135,7 +135,8 @@ Backtest JSON ciktilari `data/` altina yazilir.
 - `bist-bot-ui` Streamlit'i calistirir; `bist-bot-api` ise Flask JSON API'yi `python dashboard.py` ile acar.
 - UI servisinde `API_BASE_URL`, API servisinin Cloud Run URL'sine ayarlanmalidir.
 - API servisinde `CORS_ORIGINS`, UI servisinin Cloud Run URL'sini icermelidir.
-- SQLite icin kalici disk yoksa `DB_PATH=/tmp/bist_signals.db` kullanin; bu gecicidir ve instance yeniden olusunca sifirlanir.
+- Hem UI hem API servisinde `DB_PATH=/tmp/bist_signals.db` ayarlayin; bu gecicidir ve instance yeniden olusunca sifirlanir.
+- Kod tarafinda SQLite parent klasoru artik otomatik olusturulur, fakat Cloud Run'da yine de yazilabilir path olarak `/tmp` kullanilmalidir.
 
 Hazir manifest ornekleri `cloudrun/api-service.yaml` ve `cloudrun/ui-service.yaml` altindadir.
 
@@ -171,7 +172,7 @@ gcloud run deploy bist-bot-ui \
   --image REGION-docker.pkg.dev/PROJECT_ID/REPOSITORY/bist-bot:latest \
   --region YOUR_REGION \
   --allow-unauthenticated \
-  --set-env-vars PYTHONPATH=/app/src,API_BASE_URL=https://YOUR_API_URL
+  --set-env-vars PYTHONPATH=/app/src,DB_PATH=/tmp/bist_signals.db,API_BASE_URL=https://YOUR_API_URL
 
 gcloud run services update bist-bot-api \
   --region YOUR_REGION \
