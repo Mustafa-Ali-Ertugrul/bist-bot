@@ -7,6 +7,8 @@ import json
 import os
 import sys
 
+import dotenv
+
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
@@ -118,7 +120,9 @@ def test_secret_settings_can_be_loaded_from_file(monkeypatch, tmp_path):
     secret_file = tmp_path / "jwt_secret.txt"
     secret_file.write_text("file-based-secret\n", encoding="utf-8")
     monkeypatch.delenv("JWT_SECRET_KEY", raising=False)
+    monkeypatch.delenv("JWT_SECRET_KEY_FILE", raising=False)
     monkeypatch.setenv("JWT_SECRET_KEY_FILE", str(secret_file))
+    monkeypatch.setattr(dotenv, "load_dotenv", lambda *args, **kwargs: None)
 
     config_settings = importlib.import_module("bist_bot.config.settings")
     reloaded = importlib.reload(config_settings)
