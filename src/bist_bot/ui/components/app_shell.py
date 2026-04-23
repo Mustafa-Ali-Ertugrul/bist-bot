@@ -12,6 +12,12 @@ PAGE_META = {
 }
 
 
+def set_active_page(page: str) -> None:
+    target = page if page in PAGE_META else "dashboard"
+    st.query_params["page"] = target
+    st.rerun()
+
+
 def mask_secret(value: str | None, prefix: int = 4, suffix: int = 3) -> str:
     raw = (value or "").strip()
     if not raw:
@@ -29,19 +35,9 @@ def get_active_page(default: str = "dashboard") -> str:
     return page
 
 
-def render_shell(active_page: str, email: str = "") -> None:
+def render_shell(active_page: str, email: str = "") -> str | None:
     active_label = PAGE_META[active_page]["label"]
     email_label = html.escape(email or "Guest Session")
-    nav_items: list[str] = []
-    for key, meta in PAGE_META.items():
-        active_class = " bb-nav-item-active" if key == active_page else ""
-        nav_items.append(
-            "<a class='bb-nav-item"
-            f"{active_class}' href='?page={key}'>"
-            f"<span class='bb-nav-icon'>{meta['icon']}</span>"
-            f"<span>{html.escape(meta['label'])}</span>"
-            "</a>"
-        )
 
     st.markdown(
         (
@@ -56,13 +52,27 @@ def render_shell(active_page: str, email: str = "") -> None:
             "<div class='bb-topbar-actions'>"
             f"<span class='bb-badge bb-badge-positive'>{html.escape(active_label)}</span>"
             f"<span class='bb-session-pill'>{email_label}</span>"
-            f"<a class='bb-ghost-link' href='?page={active_page}&action=logout'>Logout</a>"
             "</div>"
             "</header>"
-            "<nav class='bb-bottomnav'>" + "".join(nav_items) + "</nav>"
         ),
         unsafe_allow_html=True,
     )
+
+    nav_columns = st.columns([1, 1, 1, 1, 0.9], gap="small")
+    for (key, meta), column in zip(PAGE_META.items(), nav_columns[:-1], strict=False):
+        with column:
+            button_type = "primary" if key == active_page else "secondary"
+            if st.button(
+                meta["label"],
+                key=f"nav_{key}",
+                use_container_width=True,
+                type=button_type,
+            ):
+                return key
+    with nav_columns[-1]:
+        if st.button("Logout", key="nav_logout", use_container_width=True):
+            return "logout"
+    return None
 
 
 def render_page_hero(

@@ -5,7 +5,11 @@ from __future__ import annotations
 import streamlit as st
 
 from bist_bot.state.session_state import init_session_state
-from bist_bot.ui.components.app_shell import get_active_page, render_shell
+from bist_bot.ui.components.app_shell import (
+    get_active_page,
+    render_shell,
+    set_active_page,
+)
 from bist_bot.ui.pages.analyze_page import render_analyze_page
 from bist_bot.ui.pages.overview_page import render_overview_page
 from bist_bot.ui.pages.settings_page import render_settings_page
@@ -39,11 +43,22 @@ def _handle_query_actions() -> None:
     st.session_state.auth_token = None
     st.session_state.auth_email = ""
     st.session_state.is_authenticated = False
+    st.session_state.app_bootstrapped = False
+    st.session_state.just_logged_in = False
     try:
         del st.query_params["action"]
     except KeyError:
         pass
     st.rerun()
+
+
+def _complete_auth(email: str, token: str) -> None:
+    st.session_state.auth_token = token
+    st.session_state.auth_email = email
+    st.session_state.is_authenticated = True
+    st.session_state.app_bootstrapped = False
+    st.session_state.just_logged_in = True
+    set_active_page("dashboard")
 
 
 def _login_form() -> bool:
@@ -83,10 +98,7 @@ def _login_form() -> bool:
                 return False
             if response.ok:
                 payload = response.json()
-                st.session_state.auth_token = payload["access_token"]
-                st.session_state.auth_email = email
-                st.session_state.is_authenticated = True
-                st.rerun()
+                _complete_auth(email, payload["access_token"])
             else:
                 st.error(
                     _response_message(
@@ -122,13 +134,32 @@ def _login_form() -> bool:
                 return False
             if response.ok:
                 payload = response.json()
-                st.session_state.auth_token = payload["access_token"]
-                st.session_state.auth_email = register_email
-                st.session_state.is_authenticated = True
-                st.rerun()
+                _complete_auth(register_email, payload["access_token"])
             else:
                 st.error(_response_message(response, "Kayit basarisiz."))
     return False
+
+
+def _handle_shell_action(action: str | None) -> None:
+    if action == "logout":
+        st.session_state.auth_token = None
+        st.session_state.auth_email = ""
+        st.session_state.is_authenticated = False
+        st.session_state.app_bootstrapped = False
+        st.session_state.just_logged_in = False
+        set_active_page("dashboard")
+    if action and action != "logout":
+        set_active_page(action)
+
+
+def _bootstrap_authenticated_app() -> None:
+    if not st.session_state.get("just_logged_in"):
+        return
+    with st.spinner("Uygulama yukleniyor, veriler hazirlaniyor..."):
+        prepare_streamlit_runtime()
+    st.session_state.just_logged_in = False
+    st.session_state.app_bootstrapped = True
+    st.rerun()
 
 
 def main() -> None:
@@ -140,10 +171,13 @@ def main() -> None:
         _login_form()
         return
 
+    _bootstrap_authenticated_app()
     prepare_streamlit_runtime()
+    st.session_state.app_bootstrapped = True
 
     page = get_active_page()
-    render_shell(page, email=st.session_state.get("auth_email", ""))
+    shell_action = render_shell(page, email=st.session_state.get("auth_email", ""))
+    _handle_shell_action(shell_action)
 
     if page == "dashboard":
         render_overview_page()
