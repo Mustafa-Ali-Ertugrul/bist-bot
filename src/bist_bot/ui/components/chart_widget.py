@@ -80,9 +80,10 @@ def plot_rsi(df):
     fig.add_hrect(y0=0, y1=30, fillcolor="green", opacity=0.08, line_width=0)
     fig.add_hrect(y0=70, y1=100, fillcolor="red", opacity=0.08, line_width=0)
     fig.add_hline(y=50, line_dash="dash", line_color="#8b90a0")
+    base_layout = _base_layout(180)
     fig.update_layout(
-        **_base_layout(180),
-        yaxis=dict(range=[0, 100], showgrid=True, gridcolor="rgba(255,255,255,0.05)"),
+        **base_layout,
+        yaxis={**base_layout["yaxis"], "range": [0, 100]},
         showlegend=False,
     )
     return fig

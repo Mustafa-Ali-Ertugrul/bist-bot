@@ -58,8 +58,18 @@ def render_shell(active_page: str, email: str = "") -> str | None:
         unsafe_allow_html=True,
     )
 
-    nav_columns = st.columns([1, 1, 1, 1, 0.9], gap="small")
-    for (key, meta), column in zip(PAGE_META.items(), nav_columns[:-1], strict=False):
+    _, logout_col = st.columns([8.6, 1.4], gap="small")
+    with logout_col:
+        if st.button("Logout", key="top_logout", use_container_width=True):
+            return "logout"
+
+    return None
+
+
+def render_bottom_nav(active_page: str) -> str | None:
+    st.markdown("<div class='bb-bottomnav-spacer'></div>", unsafe_allow_html=True)
+    nav_columns = st.columns([1, 1, 1, 1], gap="small")
+    for (key, meta), column in zip(PAGE_META.items(), nav_columns, strict=False):
         with column:
             button_type = "primary" if key == active_page else "secondary"
             if st.button(
@@ -69,9 +79,6 @@ def render_shell(active_page: str, email: str = "") -> str | None:
                 type=button_type,
             ):
                 return key
-    with nav_columns[-1]:
-        if st.button("Logout", key="nav_logout", use_container_width=True):
-            return "logout"
     return None
 
 

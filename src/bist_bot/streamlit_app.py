@@ -7,6 +7,7 @@ import streamlit as st
 from bist_bot.state.session_state import init_session_state
 from bist_bot.ui.components.app_shell import (
     get_active_page,
+    render_bottom_nav,
     render_shell,
     set_active_page,
 )
@@ -98,7 +99,7 @@ def _login_form() -> bool:
                 return False
             if response.ok:
                 payload = response.json()
-                _complete_auth(email, payload["access_token"])
+                _complete_auth(str(email), payload["access_token"])
             else:
                 st.error(
                     _response_message(
@@ -134,7 +135,7 @@ def _login_form() -> bool:
                 return False
             if response.ok:
                 payload = response.json()
-                _complete_auth(register_email, payload["access_token"])
+                _complete_auth(str(register_email), payload["access_token"])
             else:
                 st.error(_response_message(response, "Kayit basarisiz."))
     return False
@@ -187,6 +188,9 @@ def main() -> None:
         render_analyze_page()
     else:
         render_settings_page()
+
+    nav_action = render_bottom_nav(page)
+    _handle_shell_action(nav_action)
 
 
 if __name__ == "__main__":
