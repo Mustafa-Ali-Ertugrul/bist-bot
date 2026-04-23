@@ -189,6 +189,7 @@ def test_vectorized_backtest_shifts_signals_to_next_bar_open():
     signal_idx = 25
     entry_idx = signal_idx + 1
     df.iloc[signal_idx, df.columns.get_loc("rsi")] = 10.0
+    df.iloc[signal_idx, df.columns.get_loc("bb_position")] = "BELOW_LOWER"
     df.iloc[signal_idx, df.columns.get_loc("open")] = 13.0
     df.iloc[entry_idx, df.columns.get_loc("open")] = 17.5
 

@@ -114,7 +114,15 @@ class TestMACD:
         assert expected.issubset(result.columns)
 
     def test_macd_signal_smoothing(self):
-        df = _base_frame()
+        import numpy as np
+
+        np.random.seed(42)
+        n = 200
+        noise = np.random.randn(n) * 2
+        close = 100 + np.cumsum(noise)
+        df = pd.DataFrame(
+            {"open": close, "high": close + 1, "low": close - 1, "close": close, "volume": 1e6},
+        )
         result = TechnicalIndicators.add_macd(df)
 
         macd_std = result["macd"].std()

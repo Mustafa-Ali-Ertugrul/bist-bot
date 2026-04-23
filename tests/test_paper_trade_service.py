@@ -33,7 +33,7 @@ def test_paper_trade_service_updates_open_trades():
     service.update_open_trades()
 
     db.update_all_paper_close.assert_called_once_with({"THYAO.IS": 94.0})
-    db.close_paper_trade.assert_called_once_with(1, 94.0, "STOP_HIT")
+    db.close_paper_trade.assert_called_once_with("THYAO.IS", 94.0, "STOP_HIT")
 
 
 def test_paper_trade_service_queues_actionable_signals(monkeypatch):
@@ -58,7 +58,7 @@ def test_paper_trade_service_queues_actionable_signals(monkeypatch):
         ticker="THYAO.IS",
         signal_type=SignalType.BUY.value,
         signal_price=100.0,
-        signal_time="2025-01-01 10:00:00",
+        signal_time=datetime(2025, 1, 1, 10, 0, 0),
         stop_loss=95.0,
         target_price=110.0,
         score=25,
