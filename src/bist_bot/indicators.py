@@ -129,6 +129,7 @@ class TechnicalIndicators:
         df.loc[rsi.gt(45) & rsi.le(55), "rsi_zone"] = "NEUTRAL"
         df.loc[rsi.gt(55) & rsi.le(70), "rsi_zone"] = "NEAR_OVERBOUGHT"
         df.loc[rsi.gt(70) & rsi.le(100), "rsi_zone"] = "OVERBOUGHT"
+        df["rsi_zone"] = df["rsi_zone"].astype(object)
         return df
 
     @staticmethod

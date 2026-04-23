@@ -64,10 +64,30 @@ class _MetricsRegistry:
         with self._lock:
             self._init_registry()
 
+    def _ensure_prom_counter(self, name: str):
+        if self._prom_registry is None or Counter is None:
+            return None
+        counter = self._prom_counters.get(name)
+        if counter is None:
+            counter = Counter(
+                name, name.replace("_", " "), registry=self._prom_registry
+            )
+            self._prom_counters[name] = counter
+        return counter
+
+    def _ensure_prom_gauge(self, name: str):
+        if self._prom_registry is None or Gauge is None:
+            return None
+        gauge = self._prom_gauges.get(name)
+        if gauge is None:
+            gauge = Gauge(name, name.replace("_", " "), registry=self._prom_registry)
+            self._prom_gauges[name] = gauge
+        return gauge
+
     def inc_counter(self, name: str, amount: float = 1.0) -> None:
         with self._lock:
             self._counters[name] = self._counters.get(name, 0.0) + amount
-            counter = self._prom_counters.get(name)
+            counter = self._ensure_prom_counter(name)
             if counter is not None:
                 counter.inc(amount)
 
@@ -75,7 +95,7 @@ class _MetricsRegistry:
         numeric_value = float(value)
         with self._lock:
             self._gauges[name] = numeric_value
-            gauge = self._prom_gauges.get(name)
+            gauge = self._ensure_prom_gauge(name)
             if gauge is not None:
                 gauge.set(numeric_value)
 
