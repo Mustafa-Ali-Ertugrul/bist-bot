@@ -22,29 +22,70 @@ st.set_page_config(
 def _login_form() -> bool:
     st.title("BIST Bot Giris")
     st.caption("Operator paneline erismek icin kimlik dogrulamasi yapin.")
-    with st.form("login_form"):
-        email = st.text_input("Email", value=st.session_state.get("auth_email", ""))
-        password = st.text_input("Sifre", type="password")
-        submitted = st.form_submit_button("Giris yap", use_container_width=True, type="primary")
+    login_tab, register_tab = st.tabs(["Giris", "Kaydol"])
 
-    if submitted:
-        try:
-            response = api_request(
-                "POST",
-                "/api/auth/login",
-                json={"email": email, "password": password},
+    with login_tab:
+        with st.form("login_form"):
+            email = st.text_input("Email", value=st.session_state.get("auth_email", ""))
+            password = st.text_input("Sifre", type="password")
+            submitted = st.form_submit_button(
+                "Giris yap", use_container_width=True, type="primary"
             )
-        except Exception as exc:
-            st.error(f"API erisimi basarisiz: {exc}")
-            return False
-        if response.ok:
-            payload = response.json()
-            st.session_state.auth_token = payload["access_token"]
-            st.session_state.auth_email = email
-            st.session_state.is_authenticated = True
-            st.rerun()
-        else:
-            st.error("Giris basarisiz. Email veya sifre hatali.")
+
+        if submitted:
+            try:
+                response = api_request(
+                    "POST",
+                    "/api/auth/login",
+                    json={"email": email, "password": password},
+                )
+            except Exception as exc:
+                st.error(f"API erisimi basarisiz: {exc}")
+                return False
+            if response.ok:
+                payload = response.json()
+                st.session_state.auth_token = payload["access_token"]
+                st.session_state.auth_email = email
+                st.session_state.is_authenticated = True
+                st.rerun()
+            else:
+                st.error("Giris basarisiz. Email veya sifre hatali.")
+
+    with register_tab:
+        with st.form("register_form"):
+            register_email = st.text_input("Email", key="register_email")
+            register_password = st.text_input(
+                "Sifre", type="password", key="register_password"
+            )
+            register_password_confirm = st.text_input(
+                "Sifre tekrar", type="password", key="register_password_confirm"
+            )
+            register_submitted = st.form_submit_button(
+                "Kaydol", use_container_width=True, type="primary"
+            )
+
+        if register_submitted:
+            if register_password != register_password_confirm:
+                st.error("Sifreler eslesmiyor.")
+                return False
+            try:
+                response = api_request(
+                    "POST",
+                    "/api/auth/register",
+                    json={"email": register_email, "password": register_password},
+                )
+            except Exception as exc:
+                st.error(f"API erisimi basarisiz: {exc}")
+                return False
+            if response.ok:
+                payload = response.json()
+                st.session_state.auth_token = payload["access_token"]
+                st.session_state.auth_email = register_email
+                st.session_state.is_authenticated = True
+                st.rerun()
+            else:
+                message = response.json().get("message", "Kayit basarisiz.")
+                st.error(message)
     return False
 
 

@@ -72,7 +72,9 @@ def build_test_client(tmp_path):
     ):
         manager = DatabaseManager(sqlite_path=str(tmp_path / "auth_test.db"))
         db = DataAccess(manager)
-        app = create_dashboard_app(cast(Any, DummyFetcher()), cast(Any, DummyEngine()), db)
+        app = create_dashboard_app(
+            cast(Any, DummyFetcher()), cast(Any, DummyEngine()), db
+        )
         app.config["TESTING"] = True
         return app.test_client()
 
@@ -87,7 +89,9 @@ def build_db_user_client(tmp_path, *, include_bootstrap: bool = False):
     }
     if include_bootstrap:
         override_kwargs["ADMIN_BOOTSTRAP_EMAIL"] = "bootstrap@bistbot.local"
-        override_kwargs["ADMIN_BOOTSTRAP_PASSWORD_HASH"] = hash_password("bootstrap-password")
+        override_kwargs["ADMIN_BOOTSTRAP_PASSWORD_HASH"] = hash_password(
+            "bootstrap-password"
+        )
 
     with settings.override(**override_kwargs):
         manager = DatabaseManager(sqlite_path=str(tmp_path / "auth_db_only.db"))
@@ -107,7 +111,9 @@ def build_db_user_client(tmp_path, *, include_bootstrap: bool = False):
                 },
             )
         db = DataAccess(manager)
-        app = create_dashboard_app(cast(Any, DummyFetcher()), cast(Any, DummyEngine()), db)
+        app = create_dashboard_app(
+            cast(Any, DummyFetcher()), cast(Any, DummyEngine()), db
+        )
         app.config["TESTING"] = True
         return app.test_client(), manager
 
@@ -135,6 +141,56 @@ def test_login_wrong_password_returns_401(tmp_path):
     )
 
     assert response.status_code == 401
+
+
+def test_register_creates_user_and_returns_token(tmp_path):
+    client, manager = build_db_user_client(tmp_path)
+
+    response = client.post(
+        "/api/auth/register",
+        json={"email": "newuser@bistbot.local", "password": "strong-pass-123"},
+    )
+
+    assert response.status_code == 201
+    payload = response.get_json()
+    assert payload is not None
+    assert "access_token" in payload
+
+    with manager.engine.begin() as conn:
+        stored_hash = conn.execute(
+            text("SELECT password_hash FROM users WHERE email = :email"),
+            {"email": "newuser@bistbot.local"},
+        ).scalar_one()
+    assert isinstance(stored_hash, str)
+    assert stored_hash.startswith("scrypt:")
+
+
+def test_register_rejects_duplicate_email(tmp_path):
+    client, _manager = build_db_user_client(tmp_path)
+
+    response = client.post(
+        "/api/auth/register",
+        json={"email": "dbadmin@bistbot.local", "password": "strong-pass-123"},
+    )
+
+    assert response.status_code == 400
+    payload = response.get_json()
+    assert payload is not None
+    assert payload["message"] == "Bu email zaten kayitli"
+
+
+def test_register_rejects_short_password(tmp_path):
+    client, _manager = build_db_user_client(tmp_path)
+
+    response = client.post(
+        "/api/auth/register",
+        json={"email": "short@bistbot.local", "password": "short"},
+    )
+
+    assert response.status_code == 400
+    payload = response.get_json()
+    assert payload is not None
+    assert payload["message"] == "Sifre en az 8 karakter olmali"
 
 
 def test_login_rate_limit_returns_429(tmp_path):
@@ -181,7 +237,9 @@ def test_existing_db_users_prevent_env_bootstrap_override(tmp_path):
         ADMIN_BOOTSTRAP_PASSWORD_HASH=hash_password("bootstrap-password"),
     ):
         db = DataAccess(manager)
-        app = create_dashboard_app(cast(Any, DummyFetcher()), cast(Any, DummyEngine()), db)
+        app = create_dashboard_app(
+            cast(Any, DummyFetcher()), cast(Any, DummyEngine()), db
+        )
         app.config["TESTING"] = True
         client = app.test_client()
 
@@ -208,11 +266,15 @@ def test_missing_jwt_secret_prevents_app_startup(tmp_path):
         db = DataAccess(manager)
 
         try:
-            create_dashboard_app(cast(Any, DummyFetcher()), cast(Any, DummyEngine()), db)
+            create_dashboard_app(
+                cast(Any, DummyFetcher()), cast(Any, DummyEngine()), db
+            )
         except RuntimeError as exc:
             assert "JWT_SECRET_KEY" in str(exc)
         else:
-            raise AssertionError("Expected create_dashboard_app to fail without JWT secret")
+            raise AssertionError(
+                "Expected create_dashboard_app to fail without JWT secret"
+            )
 
 
 def test_legacy_bcrypt_hash_migrates_on_successful_login(tmp_path):
@@ -241,7 +303,9 @@ def test_legacy_bcrypt_hash_migrates_on_successful_login(tmp_path):
                 },
             )
         db = DataAccess(manager)
-        app = create_dashboard_app(cast(Any, DummyFetcher()), cast(Any, DummyEngine()), db)
+        app = create_dashboard_app(
+            cast(Any, DummyFetcher()), cast(Any, DummyEngine()), db
+        )
         app.config["TESTING"] = True
         client = app.test_client()
 

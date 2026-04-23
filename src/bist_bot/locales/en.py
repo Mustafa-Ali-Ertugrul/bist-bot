@@ -6,17 +6,14 @@ en = {
     "signal.weak_sell": "🟠 WEAK SELL",
     "signal.sell": "🔴 SELL",
     "signal.strong_sell": "🚨 STRONG SELL",
-
     "confidence.low": "LOW",
     "confidence.medium": "MEDIUM",
     "confidence.high": "HIGH",
-
     "ui.price": "Price",
     "ui.score": "Score",
     "ui.stop": "Stop",
     "ui.target": "Target",
     "ui.lot": "Lot",
-
     "ui.total_signals": "Total Signals",
     "ui.signals_over_time": "All Time",
     "ui.trades_completed": "Trades Completed",
@@ -44,7 +41,6 @@ en = {
     "ui.overview_title": "Overview",
     "ui.signals_title": "Signals",
     "ui.api_data_failed": "Failed to fetch API data",
-
     "log.scan_starting": "BIST BOT — SCAN STARTING",
     "log.scanning_stocks": "Watchlist: {count} stocks",
     "log.data_fetch_failed": "Failed to fetch any data!",
@@ -54,8 +50,11 @@ en = {
     "log.buy_signal": "Buy signal",
     "log.sell_signal": "Sell signal",
     "log.actionable": "Actionable",
-
     "api.invalid_credentials": "Invalid credentials",
+    "api.invalid_email": "Invalid email address",
+    "api.password_too_short": "Password must be at least 8 characters",
+    "api.email_already_exists": "This email is already registered",
+    "api.register_error": "Registration could not be completed",
     "api.data_not_found": "Data not found",
     "api.scan_error": "Scan error",
     "api.analyze_error": "Analyze error",

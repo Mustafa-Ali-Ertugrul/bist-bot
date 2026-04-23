@@ -12,10 +12,11 @@ from flask_jwt_extended import JWTManager, create_access_token, jwt_required
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
 from bist_bot.app_logging import configure_logging, get_logger
 from bist_bot.app_metrics import render_metrics
-from bist_bot.auth.passwords import verify_and_rehash_password
+from bist_bot.auth.passwords import hash_password, verify_and_rehash_password
 from bist_bot.config.settings import settings
 from bist_bot.contracts import (
     DataFetcherProtocol,
@@ -153,6 +154,37 @@ def create_dashboard_app(
                 )
         return True
 
+    def create_user(email: str, password: str) -> tuple[bool, str]:
+        manager = getattr(get_db(), "manager", None)
+        if manager is None:
+            return False, get_message("api.register_error")
+        if "@" not in email or "." not in email.split("@")[-1]:
+            return False, get_message("api.invalid_email")
+        if len(password) < 8:
+            return False, get_message("api.password_too_short")
+
+        timestamp = datetime.now(TR).isoformat()
+        try:
+            with manager.engine.begin() as conn:
+                conn.execute(
+                    text(
+                        """
+                        INSERT INTO users (email, password_hash, role, created_at, updated_at)
+                        VALUES (:email, :password_hash, 'admin', :created_at, :updated_at)
+                        """
+                    ),
+                    {
+                        "email": email,
+                        "password_hash": hash_password(password),
+                        "created_at": timestamp,
+                        "updated_at": timestamp,
+                    },
+                )
+        except IntegrityError:
+            return False, get_message("api.email_already_exists")
+
+        return True, ""
+
     @app.after_request
     def add_security_headers(response):
         response.headers["X-Content-Type-Options"] = "nosniff"
@@ -199,6 +231,21 @@ def create_dashboard_app(
 
         token = create_access_token(identity=email)
         return jsonify({"status": "ok", "access_token": token, "expires_in_hours": 12})
+
+    @app.route("/api/auth/register", methods=["POST"])
+    @limiter.limit("5 per minute")
+    def api_auth_register():
+        payload = request.get_json(silent=True) or {}
+        email = str(payload.get("email", "")).strip().lower()
+        password = str(payload.get("password", ""))
+        success, message = create_user(email, password)
+        if not success:
+            return jsonify({"status": "error", "message": message}), 400
+
+        token = create_access_token(identity=email)
+        return jsonify(
+            {"status": "ok", "access_token": token, "expires_in_hours": 12}
+        ), 201
 
     @app.route("/api/scan", methods=["POST"])
     @jwt_required()
