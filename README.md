@@ -129,6 +129,55 @@ Healthcheckler:
 
 Backtest JSON ciktilari `data/` altina yazilir.
 
+## Cloud Run
+
+- Bu repo Cloud Run'da tek servis yerine iki servis olarak deploy edilmelidir: `bist-bot-api` ve `bist-bot-ui`.
+- `bist-bot-ui` Streamlit'i calistirir; `bist-bot-api` ise Flask JSON API'yi `python dashboard.py` ile acar.
+- UI servisinde `API_BASE_URL`, API servisinin Cloud Run URL'sine ayarlanmalidir.
+- API servisinde `CORS_ORIGINS`, UI servisinin Cloud Run URL'sini icermelidir.
+- SQLite icin kalici disk yoksa `DB_PATH=/tmp/bist_signals.db` kullanin; bu gecicidir ve instance yeniden olusunca sifirlanir.
+
+Hazir manifest ornekleri `cloudrun/api-service.yaml` ve `cloudrun/ui-service.yaml` altindadir.
+
+Windows PowerShell ile hizli deploy:
+
+```powershell
+gcloud secrets create jwt-secret-key
+Set-Content -Path jwt_secret.txt -Value "replace-with-long-random-secret"
+gcloud secrets versions add jwt-secret-key --data-file=jwt_secret.txt
+
+.\cloudrun\deploy.ps1 `
+  -ProjectId YOUR_PROJECT_ID `
+  -Region YOUR_REGION `
+  -Repository YOUR_ARTIFACT_REGISTRY_REPOSITORY `
+  -JwtSecretKey jwt-secret-key
+```
+
+Elle deploy etmek isterseniz:
+
+```bash
+gcloud builds submit --tag REGION-docker.pkg.dev/PROJECT_ID/REPOSITORY/bist-bot:latest
+
+gcloud run deploy bist-bot-api \
+  --image REGION-docker.pkg.dev/PROJECT_ID/REPOSITORY/bist-bot:latest \
+  --region YOUR_REGION \
+  --allow-unauthenticated \
+  --command python \
+  --args dashboard.py \
+  --set-env-vars PYTHONPATH=/app/src,DB_PATH=/tmp/bist_signals.db,RATE_LIMIT_STORAGE_URI=memory:// \
+  --set-secrets JWT_SECRET_KEY=jwt-secret-key:latest
+
+gcloud run deploy bist-bot-ui \
+  --image REGION-docker.pkg.dev/PROJECT_ID/REPOSITORY/bist-bot:latest \
+  --region YOUR_REGION \
+  --allow-unauthenticated \
+  --set-env-vars PYTHONPATH=/app/src,API_BASE_URL=https://YOUR_API_URL
+
+gcloud run services update bist-bot-api \
+  --region YOUR_REGION \
+  --update-env-vars CORS_ORIGINS=https://YOUR_UI_URL
+```
+
 ## Official Data Provider
 
 `DATA_PROVIDER=official` ile Matriks, Foreks, Finnet gibi resmi veri saglayicilara baglanabilirsiniz. Provider, endpoint mapping'i uzerinden genisletilebilir bir REST adapter yapisi sunar.

@@ -1,0 +1,32 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: bist-bot-api
+spec:
+  template:
+    metadata:
+      annotations:
+        run.googleapis.com/execution-environment: gen2
+    spec:
+      containerConcurrency: 20
+      timeoutSeconds: 300
+      containers:
+        - image: REGION-docker.pkg.dev/PROJECT_ID/REPOSITORY/bist-bot:latest
+          command: ["python"]
+          args: ["dashboard.py"]
+          env:
+            - name: PORT
+              value: "8080"
+            - name: PYTHONPATH
+              value: "/app/src"
+            - name: DB_PATH
+              value: "/tmp/bist_signals.db"
+            - name: JWT_SECRET_KEY
+              value: "REPLACE_WITH_LONG_RANDOM_SECRET"
+            - name: RATE_LIMIT_STORAGE_URI
+              value: "memory://"
+            - name: CORS_ORIGINS
+              value: "https://bist-bot-ui-REPLACE.a.run.app"
+          ports:
+            - name: http1
+              containerPort: 8080
