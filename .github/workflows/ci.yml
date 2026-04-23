@@ -36,9 +36,9 @@ jobs:
         run: |
           python -m pytest tests/ -v --tb=short
 
-    - name: Type check with mypy
-      run: |
-        mypy src/bist_bot tests --ignore-missing-imports
+      - name: Type check with mypy
+        run: |
+          mypy src/bist_bot tests --ignore-missing-imports
 
       - name: Check imports
         run: |
