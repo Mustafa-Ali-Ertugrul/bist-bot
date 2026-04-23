@@ -19,6 +19,17 @@ st.set_page_config(
 )
 
 
+def _response_message(response, default: str) -> str:
+    try:
+        payload = response.json()
+    except ValueError:
+        text = response.text.strip()
+        return text or default
+    if isinstance(payload, dict):
+        return str(payload.get("message", default))
+    return default
+
+
 def _login_form() -> bool:
     st.title("BIST Bot Giris")
     st.caption("Operator paneline erismek icin kimlik dogrulamasi yapin.")
@@ -49,7 +60,11 @@ def _login_form() -> bool:
                 st.session_state.is_authenticated = True
                 st.rerun()
             else:
-                st.error("Giris basarisiz. Email veya sifre hatali.")
+                st.error(
+                    _response_message(
+                        response, "Giris basarisiz. Email veya sifre hatali."
+                    )
+                )
 
     with register_tab:
         with st.form("register_form"):
@@ -84,8 +99,7 @@ def _login_form() -> bool:
                 st.session_state.is_authenticated = True
                 st.rerun()
             else:
-                message = response.json().get("message", "Kayit basarisiz.")
-                st.error(message)
+                st.error(_response_message(response, "Kayit basarisiz."))
     return False
 
 
