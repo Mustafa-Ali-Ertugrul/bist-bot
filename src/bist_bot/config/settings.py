@@ -110,6 +110,9 @@ def _get_csv_env(name: str) -> tuple[str, ...]:
     return tuple(items)
 
 
+DEFAULT_FLASK_PORT = _get_int_env("PORT", _get_int_env("FLASK_PORT", 5000))
+
+
 DEFAULT_BIST100_WATCHLIST = BIST100_TICKERS
 
 TICKER_NAMES = {
@@ -266,7 +269,7 @@ class Settings:
     NOTIFICATION_MAX_RETRIES: int = _get_int_env("NOTIFICATION_MAX_RETRIES", 3)
     NOTIFICATION_RETRY_DELAY: int = _get_int_env("NOTIFICATION_RETRY_DELAY", 5)
 
-    FLASK_PORT: int = _get_int_env("FLASK_PORT", 5000)
+    FLASK_PORT: int = DEFAULT_FLASK_PORT
     FLASK_DEBUG: bool = _get_bool_env("FLASK_DEBUG", False)
     LOG_FORMAT: str = _get_str_env("LOG_FORMAT", "console")
     LOG_LEVEL: str = _get_str_env("LOG_LEVEL", "INFO")
@@ -277,7 +280,7 @@ class Settings:
         "STREAMLIT_ANALYZE_COOLDOWN_SECONDS", 4.0
     )
     API_BASE_URL: str = _get_str_env(
-        "API_BASE_URL", f"http://localhost:{_get_int_env('FLASK_PORT', 5000)}"
+        "API_BASE_URL", f"http://localhost:{DEFAULT_FLASK_PORT}"
     )
     RATE_LIMIT_STORAGE_URI: str = _get_str_env("RATE_LIMIT_STORAGE_URI", "memory://")
     SENTRY_DSN: str | None = _get_str_env("SENTRY_DSN") or None

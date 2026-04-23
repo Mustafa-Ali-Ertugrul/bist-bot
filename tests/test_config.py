@@ -26,6 +26,17 @@ def test_flask_debug_env_override(monkeypatch):
     assert reloaded.settings.FLASK_DEBUG is True
 
 
+def test_flask_port_prefers_cloud_run_port(monkeypatch):
+    monkeypatch.setenv("PORT", "8080")
+    monkeypatch.setenv("FLASK_PORT", "5000")
+
+    config_settings = importlib.import_module("bist_bot.config.settings")
+    reloaded = importlib.reload(config_settings)
+
+    assert reloaded.settings.FLASK_PORT == 8080
+    assert reloaded.settings.API_BASE_URL == "http://localhost:8080"
+
+
 def test_save_settings_strips_telegram_secrets(tmp_path, monkeypatch):
     from bist_bot.config import store as config_store
 
