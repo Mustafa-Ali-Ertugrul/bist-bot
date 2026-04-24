@@ -51,6 +51,23 @@ class NotifierProtocol(Protocol):
     def send_startup_message(self) -> bool: ...
 
 
+class SilentNotifier:
+    def send_message(self, text: str, parse_mode: str = "HTML") -> bool:
+        return True
+
+    def send_signal(self, signal: Signal) -> bool:
+        return True
+
+    def send_scan_summary(self, signals: list[Signal], total_scanned: int) -> bool:
+        return True
+
+    def send_signal_change(self, ticker: str, old_signal: Signal, new_signal: Signal) -> bool:
+        return True
+
+    def send_startup_message(self) -> bool:
+        return True
+
+
 class SignalRepositoryProtocol(Protocol):
     def save_signal(self, signal: Signal) -> None: ...
     def save_signals(self, signals: list[Signal]) -> None: ...

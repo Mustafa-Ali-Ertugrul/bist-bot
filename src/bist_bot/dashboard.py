@@ -21,6 +21,7 @@ from bist_bot.config.settings import settings
 from bist_bot.contracts import (
     DataFetcherProtocol,
     SignalRepositoryProtocol,
+    SilentNotifier,
     StrategyEngineProtocol,
 )
 from bist_bot.dependencies import AppContainer, get_default_container
@@ -30,27 +31,6 @@ from bist_bot.scanner import ScanService
 
 TR = timezone(timedelta(hours=3))
 logger = get_logger(__name__, component="dashboard")
-
-
-class _SilentNotifier:
-    def send_message(self, text: str, parse_mode: str = "HTML") -> bool:
-        _ = text, parse_mode
-        return True
-
-    def send_signal(self, signal) -> bool:
-        _ = signal
-        return True
-
-    def send_scan_summary(self, signals, total_scanned: int) -> bool:
-        _ = signals, total_scanned
-        return True
-
-    def send_signal_change(self, ticker: str, old_signal, new_signal) -> bool:
-        _ = ticker, old_signal, new_signal
-        return True
-
-    def send_startup_message(self) -> bool:
-        return True
 
 
 def _round_value(value: Any) -> float | None:
@@ -122,7 +102,7 @@ def create_dashboard_app(
         return ScanService(
             get_fetcher(),
             get_engine(),
-            _SilentNotifier(),
+            SilentNotifier(),
             get_db(),
             broker=get_broker(),
             settings=settings,

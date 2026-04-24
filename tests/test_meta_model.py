@@ -27,7 +27,7 @@ def test_signal_meta_model_fit_and_predict_probability() -> None:
     )
     labels = [0, 0, 0, 0, 1, 1, 1, 1, 0, 1]
     model = SignalMetaModel(
-        calibration_method="platt", calibration_holdout_fraction=0.3
+        calibration_method="platt", n_cv_splits=3,
     )
 
     model.fit(features, labels)
@@ -36,3 +36,4 @@ def test_signal_meta_model_fit_and_predict_probability() -> None:
     )
 
     assert 0.0 <= probability <= 1.0
+

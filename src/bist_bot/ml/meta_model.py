@@ -4,16 +4,23 @@ from __future__ import annotations
 
 import json
 import pickle
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable, Literal, Mapping, cast
+from typing import Any, Iterable, Literal, Mapping, cast
 
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
-
 from sklearn.isotonic import IsotonicRegression  # type: ignore[import-not-found]
 from sklearn.linear_model import LogisticRegression  # type: ignore[import-not-found]
+from sklearn.model_selection import TimeSeriesSplit  # type: ignore[import-not-found]
+
+try:  # pragma: no cover - optional heavy dependency
+    from xgboost import XGBClassifier  # type: ignore[import-not-found]
+
+    _HAS_XGBOOST = True
+except ImportError:  # pragma: no cover
+    _HAS_XGBOOST = False
 
 
 CalibrationMethod = Literal["none", "platt", "isotonic"]
@@ -69,38 +76,111 @@ class ProbabilityCalibrator:
         )
 
 
+# ---------------------------------------------------------------------------
+# Default XGBoost hyper-parameters tuned for financial signal classification.
+# Shallow trees + aggressive sub-sampling fight the low signal-to-noise ratio
+# that is typical of BIST technical-indicator features.
+# ---------------------------------------------------------------------------
+_DEFAULT_XGB_PARAMS: dict[str, Any] = {
+    "n_estimators": 150,
+    "max_depth": 4,
+    "learning_rate": 0.05,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "objective": "binary:logistic",
+    "eval_metric": "logloss",
+    "random_state": 42,
+    "verbosity": 0,
+}
+
+
+def _build_classifier(xgb_params: dict[str, Any] | None = None) -> Any:
+    """Create the underlying classifier, preferring XGBoost when available."""
+    if _HAS_XGBOOST:
+        params = {**_DEFAULT_XGB_PARAMS, **(xgb_params or {})}
+        return XGBClassifier(**params)
+    # Graceful fallback: keep the project functional without XGBoost
+    return LogisticRegression(max_iter=1000)  # pragma: no cover
+
+
 @dataclass
 class SignalMetaModel:
     calibration_method: CalibrationMethod = "platt"
+    n_cv_splits: int = 5
+    xgb_params: dict[str, Any] = field(default_factory=dict)
+
+    # Backward-compatible alias so old tests using the positional param still work
     calibration_holdout_fraction: float = 0.2
 
     def __post_init__(self) -> None:
-        self.model = LogisticRegression(max_iter=1000)
+        self.model = _build_classifier(self.xgb_params or None)
         self.calibrator = ProbabilityCalibrator(self.calibration_method)
         self.feature_names: list[str] = []
 
+    # ------------------------------------------------------------------
+    # Training
+    # ------------------------------------------------------------------
+
     def fit(self, features: pd.DataFrame, labels: Iterable[int]) -> "SignalMetaModel":
+        """Train the model and calibrate probabilities with Time-Series CV.
+
+        Walk-forward out-of-fold predictions are used to fit the calibrator
+        so that calibrated probabilities are entirely free of look-ahead bias.
+        The final model is then retrained on the *full* dataset for live use.
+        """
         if features.empty:
             raise ValueError("features must not be empty")
+
         targets = np.asarray(list(labels), dtype=int)
         if len(features) != len(targets):
             raise ValueError("features and labels must have the same length")
         self.feature_names = list(features.columns)
-        holdout_size = int(len(features) * self.calibration_holdout_fraction)
-        if self.calibration_method == "none" or holdout_size < 5:
+
+        # ------ Simple path: no calibration ------
+        if self.calibration_method == "none":
             self.model.fit(features, targets)
             self.calibrator = ProbabilityCalibrator("none")
             return self
 
-        split_index = len(features) - holdout_size
-        train_x = features.iloc[:split_index]
-        train_y = targets[:split_index]
-        calib_x = features.iloc[split_index:]
-        calib_y = targets[split_index:]
-        self.model.fit(train_x, train_y)
-        raw_probabilities = self.model.predict_proba(calib_x)[:, 1]
-        self.calibrator.fit(raw_probabilities, calib_y)
+        # ------ Time-Series CV path ------
+        effective_splits = min(self.n_cv_splits, len(features) - 1)
+        if effective_splits < 2:
+            # Not enough data for meaningful CV – train directly
+            self.model.fit(features, targets)
+            raw_probs = self.model.predict_proba(features)[:, 1]
+            self.calibrator.fit(raw_probs, targets)
+            return self
+
+        tscv = TimeSeriesSplit(n_splits=effective_splits)
+        oof_predictions = np.full(len(features), np.nan)
+
+        for train_idx, test_idx in tscv.split(features):
+            x_train = features.iloc[train_idx]
+            y_train = targets[train_idx]
+            x_test = features.iloc[test_idx]
+
+            fold_model = _build_classifier(self.xgb_params or None)
+            fold_model.fit(x_train, y_train)
+            oof_predictions[test_idx] = fold_model.predict_proba(x_test)[:, 1]
+
+        # Gather only the indices that received OOF predictions
+        valid_mask = ~np.isnan(oof_predictions)
+        calib_probs = oof_predictions[valid_mask]
+        calib_targets = targets[valid_mask]
+
+        if len(calib_probs) >= 5:
+            self.calibrator.fit(calib_probs, calib_targets)
+        else:
+            self.calibrator = ProbabilityCalibrator("none")  # pragma: no cover
+
+        # Retrain on full dataset for production inference
+        self.model = _build_classifier(self.xgb_params or None)
+        self.model.fit(features, targets)
         return self
+
+    # ------------------------------------------------------------------
+    # Inference
+    # ------------------------------------------------------------------
 
     def predict_probability(
         self, features: Mapping[str, float] | pd.DataFrame
@@ -122,6 +202,10 @@ class SignalMetaModel:
         if missing:
             raise ValueError(f"Missing meta-model feature(s): {', '.join(missing)}")
         return cast(pd.DataFrame, frame[self.feature_names].astype(float))
+
+    # ------------------------------------------------------------------
+    # Persistence
+    # ------------------------------------------------------------------
 
     def save_artifacts(
         self,

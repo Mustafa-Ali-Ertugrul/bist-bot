@@ -3,3 +3,18 @@ src = ["src", "tests"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["src/bist_bot"]
+
+[tool.coverage.report]
+fail_under = 65
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG:",
+    "raise AssertionError",
+    "raise NotImplementedError"
+]

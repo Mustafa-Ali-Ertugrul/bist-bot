@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
-from dataclasses import replace
+
 from datetime import datetime
 from unittest.mock import MagicMock
 
@@ -54,7 +54,7 @@ def test_scan_once_orchestrates_side_effect_services():
         engine,
         notifier,
         db,
-        settings=replace(settings, PAPER_MODE=True),
+        settings=settings.replace( PAPER_MODE=True),
         signal_change_service=signal_change_service,
         execution_service=execution_service,
         paper_trade_service=paper_trade_service,
@@ -90,7 +90,7 @@ def test_scan_once_skips_paper_trade_updates_when_disabled():
         engine,
         notifier,
         db,
-        settings=replace(settings, PAPER_MODE=False),
+        settings=settings.replace( PAPER_MODE=False),
         paper_trade_service=paper_trade_service,
     )
 

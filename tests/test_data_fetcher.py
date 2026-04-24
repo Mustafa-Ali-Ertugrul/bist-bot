@@ -6,7 +6,6 @@ import os
 import sys
 
 import pytest
-from dataclasses import replace
 import pandas as pd
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -44,7 +43,7 @@ def test_rate_limiter_waits_when_called_too_soon(monkeypatch):
     clock = iter([100.0, 100.0, 101.0, 101.0, 103.0])
 
     monkeypatch.setattr(
-        data_fetcher, "settings", replace(data_fetcher.settings, RATE_LIMIT_SECONDS=2.0)
+        data_fetcher, "settings", data_fetcher.settings.replace( RATE_LIMIT_SECONDS=2.0)
     )
     monkeypatch.setattr(data_fetcher.time, "time", lambda: next(clock))
     monkeypatch.setattr(
@@ -64,7 +63,7 @@ def test_clean_ticker_list_normalizes_and_deduplicates():
         normalize_ticker,
         validate_data,
     )
-    import pandas as pd
+import pandas as pd
 
     raw = ["thyao", "THYAO.IS", " asels ", "ASELS.IS", ""]
 
@@ -205,7 +204,7 @@ def test_fetcher_uses_provider_quote_fallback_before_history(monkeypatch):
     monkeypatch.setattr(
         data_fetcher,
         "settings",
-        replace(data_fetcher.settings, ENABLE_REALTIME_SCRAPING=True),
+        data_fetcher.settings.replace( ENABLE_REALTIME_SCRAPING=True),
     )
 
     assert fetcher.get_current_price("THYAO.IS") == 111.0

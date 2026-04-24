@@ -40,6 +40,12 @@ def build_app_container(
     paper_trade_fetcher: Optional[BISTDataFetcher] = None,
     backtester_factory: Optional[Callable[[], Backtester]] = None,
 ) -> AppContainer:
+    validation_errors = settings.validate_all()
+    if validation_errors:
+        from bist_bot.app_logging import get_logger
+        get_logger(__name__, component="dependencies").warning(
+            "config_validation_errors", errors=validation_errors
+        )
     data_provider = _build_data_provider()
     quote_provider = BorsaIstanbulQuoteProvider(rate_limiter=_build_rate_limiter())
     runtime_fetcher = fetcher or BISTDataFetcher(provider=data_provider, quote_provider=quote_provider)

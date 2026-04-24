@@ -76,6 +76,7 @@ def build_test_client(tmp_path):
             cast(Any, DummyFetcher()), cast(Any, DummyEngine()), db
         )
         app.config["TESTING"] = True
+        app.config["ALLOW_PUBLIC_REGISTRATION"] = True
         return app.test_client()
 
 
@@ -126,6 +127,13 @@ def build_db_user_client(
 
 def test_login_successful(tmp_path):
     client = build_test_client(tmp_path)
+    
+    # Önce kullanıcıyı oluştur
+    response = client.post(
+        "/api/auth/register",
+        json={"email": "admin@bistbot.local", "password": "test-password"},
+    )
+    assert response.status_code == 201
 
     response = client.post(
         "/api/auth/login",

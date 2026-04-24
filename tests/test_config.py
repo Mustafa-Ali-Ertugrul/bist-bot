@@ -23,6 +23,8 @@ def test_flask_debug_default_false(monkeypatch):
 
 def test_flask_debug_env_override(monkeypatch):
     monkeypatch.setenv("FLASK_DEBUG", "True")
+    sub = importlib.import_module("bist_bot.config.subsettings")
+    importlib.reload(sub)
     config_settings = importlib.import_module("bist_bot.config.settings")
     reloaded = importlib.reload(config_settings)
     assert reloaded.settings.FLASK_DEBUG is True
@@ -32,6 +34,8 @@ def test_flask_port_prefers_cloud_run_port(monkeypatch):
     monkeypatch.setenv("PORT", "8080")
     monkeypatch.setenv("FLASK_PORT", "5000")
 
+    sub = importlib.import_module("bist_bot.config.subsettings")
+    importlib.reload(sub)
     config_settings = importlib.import_module("bist_bot.config.settings")
     reloaded = importlib.reload(config_settings)
 
@@ -124,6 +128,8 @@ def test_secret_settings_can_be_loaded_from_file(monkeypatch, tmp_path):
     monkeypatch.setenv("JWT_SECRET_KEY_FILE", str(secret_file))
     monkeypatch.setattr(dotenv, "load_dotenv", lambda *args, **kwargs: None)
 
+    sub = importlib.import_module("bist_bot.config.subsettings")
+    importlib.reload(sub)
     config_settings = importlib.import_module("bist_bot.config.settings")
     reloaded = importlib.reload(config_settings)
 

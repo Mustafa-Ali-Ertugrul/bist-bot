@@ -428,13 +428,8 @@ class TechnicalIndicators:
 
         if ticker:
             base_threshold = getattr(settings, "VOLUME_CONFIRM_MULTIPLIER", 1.5)
-            liquidity_factor = settings.TICKER_NAMES.get(ticker, "")
-            if liquidity_factor in ("SASA", "EREGL", "KRDMD"):
-                threshold = threshold or 1.2
-            elif liquidity_factor in ("THYAO", "GARAN", "AKBNK"):
-                threshold = threshold or 1.8
-            else:
-                threshold = threshold or base_threshold
+            overrides = getattr(settings, "VOLUME_CONFIRM_TICKER_OVERRIDES", {})
+            threshold = threshold or overrides.get(ticker, base_threshold)
         else:
             threshold = threshold or 1.5
 

@@ -82,16 +82,16 @@ class StrategyEngine:
     ) -> bool:
         return check_momentum_confirmation(df, threshold)
 
-    def _score_momentum(self, last, prev) -> tuple[float, list[str]]:
+    def _score_momentum(self, last: pd.Series, prev: pd.Series) -> tuple[float, list[str]]:
         return score_momentum(self.params, last, prev)
 
-    def _score_trend(self, last, prev) -> tuple[float, list[str]]:
+    def _score_trend(self, last: pd.Series, prev: pd.Series) -> tuple[float, list[str]]:
         return score_trend(self.params, last, prev)
 
-    def _score_volume(self, last) -> tuple[float, list[str]]:
+    def _score_volume(self, last: pd.Series) -> tuple[float, list[str]]:
         return score_volume(self.params, last)
 
-    def _score_structure(self, last) -> tuple[float, list[str]]:
+    def _score_structure(self, last: pd.Series) -> tuple[float, list[str]]:
         return score_structure(self.params, last)
 
     def _build_meta_features(

@@ -44,11 +44,14 @@ class PaperTradeService:
         if not open_trades:
             return
 
+        unique_tickers = list({trade.ticker for trade in open_trades})
+        batch = self.fetcher.fetch_all(period="1d", force=False)
+
         prices: dict[str, float] = {}
-        for trade in open_trades:
-            df = self.fetcher.fetch_single(trade.ticker, period="1d")
-            if df is not None:
-                prices[trade.ticker] = float(df["close"].iloc[-1])
+        for ticker in unique_tickers:
+            df = batch.get(ticker)
+            if df is not None and len(df) > 0:
+                prices[ticker] = float(df["close"].iloc[-1])
 
         if not prices:
             return

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
 from datetime import datetime
 from typing import Any, cast
 
@@ -276,7 +275,7 @@ def test_scan_orchestration_auto_execute_creates_sent_order(tmp_path) -> None:
     manager = DatabaseManager(sqlite_path=str(tmp_path / "integration_scan.db"))
     db = DataAccess(manager)
     broker = BrokerStub()
-    execution_service = ExecutionService(db, broker=broker, settings=replace(settings, AUTO_EXECUTE=True))
+    execution_service = ExecutionService(db, broker=broker, settings=settings.replace( AUTO_EXECUTE=True))
     signal = Signal(
         ticker="THYAO.IS",
         signal_type=SignalType.STRONG_BUY,
@@ -301,7 +300,7 @@ def test_scan_orchestration_auto_execute_creates_sent_order(tmp_path) -> None:
             "update_open_trades": lambda self: None,
         })()),
         notification_service=cast(Any, type("NoopNotify", (), {"notify_scan_results": lambda self, signals, actionable, total: None})()),
-        settings=replace(settings, AUTO_EXECUTE=True, PAPER_MODE=False),
+        settings=settings.replace( AUTO_EXECUTE=True, PAPER_MODE=False),
     )
 
     result = service.scan_once()
@@ -317,7 +316,7 @@ def test_scan_orchestration_marks_order_rejected_when_broker_fails(tmp_path) -> 
     manager = DatabaseManager(sqlite_path=str(tmp_path / "integration_scan_fail.db"))
     db = DataAccess(manager)
     broker = BrokerStub(should_raise=True)
-    execution_service = ExecutionService(db, broker=broker, settings=replace(settings, AUTO_EXECUTE=True))
+    execution_service = ExecutionService(db, broker=broker, settings=settings.replace( AUTO_EXECUTE=True))
     signal = Signal(
         ticker="THYAO.IS",
         signal_type=SignalType.STRONG_BUY,
@@ -342,7 +341,7 @@ def test_scan_orchestration_marks_order_rejected_when_broker_fails(tmp_path) -> 
             "update_open_trades": lambda self: None,
         })()),
         notification_service=cast(Any, type("NoopNotify", (), {"notify_scan_results": lambda self, signals, actionable, total: None})()),
-        settings=replace(settings, AUTO_EXECUTE=True, PAPER_MODE=False),
+        settings=settings.replace( AUTO_EXECUTE=True, PAPER_MODE=False),
     )
 
     service.scan_once()
