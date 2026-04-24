@@ -18,6 +18,7 @@ from bist_bot.scanner import ScanService
 from bist_bot.notifier import TelegramNotifier
 from bist_bot.risk import RiskManager
 from bist_bot.strategy import StrategyEngine
+from bist_bot.risk.circuit_breaker import CircuitBreaker
 
 
 @dataclass(frozen=True)
@@ -29,6 +30,7 @@ class AppContainer:
     broker: BaseExecutionProvider
     paper_trade_fetcher: BISTDataFetcher
     backtester_factory: Callable[[], Backtester]
+    circuit_breaker: CircuitBreaker
 
 
 def build_app_container(
@@ -39,6 +41,7 @@ def build_app_container(
     broker: Optional[BaseExecutionProvider] = None,
     paper_trade_fetcher: Optional[BISTDataFetcher] = None,
     backtester_factory: Optional[Callable[[], Backtester]] = None,
+    circuit_breaker: Optional[CircuitBreaker] = None,
 ) -> AppContainer:
     validation_errors = settings.validate_all()
     if validation_errors:
@@ -66,6 +69,9 @@ def build_app_container(
     runtime_backtester_factory = backtester_factory or (
         lambda: Backtester(initial_capital=getattr(settings, "INITIAL_CAPITAL", 8500.0))
     )
+    runtime_circuit_breaker = circuit_breaker or CircuitBreaker(
+        capital=getattr(settings, "INITIAL_CAPITAL", 8500.0)
+    )
 
     return AppContainer(
         fetcher=runtime_fetcher,
@@ -75,6 +81,7 @@ def build_app_container(
         broker=runtime_broker,
         paper_trade_fetcher=runtime_paper_trade_fetcher,
         backtester_factory=runtime_backtester_factory,
+        circuit_breaker=runtime_circuit_breaker,
     )
 
 
@@ -89,7 +96,10 @@ def _build_broker() -> BaseExecutionProvider:
             ),
             dry_run=settings.ALGOLAB_DRY_RUN,
         )
-    return PaperBroker(initial_cash=getattr(settings, "INITIAL_CAPITAL", 8500.0))
+    return PaperBroker(
+        initial_cash=getattr(settings, "INITIAL_CAPITAL", 8500.0),
+        manual_confirm=getattr(settings, "CONFIRM_LIVE_TRADING", False),
+    )
 
 
 def _build_rate_limiter():
@@ -135,6 +145,7 @@ def build_scan_service(container: Optional[AppContainer] = None) -> ScanService:
         runtime_container.db,
         broker=runtime_container.broker,
         settings=settings,
+        circuit_breaker=runtime_container.circuit_breaker,
     )
 
 

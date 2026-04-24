@@ -6,6 +6,7 @@ import io
 import json
 import logging
 import sys
+from contextvars import ContextVar
 from datetime import datetime, timezone
 from typing import Any
 
@@ -18,6 +19,14 @@ from bist_bot.config.settings import settings
 
 
 _DEFAULT_COMPONENT = "app"
+
+_correlation_id_ctx: ContextVar[str | None] = ContextVar("correlation_id", default=None)
+
+def get_correlation_id() -> str | None:
+    return _correlation_id_ctx.get()
+
+def set_correlation_id(cid: str | None) -> None:
+    _correlation_id_ctx.set(cid)
 
 
 def _normalize_level(level: str | None = None) -> int:
@@ -106,6 +115,11 @@ class BoundLogger:
             **fields,
             "event": event,
         }
+        
+        cid = _correlation_id_ctx.get()
+        if cid is not None:
+            payload["correlation_id"] = cid
+            
         self._logger.log(level, _serialize_event(payload))
 
     def debug(self, event: str, *args: Any, **fields: Any) -> None:

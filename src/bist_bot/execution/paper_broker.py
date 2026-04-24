@@ -19,8 +19,9 @@ from bist_bot.execution.base import (
 class PaperBroker(BaseExecutionProvider):
     """Simple in-memory broker implementation."""
 
-    def __init__(self, initial_cash: float = 0.0) -> None:
+    def __init__(self, initial_cash: float = 0.0, manual_confirm: bool = False) -> None:
         self.cash = float(initial_cash)
+        self.manual_confirm = manual_confirm
         self.positions: dict[str, Position] = {}
         self.orders: dict[str, Order] = {}
 
@@ -44,6 +45,7 @@ class PaperBroker(BaseExecutionProvider):
         price: float | None = None,
         stop_price: float | None = None,
     ) -> OrderResult:
+        state = OrderState.CREATED if self.manual_confirm else OrderState.SENT
         order = Order(
             ticker=ticker,
             side=side,
@@ -51,12 +53,12 @@ class PaperBroker(BaseExecutionProvider):
             order_type=order_type,
             price=price,
             stop_price=stop_price,
-            state=OrderState.SENT,
+            state=state,
         )
         order.updated_at = utc_now()
         self.orders[order.order_id] = order
 
-        if order.order_type is OrderType.MARKET:
+        if not self.manual_confirm and order.order_type is OrderType.MARKET:
             fill_price = price if price is not None else 0.0
             self._fill_order(order.order_id, quantity=order.quantity, fill_price=fill_price)
 
@@ -66,6 +68,19 @@ class PaperBroker(BaseExecutionProvider):
             broker_order_id=order.order_id,
             state=order.state,
         )
+
+    def confirm_order(self, order_id: str, fill_price: float | None = None) -> bool:
+        """Manually approve and execute a CREATED order."""
+        order = self.orders.get(order_id)
+        if order is None or order.state != OrderState.CREATED:
+            return False
+            
+        order.state = OrderState.SENT
+        order.updated_at = utc_now()
+        if order.order_type is OrderType.MARKET or fill_price is not None:
+            exec_price = fill_price if fill_price is not None else (order.price or 0.0)
+            return self._fill_order(order_id, order.remaining_quantity(), exec_price)
+        return True
 
     def cancel_order(self, order_id: str) -> bool:
         order = self.orders.get(order_id)

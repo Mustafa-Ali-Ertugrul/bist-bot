@@ -18,6 +18,7 @@ from bist_bot.services.notification_service import NotificationDispatchService
 from bist_bot.services.paper_trade_service import PaperTradeService
 from bist_bot.services.signal_change_service import SignalChangeService
 from bist_bot.strategy.signal_models import Signal, SignalType
+from bist_bot.risk.circuit_breaker import CircuitBreaker
 
 logger = get_logger(__name__, component="scanner")
 
@@ -49,6 +50,7 @@ class ScanService:
         execution_service: ExecutionService | None = None,
         paper_trade_service: PaperTradeService | None = None,
         notification_service: NotificationDispatchService | None = None,
+        circuit_breaker: CircuitBreaker | None = None,
     ) -> None:
         """Create a scan service with explicit runtime dependencies."""
         self.fetcher = fetcher
@@ -75,6 +77,7 @@ class ScanService:
             "buys": 0,
             "sells": 0,
         }
+        self.circuit_breaker = circuit_breaker
 
     def _auto_execute_signals(self, signals: list[Signal]) -> None:
         """Submit actionable signals to the configured execution service."""
@@ -98,6 +101,10 @@ class ScanService:
             scanned_count=len(self.settings.WATCHLIST),
             component="scanner",
         )
+
+        if self.circuit_breaker and not self.circuit_breaker.allow_request():
+            logger.warning("scan_aborted_circuit_open")
+            return []
 
         try:
             if force_refresh:
@@ -168,12 +175,17 @@ class ScanService:
                         score=signal.score,
                     )
 
+            if self.circuit_breaker:
+                self.circuit_breaker.record_success()
+
             return cast(list[Signal], signals)
         except Exception as exc:
             duration_ms = round((time.perf_counter() - started_at) * 1000, 2)
             inc_counter("bist_scan_fail_total")
             set_gauge("bist_last_scan_duration_ms", duration_ms)
             logger.exception("scan_failed", error=exc, duration_ms=duration_ms)
+            if hasattr(self, "circuit_breaker") and self.circuit_breaker:
+                self.circuit_breaker.record_error()
             raise
 
     def update_paper_trades(self) -> None:

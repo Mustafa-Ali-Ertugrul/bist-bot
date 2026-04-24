@@ -66,8 +66,15 @@ class RiskManager:
         self.atr_baseline_pct = float(getattr(settings, "ATR_BASELINE_PCT", 0.025))
         self.atr_min_risk_scale = float(getattr(settings, "ATR_MIN_RISK_SCALE", 0.35))
         self.max_position_cap_pct = float(
-            getattr(settings, "MAX_POSITION_CAP_PCT", 90.0)
+            getattr(settings, "MAX_POSITION_CAP_PCT", 5.0)
         )
+        self.max_sector_cap_pct = float(
+            getattr(settings, "MAX_SECTOR_CAP_PCT", 20.0)
+        )
+        self.max_total_risk_pct = float(
+            getattr(settings, "MAX_TOTAL_RISK_PCT", 2.0)
+        )
+        self.max_risk_pct = self.max_total_risk_pct
         self.kelly_fraction_scale = float(
             getattr(settings, "KELLY_FRACTION_SCALE", 0.25)
         )
@@ -94,7 +101,7 @@ class RiskManager:
         sector = getattr(settings, "SECTOR_MAP", {}).get(ticker)
         if not sector:
             return True
-        sector_limit = getattr(settings, "SECTOR_LIMIT", 2)
+        sector_limit = int(max(1, self.max_sector_cap_pct / self.max_position_cap_pct))
         current = self._sector_signal_counts.get(sector, 0)
         if current >= sector_limit:
             logger.warning("sector_limit_reached", sector=sector, current=current, limit=sector_limit)

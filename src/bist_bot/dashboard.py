@@ -28,6 +28,7 @@ from bist_bot.dependencies import AppContainer, get_default_container
 from bist_bot.indicators import TechnicalIndicators
 from bist_bot.locales import get_message
 from bist_bot.scanner import ScanService
+from bist_bot.risk.circuit_breaker import CircuitBreaker
 
 TR = timezone(timedelta(hours=3))
 logger = get_logger(__name__, component="dashboard")
@@ -68,6 +69,7 @@ def create_dashboard_app(
     engine: StrategyEngineProtocol,
     db: SignalRepositoryProtocol,
     broker: Any | None = None,
+    circuit_breaker: CircuitBreaker | None = None,
 ) -> Flask:
     """Create the authenticated Flask API application."""
     settings.require_security_config()
@@ -77,6 +79,7 @@ def create_dashboard_app(
     app.config["engine"] = engine
     app.config["db"] = db
     app.config["broker"] = broker
+    app.config["circuit_breaker"] = circuit_breaker
     app.config["JWT_SECRET_KEY"] = settings.JWT_SECRET_KEY
     app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(hours=12)
     app.config["RATELIMIT_STORAGE_URI"] = settings.RATE_LIMIT_STORAGE_URI
@@ -106,6 +109,7 @@ def create_dashboard_app(
             get_db(),
             broker=get_broker(),
             settings=settings,
+            circuit_breaker=app.config.get("circuit_breaker"),
         )
 
     def verify_admin(email: str, password: str) -> bool:
@@ -186,11 +190,13 @@ def create_dashboard_app(
 
     @app.route("/health")
     def health_check():
+        circuit = app.config.get("circuit_breaker")
         health = {
             "status": "healthy",
             "database": "ok" if get_db().ping() else "error",
             "version": "1.0.0",
             "timestamp": datetime.now(TR).isoformat(),
+            "circuit_state": str(circuit.state) if circuit else "UNKNOWN",
         }
         if health["database"] != "ok":
             health["status"] = "degraded"
@@ -414,6 +420,7 @@ def create_default_dashboard_app(container: AppContainer | None = None) -> Flask
         engine=runtime_container.engine,
         db=runtime_container.db,
         broker=runtime_container.broker,
+        circuit_breaker=runtime_container.circuit_breaker,
     )
 
 

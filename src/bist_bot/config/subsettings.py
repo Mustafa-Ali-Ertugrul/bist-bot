@@ -211,11 +211,13 @@ class RiskSettings:
     CORRELATION_MAX_CLUSTER: int = _get_int_env("CORRELATION_MAX_CLUSTER", 2)
     ATR_BASELINE_PCT: float = _get_float_env("ATR_BASELINE_PCT", 0.025)
     ATR_MIN_RISK_SCALE: float = _get_float_env("ATR_MIN_RISK_SCALE", 0.35)
-    MAX_POSITION_CAP_PCT: float = _get_float_env("MAX_POSITION_CAP_PCT", 90.0)
+    MAX_POSITION_CAP_PCT: float = _get_float_env("MAX_POSITION_CAP_PCT", 5.0)
+    MAX_SECTOR_CAP_PCT: float = _get_float_env("MAX_SECTOR_CAP_PCT", 20.0)
+    MAX_TOTAL_RISK_PCT: float = _get_float_env("MAX_TOTAL_RISK_PCT", 2.0)
     KELLY_FRACTION_SCALE: float = _get_float_env("KELLY_FRACTION_SCALE", 0.25)
     MIN_SIGNAL_PROBABILITY: float = _get_float_env("MIN_SIGNAL_PROBABILITY", 0.50)
     MIN_LIQUIDITY_VALUE_TL: float = _get_float_env("MIN_LIQUIDITY_VALUE_TL", 0.0)
-    DAILY_LOSS_CAP_PCT: float = _get_float_env("DAILY_LOSS_CAP_PCT", 0.0)
+    DAILY_LOSS_CAP_PCT: float = _get_float_env("DAILY_LOSS_CAP_PCT", 3.0)
 
 
 @dataclass(frozen=True)

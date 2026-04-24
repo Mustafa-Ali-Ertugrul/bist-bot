@@ -62,12 +62,11 @@ class DummyEngine:
 
 
 def build_test_client(tmp_path):
-    password_hash = hash_password("test-password")
     with settings.override(
         DB_PATH=str(tmp_path / "auth_test.db"),
         JWT_SECRET_KEY="test_secret_key_12345678901234567890",
-        ADMIN_BOOTSTRAP_EMAIL="admin@bistbot.local",
-        ADMIN_BOOTSTRAP_PASSWORD_HASH=password_hash,
+        ADMIN_BOOTSTRAP_EMAIL="",
+        ADMIN_BOOTSTRAP_PASSWORD_HASH="",
         CORS_ORIGINS=("http://localhost:8501",),
     ):
         manager = DatabaseManager(sqlite_path=str(tmp_path / "auth_test.db"))
@@ -127,7 +126,7 @@ def build_db_user_client(
 
 def test_login_successful(tmp_path):
     client = build_test_client(tmp_path)
-    
+
     # Önce kullanıcıyı oluştur
     response = client.post(
         "/api/auth/register",
