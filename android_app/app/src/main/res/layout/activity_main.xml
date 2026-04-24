@@ -1,13 +1,52 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#06090A">
+    android:background="#06090A"
+    android:orientation="vertical">
 
     <WebView
         android:id="@+id/webView"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
         android:overScrollMode="never" />
 
-</FrameLayout>
+    <LinearLayout
+        android:id="@+id/bottomNavigation"
+        android:layout_width="match_parent"
+        android:layout_height="72dp"
+        android:background="#10141A"
+        android:elevation="16dp"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:paddingHorizontal="8dp"
+        android:paddingTop="6dp"
+        android:paddingBottom="8dp">
+
+        <TextView
+            android:id="@+id/navDashboard"
+            style="@style/BistBotBottomNavItem"
+            android:drawableTop="@drawable/ic_nav_dashboard"
+            android:text="Dashboard" />
+
+        <TextView
+            android:id="@+id/navSignals"
+            style="@style/BistBotBottomNavItem"
+            android:drawableTop="@drawable/ic_nav_signals"
+            android:text="Signals" />
+
+        <TextView
+            android:id="@+id/navAnalysis"
+            style="@style/BistBotBottomNavItem"
+            android:drawableTop="@drawable/ic_nav_analysis"
+            android:text="Analysis" />
+
+        <TextView
+            android:id="@+id/navSettings"
+            style="@style/BistBotBottomNavItem"
+            android:drawableTop="@drawable/ic_nav_settings"
+            android:text="Settings" />
+    </LinearLayout>
+
+</LinearLayout>

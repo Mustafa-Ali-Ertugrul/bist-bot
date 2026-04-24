@@ -4,4 +4,20 @@
         <item name="android:navigationBarColor">#06090A</item>
         <item name="android:windowLightStatusBar" tools:targetApi="m">false</item>
     </style>
+
+    <style name="BistBotBottomNavItem">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">match_parent</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:background">@drawable/bottom_nav_item_inactive</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+        <item name="android:fontFamily">sans</item>
+        <item name="android:gravity">center</item>
+        <item name="android:textColor">#8B90A0</item>
+        <item name="android:textSize">11sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:drawablePadding">3dp</item>
+        <item name="android:paddingTop">5dp</item>
+    </style>
 </resources>

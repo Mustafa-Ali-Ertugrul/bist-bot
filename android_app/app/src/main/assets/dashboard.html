@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html class="dark" lang="en">
+<html class="dark" lang="tr">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Bist-Bot Terminal | Dashboard</title>
-  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <title>Bist-Bot Terminal</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet" />
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
   <script>
     tailwind.config = {
@@ -17,328 +17,90 @@
             "surface-container": "#1c2026",
             "outline-variant": "#414755",
             "surface-variant": "#31353c",
-            "surface-bright": "#353940",
-            "surface-container-lowest": "#0a0e14",
-            "surface-container-low": "#181c22",
-            "surface-container-highest": "#31353c",
-            "surface-container-high": "#262a31",
             background: "#10141a",
             "on-surface": "#dfe2eb",
-            "on-surface-variant": "#c1c6d7",
             primary: "#adc6ff",
-            "primary-container": "#4b8eff",
             tertiary: "#ffb4aa"
-          },
-          borderRadius: {
-            DEFAULT: "0.5rem",
-            lg: "0.5rem",
-            xl: "0.75rem",
-            full: "9999px"
-          },
-          fontFamily: {
-            headline: ["Inter"],
-            body: ["Inter"],
-            label: ["Space Grotesk"]
           }
         }
       }
     };
   </script>
   <style>
-    .material-symbols-outlined {
-      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-      vertical-align: middle;
-    }
-    body {
-      background-color: #10141a;
-      color: #dfe2eb;
-      font-family: 'Inter', sans-serif;
-      min-height: max(884px, 100dvh);
-    }
-    .bento-grid {
-      display: grid;
-      grid-template-columns: repeat(12, 1fr);
-      gap: 1.5rem;
-    }
+    .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; vertical-align: middle; }
+    body { background-color: #10141a; color: #dfe2eb; font-family: 'Inter', sans-serif; }
   </style>
-  <script>
-    const API_BASE_URL = "https://ais-dev-rsgc7cv3ciwaa5kzv7gysh-293260048803.europe-west2.run.app";
-    const DASHBOARD_ENDPOINT = `${API_BASE_URL}/api/v1/dashboard/stats`;
-
-    function formatCurrency(value) {
-      const number = Number(value);
-      if (Number.isNaN(number)) return "-";
-      return `₺${number.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    }
-
-    function formatNumber(value) {
-      const number = Number(value);
-      if (Number.isNaN(number)) return "-";
-      return number.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    }
-
-    function formatPercent(value, suffix) {
-      const number = Number(value);
-      if (Number.isNaN(number)) return suffix ? `- ${suffix}` : "-";
-      const sign = number > 0 ? "+" : "";
-      return suffix ? `${sign}${number}% ${suffix}` : `${sign}${number}%`;
-    }
-
-    function escapeHtml(value) {
-      return String(value ?? "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/\"/g, "&quot;")
-        .replace(/'/g, "&#39;");
-    }
-
-    function setStatus(message, tone) {
-      const element = document.getElementById("dashboard-status");
-      if (!element) return;
-
-      const toneClasses = {
-        loading: "text-on-surface-variant",
-        success: "text-secondary",
-        error: "text-tertiary"
-      };
-
-      element.className = `mb-2 font-label text-[10px] uppercase tracking-[0.3em] ${toneClasses[tone] || toneClasses.loading}`;
-      element.textContent = message;
-    }
-
-    function renderPnlBadge(percentValue, amountValue) {
-      const percent = Number(percentValue ?? 0);
-      const amount = Number(amountValue ?? 0);
-      const positive = percent >= 0;
-      const toneClasses = positive
-        ? "bg-secondary/10 text-secondary"
-        : "bg-tertiary/10 text-tertiary";
-      const arrow = positive ? "arrow_drop_up" : "arrow_drop_down";
-      const sign = percent > 0 ? "+" : "";
-      const amountSign = amount >= 0 ? "+" : "-";
-
-      return `<div class="inline-flex items-center gap-1 rounded px-2 py-1 font-label text-[10px] font-bold ${toneClasses}"><span class="material-symbols-outlined text-[12px]">${arrow}</span>${sign}${percent.toFixed(2)}% (${amountSign}${formatCurrency(Math.abs(amount))})</div>`;
-    }
-
-    function renderPositions(positions) {
-      const tbody = document.getElementById("positions-body");
-      if (!tbody) return;
-
-      if (!Array.isArray(positions) || positions.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-10 text-center font-label text-xs uppercase tracking-widest text-on-surface-variant">Canli pozisyon verisi bekleniyor</td></tr>';
-        return;
-      }
-
-      tbody.innerHTML = positions.map((position) => {
-        const symbol = escapeHtml(position.ticker || position.symbol || "--");
-        const name = escapeHtml(position.name || position.company_name || "Canli pozisyon");
-        const entryPrice = formatCurrency(position.entry_price ?? position.avg_price ?? position.cost_price);
-        const lastPrice = formatCurrency(position.last_price ?? position.current_price ?? position.price);
-        const size = Number(position.size ?? position.quantity ?? 0);
-        const sizeText = Number.isNaN(size) ? "-" : size.toLocaleString("tr-TR");
-
-        return `
-          <tr class="transition-colors hover:bg-surface-bright">
-            <td class="px-6 py-5"><div class="flex items-center gap-3"><div class="flex h-10 w-10 items-center justify-center rounded bg-white/5 font-label font-bold text-primary">${symbol.slice(0, 3)}</div><div><p class="text-sm font-bold">${symbol}</p><p class="font-label text-[10px] text-on-surface-variant">${name}</p></div></div></td>
-            <td class="px-6 py-5 font-label text-sm">${entryPrice}</td>
-            <td class="px-6 py-5 font-label text-sm">${lastPrice}</td>
-            <td class="px-6 py-5 font-label text-sm">${sizeText}</td>
-            <td class="px-6 py-5">${renderPnlBadge(position.pnl_percent ?? position.change_percent ?? position.return_percent, position.pnl_value ?? position.unrealized_pnl ?? position.profit_loss)}</td>
-            <td class="px-6 py-5"><button class="text-on-surface-variant transition-colors hover:text-primary"><span class="material-symbols-outlined">more_vert</span></button></td>
-          </tr>
-        `;
-      }).join("");
-    }
-
-    function renderDashboard(data) {
-      const portfolioValue = data.portfolio_value ?? data.total_value;
-      const dailyChange = data.daily_change ?? data.portfolio_change_percent;
-      const indexValue = data.index_value ?? data.xu100_value ?? data.bist100_value;
-      const indexChange = data.index_change ?? data.xu100_change ?? data.bist100_change;
-
-      if (portfolioValue !== undefined) {
-        document.getElementById("portfolio-value").textContent = formatCurrency(portfolioValue);
-      }
-
-      if (dailyChange !== undefined) {
-        const element = document.getElementById("portfolio-change");
-        const numericChange = Number(dailyChange);
-        element.textContent = formatPercent(dailyChange);
-        element.classList.toggle("text-secondary", numericChange >= 0 && !Number.isNaN(numericChange));
-        element.classList.toggle("text-tertiary", numericChange < 0);
-        element.classList.toggle("text-on-surface-variant", Number.isNaN(numericChange));
-      }
-
-      if (indexValue !== undefined) {
-        document.getElementById("xu100-price").textContent = formatNumber(indexValue);
-      }
-
-      if (indexChange !== undefined) {
-        const element = document.getElementById("xu100-change");
-        const numericChange = Number(indexChange);
-        element.textContent = formatPercent(indexChange, "bugun");
-        element.classList.toggle("text-secondary", numericChange >= 0 && !Number.isNaN(numericChange));
-        element.classList.toggle("text-tertiary", numericChange < 0);
-        element.classList.toggle("text-on-surface-variant", Number.isNaN(numericChange));
-      }
-
-      renderPositions(data.positions || data.active_positions || data.holdings);
-    }
-
-    async function fetchLiveData() {
-      setStatus("Veri baglaniyor", "loading");
-
-      try {
-        const response = await fetch(DASHBOARD_ENDPOINT, {
-          headers: {
-            Accept: "application/json"
-          }
-        });
-
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-
-        const data = await response.json();
-        renderDashboard(data || {});
-        setStatus("Canli veri senkronize", "success");
-      } catch (error) {
-        console.error("Canli veri hatasi:", error);
-        renderPositions([]);
-        setStatus("Backend ulasilamiyor", "error");
-      }
-    }
-
-    window.addEventListener("DOMContentLoaded", () => {
-      fetchLiveData();
-      setInterval(fetchLiveData, 30000);
-    });
-  </script>
 </head>
 <body class="bg-background text-on-surface">
-  <header class="fixed top-0 z-50 flex h-16 w-full items-center justify-between bg-[#10141a]/80 px-6 backdrop-blur-xl">
+  <header class="fixed top-0 z-50 flex h-16 w-full items-center justify-between bg-[#10141a]/80 px-6 backdrop-blur-xl border-b border-white/5">
     <div class="flex items-center gap-3">
-      <div class="flex h-10 w-10 items-center justify-center rounded-full border border-primary/20 bg-surface-container-highest">
-        <span class="material-symbols-outlined text-primary">smart_toy</span>
-      </div>
+      <span class="material-symbols-outlined text-primary">smart_toy</span>
       <span class="text-xl font-black tracking-tighter text-[#adc6ff]">Bist-Bot</span>
     </div>
-    <div class="flex items-center gap-4">
-      <div class="flex items-center gap-2 rounded-full bg-secondary/10 px-3 py-1">
-        <span class="h-2 w-2 animate-pulse rounded-full bg-secondary"></span>
-        <span class="font-label text-[10px] font-bold uppercase tracking-widest text-secondary">Live Terminal</span>
-      </div>
-      <button class="rounded-lg p-2 text-on-surface-variant transition-colors duration-150 hover:bg-[#353940] active:scale-95">
-        <span class="material-symbols-outlined">sensors</span>
-      </button>
+    <div class="flex items-center gap-2 rounded-full bg-secondary/10 px-3 py-1">
+      <span class="h-2 w-2 animate-pulse rounded-full bg-secondary"></span>
+      <span class="font-['Space_Grotesk'] text-[10px] font-bold uppercase tracking-widest text-secondary">Live</span>
     </div>
   </header>
 
-  <main class="mx-auto max-w-7xl px-6 pb-32 pt-24">
+  <main class="mx-auto max-w-7xl px-6 pt-24">
     <section class="mb-10">
-      <div class="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
-        <div>
-          <h2 id="dashboard-status" class="mb-2 font-label text-[10px] uppercase tracking-[0.3em] text-on-surface-variant">Veri baglaniyor</h2>
-          <div class="flex items-baseline gap-3">
-            <span id="portfolio-value" class="font-headline text-5xl font-black tracking-tighter text-on-surface md:text-6xl">-</span>
-            <span id="portfolio-change" class="font-label text-lg font-bold text-on-surface-variant">-</span>
-          </div>
-        </div>
-        <div class="flex gap-2">
-          <button class="rounded-xl bg-surface-container-high px-6 py-3 text-sm font-bold tracking-tight transition-all hover:bg-surface-bright active:scale-95">Withdraw</button>
-          <button class="rounded-xl bg-gradient-to-r from-primary to-primary-container px-8 py-3 text-sm font-black tracking-tight text-[#00285c] shadow-lg shadow-primary/10 transition-all hover:opacity-90 active:scale-95">Deploy Capital</button>
-        </div>
+      <h2 id="dashboard-status" class="mb-2 font-['Space_Grotesk'] text-[10px] uppercase tracking-[0.3em] text-secondary text-center md:text-left">Canli Veri Senkronize</h2>
+      <div class="flex items-baseline justify-center md:justify-start gap-3">
+        <span id="portfolio-value" class="font-bold text-5xl tracking-tighter text-on-surface">₺0</span>
+        <span id="portfolio-change" class="font-['Space_Grotesk'] text-lg font-bold text-secondary">+0.0%</span>
       </div>
     </section>
 
-    <div class="bento-grid">
-      <div class="col-span-12 flex min-h-[400px] flex-col overflow-hidden rounded-xl bg-surface-container lg:col-span-8">
-        <div class="flex items-center justify-between bg-surface-container-high/50 p-6">
+    <div class="grid grid-cols-12 gap-6">
+      <!-- XU100 Widget -->
+      <div class="col-span-12 lg:col-span-8 rounded-2xl bg-surface-container p-6 border border-white/5">
+        <div class="flex items-center justify-between mb-8">
           <div class="flex items-center gap-3">
-            <div class="flex h-8 w-8 items-center justify-center rounded bg-primary/20">
-              <span class="material-symbols-outlined text-sm text-primary">trending_up</span>
-            </div>
-            <div>
-              <h3 class="font-bold tracking-tight">XU100 Index</h3>
-              <p class="font-label text-[10px] uppercase text-on-surface-variant">Borsa Istanbul 100</p>
-            </div>
+            <div class="p-2 rounded-lg bg-primary/10"><span class="material-symbols-outlined text-primary text-sm">trending_up</span></div>
+            <h3 class="font-bold">BIST 100</h3>
           </div>
           <div class="text-right">
-            <p id="xu100-price" class="font-label text-lg font-bold">-</p>
-            <p id="xu100-change" class="font-label text-xs text-on-surface-variant">-</p>
+            <p id="xu100-price" class="text-lg font-bold font-['Space_Grotesk']">0.00</p>
+            <p id="xu100-change" class="text-xs text-secondary">0.00%</p>
           </div>
         </div>
-        <div class="relative flex flex-grow flex-col justify-end p-6">
-          <div class="pointer-events-none absolute inset-0 overflow-hidden px-6 pb-6">
-            <div class="h-full w-full bg-gradient-to-t from-primary/10 to-transparent opacity-30"></div>
-            <svg class="absolute bottom-6 left-6 right-6 h-48 w-[calc(100%-48px)]" preserveAspectRatio="none" viewBox="0 0 1000 200">
-              <path d="M0,180 Q100,160 200,170 T400,120 T600,80 T800,40 T1000,20" fill="none" stroke="#adc6ff" stroke-linecap="round" stroke-width="4"></path>
-              <path d="M0,180 Q100,160 200,170 T400,120 T600,80 T800,40 T1000,20 V200 H0 Z" fill="url(#chartGradient)" opacity="0.1"></path>
-              <defs>
-                <linearGradient id="chartGradient" x1="0%" x2="0%" y1="0%" y2="100%">
-                  <stop offset="0%" style="stop-color:#adc6ff;stop-opacity:1"></stop>
-                  <stop offset="100%" style="stop-color:#adc6ff;stop-opacity:0"></stop>
-                </linearGradient>
-              </defs>
-            </svg>
-          </div>
-          <div class="grid grid-cols-6 gap-2">
-            <div class="relative h-1 overflow-hidden rounded-full bg-surface-variant"><div class="absolute inset-0 w-full bg-primary"></div></div>
-            <div class="relative h-1 overflow-hidden rounded-full bg-surface-variant"><div class="absolute inset-0 w-full bg-primary"></div></div>
-            <div class="relative h-1 overflow-hidden rounded-full bg-surface-variant"><div class="absolute inset-0 w-full bg-primary"></div></div>
-            <div class="relative h-1 overflow-hidden rounded-full bg-surface-variant"><div class="absolute inset-0 w-2/3 bg-primary"></div></div>
-            <div class="h-1 rounded-full bg-surface-variant"></div>
-            <div class="h-1 rounded-full bg-surface-variant"></div>
-          </div>
+        <div class="h-32 flex items-end gap-1">
+            <!-- Mock Chart bars -->
+            <div class="flex-1 bg-primary/20 h-12 rounded-t"></div><div class="flex-1 bg-primary/30 h-16 rounded-t"></div><div class="flex-1 bg-primary/40 h-24 rounded-t"></div><div class="flex-1 bg-primary/50 h-20 rounded-t"></div><div class="flex-1 bg-primary/60 h-28 rounded-t"></div>
         </div>
       </div>
 
-      <div class="col-span-12 grid grid-cols-1 gap-4 lg:col-span-4">
-        <div class="flex flex-col justify-between rounded-xl border-l-4 border-secondary bg-surface-container p-6">
-          <h3 class="font-label text-[10px] uppercase tracking-widest text-on-surface-variant">Success Rate</h3>
-          <div class="mt-4">
-            <span class="font-headline text-4xl font-black">78.4%</span>
-            <div class="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-surface-variant"><div class="h-full w-[78.4%] bg-secondary"></div></div>
-          </div>
-          <p class="mt-4 text-xs text-on-surface-variant">Based on last 250 executions</p>
+      <!-- Stats -->
+      <div class="col-span-12 lg:col-span-4 flex flex-col gap-4">
+        <div class="bg-surface-container p-6 rounded-2xl border-l-4 border-secondary">
+          <p class="text-[10px] uppercase font-['Space_Grotesk'] text-on-surface/50 mb-2">Basari Orani</p>
+          <span id="success-rate" class="text-3xl font-black">0.0%</span>
         </div>
-        <div class="flex flex-col justify-between rounded-xl border-l-4 border-primary bg-surface-container p-6">
-          <h3 class="font-label text-[10px] uppercase tracking-widest text-on-surface-variant">Total Signals</h3>
-          <div class="mt-4">
-            <span class="font-headline text-4xl font-black">1,402</span>
-            <p class="mt-2 font-label text-xs text-on-surface-variant">Active strategy: <span class="text-primary">KINETIC_ALPHA_V4</span></p>
-          </div>
-        </div>
-        <div class="group relative cursor-pointer overflow-hidden rounded-xl bg-surface-container p-6 transition-colors hover:bg-surface-bright">
-          <img alt="Abstract terminal graphics" class="absolute inset-0 h-full w-full object-cover opacity-10 transition-opacity group-hover:opacity-20" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBBxrDCeUX7CbN88LicdbrQUmquillwmRCtIsqhtBlvxlwkuAphf_fpjN793Wuq3hHVZwtxRNKYIuIR-sYlOIoUMMKh2W3S6PP8ceW422XbaFwOPlM_m3O4Y1wCVvTpQgrxF8yLho7UnNe_3DT7ERqS80Se4sePynuphWo9uuGDLCJL0GedOvPcdqFwsusUoIwrURErAjIsRrQNkrdiy-z0Hz2Sa9zBAphU_jz8ca5TtP6vyO7zxCWGzjvG_KbC0Slt92GSWIWKG6Gf" />
-          <div class="relative z-10">
-            <h3 class="font-label text-[10px] uppercase tracking-widest text-on-surface-variant">Live Insights</h3>
-            <p class="mt-4 text-sm font-medium leading-relaxed">Volatility in energy sector detected. Rebalancing signals generated for THYAO and TUPRS.</p>
-            <button class="mt-4 flex items-center gap-2 font-label text-xs font-bold tracking-widest text-primary">READ MORE <span class="material-symbols-outlined text-sm">chevron_right</span></button>
-          </div>
+        <div class="bg-surface-container p-6 rounded-2xl border-l-4 border-primary">
+          <p class="text-[10px] uppercase font-['Space_Grotesk'] text-on-surface/50 mb-2">Toplam Sinyal</p>
+          <span id="total-signals" class="text-3xl font-black">0</span>
         </div>
       </div>
 
-      <div class="col-span-12 overflow-hidden rounded-xl bg-surface-container">
-        <div class="flex items-center justify-between border-b border-outline-variant/15 px-6 py-5">
-          <h3 class="flex items-center gap-2 font-bold tracking-tight"><span class="material-symbols-outlined text-primary">list_alt</span>Active Positions</h3>
-          <button class="font-label text-[10px] font-bold uppercase tracking-widest text-primary">View All Positions</button>
+      <!-- Table -->
+      <div class="col-span-12 rounded-2xl bg-surface-container overflow-hidden border border-white/5">
+        <div class="px-6 py-4 border-b border-white/5 flex justify-between items-center">
+            <h3 class="font-bold flex items-center gap-2"><span class="material-symbols-outlined text-primary">list_alt</span>Aktif Pozisyonlar</h3>
         </div>
         <div class="overflow-x-auto">
-          <table class="w-full border-collapse text-left">
+          <table class="w-full text-left border-collapse">
             <thead>
-              <tr class="bg-surface-container-high/30 font-label text-[10px] uppercase tracking-widest text-on-surface-variant">
-                <th class="px-6 py-4 font-medium">Asset</th>
-                <th class="px-6 py-4 font-medium">Entry Price</th>
-                <th class="px-6 py-4 font-medium">Last Price</th>
-                <th class="px-6 py-4 font-medium">Size</th>
-                <th class="px-6 py-4 font-medium">P&amp;L (Unrealized)</th>
-                <th class="px-6 py-4 font-medium">Action</th>
+              <tr class="bg-white/5 text-[10px] uppercase font-['Space_Grotesk'] text-on-surface/50">
+                <th class="px-6 py-4">Hisse</th>
+                <th class="px-6 py-4">Giris</th>
+                <th class="px-6 py-4">Son</th>
+                <th class="px-6 py-4">Adet</th>
+                <th class="px-6 py-4">Kar/Zarar</th>
               </tr>
             </thead>
-            <tbody id="positions-body" class="divide-y divide-outline-variant/10">
-              <tr><td colspan="6" class="px-6 py-10 text-center font-label text-xs uppercase tracking-widest text-on-surface-variant">Canli pozisyon verisi baglaniyor</td></tr>
+            <tbody id="positions-body" class="divide-y divide-white/5">
+                <!-- Kotlin injection -->
             </tbody>
           </table>
         </div>
@@ -346,23 +108,5 @@
     </div>
   </main>
 
-  <nav class="fixed bottom-0 left-0 z-50 flex w-full items-center justify-around border-t border-[#353940]/15 bg-[#10141a]/90 px-4 py-3 backdrop-blur-2xl">
-    <a class="flex flex-col items-center justify-center rounded-xl bg-[#48ddbc]/10 px-3 py-1 text-[#48ddbc] duration-200" href="file:///android_asset/dashboard.html">
-      <span class="material-symbols-outlined">dashboard</span>
-      <span class="mt-1 font-['Space_Grotesk'] text-[10px] font-bold uppercase tracking-widest">Dashboard</span>
-    </a>
-    <a class="flex flex-col items-center justify-center text-[#c1c6d7] opacity-60 duration-200 hover:text-[#adc6ff]" href="file:///android_asset/signals.html">
-      <span class="material-symbols-outlined">query_stats</span>
-      <span class="mt-1 font-['Space_Grotesk'] text-[10px] uppercase tracking-widest">Signals</span>
-    </a>
-    <a class="flex flex-col items-center justify-center text-[#c1c6d7] opacity-60 duration-200 hover:text-[#adc6ff]" href="file:///android_asset/analysis.html">
-      <span class="material-symbols-outlined">analytics</span>
-      <span class="mt-1 font-['Space_Grotesk'] text-[10px] uppercase tracking-widest">Analysis</span>
-    </a>
-    <a class="flex flex-col items-center justify-center text-[#c1c6d7] opacity-60 duration-200 hover:text-[#adc6ff]" href="file:///android_asset/settings.html">
-      <span class="material-symbols-outlined">settings</span>
-      <span class="mt-1 font-['Space_Grotesk'] text-[10px] uppercase tracking-widest">Settings</span>
-    </a>
-  </nav>
 </body>
 </html>
