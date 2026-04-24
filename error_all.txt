@@ -1,0 +1,52 @@
+﻿........................................................................ [ 23%]
+........................................................................ [ 46%]
+........................................................................ [ 69%]
+.......................................F...F............................ [ 93%]
+.....................                                                    [100%]
+================================== FAILURES ===================================
+_______________________ test_sector_limit_functionality _______________________
+
+    def test_sector_limit_functionality():
+        """Test sector limit checking functionality."""
+        manager = RiskManager(capital=10000)
+    
+        # Mock sector settings
+        class MockSettings:
+            SECTOR_MAP = {"THYAO.IS": "Hava\xe7\u0131l\u0131k", "ASELS.IS": "Savunma"}
+            SECTOR_LIMIT = 1
+    
+        with patch("bist_bot.risk.manager.settings", MockSettings()):
+            # First check should pass
+            assert manager.check_sector_limit("THYAO.IS") is True
+    
+            # Second check for same sector should fail
+>           assert manager.check_sector_limit("THYAO.IS") is False  # Same ticker again
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           AssertionError: assert True is False
+E            +  where True = check_sector_limit('THYAO.IS')
+E            +    where check_sector_limit = <bist_bot.risk.manager.RiskManager object at 0x0000026313C91F30>.check_sector_limit
+
+tests\test_risk_manager_extended.py:239: AssertionError
+__________________ test_risk_manager_with_custom_parameters ___________________
+
+    def test_risk_manager_with_custom_parameters():
+        """Test risk manager initialization with custom parameters."""
+        manager = RiskManager(
+            capital=50000,
+            max_risk_per_trade_pct=5.0,
+            atr_stop_multiplier=3.0,
+            atr_target_multiplier=5.0,
+            fixed_stop_pct=10.0,
+            fixed_target_pct=15.0
+        )
+    
+        assert manager.capital == 50000
+>       assert manager.max_risk_pct == 5.0
+E       assert 2.0 == 5.0
+E        +  where 2.0 = <bist_bot.risk.manager.RiskManager object at 0x0000026313C922C0>.max_risk_pct
+
+tests\test_risk_manager_extended.py:338: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_risk_manager_extended.py::test_sector_limit_functionality
+FAILED tests/test_risk_manager_extended.py::test_risk_manager_with_custom_parameters
+2 failed, 307 passed in 12.33s

@@ -1,0 +1,19 @@
+﻿F.....                                                                   [100%]
+================================== FAILURES ===================================
+_____________________ test_high_atr_reduces_position_size _____________________
+
+    def test_high_atr_reduces_position_size():
+        manager = RiskManager(capital=100000)
+        low_vol = manager.calculate(build_frame(1.0, atr=1.0))
+        high_vol = manager.calculate(build_frame(1.0, atr=50.0))
+    
+        assert high_vol.volatility_scale < low_vol.volatility_scale
+>       assert high_vol.position_size < low_vol.position_size
+E       AssertionError: assert 35 < 35
+E        +  where 35 = RiskLevels(stop_atr=40.0, stop_support=127.36, stop_fibonacci=130.2, stop_percent=133.0, stop_swing=0.0, target_atr=29...daily_loss=False, blocked_by_probability=False, method_used='Stop: Yⁿzdelik | Hedef: ATR', confidence='confidence.low').position_size
+E        +  and   35 = RiskLevels(stop_atr=138.0, stop_support=127.36, stop_fibonacci=130.2, stop_percent=133.0, stop_swing=0.0, target_atr=1...y_daily_loss=False, blocked_by_probability=False, method_used='Stop: ATR | Hedef: ATR', confidence='confidence.medium').position_size
+
+tests\test_risk_manager.py:40: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_risk_manager.py::test_high_atr_reduces_position_size - Asse...
+1 failed, 5 passed in 0.62s

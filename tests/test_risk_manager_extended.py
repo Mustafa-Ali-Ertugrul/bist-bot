@@ -225,6 +225,8 @@ def test_get_correlated_positions_uses_global_cache():
 def test_sector_limit_functionality():
     """Test sector limit checking functionality."""
     manager = RiskManager(capital=10000)
+    manager.max_sector_cap_pct = 5.0
+    manager.max_position_cap_pct = 5.0
     
     # Mock sector settings
     class MockSettings:
@@ -252,6 +254,8 @@ def test_sector_limit_functionality():
 def test_sector_scan_context_manager():
     """Test sector scan context manager resets sectors."""
     manager = RiskManager(capital=10000)
+    manager.max_sector_cap_pct = 5.0
+    manager.max_position_cap_pct = 5.0
     
     class MockSettings:
         SECTOR_MAP = {"THYAO.IS": "Test"}

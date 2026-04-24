@@ -74,7 +74,7 @@ class RiskManager:
         self.max_total_risk_pct = float(
             getattr(settings, "MAX_TOTAL_RISK_PCT", 2.0)
         )
-        self.max_risk_pct = self.max_total_risk_pct
+        self.max_risk_pct = max_risk_per_trade_pct
         self.kelly_fraction_scale = float(
             getattr(settings, "KELLY_FRACTION_SCALE", 0.25)
         )

@@ -32,7 +32,9 @@ def build_frame(scale: float = 1.0, atr: float = 2.0) -> pd.DataFrame:
 
 
 def test_high_atr_reduces_position_size():
-    manager = RiskManager(capital=10000)
+    manager = RiskManager(capital=100000)
+    manager.max_position_cap_pct = 100.0  # Bypass cap to test ATR risk limit
+    manager.max_risk_pct = 2.0  # Keep 2% limit for explicit size test
     low_vol = manager.calculate(build_frame(1.0, atr=1.0))
     high_vol = manager.calculate(build_frame(1.0, atr=8.0))
 

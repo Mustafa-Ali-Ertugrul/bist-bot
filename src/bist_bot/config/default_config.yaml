@@ -1,0 +1,132 @@
+# BIST Bot Default Configuration
+
+# Server Settings
+port: 5000
+flask_debug: false
+log_format: console
+log_level: INFO
+api_base_url: http://localhost:5000
+rate_limit_storage_uri: memory://
+environment: production
+scan_interval_minutes: 15
+market_open_hour: 9
+market_close_hour: 18
+market_warmup_minutes: 15
+market_half_day_hour: 13
+streamlit_scan_cooldown_seconds: 8.0
+streamlit_analyze_cooldown_seconds: 4.0
+
+# Auth Settings
+allow_public_registration: false
+cors_origins:
+  - "*"
+
+# Database Settings
+db_path: bist_signals.db
+
+# Data Settings
+data_period: 3mo
+data_interval: 1d
+data_provider: yfinance
+mtf_enabled: true
+mtf_trend_period: 6mo
+mtf_trend_interval: 1d
+mtf_trigger_period: 1mo
+mtf_trigger_interval: 15m
+enable_realtime_scraping: true
+rate_limit_seconds: 2.0
+fetch_cache_ttl_seconds: 900.0
+intraday_fetch_cache_ttl_seconds: 120.0
+analysis_cache_ttl_seconds: 180.0
+realtime_quote_cache_ttl_seconds: 30.0
+official_vendor: generic
+official_timeout: 30.0
+official_max_retries: 3
+official_retry_backoff_seconds: 1.0
+benchmark_ticker: "^XU100"
+benchmark_ticker_alt: "XRXIST.IS"
+
+# Trading Settings
+strong_buy_threshold: 48
+buy_threshold: 20
+weak_buy_threshold: 8
+weak_sell_threshold: -8
+sell_threshold: -20
+strong_sell_threshold: -48
+sideways_extra_threshold: 5.0
+momentum_confirmation_threshold: 4.0
+rsi_period: 14
+rsi_oversold: 30
+rsi_overbought: 70
+sma_fast: 5
+sma_slow: 20
+ema_fast: 12
+ema_slow: 26
+ema_long: 200
+macd_fast: 12
+macd_slow: 26
+macd_signal: 9
+bollinger_period: 20
+bollinger_std: 2.0
+adx_threshold: 20
+volume_confirm_multiplier: 1.5
+volume_spike_multiplier: 1.5
+walkforward_train_days: 180
+walkforward_test_days: 30
+sector_limit: 2
+initial_capital: 100000.0
+paper_mode: false
+paper_trades_table: paper_trades
+commission_buy: 0.0002
+commission_sell: 0.0002
+bsmv: 0.0005
+slippage: 0.001
+slippage_pct: 0.001
+slippage_penalty_ratio: 0.15
+slippage_max_cap: 0.02
+volume_confirm_ticker_overrides:
+  SASA.IS: 1.2
+  EREGL.IS: 1.2
+  KRDMD.IS: 1.2
+  THYAO.IS: 1.8
+  GARAN.IS: 1.8
+  AKBNK.IS: 1.8
+
+# Risk Settings
+correlation_threshold: 0.70
+correlation_risk_step: 0.35
+correlation_min_scale: 0.25
+correlation_max_cluster: 2
+atr_baseline_pct: 0.025
+atr_min_risk_scale: 0.35
+max_position_cap_pct: 5.0
+max_sector_cap_pct: 20.0
+max_total_risk_pct: 2.0
+kelly_fraction_scale: 0.25
+min_signal_probability: 0.50
+min_liquidity_value_tl: 0.0
+daily_loss_cap_pct: 3.0
+
+# Broker Settings
+broker_provider: paper
+algolab_dry_run: true
+auto_execute: false
+confirm_live_trading: false
+auto_execute_warn_max_quantity: 100000
+
+# Backtest Settings
+backtest_commission_pct: 0.001
+backtest_commission_buy_pct: 0.001
+backtest_commission_sell_pct: 0.001
+backtest_slippage_pct: 0.0005
+
+# ML Settings
+ml_sequence_length: 60
+ml_epochs: 50
+ml_batch_size: 32
+ml_model_path: models
+
+# Notification Settings
+telegram_min_score: 48
+notification_max_retries: 3
+notification_retry_delay: 5

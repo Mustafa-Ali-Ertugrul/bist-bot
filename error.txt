@@ -1,0 +1,19 @@
+﻿============================= test session starts =============================
+platform win32 -- Python 3.13.13, pytest-9.0.3, pluggy-1.6.0
+rootdir: C:\Users\Ali\OneDrive\Masaⁿstⁿ\bist_bot
+configfile: pyproject.toml
+plugins: cov-7.1.0
+collected 6 items
+
+tests\test_risk_manager.py F.....                                        [100%]
+
+================================== FAILURES ===================================
+_____________________ test_high_atr_reduces_position_size _____________________
+tests\test_risk_manager.py:40: in test_high_atr_reduces_position_size
+    assert high_vol.position_size < low_vol.position_size
+E   AssertionError: assert 3 < 3
+E    +  where 3 = RiskLevels(stop_atr=124.0, stop_support=127.36, stop_fibonacci=130.2, stop_percent=133.0, stop_swing=0.0, target_atr=1...ly_loss=False, blocked_by_probability=False, method_used='Stop: Yⁿzdelik | Hedef: ATR', confidence='confidence.medium').position_size
+E    +  and   3 = RiskLevels(stop_atr=138.0, stop_support=127.36, stop_fibonacci=130.2, stop_percent=133.0, stop_swing=0.0, target_atr=1...y_daily_loss=False, blocked_by_probability=False, method_used='Stop: ATR | Hedef: ATR', confidence='confidence.medium').position_size
+=========================== short test summary info ===========================
+FAILED tests/test_risk_manager.py::test_high_atr_reduces_position_size - Asse...
+========================= 1 failed, 5 passed in 0.62s =========================
