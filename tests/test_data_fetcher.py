@@ -63,7 +63,6 @@ def test_clean_ticker_list_normalizes_and_deduplicates():
         normalize_ticker,
         validate_data,
     )
-import pandas as pd
 
     raw = ["thyao", "THYAO.IS", " asels ", "ASELS.IS", ""]
 
