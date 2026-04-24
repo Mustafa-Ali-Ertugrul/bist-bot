@@ -1674,9 +1674,11 @@ class Backtester:
             return None
 
         if stop_hit and target_hit:
-            stop_first = close_price >= open_price
-            first_reason = "STOP_LOSS" if stop_first else "TAKE_PROFIT"
-            first_price = stop_loss if stop_first else target_price
+            # OHLC bars do not reveal whether stop or target traded first.
+            # Use the conservative fill for long-only simulations instead of
+            # inferring an impossible intrabar path from open/close direction.
+            first_reason = "STOP_LOSS"
+            first_price = stop_loss
         elif stop_hit:
             first_reason = "STOP_LOSS"
             first_price = stop_loss

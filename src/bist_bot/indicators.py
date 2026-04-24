@@ -162,6 +162,8 @@ class TechnicalIndicators:
     @staticmethod
     def add_adx(df: pd.DataFrame, period: int = 14) -> pd.DataFrame:
         df = df.copy()
+        if "atr" not in df.columns:
+            df = TechnicalIndicators.add_atr(df, period=period)
 
         high_diff = df["high"].diff()
         low_diff = -df["low"].diff()

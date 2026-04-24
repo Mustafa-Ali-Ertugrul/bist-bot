@@ -37,6 +37,7 @@ htmlcov/
 # Streamlit secrets
 .streamlit/secrets.toml
 secrets/
+app/memory/
 
 # OS / editor
 Thumbs.db

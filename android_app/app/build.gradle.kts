@@ -4,6 +4,12 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+val apiBaseUrl = providers.gradleProperty("BIST_BOT_API_BASE_URL")
+    .orElse(providers.environmentVariable("BIST_BOT_API_BASE_URL"))
+    .orElse("")
+    .get()
+val escapedApiBaseUrl = apiBaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")
+
 android {
     namespace = "com.bistbot.prototype"
     compileSdk = 34
@@ -16,6 +22,7 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "API_BASE_URL", "\"$escapedApiBaseUrl\"")
     }
 
     buildTypes {
@@ -38,6 +45,7 @@ android {
     }
 
     buildFeatures {
+        buildConfig = true
         viewBinding = true
     }
 }

@@ -37,6 +37,17 @@ def test_add_adx_produces_bounded_positive_value() -> None:
     assert 0 <= latest_adx <= 100
 
 
+def test_add_adx_computes_atr_when_missing_and_drops_temp_columns() -> None:
+    df = build_ohlc_frame()
+
+    result = TechnicalIndicators.add_adx(df, period=14)
+
+    assert "atr" in result.columns
+    assert "plus_dm" not in result.columns
+    assert "minus_dm" not in result.columns
+    assert result["adx"].dropna().iloc[-1] > 0
+
+
 def test_add_rsi_uses_plain_string_zone_labels() -> None:
     df = build_ohlc_frame()
 

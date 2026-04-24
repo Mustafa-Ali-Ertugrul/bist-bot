@@ -97,12 +97,45 @@ def test_backtester_enters_on_next_bar_open():
     assert result.trades[0].entry_price == 11.25
 
 
-def test_intrabar_simulation_uses_price_path_heuristic_for_same_bar_hits():
+def test_intrabar_simulation_uses_conservative_stop_for_same_bar_hits():
     df = build_price_frame()
     df.iloc[1, df.columns.get_loc("open")] = 10.0
     df.iloc[1, df.columns.get_loc("high")] = 12.0
     df.iloc[1, df.columns.get_loc("low")] = 8.0
     df.iloc[1, df.columns.get_loc("close")] = 11.0
+
+    backtester = ScriptedBacktester(
+        {
+            1: {
+                "enter": True,
+                "exit": False,
+                "score": 30.0,
+                "stop_loss": 9.0,
+                "target_price": 11.5,
+            }
+        }
+    )
+
+    with settings.override(
+        SLIPPAGE_PCT=0.0,
+        SLIPPAGE_PENALTY_RATIO=0.0,
+        SLIPPAGE_MAX_CAP=0.02,
+    ):
+        result = backtester.run("TEST.IS", df, verbose=False)
+
+    assert result is not None
+    assert result.trades
+    trade = result.trades[0]
+    assert trade.exit_reason == "STOP_LOSS"
+    assert trade.exit_price == 9.0
+
+
+def test_intrabar_simulation_does_not_infer_target_first_from_bearish_close():
+    df = build_price_frame()
+    df.iloc[1, df.columns.get_loc("open")] = 10.0
+    df.iloc[1, df.columns.get_loc("high")] = 12.0
+    df.iloc[1, df.columns.get_loc("low")] = 8.0
+    df.iloc[1, df.columns.get_loc("close")] = 9.5
 
     backtester = ScriptedBacktester(
         {

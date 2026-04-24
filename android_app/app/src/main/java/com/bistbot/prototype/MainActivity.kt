@@ -7,7 +7,6 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
 import android.webkit.*
 import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
@@ -22,7 +21,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private val handler = Handler(Looper.getMainLooper())
     private val client = OkHttpClient()
-    private val API_BASE_URL = "https://ais-dev-rsgc7cv3ciwaa5kzv7gysh-293260048803.europe-west2.run.app"
+    private val apiBaseUrl = BuildConfig.API_BASE_URL.trimEnd('/')
 
     private val liveDataTask = object : Runnable {
         override fun run() {
@@ -57,8 +56,6 @@ class MainActivity : AppCompatActivity() {
             domStorageEnabled = true
             allowFileAccess = true
             allowContentAccess = true
-            allowFileAccessFromFileURLs = true
-            allowUniversalAccessFromFileURLs = true
             defaultTextEncodingName = "utf-8"
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 forceDark = WebSettings.FORCE_DARK_ON
@@ -112,7 +109,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun fetchLiveData() {
-        val request = Request.Builder().url("${API_BASE_URL}/api/v1/signals/active").build()
+        if (apiBaseUrl.isBlank()) {
+            injectData(null)
+            return
+        }
+        val request = Request.Builder().url("${apiBaseUrl}/api/v1/signals/active").build()
         client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
                 runOnUiThread { injectData(null) }
