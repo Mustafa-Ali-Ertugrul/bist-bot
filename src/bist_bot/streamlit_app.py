@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import streamlit as st
 
+from bist_bot.config.settings import settings
 from bist_bot.state.session_state import init_session_state
 from bist_bot.ui.components.app_shell import (
     get_active_page,
@@ -77,9 +78,12 @@ def _login_form() -> bool:
         """,
         unsafe_allow_html=True,
     )
-    login_tab, register_tab = st.tabs(["Giris", "Kaydol"])
+    auth_tabs = ["Giris"]
+    if settings.ALLOW_PUBLIC_REGISTRATION:
+        auth_tabs.append("Kaydol")
+    tabs = st.tabs(auth_tabs)
 
-    with login_tab:
+    with tabs[0]:
         with st.form("login_form"):
             email = st.text_input("Email", value=st.session_state.get("auth_email", ""))
             password = st.text_input("Sifre", type="password")
@@ -107,7 +111,11 @@ def _login_form() -> bool:
                     )
                 )
 
-    with register_tab:
+    if not settings.ALLOW_PUBLIC_REGISTRATION:
+        st.info("Yeni hesap kaydi kapali. Lutfen tanimli operator hesabi ile giris yapin.")
+        return False
+
+    with tabs[1]:
         with st.form("register_form"):
             register_email = st.text_input("Email", key="register_email")
             register_password = st.text_input(
