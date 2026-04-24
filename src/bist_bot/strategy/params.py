@@ -20,6 +20,9 @@ class StrategyParams:
     momentum_confirmation_threshold: float = field(
         default_factory=lambda: float(settings.MOMENTUM_CONFIRMATION_THRESHOLD)
     )
+    min_trigger_candles: int = 30
+    adx_threshold: float = field(default_factory=lambda: float(settings.ADX_THRESHOLD))
+    sideways_score_multiplier: float = 0.6
 
     # RSI Parametreleri
     rsi_oversold_extreme: float = 25.0

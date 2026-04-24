@@ -15,6 +15,7 @@ import pandas as pd  # noqa: E402
 import pytest  # noqa: E402
 from bist_bot.strategy import StrategyEngine  # noqa: E402
 from bist_bot.strategy import TrendBias  # noqa: E402
+from bist_bot.strategy.params import StrategyParams  # noqa: E402
 
 
 class IdentityIndicators:
@@ -192,6 +193,28 @@ def test_engine_uses_configured_sideways_and_momentum_thresholds():
 
     assert engine.SIDEWAYS_EXTRA_THRESHOLD == 9.0
     assert engine.MOMENTUM_CONFIRMATION == 6.5
+    assert engine.params.adx_threshold == settings.ADX_THRESHOLD
+    assert engine.params.min_trigger_candles == 30
+    assert engine.params.sideways_score_multiplier == 0.6
+
+
+def test_engine_uses_configurable_trigger_candle_minimum():
+    engine = StrategyEngine(
+        indicators=cast(Any, IdentityIndicators()),
+        risk_manager=cast(Any, FakeRiskManager()),
+        params=StrategyParams(min_trigger_candles=40),
+    )
+    trigger_df = build_signal_frame()
+
+    assert engine.analyze("TEST.IS", trigger_df) is None
+
+
+def test_engine_uses_configurable_adx_threshold():
+    engine = BiasControlledStrategyEngine(TrendBias.LONG)
+    engine.params.adx_threshold = 35.0
+    trigger_df = build_signal_frame()
+
+    assert engine.analyze("TEST.IS", trigger_df) is None
 
 
 def test_engine_filters_when_adx_is_missing():

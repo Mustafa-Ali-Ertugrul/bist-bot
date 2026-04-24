@@ -31,6 +31,8 @@ NUL
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.pip-audit-cache/
+.pip-audit-tmp/
 .coverage
 htmlcov/
 

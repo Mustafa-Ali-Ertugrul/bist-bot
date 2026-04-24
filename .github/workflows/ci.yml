@@ -32,6 +32,12 @@ jobs:
         run: |
           ruff check . --output-format=github
 
+      - name: Security scan
+        run: |
+          bandit -q -r src main.py dashboard.py streamlit_app.py --severity-level high --confidence-level medium
+          mkdir -p .pip-audit-cache .pip-audit-tmp
+          TMPDIR="$PWD/.pip-audit-tmp" pip-audit -r requirements.txt -r dev-requirements.txt --progress-spinner off --cache-dir .pip-audit-cache
+
       - name: Run tests
         run: |
           python -m pytest tests/ -v --tb=short --cov=src/bist_bot --cov-report=term-missing:skip-covered --cov-report=xml
