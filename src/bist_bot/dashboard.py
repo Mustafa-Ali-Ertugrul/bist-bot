@@ -100,6 +100,7 @@ def create_dashboard_app(
     app.config["JWT_SECRET_KEY"] = settings.JWT_SECRET_KEY
     app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(hours=12)
     app.config["RATELIMIT_STORAGE_URI"] = settings.RATE_LIMIT_STORAGE_URI
+    app.config["ALLOW_PUBLIC_REGISTRATION"] = settings.ALLOW_PUBLIC_REGISTRATION
 
     JWTManager(app)
     limiter = Limiter(get_remote_address, app=app, default_limits=["60 per minute"])
@@ -244,7 +245,7 @@ def create_dashboard_app(
     @app.route("/api/auth/register", methods=["POST"])
     @limiter.limit("5 per minute", key_func=_auth_rate_limit_key)
     def api_auth_register():
-        if not getattr(settings, "ALLOW_PUBLIC_REGISTRATION", False):
+        if not bool(app.config.get("ALLOW_PUBLIC_REGISTRATION", False)):
             return jsonify(
                 {"status": "error", "message": get_message("api.registration_disabled")}
             ), 403
