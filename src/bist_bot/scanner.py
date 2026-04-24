@@ -23,6 +23,20 @@ logger = get_logger(__name__, component="scanner")
 
 
 class ScanService:
+    """Coordinate one market scan from data fetch through side effects.
+
+    The service is the orchestration boundary shared by the CLI worker,
+    Flask API, and tests. It deliberately delegates domain work to injected
+    collaborators: the fetcher loads market data, the strategy engine scores
+    it, repositories persist results, and side-effect services handle
+    notifications, execution, and paper-trade lifecycle updates.
+
+    `scan_once` is intentionally synchronous so callers can reason about one
+    complete scan transaction at a time. Failures are logged with metrics and
+    then re-raised, allowing schedulers or API handlers to decide retry/HTTP
+    behavior.
+    """
+
     def __init__(
         self,
         fetcher: DataFetcherProtocol,
@@ -35,8 +49,8 @@ class ScanService:
         execution_service: ExecutionService | None = None,
         paper_trade_service: PaperTradeService | None = None,
         notification_service: NotificationDispatchService | None = None,
-    ):
-        """Compose fetch, analyze, persistence, and notification steps."""
+    ) -> None:
+        """Create a scan service with explicit runtime dependencies."""
         self.fetcher = fetcher
         self.engine = engine
         self.notifier = notifier
@@ -63,12 +77,21 @@ class ScanService:
         }
 
     def _auto_execute_signals(self, signals: list[Signal]) -> None:
+        """Submit actionable signals to the configured execution service."""
         self.execution_service.auto_execute_signals(signals)
 
     def _check_signal_changes(self, signals: list[Signal]) -> None:
+        """Detect signal changes and dispatch change notifications."""
         self.signal_change_service.check_signal_changes(signals)
 
-    def scan_once(self, force_refresh: bool = False) -> list:
+    def scan_once(self, force_refresh: bool = False) -> list[Signal]:
+        """Run one complete scan and return all generated signals.
+
+        When `force_refresh` is true, intraday fetch and analysis caches are
+        invalidated before data loading. Only actionable signals are persisted
+        and queued for execution/paper trading, but the full signal list is
+        returned to callers for UI and diagnostics.
+        """
         started_at = time.perf_counter()
         logger.info(
             "scan_started",
@@ -153,5 +176,6 @@ class ScanService:
             logger.exception("scan_failed", error=exc, duration_ms=duration_ms)
             raise
 
-    def update_paper_trades(self):
+    def update_paper_trades(self) -> None:
+        """Refresh open paper trades and close only triggered positions."""
         self.paper_trade_service.update_open_trades()
