@@ -4,15 +4,17 @@ from __future__ import annotations
 
 import copy
 import json
-from bist_bot.app_logging import get_logger
 from pathlib import Path
+from typing import Any, cast
+
+from bist_bot.app_logging import get_logger
 
 logger = get_logger(__name__, component="config_store")
 
 CONFIG_DIR = Path(__file__).parent
 CONFIG_FILE = CONFIG_DIR / "user_settings.json"
 
-DEFAULT_SETTINGS = {
+DEFAULT_SETTINGS: dict[str, dict[str, Any]] = {
     "indicator": {
         "rsi_period": 14,
         "rsi_oversold": 30,
@@ -45,11 +47,11 @@ DEFAULT_SETTINGS = {
 }
 
 
-def _deepcopy_defaults() -> dict:
+def _deepcopy_defaults() -> dict[str, dict[str, Any]]:
     return copy.deepcopy(DEFAULT_SETTINGS)
 
 
-def _merge_with_defaults(data: dict | None) -> dict:
+def _merge_with_defaults(data: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
     merged = _deepcopy_defaults()
     if not isinstance(data, dict):
         return merged
@@ -63,7 +65,7 @@ def _merge_with_defaults(data: dict | None) -> dict:
     return merged
 
 
-def load_settings() -> dict:
+def load_settings() -> dict[str, dict[str, Any]]:
     """Load persisted UI preferences while preserving legacy JSON shape."""
     try:
         if not CONFIG_FILE.exists():
@@ -76,7 +78,7 @@ def load_settings() -> dict:
         return _deepcopy_defaults()
 
 
-def save_settings(settings: dict) -> bool:
+def save_settings(settings: dict[str, Any]) -> bool:
     """Save persisted UI preferences while stripping secret inputs."""
     try:
         settings = _merge_with_defaults(json.loads(json.dumps(settings)))
@@ -102,13 +104,13 @@ def reset_settings() -> bool:
         return False
 
 
-def get_indicator_defaults() -> dict:
-    return copy.deepcopy(DEFAULT_SETTINGS["indicator"])
+def get_indicator_defaults() -> dict[str, Any]:
+    return cast(dict[str, Any], copy.deepcopy(DEFAULT_SETTINGS["indicator"]))
 
 
-def get_telegram_settings() -> dict:
-    return copy.deepcopy(DEFAULT_SETTINGS["telegram"])
+def get_telegram_settings() -> dict[str, Any]:
+    return cast(dict[str, Any], copy.deepcopy(DEFAULT_SETTINGS["telegram"]))
 
 
-def get_scan_settings() -> dict:
-    return copy.deepcopy(DEFAULT_SETTINGS["scan"])
+def get_scan_settings() -> dict[str, Any]:
+    return cast(dict[str, Any], copy.deepcopy(DEFAULT_SETTINGS["scan"]))

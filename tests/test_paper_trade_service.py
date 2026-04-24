@@ -32,8 +32,38 @@ def test_paper_trade_service_updates_open_trades():
 
     service.update_open_trades()
 
-    db.update_all_paper_close.assert_called_once_with({"THYAO.IS": 94.0})
+    db.update_all_paper_close.assert_not_called()
     db.close_paper_trade.assert_called_once_with("THYAO.IS", 94.0, "STOP_HIT")
+
+
+def test_paper_trade_service_closes_target_hit():
+    fetcher = MagicMock()
+    db = MagicMock()
+    fetcher.fetch_single.return_value = pd.DataFrame({"close": [100.0, 111.0]})
+    db.get_open_paper_trades.return_value = [
+        SimpleNamespace(id=1, ticker="THYAO.IS", stop_loss=95.0, target_price=110.0),
+    ]
+    service = PaperTradeService(fetcher, db, settings=replace(settings, PAPER_MODE=True))
+
+    service.update_open_trades()
+
+    db.update_all_paper_close.assert_not_called()
+    db.close_paper_trade.assert_called_once_with("THYAO.IS", 111.0, "TARGET_HIT")
+
+
+def test_paper_trade_service_keeps_trade_open_without_stop_or_target_hit():
+    fetcher = MagicMock()
+    db = MagicMock()
+    fetcher.fetch_single.return_value = pd.DataFrame({"close": [100.0, 104.0]})
+    db.get_open_paper_trades.return_value = [
+        SimpleNamespace(id=1, ticker="THYAO.IS", stop_loss=95.0, target_price=110.0),
+    ]
+    service = PaperTradeService(fetcher, db, settings=replace(settings, PAPER_MODE=True))
+
+    service.update_open_trades()
+
+    db.update_all_paper_close.assert_not_called()
+    db.close_paper_trade.assert_not_called()
 
 
 def test_paper_trade_service_queues_actionable_signals(monkeypatch):

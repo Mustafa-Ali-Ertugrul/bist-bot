@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
+import importlib
 import threading
 from collections import OrderedDict
+from typing import Any, Callable, cast
 
 try:  # pragma: no cover - exercised indirectly depending on environment
-    from prometheus_client import CollectorRegistry, Counter, Gauge, generate_latest  # type: ignore[import-not-found]
+    _prometheus_client: Any = importlib.import_module("prometheus_client")
 except ImportError:  # pragma: no cover - fallback remains covered
-    CollectorRegistry = None
-    Counter = None
-    Gauge = None
-    generate_latest = None
+    _prometheus_client = None
 
 
 _COUNTER_DEFAULTS = OrderedDict(
@@ -44,19 +43,22 @@ class _MetricsRegistry:
         self._gauges = OrderedDict(
             (name, float(value)) for name, value in _GAUGE_DEFAULTS.items()
         )
-        self._prom_registry = None
-        self._prom_counters = {}
-        self._prom_gauges = {}
-        if CollectorRegistry is None or Counter is None or Gauge is None:
+        self._prom_registry: Any | None = None
+        self._prom_counters: dict[str, Any] = {}
+        self._prom_gauges: dict[str, Any] = {}
+        collector_registry = getattr(_prometheus_client, "CollectorRegistry", None)
+        counter_cls = getattr(_prometheus_client, "Counter", None)
+        gauge_cls = getattr(_prometheus_client, "Gauge", None)
+        if collector_registry is None or counter_cls is None or gauge_cls is None:
             return
-        registry = CollectorRegistry()
+        registry = collector_registry()
         self._prom_registry = registry
         self._prom_counters = {
-            name: Counter(name, name.replace("_", " "), registry=registry)
+            name: counter_cls(name, name.replace("_", " "), registry=registry)
             for name in _COUNTER_DEFAULTS
         }
         self._prom_gauges = {
-            name: Gauge(name, name.replace("_", " "), registry=registry)
+            name: gauge_cls(name, name.replace("_", " "), registry=registry)
             for name in _GAUGE_DEFAULTS
         }
 
@@ -64,23 +66,27 @@ class _MetricsRegistry:
         with self._lock:
             self._init_registry()
 
-    def _ensure_prom_counter(self, name: str):
-        if self._prom_registry is None or Counter is None:
+    def _ensure_prom_counter(self, name: str) -> Any | None:
+        counter_cls = getattr(_prometheus_client, "Counter", None)
+        if self._prom_registry is None or counter_cls is None:
             return None
         counter = self._prom_counters.get(name)
         if counter is None:
-            counter = Counter(
+            counter = counter_cls(
                 name, name.replace("_", " "), registry=self._prom_registry
             )
             self._prom_counters[name] = counter
         return counter
 
-    def _ensure_prom_gauge(self, name: str):
-        if self._prom_registry is None or Gauge is None:
+    def _ensure_prom_gauge(self, name: str) -> Any | None:
+        gauge_cls = getattr(_prometheus_client, "Gauge", None)
+        if self._prom_registry is None or gauge_cls is None:
             return None
         gauge = self._prom_gauges.get(name)
         if gauge is None:
-            gauge = Gauge(name, name.replace("_", " "), registry=self._prom_registry)
+            gauge = gauge_cls(
+                name, name.replace("_", " "), registry=self._prom_registry
+            )
             self._prom_gauges[name] = gauge
         return gauge
 
@@ -104,8 +110,10 @@ class _MetricsRegistry:
             prom_registry = self._prom_registry
             counter_snapshot = list(self._counters.items())
             gauge_snapshot = list(self._gauges.items())
+        generate_latest = getattr(_prometheus_client, "generate_latest", None)
         if prom_registry is not None and generate_latest is not None:
-            return generate_latest(prom_registry).decode("utf-8")
+            renderer = cast(Callable[[Any], bytes], generate_latest)
+            return str(renderer(prom_registry).decode("utf-8"))
         lines: list[str] = []
         for name, value in counter_snapshot:
             lines.append(f"# TYPE {name} counter")

@@ -9,7 +9,7 @@ from bist_bot.app_logging import get_logger
 from bist_bot.config.settings import settings
 from bist_bot.indicators import TechnicalIndicators
 from bist_bot.ml.features import build_feature_payload
-from bist_bot.risk import RiskManager
+from bist_bot.risk import RiskLevels, RiskManager
 from bist_bot.strategy.signal_models import Signal, SignalType
 from bist_bot.strategy.params import StrategyParams
 from bist_bot.strategy.regime import (
@@ -98,7 +98,7 @@ class StrategyEngine:
         *,
         score: float,
         trend_bias: TrendBias,
-        risk_levels,
+        risk_levels: RiskLevels,
     ) -> dict[str, float]:
         return build_feature_payload(
             last,
@@ -141,10 +141,11 @@ class StrategyEngine:
 
     def _passes_adx_filter(self, ticker: str, last: pd.Series) -> bool:
         adx_raw = last.get("adx")
-        if pd.isna(adx_raw):
+        try:
+            adx = float(adx_raw)
+        except (TypeError, ValueError):
             logger.debug("strategy_adx_missing", ticker=ticker)
             return False
-        adx = float(adx_raw)
         if adx >= getattr(settings, "ADX_THRESHOLD", 20):
             return True
         logger.debug("strategy_adx_filtered", ticker=ticker, adx=round(float(adx), 2))
@@ -228,8 +229,8 @@ class StrategyEngine:
         last: pd.Series,
         score: float,
         trend_bias: TrendBias,
-        risk_levels: Any,
-    ) -> Any | None:
+        risk_levels: RiskLevels,
+    ) -> RiskLevels | None:
         if not self._is_buy_signal(signal_type):
             return risk_levels
         if enforce_sector_limit and not self.risk_manager.check_sector_limit(ticker):
@@ -274,7 +275,7 @@ class StrategyEngine:
         score: float,
         last: pd.Series,
         reasons: list[str],
-        risk_levels: Any,
+        risk_levels: RiskLevels,
         fallback_confidence: str,
     ) -> Signal:
         return Signal(
@@ -295,7 +296,7 @@ class StrategyEngine:
             ),
         )
 
-    def _append_signal_reasons(self, signal: Signal, risk_levels: Any) -> None:
+    def _append_signal_reasons(self, signal: Signal, risk_levels: RiskLevels) -> None:
         signal.reasons.append(
             f"R/R: 1:{risk_levels.risk_reward_ratio:.1f} | {risk_levels.method_used}"
         )
@@ -367,7 +368,7 @@ class StrategyEngine:
         score, reasons = scored
         signal_type, confidence = self._classify_signal(score)
         risk_levels = self.risk_manager.calculate(df)
-        risk_levels = self._apply_buy_side_risk(
+        adjusted_risk_levels = self._apply_buy_side_risk(
             ticker,
             df,
             signal_type=signal_type,
@@ -377,8 +378,9 @@ class StrategyEngine:
             trend_bias=trend_bias,
             risk_levels=risk_levels,
         )
-        if risk_levels is None:
+        if adjusted_risk_levels is None:
             return None
+        risk_levels = adjusted_risk_levels
         signal = self._build_signal(
             ticker,
             signal_type=signal_type,

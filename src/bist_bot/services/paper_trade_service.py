@@ -53,7 +53,6 @@ class PaperTradeService:
         if not prices:
             return
 
-        self.db.update_all_paper_close(prices)
         for trade in open_trades:
             current = prices.get(trade.ticker)
             if current is None:

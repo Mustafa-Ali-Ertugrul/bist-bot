@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from sqlalchemy import select
 
@@ -44,7 +44,7 @@ class OrdersRepository:
             session.flush()
             return self._to_dict(row)
 
-        return self.manager.run_session(_write)
+        return cast(dict[str, Any], self.manager.run_session(_write))
 
     def update_order(
         self,
@@ -55,7 +55,7 @@ class OrdersRepository:
         filled_qty: float | None = None,
         avg_fill_price: float | None = None,
     ) -> Optional[dict[str, Any]]:
-        def _write(session):
+        def _write(session) -> dict[str, Any] | None:
             row = session.get(OrderRecord, order_id)
             if row is None:
                 return None
@@ -71,7 +71,7 @@ class OrdersRepository:
             session.flush()
             return self._to_dict(row)
 
-        return self.manager.run_session(_write)
+        return cast(Optional[dict[str, Any]], self.manager.run_session(_write))
 
     def get_pending_orders(self) -> list[dict[str, Any]]:
         rows = self.manager.run_session(
@@ -123,8 +123,12 @@ class OrdersRepository:
             "price": row.price,
             "state": row.state,
             "broker_order_id": row.broker_order_id,
-            "created_at": row.created_at.isoformat() if isinstance(row.created_at, datetime) else row.created_at,
-            "updated_at": row.updated_at.isoformat() if isinstance(row.updated_at, datetime) else row.updated_at,
+            "created_at": row.created_at.isoformat()
+            if isinstance(row.created_at, datetime)
+            else row.created_at,
+            "updated_at": row.updated_at.isoformat()
+            if isinstance(row.updated_at, datetime)
+            else row.updated_at,
             "filled_qty": row.filled_qty,
             "avg_fill_price": row.avg_fill_price,
         }

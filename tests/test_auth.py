@@ -79,13 +79,19 @@ def build_test_client(tmp_path):
         return app.test_client()
 
 
-def build_db_user_client(tmp_path, *, include_bootstrap: bool = False):
+def build_db_user_client(
+    tmp_path,
+    *,
+    include_bootstrap: bool = False,
+    allow_public_registration: bool = False,
+):
     override_kwargs = {
         "DB_PATH": str(tmp_path / "auth_db_only.db"),
         "JWT_SECRET_KEY": "test_secret_key_12345678901234567890",
         "CORS_ORIGINS": ("http://localhost:8501",),
         "ADMIN_BOOTSTRAP_EMAIL": "",
         "ADMIN_BOOTSTRAP_PASSWORD_HASH": "",
+        "ALLOW_PUBLIC_REGISTRATION": allow_public_registration,
     }
     if include_bootstrap:
         override_kwargs["ADMIN_BOOTSTRAP_EMAIL"] = "bootstrap@bistbot.local"
@@ -144,7 +150,7 @@ def test_login_wrong_password_returns_401(tmp_path):
 
 
 def test_register_creates_user_and_returns_token(tmp_path):
-    client, manager = build_db_user_client(tmp_path)
+    client, manager = build_db_user_client(tmp_path, allow_public_registration=True)
 
     response = client.post(
         "/api/auth/register",
@@ -165,8 +171,29 @@ def test_register_creates_user_and_returns_token(tmp_path):
     assert stored_hash.startswith("scrypt:")
 
 
+def test_register_returns_403_when_public_registration_disabled(tmp_path):
+    client, manager = build_db_user_client(tmp_path)
+
+    response = client.post(
+        "/api/auth/register",
+        json={"email": "newuser@bistbot.local", "password": "strong-pass-123"},
+    )
+
+    assert response.status_code == 403
+    payload = response.get_json()
+    assert payload is not None
+    assert payload["message"] == "Herkese acik kayit kapali"
+
+    with manager.engine.begin() as conn:
+        stored_count = conn.execute(
+            text("SELECT COUNT(*) FROM users WHERE email = :email"),
+            {"email": "newuser@bistbot.local"},
+        ).scalar_one()
+    assert stored_count == 0
+
+
 def test_register_rejects_duplicate_email(tmp_path):
-    client, _manager = build_db_user_client(tmp_path)
+    client, _manager = build_db_user_client(tmp_path, allow_public_registration=True)
 
     response = client.post(
         "/api/auth/register",
@@ -180,7 +207,7 @@ def test_register_rejects_duplicate_email(tmp_path):
 
 
 def test_register_rejects_short_password(tmp_path):
-    client, _manager = build_db_user_client(tmp_path)
+    client, _manager = build_db_user_client(tmp_path, allow_public_registration=True)
 
     response = client.post(
         "/api/auth/register",

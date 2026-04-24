@@ -40,8 +40,10 @@ class SignalType(Enum):
 
     @staticmethod
     def from_value(value: str) -> "SignalType":
-        if value in SignalType._value2member_:
+        try:
             return SignalType(value)
+        except ValueError:
+            pass
         for st in SignalType:
             if st.display == value:
                 return st

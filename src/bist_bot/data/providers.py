@@ -22,8 +22,12 @@ class RateLimiterProtocol(Protocol):
 
 
 class MarketDataProvider(Protocol):
-    def fetch_history(self, ticker: str, period: str, interval: str) -> pd.DataFrame | None: ...
-    def fetch_batch(self, tickers: list[str], period: str, interval: str) -> dict[str, pd.DataFrame | None]: ...
+    def fetch_history(
+        self, ticker: str, period: str, interval: str
+    ) -> pd.DataFrame | None: ...
+    def fetch_batch(
+        self, tickers: list[str], period: str, interval: str
+    ) -> dict[str, pd.DataFrame | None]: ...
     def fetch_quote(self, ticker: str) -> float | None: ...
     def fetch_universe(self, force_refresh: bool = False) -> list[str]: ...
 
@@ -36,14 +40,18 @@ class YFinanceProvider:
     def __init__(self, rate_limiter: RateLimiterProtocol) -> None:
         self.rate_limiter = rate_limiter
 
-    def fetch_history(self, ticker: str, period: str, interval: str) -> pd.DataFrame | None:
+    def fetch_history(
+        self, ticker: str, period: str, interval: str
+    ) -> pd.DataFrame | None:
         import yfinance as yf
 
         self.rate_limiter.wait_if_needed("yahoo.finance")
         stock = yf.Ticker(ticker)
         return stock.history(period=period, interval=interval)
 
-    def fetch_batch(self, tickers: list[str], period: str, interval: str) -> dict[str, pd.DataFrame | None]:
+    def fetch_batch(
+        self, tickers: list[str], period: str, interval: str
+    ) -> dict[str, pd.DataFrame | None]:
         import yfinance as yf
 
         if not tickers:
@@ -78,7 +86,9 @@ class YFinanceProvider:
         return None
 
     def fetch_universe(self, force_refresh: bool = False) -> list[str]:
-        return quote_helpers.get_bist100_tickers(self.rate_limiter, force_refresh=force_refresh)
+        return quote_helpers.get_bist100_tickers(
+            self.rate_limiter, force_refresh=force_refresh
+        )
 
 
 class BorsaIstanbulQuoteProvider:
@@ -95,11 +105,15 @@ class BorsaIstanbulQuoteProvider:
 class OfficialProviderStub:
     """Placeholder adapter for use in tests and as a fallback stub."""
 
-    def fetch_history(self, ticker: str, period: str, interval: str) -> pd.DataFrame | None:
+    def fetch_history(
+        self, ticker: str, period: str, interval: str
+    ) -> pd.DataFrame | None:
         _ = ticker, period, interval
         return None
 
-    def fetch_batch(self, tickers: list[str], period: str, interval: str) -> dict[str, pd.DataFrame | None]:
+    def fetch_batch(
+        self, tickers: list[str], period: str, interval: str
+    ) -> dict[str, pd.DataFrame | None]:
         _ = period, interval
         return {ticker: None for ticker in tickers}
 
@@ -152,7 +166,11 @@ class RateLimitError(OfficialProviderError):
 
     def __init__(self, retry_after: float | None = None) -> None:
         self.retry_after = retry_after
-        super().__init__(f"Rate limited; retry after {retry_after}s" if retry_after else "Rate limited")
+        super().__init__(
+            f"Rate limited; retry after {retry_after}s"
+            if retry_after
+            else "Rate limited"
+        )
 
 
 class BadResponseError(OfficialProviderError):
@@ -173,8 +191,12 @@ class RequestsOfficialHTTPClient:
             return
         try:
             import requests
-        except ImportError as exc:  # pragma: no cover - dependency should exist in runtime
-            raise RuntimeError("requests library is required for OfficialProvider") from exc
+        except (
+            ImportError
+        ) as exc:  # pragma: no cover - dependency should exist in runtime
+            raise RuntimeError(
+                "requests library is required for OfficialProvider"
+            ) from exc
         self.session = requests.Session()
 
     def authenticate(self, provider: "BaseOfficialProvider") -> str:
@@ -185,7 +207,11 @@ class RequestsOfficialHTTPClient:
             timeout=provider.timeout,
         )
         body = self._parse_json(response)
-        token = body.get("token") or body.get("access_token") or body.get("data", {}).get("token", "")
+        token = (
+            body.get("token")
+            or body.get("access_token")
+            or body.get("data", {}).get("token", "")
+        )
         if not token:
             raise AuthenticationError("No token in auth response")
         return str(token)
@@ -213,7 +239,9 @@ class RequestsOfficialHTTPClient:
         )
         return self._parse_json(response, clear_auth=lambda: provider._clear_auth())
 
-    def _parse_json(self, response: Any, clear_auth: Any | None = None) -> dict[str, Any]:
+    def _parse_json(
+        self, response: Any, clear_auth: Any | None = None
+    ) -> dict[str, Any]:
         if response.status_code == 401:
             if clear_auth is not None:
                 clear_auth()
@@ -226,9 +254,13 @@ class RequestsOfficialHTTPClient:
         try:
             body = response.json()
         except Exception as exc:
-            raise BadResponseError(response.status_code, f"Invalid JSON response: {exc}") from exc
+            raise BadResponseError(
+                response.status_code, f"Invalid JSON response: {exc}"
+            ) from exc
         if not isinstance(body, dict):
-            raise BadResponseError(response.status_code, f"Unexpected payload type: {type(body).__name__}")
+            raise BadResponseError(
+                response.status_code, f"Unexpected payload type: {type(body).__name__}"
+            )
         return body
 
 
@@ -282,10 +314,16 @@ class BaseOfficialProvider(ABC):
         params: dict[str, Any] | None = None,
         json_body: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        return self.http_client.request(self, method, path, params=params, json_body=json_body)
+        return self.http_client.request(
+            self, method, path, params=params, json_body=json_body
+        )
 
     def _ensure_auth(self) -> None:
-        if self._session_token and self._token_expires and datetime.now() < self._token_expires:
+        if (
+            self._session_token
+            and self._token_expires
+            and datetime.now() < self._token_expires
+        ):
             return
         self._session_token = self._authenticate()
         self._token_expires = datetime.now() + timedelta(hours=1)
@@ -299,30 +337,40 @@ class BaseOfficialProvider(ABC):
         method: str,
         path: str,
         *,
-        params: dict | None = None,
-        json_body: dict | None = None,
-    ) -> dict:
-        last_exc: OfficialProviderError | None = None
+        params: dict[str, Any] | None = None,
+        json_body: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        last_exc: Exception | None = None
         for attempt in range(1, self.max_retries + 1):
             try:
                 self._ensure_auth()
                 return self._request(method, path, params=params, json_body=json_body)
             except RateLimitError as exc:
-                wait = exc.retry_after or self.retry_backoff * (2 ** attempt)
-                logger.warning("official_rate_limited", retry_after=wait, actionable_count=attempt)
+                wait = exc.retry_after or self.retry_backoff * (2**attempt)
+                logger.warning(
+                    "official_rate_limited", retry_after=wait, actionable_count=attempt
+                )
                 time.sleep(wait)
                 last_exc = exc
             except BadResponseError as exc:
                 if exc.status_code >= 500:
-                    wait = self.retry_backoff * (2 ** attempt)
-                    logger.warning("official_server_error_retry", error_type=str(exc.status_code), actionable_count=attempt)
+                    wait = self.retry_backoff * (2**attempt)
+                    logger.warning(
+                        "official_server_error_retry",
+                        error_type=str(exc.status_code),
+                        actionable_count=attempt,
+                    )
                     time.sleep(wait)
                     last_exc = exc
                 else:
                     raise
             except (ConnectionError, TimeoutError, OSError) as exc:
-                wait = self.retry_backoff * (2 ** attempt)
-                logger.warning("official_connection_retry", error_type=type(exc).__name__, actionable_count=attempt)
+                wait = self.retry_backoff * (2**attempt)
+                logger.warning(
+                    "official_connection_retry",
+                    error_type=type(exc).__name__,
+                    actionable_count=attempt,
+                )
                 time.sleep(wait)
                 last_exc = exc
         if last_exc is not None:
@@ -333,8 +381,16 @@ class BaseOfficialProvider(ABC):
     def _period_to_start_end(period: str) -> tuple[str, str]:
         now = datetime.now()
         mapping = {
-            "1mo": 30, "3mo": 90, "6mo": 180, "1y": 365, "2y": 730, "5y": 1825,
-            "1d": 1, "5d": 5, "ytd": None, "max": 3650,
+            "1mo": 30,
+            "3mo": 90,
+            "6mo": 180,
+            "1y": 365,
+            "2y": 730,
+            "5y": 1825,
+            "1d": 1,
+            "5d": 5,
+            "ytd": None,
+            "max": 3650,
         }
         days = mapping.get(period, 90)
         if period == "ytd":
@@ -358,7 +414,9 @@ class BaseOfficialProvider(ABC):
             return None
         return df[sorted(required)]
 
-    def fetch_history(self, ticker: str, period: str, interval: str) -> pd.DataFrame | None:
+    def fetch_history(
+        self, ticker: str, period: str, interval: str
+    ) -> pd.DataFrame | None:
         self._wait_rate_limit()
         start_date, end_date = self._period_to_start_end(period)
         try:
@@ -378,7 +436,9 @@ class BaseOfficialProvider(ABC):
         records = resp.get("data", [])
         return self._ohlcv_from_records(records)
 
-    def fetch_batch(self, tickers: list[str], period: str, interval: str) -> dict[str, pd.DataFrame | None]:
+    def fetch_batch(
+        self, tickers: list[str], period: str, interval: str
+    ) -> dict[str, pd.DataFrame | None]:
         if not tickers:
             return {}
         self._wait_rate_limit()
@@ -426,7 +486,10 @@ class BaseOfficialProvider(ABC):
         except OfficialProviderError:
             logger.exception("fetch_universe failed")
             return []
-        return resp.get("data", [])
+        data = resp.get("data", [])
+        if isinstance(data, list):
+            return [str(item) for item in data]
+        return []
 
 
 class OfficialProvider(BaseOfficialProvider):

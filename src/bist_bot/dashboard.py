@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, cast
 
 from flask import Flask, jsonify, request
 from flask_cors import CORS
@@ -33,8 +33,8 @@ logger = get_logger(__name__, component="dashboard")
 
 
 class _SilentNotifier:
-    def send_message(self, message_text: str, parse_mode: str = "HTML") -> bool:
-        _ = message_text, parse_mode
+    def send_message(self, text: str, parse_mode: str = "HTML") -> bool:
+        _ = text, parse_mode
         return True
 
     def send_signal(self, signal) -> bool:
@@ -106,13 +106,13 @@ def create_dashboard_app(
     CORS(app, resources={r"/api/*": {"origins": _cors_origins()}})
 
     def get_fetcher() -> DataFetcherProtocol:
-        return app.config["fetcher"]
+        return cast(DataFetcherProtocol, app.config["fetcher"])
 
     def get_engine() -> StrategyEngineProtocol:
-        return app.config["engine"]
+        return cast(StrategyEngineProtocol, app.config["engine"])
 
     def get_db() -> SignalRepositoryProtocol:
-        return app.config["db"]
+        return cast(SignalRepositoryProtocol, app.config["db"])
 
     def get_broker() -> Any | None:
         return app.config["broker"]
@@ -244,6 +244,11 @@ def create_dashboard_app(
     @app.route("/api/auth/register", methods=["POST"])
     @limiter.limit("5 per minute", key_func=_auth_rate_limit_key)
     def api_auth_register():
+        if not getattr(settings, "ALLOW_PUBLIC_REGISTRATION", False):
+            return jsonify(
+                {"status": "error", "message": get_message("api.registration_disabled")}
+            ), 403
+
         payload = request.get_json(silent=True) or {}
         email = str(payload.get("email", "")).strip().lower()
         password = str(payload.get("password", ""))
@@ -286,7 +291,7 @@ def create_dashboard_app(
                 for signal in signals
             ]
 
-            response_payload = {
+            response_payload: dict[str, Any] = {
                 "status": "ok",
                 "scanned": scan_stats["scanned"],
                 "signals": results,
@@ -367,7 +372,7 @@ def create_dashboard_app(
                 for idx, row in enriched.tail(60).iterrows()
             ]
 
-            response_payload = {
+            response_payload: dict[str, Any] = {
                 "status": "ok",
                 "ticker": normalized_ticker,
                 "name": settings.TICKER_NAMES.get(normalized_ticker, normalized_ticker),

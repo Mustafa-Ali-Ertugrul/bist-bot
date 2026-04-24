@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Iterable, Literal, Mapping, cast
 
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
 
 from sklearn.isotonic import IsotonicRegression  # type: ignore[import-not-found]
@@ -45,22 +46,26 @@ class ProbabilityCalibrator:
         self._model = model
         return self
 
-    def predict(self, raw_probabilities: Iterable[float]) -> np.ndarray:
+    def predict(self, raw_probabilities: Iterable[float]) -> npt.NDArray[np.float64]:
         probabilities = np.clip(
             np.asarray(list(raw_probabilities), dtype=float), 1e-6, 1.0 - 1e-6
         )
         if self._model is None:
-            return probabilities
+            return cast(npt.NDArray[np.float64], probabilities)
         if self.method == "platt":
             model = cast(LogisticRegression, self._model)
-            return model.predict_proba(probabilities.reshape(-1, 1))[:, 1]
-        return np.clip(
-            np.asarray(
-                cast(IsotonicRegression, self._model).predict(probabilities),
-                dtype=float,
+            calibrated = model.predict_proba(probabilities.reshape(-1, 1))[:, 1]
+            return cast(npt.NDArray[np.float64], calibrated)
+        return cast(
+            npt.NDArray[np.float64],
+            np.clip(
+                np.asarray(
+                    cast(IsotonicRegression, self._model).predict(probabilities),
+                    dtype=float,
+                ),
+                0.0,
+                1.0,
             ),
-            0.0,
-            1.0,
         )
 
 

@@ -113,13 +113,18 @@ class BISTDataFetcher:
             _rate_limiter
         )
         if watchlist is None:
-            tickers = self.provider.fetch_universe()
+            tickers = _clean_ticker_list(self.provider.fetch_universe())
             if len(tickers) < 90:
                 logger.warning(
-                    "watchlist_insufficient_fallback",
+                    "watchlist_provider_insufficient",
                     provider_count=len(tickers),
                 )
-            tickers = _clean_ticker_list(BIST100_TICKERS)
+            if not tickers:
+                tickers = _clean_ticker_list(BIST100_TICKERS)
+                logger.warning(
+                    "watchlist_static_fallback",
+                    fallback_count=len(tickers),
+                )
             self.watchlist = tickers
         else:
             self.watchlist = _clean_ticker_list(watchlist)
@@ -586,24 +591,28 @@ class BISTDataFetcher:
 
         if scope in {"all", "history", "intraday_fetch"}:
             history_keys = [
-                key
-                for key in list(self._history_cache)
-                if (normalized_ticker is None or key[0] == normalized_ticker)
-                and (period is None or key[1] == period)
-                and (interval is None or key[2] == interval)
-                and (scope != "intraday_fetch" or self._is_intraday_interval(key[2]))
+                history_key
+                for history_key in list(self._history_cache)
+                if (normalized_ticker is None or history_key[0] == normalized_ticker)
+                and (period is None or history_key[1] == period)
+                and (interval is None or history_key[2] == interval)
+                and (
+                    scope != "intraday_fetch"
+                    or self._is_intraday_interval(history_key[2])
+                )
             ]
-            for key in history_keys:
-                self._history_cache.pop(key, None)
+            for history_key in history_keys:
+                self._history_cache.pop(history_key, None)
 
         if scope in {"all", "analysis"}:
-            analysis_keys = [
-                key
-                for key in list(self._analysis_cache)
-                if normalized_ticker is None or key.startswith(f"{normalized_ticker}|")
+            analysis_keys: list[str] = [
+                analysis_key
+                for analysis_key in list(self._analysis_cache)
+                if normalized_ticker is None
+                or analysis_key.startswith(f"{normalized_ticker}|")
             ]
-            for key in analysis_keys:
-                self._analysis_cache.pop(key, None)
+            for analysis_key in analysis_keys:
+                self._analysis_cache.pop(analysis_key, None)
 
         if scope in {"all", "quote_fallback"}:
             if normalized_ticker is None:

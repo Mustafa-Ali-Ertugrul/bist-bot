@@ -6,7 +6,7 @@ from pathlib import Path
 import random
 import threading
 import time
-from typing import Callable, Iterator, Optional, TypeVar
+from typing import Any, Callable, Iterator, Optional, TypeVar
 
 from sqlalchemy import (
     DateTime,
@@ -174,7 +174,7 @@ class DatabaseManager:
         self.write_retry_attempts = max(int(write_retry_attempts), 1)
         self.write_retry_backoff_seconds = max(float(write_retry_backoff_seconds), 0.0)
         engine_url = self.database_url or f"sqlite:///{Path(self.sqlite_path)}"
-        engine_kwargs = {
+        engine_kwargs: dict[str, Any] = {
             "future": True,
             "pool_size": pool_size,
             "max_overflow": max_overflow,

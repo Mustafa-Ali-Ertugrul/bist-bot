@@ -55,6 +55,7 @@ en = {
     "api.password_too_short": "Password must be at least 8 characters",
     "api.email_already_exists": "This email is already registered",
     "api.register_error": "Registration could not be completed",
+    "api.registration_disabled": "Public registration is disabled",
     "api.data_not_found": "Data not found",
     "api.scan_error": "Scan error",
     "api.analyze_error": "Analyze error",

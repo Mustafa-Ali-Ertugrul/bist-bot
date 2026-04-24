@@ -108,7 +108,7 @@ class TechnicalIndicators:
         return df
 
     @staticmethod
-    def add_rsi(df: pd.DataFrame, period: int = None) -> pd.DataFrame:
+    def add_rsi(df: pd.DataFrame, period: int | None = None) -> pd.DataFrame:
         period = period or settings.RSI_PERIOD
         df = df.copy()
 
@@ -267,7 +267,9 @@ class TechnicalIndicators:
         )
 
     @staticmethod
-    def add_sma(df: pd.DataFrame, fast: int = None, slow: int = None) -> pd.DataFrame:
+    def add_sma(
+        df: pd.DataFrame, fast: int | None = None, slow: int | None = None
+    ) -> pd.DataFrame:
         fast = fast or settings.SMA_FAST
         slow = slow or settings.SMA_SLOW
         df = df.copy()
@@ -294,7 +296,9 @@ class TechnicalIndicators:
         return df
 
     @staticmethod
-    def add_ema(df: pd.DataFrame, fast: int = None, slow: int = None) -> pd.DataFrame:
+    def add_ema(
+        df: pd.DataFrame, fast: int | None = None, slow: int | None = None
+    ) -> pd.DataFrame:
         fast = fast or settings.EMA_FAST
         slow = slow or settings.EMA_SLOW
         df = df.copy()
@@ -349,7 +353,7 @@ class TechnicalIndicators:
 
     @staticmethod
     def add_bollinger(
-        df: pd.DataFrame, period: int = None, std: float = None
+        df: pd.DataFrame, period: int | None = None, std: float | None = None
     ) -> pd.DataFrame:
         period = period or settings.BOLLINGER_PERIOD
         std = std or settings.BOLLINGER_STD
@@ -382,7 +386,7 @@ class TechnicalIndicators:
 
     @staticmethod
     def add_bollinger_bands(
-        df: pd.DataFrame, period: int = None, std: float = None
+        df: pd.DataFrame, period: int | None = None, std: float | None = None
     ) -> pd.DataFrame:
         return TechnicalIndicators.add_bollinger(df, period=period, std=std)
 
@@ -410,13 +414,15 @@ class TechnicalIndicators:
 
     @staticmethod
     def volume_confirmed(
-        df: pd.DataFrame, ticker: str = None, threshold: float = None
+        df: pd.DataFrame,
+        ticker: str | None = None,
+        threshold: float | None = None,
     ) -> bool:
         if df is None or len(df) < 25:
             return False
 
         last = df.iloc[-1]
-        vol_ratio = last.get("volume_ratio", 1.0)
+        vol_ratio = float(last.get("volume_ratio", 1.0) or 0.0)
 
         if ticker:
             base_threshold = getattr(settings, "VOLUME_CONFIRM_MULTIPLIER", 1.5)
@@ -430,7 +436,7 @@ class TechnicalIndicators:
         else:
             threshold = threshold or 1.5
 
-        return vol_ratio >= threshold
+        return bool(vol_ratio >= threshold)
 
     @staticmethod
     def add_atr(df: pd.DataFrame, period: int = 14) -> pd.DataFrame:

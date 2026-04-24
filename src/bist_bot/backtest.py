@@ -380,7 +380,7 @@ def _calculate_cagr(
     years = total_days / 365.25
     if years <= 0:
         return 0.0
-    return (final_capital / initial_capital) ** (1 / years) - 1
+    return float((final_capital / initial_capital) ** (1 / years) - 1)
 
 
 def _longest_loss_streak(trades: list[BacktestTrade]) -> int:
@@ -675,20 +675,24 @@ class Backtester:
             score += np.where(rsi < p.rsi_oversold_extreme, p.score_rsi_extreme, 0.0)
             score += np.where(
                 (rsi >= p.rsi_oversold_extreme) & (rsi < p.rsi_oversold),
-                p.score_rsi_normal, 0.0,
+                p.score_rsi_normal,
+                0.0,
             )
             score += np.where(
                 (rsi >= p.rsi_oversold) & (rsi < p.rsi_neutral_low),
-                p.score_rsi_weak_low, 0.0,
+                p.score_rsi_weak_low,
+                0.0,
             )
             score -= np.where(rsi > p.rsi_overbought_extreme, p.score_rsi_extreme, 0.0)
             score -= np.where(
                 (rsi <= p.rsi_overbought_extreme) & (rsi > p.rsi_overbought),
-                p.score_rsi_normal, 0.0,
+                p.score_rsi_normal,
+                0.0,
             )
             score -= np.where(
                 (rsi <= p.rsi_overbought) & (rsi > p.rsi_neutral_high),
-                p.score_rsi_weak_high, 0.0,
+                p.score_rsi_weak_high,
+                0.0,
             )
 
         if "stoch_k" in df.columns and "stoch_d" in df.columns:
@@ -699,19 +703,23 @@ class Backtester:
                 score += np.where(sc == "BULLISH", p.score_stoch_cross, 0.0)
                 score -= np.where(sc == "BEARISH", p.score_stoch_cross, 0.0)
             score += np.where(
-                np.isnan(sk) | np.isnan(sd), 0.0,
+                np.isnan(sk) | np.isnan(sd),
+                0.0,
                 np.where((sk < 20) & (sd < 20), p.score_stoch_extreme, 0.0),
             )
             score -= np.where(
-                np.isnan(sk) | np.isnan(sd), 0.0,
+                np.isnan(sk) | np.isnan(sd),
+                0.0,
                 np.where((sk > 80) & (sd > 80), p.score_stoch_extreme, 0.0),
             )
             score += np.where(
-                np.isnan(sk) | np.isnan(sd), 0.0,
+                np.isnan(sk) | np.isnan(sd),
+                0.0,
                 np.where((sk > sd) & (sk < 50), p.score_stoch_trend, 0.0),
             )
             score -= np.where(
-                np.isnan(sk) | np.isnan(sd), 0.0,
+                np.isnan(sk) | np.isnan(sd),
+                0.0,
                 np.where((sk < sd) & (sk > 50), p.score_stoch_trend, 0.0),
             )
 
@@ -733,7 +741,9 @@ class Backtester:
 
         if "sma_cross" in df.columns:
             sma_cross = cast(pd.Series, df["sma_cross"]).astype(str).to_numpy()
-            score += np.where(sma_cross == "GOLDEN_CROSS", p.score_sma_golden_cross, 0.0)
+            score += np.where(
+                sma_cross == "GOLDEN_CROSS", p.score_sma_golden_cross, 0.0
+            )
             score -= np.where(sma_cross == "DEATH_CROSS", p.score_sma_golden_cross, 0.0)
         else:
             sma_fast_col = f"sma_{settings.SMA_FAST}"
@@ -743,7 +753,9 @@ class Backtester:
                 sma_slow = cast(pd.Series, df[sma_slow_col]).to_numpy(dtype=float)
                 valid = ~np.isnan(sma_fast) & ~np.isnan(sma_slow)
                 score += np.where(valid & (sma_fast > sma_slow), p.score_sma_trend, 0.0)
-                score -= np.where(valid & (sma_fast <= sma_slow), p.score_sma_trend, 0.0)
+                score -= np.where(
+                    valid & (sma_fast <= sma_slow), p.score_sma_trend, 0.0
+                )
 
         if "ema_cross" in df.columns:
             ema_cross = cast(pd.Series, df["ema_cross"]).astype(str).to_numpy()
@@ -792,16 +804,16 @@ class Backtester:
             valid = ~np.isnan(vol_sma) & (vol_sma > 0)
             score += np.where(
                 valid & (vol / np.where(vol_sma == 0, 1, vol_sma) >= min_ratio),
-                p.score_volume_confirm, 0.0,
+                p.score_volume_confirm,
+                0.0,
             )
 
         if "volume_spike" in df.columns:
             vol_spike = cast(pd.Series, df["volume_spike"]).to_numpy(dtype=bool)
             if "_prev_close_for_scoring" in df.columns:
-                price_chg = (
-                    df["close"].to_numpy(dtype=float)
-                    - df["_prev_close_for_scoring"].to_numpy(dtype=float)
-                )
+                price_chg = df["close"].to_numpy(dtype=float) - df[
+                    "_prev_close_for_scoring"
+                ].to_numpy(dtype=float)
             else:
                 price_chg = np.zeros(len(df), dtype=float)
             score += np.where(vol_spike & (price_chg > 0), p.score_volume_spike, 0.0)
@@ -824,26 +836,38 @@ class Backtester:
         # ── Structure ─────────────────────────────────────────────────
         if "bb_position" in df.columns:
             bb_position = cast(pd.Series, df["bb_position"]).astype(str).to_numpy()
-            score += np.where(bb_position == "BELOW_LOWER", p.score_bollinger_extreme, 0.0)
-            score -= np.where(bb_position == "ABOVE_UPPER", p.score_bollinger_extreme, 0.0)
+            score += np.where(
+                bb_position == "BELOW_LOWER", p.score_bollinger_extreme, 0.0
+            )
+            score -= np.where(
+                bb_position == "ABOVE_UPPER", p.score_bollinger_extreme, 0.0
+            )
         if "bb_percent" in df.columns:
             bb_pct = cast(pd.Series, df["bb_percent"]).to_numpy(dtype=float)
             score += np.where(
-                ~np.isnan(bb_pct) & (bb_pct < 0.2), p.score_bollinger_percent, 0.0,
+                ~np.isnan(bb_pct) & (bb_pct < 0.2),
+                p.score_bollinger_percent,
+                0.0,
             )
             score -= np.where(
-                ~np.isnan(bb_pct) & (bb_pct > 0.8), p.score_bollinger_percent, 0.0,
+                ~np.isnan(bb_pct) & (bb_pct > 0.8),
+                p.score_bollinger_percent,
+                0.0,
             )
 
         if "dist_to_support_pct" in df.columns:
             ds = cast(pd.Series, df["dist_to_support_pct"]).to_numpy(dtype=float)
             score += np.where(
-                ~np.isnan(ds) & (ds < 2), p.score_sr_distance, 0.0,
+                ~np.isnan(ds) & (ds < 2),
+                p.score_sr_distance,
+                0.0,
             )
         if "dist_to_resistance_pct" in df.columns:
             dr = cast(pd.Series, df["dist_to_resistance_pct"]).to_numpy(dtype=float)
             score -= np.where(
-                ~np.isnan(dr) & (dr < 2), p.score_sr_distance, 0.0,
+                ~np.isnan(dr) & (dr < 2),
+                p.score_sr_distance,
+                0.0,
             )
 
         if "rsi_divergence" in df.columns:
@@ -1011,7 +1035,9 @@ class Backtester:
         universe_as_of: str | None = None,
     ) -> Optional[BacktestResult]:
         if df is None or len(df) < 50:
-            logger.warning("insufficient_data", row_count=len(df) if df is not None else 0)
+            logger.warning(
+                "insufficient_data", row_count=len(df) if df is not None else 0
+            )
             return None
 
         df = df.copy()
@@ -1745,7 +1771,7 @@ class Backtester:
                 f"{emoji} {profit_pct:+.1f}% (₺{profit_tl:+.0f}) | {holding_days} gün"
             )
 
-        return capital + revenue
+        return float(capital + revenue)
 
     def _build_result(
         self,
@@ -1767,7 +1793,9 @@ class Backtester:
                 )
 
         self.avg_holding_days = avg_holding
-        logger.info("avg_holding_stats", avg_holding_days=avg_holding, idle_pct=idle_ratio)
+        logger.info(
+            "avg_holding_stats", avg_holding_days=avg_holding, idle_pct=idle_ratio
+        )
 
         summary = _summarize_trades_and_equity(
             ticker=ticker,
@@ -1970,7 +1998,9 @@ class WalkForwardValidator:
 
     def _backtester(self, initial_capital: float, params: Any) -> StrategyBacktester:
         if self.backtester_factory is not None:
-            return self.backtester_factory(initial_capital, params)
+            return cast(
+                StrategyBacktester, self.backtester_factory(initial_capital, params)
+            )
 
         engine = strategy_module.StrategyEngine(params=params)
         return StrategyBacktester(initial_capital=initial_capital, engine=engine)
@@ -1986,7 +2016,11 @@ class WalkForwardValidator:
         if df is None or df.empty:
             return None
 
-        initial = float(initial_capital or getattr(settings, "INITIAL_CAPITAL", 8500.0))
+        initial = (
+            float(initial_capital)
+            if initial_capital is not None
+            else float(getattr(settings, "INITIAL_CAPITAL", 8500.0))
+        )
         df_sorted = df.sort_index()
         windows = self._build_windows(df_sorted)
         if not windows:
@@ -2076,7 +2110,7 @@ class WalkForwardValidator:
 
 def _reload_strategy_dependencies() -> StrategyEngineProtocol:
     reloaded_module = importlib.reload(strategy_module)
-    return reloaded_module.StrategyEngine()
+    return cast(StrategyEngineProtocol, reloaded_module.StrategyEngine())
 
 
 if __name__ == "__main__":
@@ -2179,5 +2213,5 @@ def compare_benchmark(ticker: str, df: pd.DataFrame) -> float:
             close_series = bench[close_col]
             return float((close_series.iloc[-1] / close_series.iloc[0] - 1) * 100)
     except Exception as e:
-            logger.warning("benchmark_data_error", error=str(e))
+        logger.warning("benchmark_data_error", error=str(e))
     return 0.0

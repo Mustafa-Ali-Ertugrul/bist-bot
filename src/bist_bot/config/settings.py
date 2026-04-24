@@ -298,6 +298,7 @@ class Settings:
     JWT_SECRET_KEY: str = _get_str_env("JWT_SECRET_KEY")
     ADMIN_BOOTSTRAP_EMAIL: str = _get_str_env("ADMIN_BOOTSTRAP_EMAIL")
     ADMIN_BOOTSTRAP_PASSWORD_HASH: str = _get_str_env("ADMIN_BOOTSTRAP_PASSWORD_HASH")
+    ALLOW_PUBLIC_REGISTRATION: bool = _get_bool_env("ALLOW_PUBLIC_REGISTRATION", False)
     CORS_ORIGINS: tuple[str, ...] = field(
         default_factory=lambda: _get_csv_env("CORS_ORIGINS")
     )

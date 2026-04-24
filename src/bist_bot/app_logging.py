@@ -21,7 +21,8 @@ _DEFAULT_COMPONENT = "app"
 
 
 def _normalize_level(level: str | None = None) -> int:
-    return getattr(logging, (level or getattr(settings, "LOG_LEVEL", "INFO")).upper(), logging.INFO)
+    raw_level = str(level or getattr(settings, "LOG_LEVEL", "INFO") or "INFO")
+    return getattr(logging, raw_level.upper(), logging.INFO)
 
 
 def _json_enabled() -> bool:
@@ -59,7 +60,11 @@ def configure_logging(
     for h in handlers:
         root.addHandler(h)
     if level is not None:
-        root.setLevel(level if isinstance(level, int) else getattr(logging, str(level).upper(), logging.INFO))
+        root.setLevel(
+            level
+            if isinstance(level, int)
+            else getattr(logging, str(level).upper(), logging.INFO)
+        )
     else:
         root.setLevel(_normalize_level())
 
@@ -70,6 +75,7 @@ def _configure_sentry() -> None:
         try:
             import sentry_sdk
             from sentry_sdk.integrations.flask import FlaskIntegration
+
             sentry_sdk.init(
                 dsn=sentry_dsn,
                 integrations=[FlaskIntegration()],

@@ -122,6 +122,57 @@ def test_fetcher_uses_injected_provider_for_history_and_batch():
     assert set(batch) == {"THYAO.IS", "ASELS.IS"}
 
 
+def test_fetcher_uses_provider_universe_when_watchlist_not_supplied():
+    from bist_bot.data.fetcher import BISTDataFetcher
+
+    class UniverseProvider:
+        def fetch_history(self, ticker: str, period: str, interval: str):
+            _ = ticker, period, interval
+            return None
+
+        def fetch_batch(self, tickers: list[str], period: str, interval: str):
+            _ = tickers, period, interval
+            return {}
+
+        def fetch_quote(self, ticker: str):
+            _ = ticker
+            return None
+
+        def fetch_universe(self, force_refresh: bool = False):
+            _ = force_refresh
+            return [" thyao ", "ASELS.IS", "THYAO.IS"]
+
+    fetcher = BISTDataFetcher(provider=UniverseProvider())
+
+    assert fetcher.watchlist == ["THYAO.IS", "ASELS.IS"]
+
+
+def test_fetcher_falls_back_to_static_universe_when_provider_universe_empty():
+    from bist_bot.data.bist100 import BIST100_TICKERS
+    from bist_bot.data.fetcher import BISTDataFetcher
+
+    class EmptyUniverseProvider:
+        def fetch_history(self, ticker: str, period: str, interval: str):
+            _ = ticker, period, interval
+            return None
+
+        def fetch_batch(self, tickers: list[str], period: str, interval: str):
+            _ = tickers, period, interval
+            return {}
+
+        def fetch_quote(self, ticker: str):
+            _ = ticker
+            return None
+
+        def fetch_universe(self, force_refresh: bool = False):
+            _ = force_refresh
+            return []
+
+    fetcher = BISTDataFetcher(provider=EmptyUniverseProvider())
+
+    assert fetcher.watchlist == BIST100_TICKERS
+
+
 def test_fetcher_uses_provider_quote_fallback_before_history(monkeypatch):
     from bist_bot.data import fetcher as data_fetcher
     from bist_bot.data.fetcher import BISTDataFetcher

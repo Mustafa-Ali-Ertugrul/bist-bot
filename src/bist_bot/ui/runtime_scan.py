@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import threading
+from collections.abc import MutableMapping
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, cast
 
 import streamlit as st
 
@@ -19,7 +20,9 @@ PENDING_SCAN_RESULTS: dict[str, ScanResult] = {}
 ACTIVE_SCAN_SESSIONS: set[str] = set()
 
 
-def _should_clear_cache(scan_started_at: datetime, last_scan_time: datetime | None, force_clear: bool) -> bool:
+def _should_clear_cache(
+    scan_started_at: datetime, last_scan_time: datetime | None, force_clear: bool
+) -> bool:
     """Decide whether cached market data should be invalidated before scanning."""
     if force_clear:
         return True
@@ -50,7 +53,14 @@ def _empty_scan_result(last_scan_time: datetime | None, error: str) -> ScanResul
     }
 
 
-def collect_scan_result(fetcher, engine, notifier, db, last_scan_time: datetime | None = None, force_clear: bool = False) -> ScanResult:
+def collect_scan_result(
+    fetcher,
+    engine,
+    notifier,
+    db,
+    last_scan_time: datetime | None = None,
+    force_clear: bool = False,
+) -> ScanResult:
     """Run one scan cycle and return the runtime payload."""
     scan_started_at = datetime.now(TR)
     if _should_clear_cache(scan_started_at, last_scan_time, force_clear):
@@ -65,7 +75,11 @@ def collect_scan_result(fetcher, engine, notifier, db, last_scan_time: datetime 
         force_refresh=force_clear,
     )
     signals = engine.scan_all(timeframe_data)
-    all_data = {ticker: data["trigger"] for ticker, data in timeframe_data.items() if isinstance(data, dict) and "trigger" in data}
+    all_data = {
+        ticker: data["trigger"]
+        for ticker, data in timeframe_data.items()
+        if isinstance(data, dict) and "trigger" in data
+    }
 
     db.save_signals(signals)
 
@@ -74,7 +88,12 @@ def collect_scan_result(fetcher, engine, notifier, db, last_scan_time: datetime 
         if signal is not None:
             send_signal_notification(signal, notifier)
 
-    return {"all_data": all_data, "signals": signals, "last_scan_time": scan_started_at, "error": None}
+    return {
+        "all_data": all_data,
+        "signals": signals,
+        "last_scan_time": scan_started_at,
+        "error": None,
+    }
 
 
 def apply_scan_result(scan_result: ScanResult) -> None:
@@ -102,12 +121,16 @@ def run_scan(force_clear: bool = False) -> None:
 
 def request_scan(force_clear: bool = False) -> bool:
     allowed, remaining = consume_cooldown(
-        st.session_state,
+        cast(MutableMapping[str, Any], st.session_state),
         action="scan",
-        cooldown_seconds=float(getattr(settings, "STREAMLIT_SCAN_COOLDOWN_SECONDS", 8.0)),
+        cooldown_seconds=float(
+            getattr(settings, "STREAMLIT_SCAN_COOLDOWN_SECONDS", 8.0)
+        ),
     )
     if not allowed:
-        st.warning(f"Cok sik istek gonderildi, birkac saniye bekleyin. ({remaining:.1f}s)")
+        st.warning(
+            f"Cok sik istek gonderildi, birkac saniye bekleyin. ({remaining:.1f}s)"
+        )
         return False
     run_scan(force_clear=force_clear)
     return True
@@ -129,7 +152,14 @@ def start_background_scan(force_clear: bool = False) -> bool:
 
     def worker():
         try:
-            result = collect_scan_result(fetcher, engine, notifier, db, last_scan_time=last_scan_time, force_clear=force_clear)
+            result = collect_scan_result(
+                fetcher,
+                engine,
+                notifier,
+                db,
+                last_scan_time=last_scan_time,
+                force_clear=force_clear,
+            )
         except Exception as exc:
             result = _empty_scan_result(last_scan_time, str(exc))
         with SCAN_LOCK:

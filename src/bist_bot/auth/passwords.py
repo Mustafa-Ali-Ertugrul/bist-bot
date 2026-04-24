@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import bcrypt
+from typing import cast
 from werkzeug.security import check_password_hash, generate_password_hash
 
 
@@ -10,7 +11,7 @@ _MODERN_HASH_PREFIX = "scrypt:"
 
 
 def hash_password(password: str) -> str:
-    return generate_password_hash(password, method="scrypt")
+    return cast(str, generate_password_hash(password, method="scrypt"))
 
 
 def _is_modern_hash(password_hash: str) -> bool:

@@ -97,21 +97,19 @@ def build_training_dataset(
             stop_loss = to_float(row.get("stop_loss_atr"), close_price * 0.95)
             risk_per_share = max(close_price - stop_loss, close_price * 0.01)
             target_price = max(close_price + risk_per_share * target_rr, close_price)
-            feature_row = build_feature_payload(
-                row,
-                score=score,
-                stop_loss=stop_loss,
-                target_price=target_price,
+            feature_row: dict[str, Any] = dict(
+                build_feature_payload(
+                    row,
+                    score=score,
+                    stop_loss=stop_loss,
+                    target_price=target_price,
+                )
             )
-            feature_row.update(
-                {
-                    "ticker": ticker,
-                    "date": pd.Timestamp(enriched.index[idx]),
-                    "future_return": float(future_return.iloc[idx]),
-                    "label": int(
-                        future_return.iloc[idx] >= label_definition.return_threshold
-                    ),
-                }
+            feature_row["ticker"] = ticker
+            feature_row["date"] = str(enriched.index[idx])[:10]
+            feature_row["future_return"] = float(future_return.iloc[idx])
+            feature_row["label"] = int(
+                future_return.iloc[idx] >= label_definition.return_threshold
             )
             rows.append(feature_row)
     dataset = pd.DataFrame(rows)
@@ -125,18 +123,17 @@ def build_training_dataset(
 def _date_range(frame: pd.DataFrame) -> dict[str, str | None]:
     if frame.empty:
         return {"start": None, "end": None}
+    date_series = pd.to_datetime(frame["date"])
     return {
-        "start": pd.Timestamp(frame["date"].min()).strftime("%Y-%m-%d"),
-        "end": pd.Timestamp(frame["date"].max()).strftime("%Y-%m-%d"),
+        "start": pd.Timestamp(date_series.min()).strftime("%Y-%m-%d"),
+        "end": pd.Timestamp(date_series.max()).strftime("%Y-%m-%d"),
     }
 
 
 def split_dataset(
     dataset: pd.DataFrame, split_config: SplitConfig
 ) -> dict[str, pd.DataFrame]:
-    unique_dates = sorted(
-        pd.Timestamp(date) for date in dataset["date"].drop_duplicates()
-    )
+    unique_dates = sorted(pd.to_datetime(dataset["date"].drop_duplicates()).tolist())
     if len(unique_dates) < 10:
         raise ValueError("Need at least 10 unique dates for time-based split")
     train_end = max(1, int(len(unique_dates) * split_config.train_fraction))
@@ -146,23 +143,24 @@ def split_dataset(
     calibration_end = validation_end + max(
         1, int(len(unique_dates) * split_config.calibration_fraction)
     )
-    train_dates = set(unique_dates[:train_end])
-    validation_dates = set(unique_dates[train_end:validation_end])
-    calibration_dates = set(unique_dates[validation_end:calibration_end])
-    test_dates = set(unique_dates[calibration_end:])
+    train_dates = list(unique_dates[:train_end])
+    validation_dates = list(unique_dates[train_end:validation_end])
+    calibration_dates = list(unique_dates[validation_end:calibration_end])
+    test_dates = list(unique_dates[calibration_end:])
+    date_series = pd.to_datetime(dataset["date"])
     if not validation_dates or not calibration_dates or not test_dates:
         raise ValueError(
             "Split config leaves an empty validation/calibration/test partition"
         )
     return {
-        "train": dataset[dataset["date"].isin(train_dates)].reset_index(drop=True),
-        "validation": dataset[dataset["date"].isin(validation_dates)].reset_index(
+        "train": dataset[date_series.isin(train_dates)].reset_index(drop=True),
+        "validation": dataset[date_series.isin(validation_dates)].reset_index(
             drop=True
         ),
-        "calibration": dataset[dataset["date"].isin(calibration_dates)].reset_index(
+        "calibration": dataset[date_series.isin(calibration_dates)].reset_index(
             drop=True
         ),
-        "test": dataset[dataset["date"].isin(test_dates)].reset_index(drop=True),
+        "test": dataset[date_series.isin(test_dates)].reset_index(drop=True),
     }
 
 
@@ -223,7 +221,7 @@ def train_meta_model_from_dataset(
 ) -> tuple[SignalMetaModel, dict[str, Any], dict[str, Any]]:
     splits = split_dataset(dataset, split_config)
     model = SignalMetaModel(calibration_method="none")
-    train_features = splits["train"][FEATURE_COLUMNS]
+    train_features = pd.DataFrame(splits["train"][FEATURE_COLUMNS])
     train_labels = splits["train"]["label"].to_numpy(dtype=int)
     model.fit(train_features, train_labels)
 

@@ -10,7 +10,12 @@ from pathlib import Path
 import bist_bot.config as config
 
 from bist_bot.app_logging import get_logger
-from bist_bot.backtest import Backtester, WalkForwardValidator
+from bist_bot.backtest import (
+    BacktestResult,
+    Backtester,
+    WalkForwardResult,
+    WalkForwardValidator,
+)
 from bist_bot.data.universe import get_universe_for_date
 
 logger = get_logger(__name__, component="backtest_runner")
@@ -52,7 +57,6 @@ def run_backtest(fetcher, walk_forward: bool | None = None) -> None:
 
     output_dir = Path("data")
     output_dir.mkdir(parents=True, exist_ok=True)
-    results = []
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     universe_as_of = args.historical_universe_date
     universe = (
@@ -69,12 +73,13 @@ def run_backtest(fetcher, walk_forward: bool | None = None) -> None:
             ticker_count=len(universe),
         )
 
-    for ticker in universe:
-        df = fetcher.fetch_single(ticker, period="2y" if use_walk_forward else "1y")
-        if df is None:
-            continue
+    if use_walk_forward:
+        walk_forward_results: list[WalkForwardResult] = []
+        for ticker in universe:
+            df = fetcher.fetch_single(ticker, period="2y")
+            if df is None:
+                continue
 
-        if use_walk_forward:
             validator = WalkForwardValidator(
                 train_window=args.train_window,
                 test_window=args.test_window,
@@ -84,69 +89,81 @@ def run_backtest(fetcher, walk_forward: bool | None = None) -> None:
             output_path = (
                 output_dir / f"walkforward_{ticker.replace('.', '_')}_{timestamp}.json"
             )
-            result = validator.run(
+            walk_forward_result = validator.run(
                 ticker,
                 df,
                 initial_capital=getattr(config.settings, "INITIAL_CAPITAL", 8500.0),
                 output_path=output_path,
                 universe_as_of=universe_as_of,
             )
-            if result is not None:
-                results.append(result)
+            if walk_forward_result is not None:
+                walk_forward_results.append(walk_forward_result)
                 print(
-                    f"{ticker}: OOS %{result.combined_metrics['total_return_pct']:+.2f} | "
-                    f"Sharpe {result.combined_metrics['sharpe']:.2f} | "
-                    f"Windows {len(result.windows)}"
+                    f"{ticker}: OOS %{walk_forward_result.combined_metrics['total_return_pct']:+.2f} | "
+                    f"Sharpe {walk_forward_result.combined_metrics['sharpe']:.2f} | "
+                    f"Windows {len(walk_forward_result.windows)}"
                 )
-        else:
-            backtester = Backtester(
-                initial_capital=getattr(config.settings, "INITIAL_CAPITAL", 8500.0)
-            )
-            output_path = output_dir / f"backtest_{ticker.replace('.', '_')}.json"
-            result = backtester.run(
-                ticker,
-                df,
-                verbose=False,
-                output_path=output_path,
-                universe_as_of=universe_as_of,
-            )
-            if result is not None:
-                results.append(result)
-                print(result)
 
-    if not results:
-        return
+        if not walk_forward_results:
+            return
 
-    if use_walk_forward:
-        avg_return = sum(r.combined_metrics["total_return_pct"] for r in results) / len(
-            results
-        )
-        avg_sharpe = sum(r.combined_metrics["sharpe"] for r in results) / len(results)
-        total_windows = sum(len(r.windows) for r in results)
+        avg_return = sum(
+            r.combined_metrics["total_return_pct"] for r in walk_forward_results
+        ) / len(walk_forward_results)
+        avg_sharpe = sum(
+            r.combined_metrics["sharpe"] for r in walk_forward_results
+        ) / len(walk_forward_results)
+        total_windows = sum(len(r.windows) for r in walk_forward_results)
         print(f"\n{'═' * 55}")
         print("📊 GENEL WALK-FORWARD ÖZETİ")
         print(f"{'═' * 55}")
-        print(f"  Test edilen : {len(results)} hisse")
+        print(f"  Test edilen : {len(walk_forward_results)} hisse")
         print(f"  Toplam pencere: {total_windows}")
         print(f"  Ort. OOS getiri : %{avg_return:.2f}")
         print(f"  Ort. Sharpe     : {avg_sharpe:.2f}")
         print(f"{'═' * 55}")
         return
 
-    avg_return = sum(r.total_return_pct for r in results) / len(results)
-    avg_winrate = sum(r.win_rate for r in results) / len(results)
-    total_trades = sum(r.total_trades for r in results)
+    backtest_results: list[BacktestResult] = []
+    for ticker in universe:
+        df = fetcher.fetch_single(ticker, period="1y")
+        if df is None:
+            continue
+
+        backtester = Backtester(
+            initial_capital=getattr(config.settings, "INITIAL_CAPITAL", 8500.0)
+        )
+        output_path = output_dir / f"backtest_{ticker.replace('.', '_')}.json"
+        backtest_result = backtester.run(
+            ticker,
+            df,
+            verbose=False,
+            output_path=output_path,
+            universe_as_of=universe_as_of,
+        )
+        if backtest_result is not None:
+            backtest_results.append(backtest_result)
+            print(backtest_result)
+
+    if not backtest_results:
+        return
+
+    avg_return = sum(r.total_return_pct for r in backtest_results) / len(
+        backtest_results
+    )
+    avg_winrate = sum(r.win_rate for r in backtest_results) / len(backtest_results)
+    total_trades = sum(r.total_trades for r in backtest_results)
 
     print(f"\n{'═' * 55}")
     print("📊 GENEL BACKTEST ÖZETİ")
     print(f"{'═' * 55}")
-    print(f"  Test edilen : {len(results)} hisse")
+    print(f"  Test edilen : {len(backtest_results)} hisse")
     print(f"  Toplam işlem: {total_trades}")
     print(f"  Ort. getiri : %{avg_return:.2f}")
     print(f"  Ort. win rate: %{avg_winrate:.1f}")
 
-    best = max(results, key=lambda result: result.total_return_pct)
-    worst = min(results, key=lambda result: result.total_return_pct)
+    best = max(backtest_results, key=lambda result: result.total_return_pct)
+    worst = min(backtest_results, key=lambda result: result.total_return_pct)
     print(f"  En iyi      : {best.ticker} (%{best.total_return_pct:+.2f})")
     print(f"  En kötü     : {worst.ticker} (%{worst.total_return_pct:+.2f})")
     print(f"{'═' * 55}")

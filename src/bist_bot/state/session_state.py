@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from typing import Any
 
 import streamlit as st
 
@@ -17,7 +18,7 @@ def init_session_state(container=None) -> None:
         return
 
     runtime_container = container or get_default_container()
-    defaults = {
+    defaults: dict[str, Any] = {
         "data_fetcher": runtime_container.fetcher,
         "engine": runtime_container.engine,
         "notifier": runtime_container.notifier,

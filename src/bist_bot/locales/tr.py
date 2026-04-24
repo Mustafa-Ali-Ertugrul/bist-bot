@@ -56,6 +56,7 @@ tr = {
     "api.password_too_short": "Sifre en az 8 karakter olmali",
     "api.email_already_exists": "Bu email zaten kayitli",
     "api.register_error": "Kayit olusturulamadi",
+    "api.registration_disabled": "Herkese acik kayit kapali",
     "api.data_not_found": "Veri bulunamadi",
     "api.scan_error": "Tarama hatasi",
     "api.analyze_error": "Analiz hatasi",

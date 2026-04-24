@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from datetime import datetime, timedelta, timezone
+from typing import cast
 
 import streamlit as st
 
@@ -20,16 +21,18 @@ def sync_runtime_feedback(run_scan_callback) -> None:
         st.rerun()
 
     if st.session_state.get("scan_in_progress"):
-        st.caption("Arka planda guncel tarama suruyor; sonuc hazir oldugunda ekran yenilenir.")
+        st.caption(
+            "Arka planda guncel tarama suruyor; sonuc hazir oldugunda ekran yenilenir."
+        )
         time.sleep(1)
         st.rerun()
 
 
 def _should_auto_refresh() -> bool:
-    last_scan_time = st.session_state.get("last_scan_time")
+    last_scan_time = cast(datetime | None, st.session_state.get("last_scan_time"))
     if not st.session_state.get("auto_refresh") or last_scan_time is None:
         return False
 
     elapsed = (datetime.now(TR) - last_scan_time).total_seconds()
-    refresh_interval = st.session_state.get("refresh_interval", 5)
+    refresh_interval = float(st.session_state.get("refresh_interval", 5) or 5)
     return elapsed >= refresh_interval * 60

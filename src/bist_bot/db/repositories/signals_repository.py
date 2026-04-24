@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from sqlalchemy import func, select
 
@@ -107,7 +107,7 @@ class SignalsRepository:
         signal_type: Optional[str] = None,
         timestamp: Optional[str] = None,
     ) -> bool:
-        def _read(session):
+        def _read(session) -> bool:
             statement = (
                 select(func.count())
                 .select_from(SignalRecord)
@@ -119,7 +119,7 @@ class SignalsRepository:
                 statement = statement.where(SignalRecord.timestamp == timestamp)
             return bool(session.scalar(statement))
 
-        return self.manager.run_session(_read, read_only=True)
+        return cast(bool, self.manager.run_session(_read, read_only=True))
 
     def save_scan_log(self, total: int, generated: int, buys: int, sells: int) -> None:
         def _write(session):
@@ -196,8 +196,12 @@ class SignalsRepository:
     def _signal_to_dict(self, row: SignalRecord) -> dict[str, Any]:
         return {
             "id": row.id,
-            "timestamp": row.timestamp.isoformat() if isinstance(row.timestamp, datetime) else row.timestamp,
-            "created_at": row.created_at.isoformat() if isinstance(row.created_at, datetime) else row.created_at,
+            "timestamp": row.timestamp.isoformat()
+            if isinstance(row.timestamp, datetime)
+            else row.timestamp,
+            "created_at": row.created_at.isoformat()
+            if isinstance(row.created_at, datetime)
+            else row.created_at,
             "ticker": row.ticker,
             "signal_type": row.signal_type,
             "score": row.score,
@@ -210,7 +214,9 @@ class SignalsRepository:
             or _deserialize_reasons(row.reasons),
             "outcome": row.outcome,
             "outcome_price": row.outcome_price,
-            "outcome_date": row.outcome_date.isoformat() if isinstance(row.outcome_date, datetime) else row.outcome_date,
+            "outcome_date": row.outcome_date.isoformat()
+            if isinstance(row.outcome_date, datetime)
+            else row.outcome_date,
             "profit_pct": row.profit_pct,
             "conditions": _deserialize_reasons(row.conditions),
         }

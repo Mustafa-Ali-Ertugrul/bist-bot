@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import html
+from typing import Literal
 
 import streamlit as st
 
@@ -71,7 +72,9 @@ def render_bottom_nav(active_page: str) -> str | None:
     nav_columns = st.columns([1, 1, 1, 1], gap="small")
     for (key, meta), column in zip(PAGE_META.items(), nav_columns, strict=False):
         with column:
-            button_type = "primary" if key == active_page else "secondary"
+            button_type: Literal["primary", "secondary", "tertiary"] = (
+                "primary" if key == active_page else "secondary"
+            )
             if st.button(
                 meta["label"],
                 key=f"nav_{key}",

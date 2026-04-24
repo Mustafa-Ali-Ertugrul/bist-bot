@@ -118,17 +118,17 @@ def calc_swing_levels(df: pd.DataFrame, price: float, levels: RiskLevels) -> Ris
 
 
 def determine_final_levels(price: float, levels: RiskLevels) -> RiskLevels:
-    all_stops = {
+    all_stops: dict[str, float] = {
         "ATR": levels.stop_atr,
         "Destek": levels.stop_support,
         "Fibonacci": levels.stop_fibonacci,
         "Yüzdelik": levels.stop_percent,
         "Swing": levels.stop_swing,
     }
-    valid_stops = {
+    valid_stops: dict[str, float] = {
         key: value for key, value in all_stops.items() if value > 0 and value < price
     }
-    reasonable_stops = {
+    reasonable_stops: dict[str, float] = {
         key: value
         for key, value in valid_stops.items()
         if (price - value) / price > 0.01
@@ -140,26 +140,30 @@ def determine_final_levels(price: float, levels: RiskLevels) -> RiskLevels:
     }
 
     if reasonable_stops:
-        best_stop_method = max(reasonable_stops, key=reasonable_stops.get)
+        best_stop_method = max(
+            reasonable_stops, key=lambda method: reasonable_stops[method]
+        )
         levels.final_stop = reasonable_stops[best_stop_method]
         stop_method = best_stop_method
     elif valid_stops:
-        best_stop_method = max(valid_stops, key=valid_stops.get)
+        best_stop_method = max(valid_stops, key=lambda method: valid_stops[method])
         levels.final_stop = valid_stops[best_stop_method]
         stop_method = best_stop_method
     else:
         levels.final_stop = levels.stop_percent
         stop_method = "Yüzdelik"
 
-    all_targets = {
+    all_targets: dict[str, float] = {
         "ATR": levels.target_atr,
         "Direnç": levels.target_resistance,
         "Fibonacci": levels.target_fibonacci,
         "Yüzdelik": levels.target_percent,
         "Swing": levels.target_swing,
     }
-    valid_targets = {key: value for key, value in all_targets.items() if value > price}
-    reasonable_targets = {
+    valid_targets: dict[str, float] = {
+        key: value for key, value in all_targets.items() if value > price
+    }
+    reasonable_targets: dict[str, float] = {
         key: value
         for key, value in valid_targets.items()
         if (value - price) / price > 0.02
@@ -169,14 +173,14 @@ def determine_final_levels(price: float, levels: RiskLevels) -> RiskLevels:
     if reasonable_targets:
         best_target_method = next(
             (method for method in target_priority if method in reasonable_targets),
-            min(reasonable_targets, key=reasonable_targets.get),
+            min(reasonable_targets, key=lambda method: reasonable_targets[method]),
         )
         levels.final_target = reasonable_targets[best_target_method]
         target_method = best_target_method
     elif valid_targets:
         best_target_method = next(
             (method for method in target_priority if method in valid_targets),
-            min(valid_targets, key=valid_targets.get),
+            min(valid_targets, key=lambda method: valid_targets[method]),
         )
         levels.final_target = valid_targets[best_target_method]
         target_method = best_target_method

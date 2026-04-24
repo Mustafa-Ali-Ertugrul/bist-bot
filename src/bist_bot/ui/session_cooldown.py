@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from collections.abc import MutableMapping
+from typing import Any
 
 
 def _cooldown_key(action: str) -> str:
@@ -11,7 +11,7 @@ def _cooldown_key(action: str) -> str:
 
 
 def cooldown_remaining_seconds(
-    state: MutableMapping[str, float],
+    state: Any,
     action: str,
     cooldown_seconds: float,
     now: float | None = None,
@@ -23,13 +23,15 @@ def cooldown_remaining_seconds(
 
 
 def consume_cooldown(
-    state: MutableMapping[str, float],
+    state: Any,
     action: str,
     cooldown_seconds: float,
     now: float | None = None,
 ) -> tuple[bool, float]:
     current_time = time.time() if now is None else now
-    remaining = cooldown_remaining_seconds(state, action, cooldown_seconds, now=current_time)
+    remaining = cooldown_remaining_seconds(
+        state, action, cooldown_seconds, now=current_time
+    )
     if remaining > 0:
         return False, remaining
     state[_cooldown_key(action)] = current_time
