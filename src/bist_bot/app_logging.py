@@ -16,15 +16,16 @@ except ImportError:  # pragma: no cover - optional dependency
     _structlog = None
 
 from bist_bot.config.settings import settings
-from bist_bot.exceptions import DataFetchError, SignalProcessingError, OrderExecutionError
 
 
 _DEFAULT_COMPONENT = "app"
 
 _correlation_id_ctx: ContextVar[str | None] = ContextVar("correlation_id", default=None)
 
+
 def get_correlation_id() -> str | None:
     return _correlation_id_ctx.get()
+
 
 def set_correlation_id(cid: str | None) -> None:
     _correlation_id_ctx.set(cid)
@@ -66,6 +67,7 @@ def configure_logging(
         # JSON formatter using python-json-logger
         try:
             from pythonjsonlogger import jsonlogger
+
             formatter = jsonlogger.JsonFormatter(
                 fmt or "%(asctime)s %(levelname)s %(name)s %(component)s %(message)s"
             )
@@ -126,11 +128,11 @@ class BoundLogger:
             **fields,
             "event": event,
         }
-        
+
         cid = _correlation_id_ctx.get()
         if cid is not None:
             payload["correlation_id"] = cid
-            
+
         self._logger.log(level, _serialize_event(payload))
 
     def debug(self, event: str, *args: Any, **fields: Any) -> None:
