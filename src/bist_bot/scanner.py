@@ -28,6 +28,7 @@ class ScanService:
         execution_service: ExecutionService | None = None,
         paper_trade_service: PaperTradeService | None = None,
         notification_service: NotificationDispatchService | None = None,
+        circuit_breaker=None,
     ):
         """Compose fetch, analyze, persistence, and notification steps."""
         self.fetcher = fetcher
@@ -46,6 +47,7 @@ class ScanService:
         self.notification_service = notification_service or NotificationDispatchService(
             notifier, settings=self.settings
         )
+        self.circuit_breaker = circuit_breaker
         self.last_scan_stats: dict[str, int] = {
             "scanned": 0,
             "actionable": 0,

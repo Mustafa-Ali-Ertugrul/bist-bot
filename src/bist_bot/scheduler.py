@@ -18,6 +18,9 @@ class MarketScheduler:
         self.settings = settings
         self.running = False
 
+    def _now(self):
+        return datetime.now(TR)
+
     def run_loop(self):
         self.running = True
 
@@ -25,7 +28,7 @@ class MarketScheduler:
         self.notifier.send_startup_message()
 
         while self.running:
-            now = datetime.now(TR)
+            now = self._now()
             hour = now.hour
             minute = now.minute
 

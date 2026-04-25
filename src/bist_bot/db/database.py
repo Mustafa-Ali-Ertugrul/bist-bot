@@ -118,25 +118,38 @@ class DatabaseManager:
     def __init__(
         self,
         sqlite_path: str | None = None,
+        database_url: str | None = None,
         pool_size: int = 5,
         max_overflow: int = 10,
         pool_timeout: int = 30,
         busy_timeout_ms: int = 5000,
     ) -> None:
-        self.sqlite_path = sqlite_path or settings.DB_PATH
         self.busy_timeout_ms = busy_timeout_ms
-        self.engine = create_engine(
-            f"sqlite:///{Path(self.sqlite_path)}",
-            future=True,
-            poolclass=QueuePool,
-            pool_size=pool_size,
-            max_overflow=max_overflow,
-            pool_timeout=pool_timeout,
-            connect_args={
-                "check_same_thread": False,
-                "timeout": busy_timeout_ms / 1000,
-            },
-        )
+        if database_url:
+            self.sqlite_path = None
+            self.engine = create_engine(
+                database_url,
+                future=True,
+                poolclass=QueuePool,
+                pool_size=pool_size,
+                max_overflow=max_overflow,
+                pool_timeout=pool_timeout,
+                pool_pre_ping=True,
+            )
+        else:
+            self.sqlite_path = sqlite_path or settings.DB_PATH
+            self.engine = create_engine(
+                f"sqlite:///{Path(self.sqlite_path)}",
+                future=True,
+                poolclass=QueuePool,
+                pool_size=pool_size,
+                max_overflow=max_overflow,
+                pool_timeout=pool_timeout,
+                connect_args={
+                    "check_same_thread": False,
+                    "timeout": busy_timeout_ms / 1000,
+                },
+            )
         self._register_pragmas()
         self.session_factory = scoped_session(
             sessionmaker(bind=self.engine, autoflush=False, expire_on_commit=False, future=True)
@@ -144,6 +157,8 @@ class DatabaseManager:
         self.initialize()
 
     def _register_pragmas(self) -> None:
+        if self.sqlite_path is None:
+            return
         @event.listens_for(self.engine, "connect")
         def set_sqlite_pragmas(dbapi_connection, _connection_record) -> None:
             cursor = dbapi_connection.cursor()
@@ -264,9 +279,40 @@ class DatabaseManager:
             return False
 
     def get_journal_mode(self) -> str:
+        if self.sqlite_path is None:
+            return "n/a"
         with self.engine.connect() as conn:
             value = conn.execute(text("PRAGMA journal_mode")).scalar_one()
         return str(value)
 
     def now_iso(self) -> str:
         return datetime.now(UTC).isoformat(timespec="seconds")
+
+    def now_utc(self) -> datetime:
+        return datetime.now(UTC)
+
+    def run_session(self, callback, read_only=False):
+        import time as _time
+        from sqlalchemy.exc import OperationalError
+
+        max_retries = 3
+        delay = 0.05
+
+        for attempt in range(max_retries):
+            session = self.session_factory()
+            try:
+                result = callback(session)
+                if not read_only:
+                    session.commit()
+                else:
+                    session.rollback()
+                return result
+            except OperationalError as exc:
+                session.rollback()
+                if "database is locked" in str(exc).lower() and attempt < max_retries - 1:
+                    _time.sleep(delay * (2 ** attempt))
+                    continue
+                raise
+            except Exception:
+                session.rollback()
+                raise

@@ -34,6 +34,7 @@ class SignalsRepository:
 
     def save_signal(self, signal: Signal) -> None:
         created_at = signal.timestamp
+        created_at_str = created_at.strftime("%Y-%m-%d %H:%M:%S") if isinstance(created_at, datetime) else str(created_at)
 
         def _write(session):
             existing = session.scalar(
@@ -41,7 +42,7 @@ class SignalsRepository:
                 .where(
                     SignalRecord.ticker == signal.ticker,
                     SignalRecord.signal_type == signal.signal_type.value,
-                    SignalRecord.timestamp == created_at,
+                    SignalRecord.timestamp == created_at_str,
                 )
                 .limit(1)
             )
@@ -49,8 +50,8 @@ class SignalsRepository:
                 return
             session.add(
                 SignalRecord(
-                    timestamp=created_at,
-                    created_at=created_at,
+                    timestamp=created_at_str,
+                    created_at=created_at_str,
                     ticker=signal.ticker,
                     signal_type=signal.signal_type.value,
                     score=float(signal.score),

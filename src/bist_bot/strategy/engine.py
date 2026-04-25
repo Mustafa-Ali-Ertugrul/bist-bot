@@ -44,6 +44,7 @@ class StrategyEngine:
         )
         self.params = params or StrategyParams()
         self.meta_model = meta_model
+        self._strategies: list = []
         self.STRONG_BUY_THRESHOLD = self.params.strong_buy_threshold
         self.BUY_THRESHOLD = self.params.buy_threshold
         self.WEAK_BUY_THRESHOLD = self.params.weak_buy_threshold
@@ -130,7 +131,7 @@ class StrategyEngine:
         """
         trend_df, trigger_df, multi_timeframe = self._extract_timeframes(df)
 
-        if trigger_df is None or len(trigger_df) < 30:
+        if trigger_df is None or len(trigger_df) < self.params.min_trigger_candles:
             logger.warning(
                 f"  {ticker}: Yetersiz veri ({len(trigger_df) if trigger_df is not None else 0} mum)"
             )
@@ -153,7 +154,7 @@ class StrategyEngine:
         if not pd.notna(adx):
             logger.debug(f"  {ticker}: ADX hesaplanamadı (NaN) - sinyal üretme")
             return None
-        if adx < getattr(settings, "ADX_THRESHOLD", 20):
+        if adx < self.params.adx_threshold:
             logger.debug(f"  {ticker}: ADX düşük ({adx:.1f}) - Trend yok, sinyal üretme")
             return None
 
@@ -323,6 +324,32 @@ class StrategyEngine:
         signals.sort(key=lambda s: s.score, reverse=True)
 
         return signals
+
+    def register_strategy(self, strategy) -> None:
+        self._strategies.append(strategy)
+
+    def unregister_strategy(self, name: str) -> bool:
+        for i, s in enumerate(self._strategies):
+            if hasattr(s, "name") and s.name == name:
+                self._strategies.pop(i)
+                return True
+        return False
+
+    def scan_with_plugins(self, data: dict[str, pd.DataFrame] | dict[str, dict[str, pd.DataFrame]]) -> list[Signal]:
+        results = self.scan_all(data)
+        for strategy in self._strategies:
+            for ticker, df in data.items():
+                signal = strategy.analyze(ticker, df)
+                if signal is not None:
+                    existing = [s for s in results if s.ticker == ticker and s.signal_type == signal.signal_type]
+                    if existing:
+                        if signal.score > existing[0].score:
+                            results.remove(existing[0])
+                            results.append(signal)
+                    else:
+                        results.append(signal)
+        results.sort(key=lambda s: s.score, reverse=True)
+        return results
 
     def get_actionable_signals(self, signals: list[Signal]) -> list[Signal]:
         """Filter out hold signals from the signal list.

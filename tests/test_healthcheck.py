@@ -30,18 +30,18 @@ def mock_circuit() -> MagicMock:
 def app(mock_db, mock_circuit) -> Flask:
     from bist_bot.config.settings import settings
 
-    settings.override(JWT_SECRET_KEY="test-secret")
-    fetcher = MagicMock()
-    engine = MagicMock()
+    with settings.override(JWT_SECRET_KEY="test-secret"):
+        fetcher = MagicMock()
+        engine = MagicMock()
 
-    app = create_dashboard_app(
-        fetcher=fetcher,
-        engine=engine,
-        db=mock_db,
-        circuit_breaker=mock_circuit,
-    )
-    app.config["TESTING"] = True
-    return app
+        app = create_dashboard_app(
+            fetcher=fetcher,
+            engine=engine,
+            db=mock_db,
+            circuit_breaker=mock_circuit,
+        )
+        app.config["TESTING"] = True
+        yield app
 
 
 def test_healthcheck_returns_healthy_when_db_is_up(app, mock_circuit):

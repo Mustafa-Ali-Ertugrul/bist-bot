@@ -62,14 +62,9 @@ def configure_logging(
     else:
         handlers.append(logging.StreamHandler(target))
     if _json_enabled():
-        # JSON formatter using python-json-logger
-        try:
-            from pythonjsonlogger import jsonlogger
-            formatter = jsonlogger.JsonFormatter(
-                fmt or "%(asctime)s %(levelname)s %(name)s %(component)s %(message)s"
-            )
-        except ImportError:
-            formatter = logging.Formatter(fmt or "%(message)s")
+        # When JSON is enabled, _serialize_event already produces a JSON string;
+        # use a plain formatter so the output remains valid JSON.
+        formatter = logging.Formatter(fmt or "%(message)s")
     else:
         formatter = logging.Formatter(fmt or "%(message)s")
     for h in handlers:
