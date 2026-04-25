@@ -1,6 +1,6 @@
 """Market-hours scheduler for the CLI bot runtime."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from time import sleep
 
 from bist_bot.app_logging import get_logger
