@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import logging
+
 from bist_bot.risk.models import RiskLevels
+
+logger = logging.getLogger(__name__)
 
 
 def calculate_atr_pct(levels: RiskLevels, price: float, atr_stop_mult: float) -> float:
@@ -47,6 +51,14 @@ def apply_position_budget(
     levels.position_size = max(0, position_size)
     levels.max_loss_tl = round(position_size * risk_per_share, 2)
     levels.risk_budget_tl = round(max_loss_tl, 2)
+
+    if levels.position_size == 0 and capital > 0:
+        logger.warning(
+            "position_size_zero capital=%.0f price=%.2f risk_per_share=%.2f "
+            "max_affordable=%d max_position_cap=%d -- INITIAL_CAPITAL veya "
+            "MAX_POSITION_CAP_PCT yetersiz olabilir",
+            capital, price, risk_per_share, max_affordable, max_position_cap,
+        )
 
 
 def calculate_kelly_fraction(

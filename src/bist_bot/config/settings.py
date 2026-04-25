@@ -94,67 +94,185 @@ def _get_csv_env(name: str) -> tuple[str, ...]:
 DEFAULT_BIST100_WATCHLIST = BIST100_TICKERS
 
 TICKER_NAMES = {
-    "THYAO.IS": "THY",
-    "ASELS.IS": "ASELSAN",
-    "SASA.IS": "SASA",
-    "KCHOL.IS": "Koç Holding",
-    "EREGL.IS": "Ereğli",
-    "BIMAS.IS": "BİM",
-    "TUPRS.IS": "Tüpraş",
-    "SAHOL.IS": "Sabancı Holding",
+    # Bankacilik & Finans
+    "AKBNK.IS": "Akbank",
     "GARAN.IS": "Garanti BBVA",
-    "TAVHL.IS": "TAV Havalimanları",
-    "TOASO.IS": "Tofaş",
-    "FROTO.IS": "Ford Otosan",
-    "PETKM.IS": "Petkim",
-    "KRDMD.IS": "Kardemir",
-    "HEKTS.IS": "Hektaş",
-    "AYGAZ.IS": "Aygaz",
-    "ISCTR.IS": "İş Bankası",
-    "YKBNK.IS": "Yapı Kredi",
     "HALKB.IS": "Halkbank",
+    "ISCTR.IS": "İş Bankası",
     "VAKBN.IS": "VakıfBank",
-    "AKSA.IS": "Aksa",
-    "ARCLK.IS": "Arçelik",
-    "CCOLA.IS": "Coca-Cola İçecek",
+    "YKBNK.IS": "Yapı Kredi",
+    "ALBRK.IS": "Albaraka Türk",
+    "QNBFB.IS": "QNB Finansbank",
+    "SKBNK.IS": "Şekerbank",
+    "TSKB.IS": "Türkiye Sınai Kalkınma Bankası",
+    # Holding
+    "KCHOL.IS": "Koç Holding",
+    "SAHOL.IS": "Sabancı Holding",
+    "DOHOL.IS": "Doğan Holding",
+    "GLYHO.IS": "Global Yatırım Holding",
+    "GSDHO.IS": "GSD Holding",
+    "ALARK.IS": "Alarko Holding",
+    "ECILC.IS": "Eczacıbaşı İlaç",
+    "YGGYO.IS": "Yeni Gimat GYO",
+    # Havayolu & Ulastirma
+    "THYAO.IS": "Türk Hava Yolları",
+    "PGSUS.IS": "Pegasus Hava Yolları",
+    "TAVHL.IS": "TAV Havalimanları",
+    "CLEBI.IS": "Çelebi Hava Servisi",
+    "DOCO.IS": "DO & CO",
+    # Otomotiv
+    "FROTO.IS": "Ford Otosan",
+    "TOASO.IS": "Tofaş Oto",
+    "TTRAK.IS": "Türk Traktör",
+    "OTKAR.IS": "Otokar",
+    "DOAS.IS": "Doğuş Otomotiv",
+    "KARSN.IS": "Karsan Otomotiv",
+    # Demir-Celik & Metal
+    "EREGL.IS": "Ereğli Demir Çelik",
+    "KRDMD.IS": "Kardemir (D)",
+    "BRSAN.IS": "Borusan Boru",
+    "CEMTS.IS": "Çemtaş",
+    "IZMDC.IS": "İzmir Demir Çelik",
+    # Kimya & Petrokimya & Rafineri
+    "TUPRS.IS": "Tüpraş",
+    "PETKM.IS": "Petkim",
+    "SASA.IS": "SASA Polyester",
+    "AKSA.IS": "Aksa Akrilik",
+    "ALKIM.IS": "Alkim Kimya",
+    "GUBRF.IS": "Gübre Fabrikaları",
+    "BAGFS.IS": "Bagfaş",
+    "HEKTS.IS": "Hektaş",
+    # Cimento & Insaat
     "CIMSA.IS": "Çimsa",
-    "CLEBI.IS": "Clebi",
-    "ENJSA.IS": "Enerjisa Enerji",
-    "ERBOS.IS": "Erbos",
-    "FENIS.IS": "Feniş",
-    "FMIZP.IS": "Formpi",
-    "FORMT.IS": "Formet",
-    "GENTS.IS": "Gents",
-    "GLYHO.IS": "Gülho",
-    "IPEKE.IS": "İpek",
-    "IZMDC.IS": "İzdemir",
-    "KARSN.IS": "Karsan",
-    "KAYSE.IS": "Kayse",
-    "KONTR.IS": "Kontrol",
-    "KORFM.IS": "Korfm",
-    "LKMNH.IS": "Lokman",
-    "MAKIM.IS": "Makim",
+    "AKCNS.IS": "Akçansa",
+    "OYAKC.IS": "OYAK Çimento",
+    "BTCIM.IS": "Batıçim",
+    "ENKAI.IS": "Enka İnşaat",
+    "TKFEN.IS": "Tekfen Holding",
+    # Cam
+    "SISE.IS": "Şişecam",
+    "ANACM.IS": "Anadolu Cam",
+    # Beyaz Esya & Dayanikli Tuketim
+    "ARCLK.IS": "Arçelik",
+    "VESTL.IS": "Vestel",
+    "VESBE.IS": "Vestel Beyaz Eşya",
+    # Gida & Icecek & Perakende
+    "BIMAS.IS": "BİM Birleşik Mağazalar",
     "MGROS.IS": "Migros",
-    "MRGYO.IS": "Merit Gayrimenkul",
-    "ODAS.IS": "Odas",
-    "PNLSN.IS": "Pınar",
-    "PSDTC.IS": "Panda",
-    "SEKFK.IS": "Şeker",
-    "SEKFS.IS": "Şeker Finans",
     "SOKM.IS": "ŞOK Marketler",
+    "AEFES.IS": "Anadolu Efes",
+    "CCOLA.IS": "Coca-Cola İçecek",
+    "ULKER.IS": "Ülker Bisküvi",
+    "TUKAS.IS": "Tukaş",
+    "PNSUT.IS": "Pınar Süt",
+    # Enerji & Elektrik
+    "ENJSA.IS": "Enerjisa Enerji",
+    "AKSEN.IS": "Aksa Enerji",
+    "AYGAZ.IS": "Aygaz",
+    "ZOREN.IS": "Zorlu Enerji",
+    "ODAS.IS": "Odaş Elektrik",
+    "AYDEM.IS": "Aydem Yenilenebilir Enerji",
+    "CWENE.IS": "CW Enerji",
+    "SMRTG.IS": "Smart Güneş Enerjisi",
+    "EUPWR.IS": "Europower Enerji",
+    # Teknoloji & Savunma
+    "ASELS.IS": "ASELSAN",
+    "LOGO.IS": "Logo Yazılım",
+    "KAREL.IS": "Karel Elektronik",
+    "NETAS.IS": "Netaş Telekom.",
+    "INDES.IS": "İndeks Bilgisayar",
+    "ARENA.IS": "Arena Bilgisayar",
+    "FONET.IS": "Fonet Bilgi Teknolojileri",
+    "MIATK.IS": "MIA Teknoloji",
+    "KONTR.IS": "Kontrolmatik Teknoloji",
+    "GESAN.IS": "Girişim Elektrik",
+    "PAPIL.IS": "Papilon Savunma",
+    # Iletisim
+    "TCELL.IS": "Turkcell",
+    "TTKOM.IS": "Türk Telekom",
+    # Madencilik
+    "KOZAL.IS": "Koza Altın",
+    "KOZAA.IS": "Koza Anadolu Metal",
+    "IPEKE.IS": "İpek Doğal Enerji",
+    # Lastik
+    "BRISA.IS": "Brisa",
+    # Tekstil & Hazir Giyim
+    "MAVI.IS": "Mavi Giyim",
+    "DESA.IS": "Desa Deri",
+    # Ilac & Saglik
+    "DEVA.IS": "Deva Holding",
+    "LKMNH.IS": "Lokman Hekim Sağlık",
+    "MPARK.IS": "MLP Sağlık (Medical Park)",
+    "SELEC.IS": "Selçuk Ecza Deposu",
+    # Gayrimenkul
+    "EKGYO.IS": "Emlak Konut GYO",
+    "ISGYO.IS": "İş GYO",
+    "AKMGY.IS": "Akmerkez GYO",
+    "TRGYO.IS": "Torunlar GYO",
+    # Spor
+    "FENER.IS": "Fenerbahçe Sportif",
+    "BJKAS.IS": "Beşiktaş",
+    "GSRAY.IS": "Galatasaray Sportif",
 }
 
 SECTOR_MAP = {
-    "THYAO.IS": "HAVA",
-    "ASELS.IS": "TEKNO",
-    "SASA.IS": "KIMYA",
-    "KCHOL.IS": "HOLDI",
-    "EREGL.IS": "KIMYA",
-    "BIMAS.IS": "PERAK",
-    "TUPRS.IS": "KIMYA",
-    "SAHOL.IS": "HOLDI",
-    "GARAN.IS": "FINANS",
-    "AKBNK.IS": "FINANS",
+    # Bankacilik & Finans
+    "AKBNK.IS": "BANKA", "GARAN.IS": "BANKA", "HALKB.IS": "BANKA",
+    "ISCTR.IS": "BANKA", "VAKBN.IS": "BANKA", "YKBNK.IS": "BANKA",
+    "ALBRK.IS": "BANKA", "QNBFB.IS": "BANKA", "SKBNK.IS": "BANKA",
+    "TSKB.IS": "BANKA",
+    # Holding
+    "KCHOL.IS": "HOLDI", "SAHOL.IS": "HOLDI", "DOHOL.IS": "HOLDI",
+    "GLYHO.IS": "HOLDI", "GSDHO.IS": "HOLDI", "ALARK.IS": "HOLDI",
+    "ECILC.IS": "HOLDI",
+    # Ulastirma & Havayolu
+    "THYAO.IS": "ULASTIRMA", "PGSUS.IS": "ULASTIRMA",
+    "TAVHL.IS": "ULASTIRMA", "CLEBI.IS": "ULASTIRMA", "DOCO.IS": "ULASTIRMA",
+    # Otomotiv
+    "FROTO.IS": "OTOMOTIV", "TOASO.IS": "OTOMOTIV", "TTRAK.IS": "OTOMOTIV",
+    "OTKAR.IS": "OTOMOTIV", "DOAS.IS": "OTOMOTIV", "KARSN.IS": "OTOMOTIV",
+    # Metal
+    "EREGL.IS": "METAL", "KRDMD.IS": "METAL", "BRSAN.IS": "METAL",
+    "CEMTS.IS": "METAL", "IZMDC.IS": "METAL",
+    # Kimya
+    "TUPRS.IS": "KIMYA", "PETKM.IS": "KIMYA", "SASA.IS": "KIMYA",
+    "AKSA.IS": "KIMYA", "ALKIM.IS": "KIMYA", "GUBRF.IS": "KIMYA",
+    "BAGFS.IS": "KIMYA", "HEKTS.IS": "KIMYA",
+    # Insaat & Cimento
+    "CIMSA.IS": "INSAAT", "AKCNS.IS": "INSAAT", "OYAKC.IS": "INSAAT",
+    "BTCIM.IS": "INSAAT", "ENKAI.IS": "INSAAT", "TKFEN.IS": "INSAAT",
+    # Cam
+    "SISE.IS": "CAM", "ANACM.IS": "CAM",
+    # Beyaz Esya
+    "ARCLK.IS": "DAYANIKLI", "VESTL.IS": "DAYANIKLI", "VESBE.IS": "DAYANIKLI",
+    # Gida & Perakende
+    "BIMAS.IS": "PERAK", "MGROS.IS": "PERAK", "SOKM.IS": "PERAK",
+    "AEFES.IS": "GIDA", "CCOLA.IS": "GIDA", "ULKER.IS": "GIDA",
+    "TUKAS.IS": "GIDA", "PNSUT.IS": "GIDA",
+    # Enerji
+    "ENJSA.IS": "ENERJI", "AKSEN.IS": "ENERJI", "AYGAZ.IS": "ENERJI",
+    "ZOREN.IS": "ENERJI", "ODAS.IS": "ENERJI", "AYDEM.IS": "ENERJI",
+    "CWENE.IS": "ENERJI", "SMRTG.IS": "ENERJI", "EUPWR.IS": "ENERJI",
+    # Teknoloji & Savunma
+    "ASELS.IS": "TEKNO", "LOGO.IS": "TEKNO", "KAREL.IS": "TEKNO",
+    "NETAS.IS": "TEKNO", "INDES.IS": "TEKNO", "ARENA.IS": "TEKNO",
+    "FONET.IS": "TEKNO", "MIATK.IS": "TEKNO", "KONTR.IS": "TEKNO",
+    "GESAN.IS": "TEKNO", "PAPIL.IS": "TEKNO",
+    # Iletisim
+    "TCELL.IS": "ILETISIM", "TTKOM.IS": "ILETISIM",
+    # Madencilik
+    "KOZAL.IS": "MADEN", "KOZAA.IS": "MADEN", "IPEKE.IS": "MADEN",
+    # Lastik & Tekstil
+    "BRISA.IS": "DAYANIKLI", "MAVI.IS": "TEKSTIL", "DESA.IS": "TEKSTIL",
+    # Saglik
+    "DEVA.IS": "SAGLIK", "LKMNH.IS": "SAGLIK", "MPARK.IS": "SAGLIK",
+    "SELEC.IS": "SAGLIK",
+    # GYO
+    "EKGYO.IS": "GAYRIMENKUL", "ISGYO.IS": "GAYRIMENKUL",
+    "AKMGY.IS": "GAYRIMENKUL", "TRGYO.IS": "GAYRIMENKUL",
+    "YGGYO.IS": "GAYRIMENKUL",
+    # Spor
+    "FENER.IS": "SPOR", "BJKAS.IS": "SPOR", "GSRAY.IS": "SPOR",
 }
 
 
