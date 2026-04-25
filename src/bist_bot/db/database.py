@@ -1,24 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-import random
-import threading
-import time
-from typing import Any, Callable, Iterator, Optional, TypeVar
 
-from sqlalchemy import (
-    DateTime,
-    Float,
-    Integer,
-    String,
-    Text,
-    create_engine,
-    event,
-    text,
-)
-from sqlalchemy.exc import IntegrityError, OperationalError
+from sqlalchemy import Float, Integer, String, Text, create_engine, event, text
 from sqlalchemy.orm import (
     DeclarativeBase,
     Mapped,
@@ -40,26 +27,22 @@ class SignalRecord(Base):
     __tablename__ = "signals"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    timestamp: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=lambda: datetime.now(UTC)
-    )
+    timestamp: Mapped[str] = mapped_column(Text, nullable=False, default="")
     ticker: Mapped[str] = mapped_column(String, nullable=False, index=True)
     signal_type: Mapped[str] = mapped_column(String, nullable=False)
     score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     price: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
-    stop_loss: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    target_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    position_size: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    confidence: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    reasons: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    stop_loss: Mapped[float | None] = mapped_column(Float, nullable=True)
+    target_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    position_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    confidence: Mapped[str | None] = mapped_column(String, nullable=True)
+    reasons: Mapped[str | None] = mapped_column(Text, nullable=True)
     outcome: Mapped[str] = mapped_column(String, nullable=False, default="PENDING")
-    outcome_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    outcome_date: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    profit_pct: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    outcome_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    outcome_date: Mapped[str | None] = mapped_column(Text, nullable=True)
+    profit_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     conditions: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=lambda: datetime.now(UTC)
-    )
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, default="")
 
 
 class PaperTradeRecord(Base):
@@ -69,34 +52,30 @@ class PaperTradeRecord(Base):
     ticker: Mapped[str] = mapped_column(String, nullable=False, index=True)
     signal_type: Mapped[str] = mapped_column(String, nullable=False)
     signal_price: Mapped[float] = mapped_column(Float, nullable=False)
-    signal_time: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=lambda: datetime.now(UTC)
-    )
-    stop_loss: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    target_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    close_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    score: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    regime: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    filled_at: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    signal_time: Mapped[str] = mapped_column(Text, nullable=False)
+    stop_loss: Mapped[float | None] = mapped_column(Float, nullable=True)
+    target_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    close_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    regime: Mapped[str | None] = mapped_column(String, nullable=True)
+    filled_at: Mapped[float | None] = mapped_column(Float, nullable=True)
     outcome: Mapped[str] = mapped_column(String, nullable=False, default="OPEN")
-    actual_profit_pct: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    exit_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    exit_date: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    close_reason: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    close_time: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    actual_profit_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    exit_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    exit_date: Mapped[str | None] = mapped_column(Text, nullable=True)
+    close_reason: Mapped[str | None] = mapped_column(String, nullable=True)
+    close_time: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class ScanLogRecord(Base):
     __tablename__ = "scan_log"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    timestamp: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=lambda: datetime.now(UTC)
-    )
-    total_scanned: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    signals_generated: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    buy_signals: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    sell_signals: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    timestamp: Mapped[str] = mapped_column(Text, nullable=False)
+    total_scanned: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    signals_generated: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    buy_signals: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    sell_signals: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class ConfigRecord(Base):
@@ -104,9 +83,7 @@ class ConfigRecord(Base):
 
     key: Mapped[str] = mapped_column(String, primary_key=True)
     value: Mapped[str] = mapped_column(Text, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=lambda: datetime.now(UTC)
-    )
+    updated_at: Mapped[str] = mapped_column(Text, nullable=False, default="")
 
 
 class UserRecord(Base):
@@ -116,12 +93,8 @@ class UserRecord(Base):
     email: Mapped[str] = mapped_column(String, nullable=False, unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(Text, nullable=False)
     role: Mapped[str] = mapped_column(String, nullable=False, default="admin")
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=lambda: datetime.now(UTC)
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=lambda: datetime.now(UTC)
-    )
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    updated_at: Mapped[str] = mapped_column(Text, nullable=False, default="")
 
 
 class OrderRecord(Base):
@@ -132,77 +105,43 @@ class OrderRecord(Base):
     side: Mapped[str] = mapped_column(String, nullable=False)
     qty: Mapped[float] = mapped_column(Float, nullable=False)
     type: Mapped[str] = mapped_column(String, nullable=False)
-    price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    price: Mapped[float | None] = mapped_column(Float, nullable=True)
     state: Mapped[str] = mapped_column(String, nullable=False, index=True)
-    broker_order_id: Mapped[Optional[str]] = mapped_column(
-        String, nullable=True, index=True
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=lambda: datetime.now(UTC)
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=lambda: datetime.now(UTC)
-    )
+    broker_order_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    updated_at: Mapped[str] = mapped_column(Text, nullable=False, default="")
     filled_qty: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
-    avg_fill_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-
-
-_T = TypeVar("_T")
-_INIT_LOCK = threading.RLock()
+    avg_fill_price: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
 class DatabaseManager:
     def __init__(
         self,
-        database_url: Optional[str] = None,
-        sqlite_path: Optional[str] = None,
+        sqlite_path: str | None = None,
         pool_size: int = 5,
         max_overflow: int = 10,
         pool_timeout: int = 30,
         busy_timeout_ms: int = 5000,
-        write_retry_attempts: int = 3,
-        write_retry_backoff_seconds: float = 0.05,
     ) -> None:
-        self.database_url = (database_url or settings.DATABASE_URL or "").strip()
         self.sqlite_path = sqlite_path or settings.DB_PATH
-        self._is_sqlite = not self.database_url or self.database_url.startswith(
-            "sqlite"
-        )
-        if self._is_sqlite:
-            self._ensure_sqlite_parent_dir()
         self.busy_timeout_ms = busy_timeout_ms
-        self.write_retry_attempts = max(int(write_retry_attempts), 1)
-        self.write_retry_backoff_seconds = max(float(write_retry_backoff_seconds), 0.0)
-        engine_url = self.database_url or f"sqlite:///{Path(self.sqlite_path)}"
-        engine_kwargs: dict[str, Any] = {
-            "future": True,
-            "pool_size": pool_size,
-            "max_overflow": max_overflow,
-            "pool_timeout": pool_timeout,
-            "pool_pre_ping": True,
-        }
-        if self._is_sqlite:
-            engine_kwargs["poolclass"] = QueuePool
-            engine_kwargs["connect_args"] = {
+        self.engine = create_engine(
+            f"sqlite:///{Path(self.sqlite_path)}",
+            future=True,
+            poolclass=QueuePool,
+            pool_size=pool_size,
+            max_overflow=max_overflow,
+            pool_timeout=pool_timeout,
+            connect_args={
                 "check_same_thread": False,
                 "timeout": busy_timeout_ms / 1000,
-            }
-        self.engine = create_engine(engine_url, **engine_kwargs)
-        if self._is_sqlite:
-            self._register_pragmas()
+            },
+        )
+        self._register_pragmas()
         self.session_factory = scoped_session(
-            sessionmaker(
-                bind=self.engine, autoflush=False, expire_on_commit=False, future=True
-            )
+            sessionmaker(bind=self.engine, autoflush=False, expire_on_commit=False, future=True)
         )
         self.initialize()
-
-    def _ensure_sqlite_parent_dir(self) -> None:
-        db_path = Path(self.sqlite_path)
-        parent = db_path.parent
-        if str(parent) in {"", "."}:
-            return
-        parent.mkdir(parents=True, exist_ok=True)
 
     def _register_pragmas(self) -> None:
         @event.listens_for(self.engine, "connect")
@@ -216,39 +155,25 @@ class DatabaseManager:
             cursor.close()
 
     def initialize(self) -> None:
-        with _INIT_LOCK:
-            try:
-                Base.metadata.create_all(self.engine)
-            except OperationalError as exc:
-                if "already exists" not in str(exc).lower():
-                    raise
-            self._migrate_legacy_schema()
-            self._seed_admin_user()
+        Base.metadata.create_all(self.engine)
+        self._migrate_legacy_schema()
+        self._seed_admin_user()
 
     def _migrate_legacy_schema(self) -> None:
-        if not self._is_sqlite:
-            return
         with self.engine.begin() as conn:
             signal_columns = {
-                row[1]
-                for row in conn.execute(text("PRAGMA table_info(signals)")).fetchall()
+                row[1] for row in conn.execute(text("PRAGMA table_info(signals)")).fetchall()
             }
             if "conditions" not in signal_columns:
                 conn.execute(
-                    text(
-                        "ALTER TABLE signals ADD COLUMN conditions TEXT NOT NULL DEFAULT '[]'"
-                    )
+                    text("ALTER TABLE signals ADD COLUMN conditions TEXT NOT NULL DEFAULT '[]'")
                 )
             if "created_at" not in signal_columns:
                 conn.execute(
-                    text(
-                        "ALTER TABLE signals ADD COLUMN created_at TEXT NOT NULL DEFAULT ''"
-                    )
+                    text("ALTER TABLE signals ADD COLUMN created_at TEXT NOT NULL DEFAULT ''")
                 )
             if "position_size" not in signal_columns:
-                conn.execute(
-                    text("ALTER TABLE signals ADD COLUMN position_size INTEGER")
-                )
+                conn.execute(text("ALTER TABLE signals ADD COLUMN position_size INTEGER"))
 
             paper_columns = {
                 row[1]
@@ -258,42 +183,28 @@ class DatabaseManager:
             }
             if "stop_loss" not in paper_columns:
                 conn.execute(
-                    text(
-                        f"ALTER TABLE {settings.PAPER_TRADES_TABLE} ADD COLUMN stop_loss REAL"
-                    )
+                    text(f"ALTER TABLE {settings.PAPER_TRADES_TABLE} ADD COLUMN stop_loss REAL")
                 )
             if "target_price" not in paper_columns:
                 conn.execute(
-                    text(
-                        f"ALTER TABLE {settings.PAPER_TRADES_TABLE} ADD COLUMN target_price REAL"
-                    )
+                    text(f"ALTER TABLE {settings.PAPER_TRADES_TABLE} ADD COLUMN target_price REAL")
                 )
             if "exit_price" not in paper_columns:
                 conn.execute(
-                    text(
-                        f"ALTER TABLE {settings.PAPER_TRADES_TABLE} ADD COLUMN exit_price REAL"
-                    )
+                    text(f"ALTER TABLE {settings.PAPER_TRADES_TABLE} ADD COLUMN exit_price REAL")
                 )
             if "exit_date" not in paper_columns:
                 conn.execute(
-                    text(
-                        f"ALTER TABLE {settings.PAPER_TRADES_TABLE} ADD COLUMN exit_date TEXT"
-                    )
+                    text(f"ALTER TABLE {settings.PAPER_TRADES_TABLE} ADD COLUMN exit_date TEXT")
                 )
             if "close_reason" not in paper_columns:
                 conn.execute(
-                    text(
-                        f"ALTER TABLE {settings.PAPER_TRADES_TABLE} ADD COLUMN close_reason TEXT"
-                    )
+                    text(f"ALTER TABLE {settings.PAPER_TRADES_TABLE} ADD COLUMN close_reason TEXT")
                 )
             if "close_time" not in paper_columns:
                 conn.execute(
-                    text(
-                        f"ALTER TABLE {settings.PAPER_TRADES_TABLE} ADD COLUMN close_time TEXT"
-                    )
+                    text(f"ALTER TABLE {settings.PAPER_TRADES_TABLE} ADD COLUMN close_time TEXT")
                 )
-
-            self._normalize_timestamp_columns(conn)
 
             conn.execute(
                 text(
@@ -305,126 +216,44 @@ class DatabaseManager:
                     "CREATE INDEX IF NOT EXISTS idx_signals_ticker_created_at ON signals(ticker, created_at DESC)"
                 )
             )
-            conn.execute(
-                text("CREATE INDEX IF NOT EXISTS idx_orders_state ON orders(state)")
-            )
-
-    @staticmethod
-    def _normalize_timestamp_columns(conn) -> None:
-        """Convert legacy TEXT timestamps to ISO-8601 so SQLAlchemy DateTime can parse them.
-
-        SQLite stores DateTime as TEXT in ISO format. Older rows may use
-        non-ISO formats (e.g. ``YYYY-MM-DD HH:MM:SS``) or non-date values
-        (e.g. ``STOP_HIT`` mistakenly stored in ``exit_date``). This migration
-        normalizes them in-place.
-        """
-        migrations = {
-            "signals": ["timestamp", "created_at", "outcome_date"],
-            settings.PAPER_TRADES_TABLE: ["signal_time", "exit_date", "close_time"],
-            "scan_log": ["timestamp"],
-            "users": ["created_at", "updated_at"],
-            "orders": ["created_at", "updated_at"],
-            "app_settings": ["updated_at"],
-        }
-        for table, columns in migrations.items():
-            try:
-                col_info = {
-                    row[1]: row[2]
-                    for row in conn.execute(
-                        text(f"PRAGMA table_info({table})")
-                    ).fetchall()
-                }
-            except OperationalError:
-                continue
-            for col in columns:
-                if col not in col_info:
-                    continue
-                conn.execute(
-                    text(
-                        f"UPDATE {table} SET {col} = "
-                        f"CASE "
-                        f"  WHEN {col} IS NULL OR {col} = '' THEN NULL "
-                        f"  WHEN {col} GLOB '*[a-zA-Z]*' AND {col} NOT GLOB '*[0-9]*' THEN NULL "
-                        f"  WHEN substr({col}, 11, 1) = ' ' THEN "
-                        f"    substr({col}, 1, 10) || 'T' || substr({col}, 12) "
-                        f"  ELSE {col} "
-                        f"END "
-                        f"WHERE {col} IS NOT NULL AND {col} != ''"
-                    )
-                )
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_orders_state ON orders(state)"))
 
     def _seed_admin_user(self) -> None:
         if not settings.admin_bootstrap_enabled:
             return
 
-        now = self.now_utc()
+        now = self.now_iso()
+        # Atomic insert: only when users table is empty. NOT EXISTS guard + UNIQUE(email)
+        # together prevent duplicate inserts under concurrent worker startup.
         with self.engine.begin() as conn:
-            has_users = conn.execute(
-                text("SELECT id FROM users LIMIT 1")
-            ).scalar_one_or_none()
-            if has_users is not None:
-                return
-            try:
-                conn.execute(
-                    text(
-                        """
-                        INSERT OR IGNORE INTO users (email, password_hash, role, created_at, updated_at)
-                        VALUES (:email, :password_hash, 'admin', :created_at, :updated_at)
-                        """
-                    ),
-                    {
-                        "email": settings.ADMIN_BOOTSTRAP_EMAIL,
-                        "password_hash": settings.ADMIN_BOOTSTRAP_PASSWORD_HASH,
-                        "created_at": now,
-                        "updated_at": now,
-                    },
-                )
-            except IntegrityError:
-                return
+            conn.execute(
+                text(
+                    """
+                    INSERT OR IGNORE INTO users (email, password_hash, role, created_at, updated_at)
+                    SELECT :email, :password_hash, 'admin', :created_at, :updated_at
+                    WHERE NOT EXISTS (SELECT 1 FROM users)
+                    """
+                ),
+                {
+                    "email": settings.ADMIN_BOOTSTRAP_EMAIL,
+                    "password_hash": settings.ADMIN_BOOTSTRAP_PASSWORD_HASH,
+                    "created_at": now,
+                    "updated_at": now,
+                },
+            )
 
     @contextmanager
-    def session_scope(self, *, read_only: bool = False) -> Iterator[Session]:
+    def session_scope(self) -> Iterator[Session]:
         session = self.session_factory()
         try:
             yield session
-            if not read_only:
-                session.commit()
+            session.commit()
         except Exception:
             session.rollback()
             raise
         finally:
             session.close()
             self.session_factory.remove()
-
-    def run_session(
-        self,
-        operation: Callable[[Session], _T],
-        *,
-        read_only: bool = False,
-    ) -> _T:
-        if read_only:
-            with self.session_scope(read_only=True) as session:
-                return operation(session)
-
-        attempt = 0
-        while True:
-            try:
-                with self.session_scope(read_only=False) as session:
-                    return operation(session)
-            except OperationalError as exc:
-                if (
-                    not self._is_locked_error(exc)
-                    or attempt >= self.write_retry_attempts - 1
-                ):
-                    raise
-                backoff = self.write_retry_backoff_seconds * (2**attempt)
-                jitter = random.uniform(0, backoff * 0.5)
-                time.sleep(backoff + jitter)
-                attempt += 1
-
-    def _is_locked_error(self, exc: OperationalError) -> bool:
-        message = str(getattr(exc, "orig", exc)).lower()
-        return "database is locked" in message or "database table is locked" in message
 
     def ping(self) -> bool:
         try:
@@ -435,14 +264,9 @@ class DatabaseManager:
             return False
 
     def get_journal_mode(self) -> str:
-        if not self._is_sqlite:
-            return "n/a"
         with self.engine.connect() as conn:
             value = conn.execute(text("PRAGMA journal_mode")).scalar_one()
         return str(value)
 
-    def now_utc(self) -> datetime:
-        return datetime.now(UTC)
-
     def now_iso(self) -> str:
-        return self.now_utc().isoformat(timespec="seconds")
+        return datetime.now(UTC).isoformat(timespec="seconds")
