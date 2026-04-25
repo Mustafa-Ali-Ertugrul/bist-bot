@@ -13,10 +13,11 @@ if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
 from dashboard import create_dashboard_app  # noqa: E402
-from bist_bot.auth.passwords import hash_password  # noqa: E402
-from bist_bot.db import DataAccess, DatabaseManager  # noqa: E402
-from bist_bot.config.settings import settings  # noqa: E402
 from sqlalchemy import text  # noqa: E402
+
+from bist_bot.auth.passwords import hash_password  # noqa: E402
+from bist_bot.config.settings import settings  # noqa: E402
+from bist_bot.db import DataAccess, DatabaseManager  # noqa: E402
 
 
 class DummyFetcher:

@@ -39,7 +39,7 @@ class SignalType(Enum):
         return get_message(self.key, DEFAULT_LOCALE)
 
     @staticmethod
-    def from_value(value: str) -> "SignalType":
+    def from_value(value: str) -> SignalType:
         if value in SignalType._value2member_:
             return SignalType(value)
         for st in SignalType:
@@ -71,7 +71,7 @@ class Signal:
     def confidence_display(self) -> str:
         return get_message(self.confidence)
 
-    def with_locale(self, locale: str) -> "Signal":
+    def with_locale(self, locale: str) -> Signal:
         return Signal(
             ticker=self.ticker,
             signal_type=self.signal_type,

@@ -6,7 +6,7 @@ import io
 import json
 import logging
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 try:
@@ -15,7 +15,6 @@ except ImportError:  # pragma: no cover - optional dependency
     _structlog = None
 
 from bist_bot.config.settings import settings
-
 
 _DEFAULT_COMPONENT = "app"
 
@@ -51,7 +50,7 @@ class BoundLogger:
         self._logger = logging.getLogger(name)
         self._context = {"component": context.pop("component", name), **context}
 
-    def bind(self, **context: Any) -> "BoundLogger":
+    def bind(self, **context: Any) -> BoundLogger:
         return BoundLogger(self._logger.name, **{**self._context, **context})
 
     def _emit(self, level: int, event: str, *args: Any, **fields: Any) -> None:
@@ -61,7 +60,7 @@ class BoundLogger:
             except TypeError:
                 event = event.format(*args)
         payload = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             **self._context,
             **fields,
             "event": event,

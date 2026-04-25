@@ -1,15 +1,14 @@
 """Signal scoring and classification logic for BIST trading ideas."""
 
-from contextlib import AbstractContextManager
 import logging
-from typing import Any, Optional, cast
+from contextlib import AbstractContextManager
+from typing import Any, cast
 
 import pandas as pd
 
 from bist_bot.config.settings import settings
 from bist_bot.indicators import TechnicalIndicators
 from bist_bot.risk import RiskManager
-from bist_bot.strategy.signal_models import Signal, SignalType
 from bist_bot.strategy.params import StrategyParams
 from bist_bot.strategy.regime import (
     MarketRegime,
@@ -25,6 +24,7 @@ from bist_bot.strategy.scoring import (
     score_trend,
     score_volume,
 )
+from bist_bot.strategy.signal_models import Signal, SignalType
 
 logger = logging.getLogger(__name__)
 
@@ -32,9 +32,9 @@ logger = logging.getLogger(__name__)
 class StrategyEngine:
     def __init__(
         self,
-        indicators: Optional[TechnicalIndicators] = None,
-        risk_manager: Optional[RiskManager] = None,
-        params: Optional[StrategyParams] = None,
+        indicators: TechnicalIndicators | None = None,
+        risk_manager: RiskManager | None = None,
+        params: StrategyParams | None = None,
         meta_model: Any | None = None,
     ) -> None:
         """Initialize injectable indicator and risk-management dependencies."""
@@ -60,9 +60,7 @@ class StrategyEngine:
             trend_df = market_data.get("trend")
             trigger_df = market_data.get("trigger")
             if trend_df is None or trigger_df is None:
-                raise ValueError(
-                    "Multi-timeframe veri 'trend' ve 'trigger' anahtarlarını içermeli"
-                )
+                raise ValueError("Multi-timeframe veri 'trend' ve 'trigger' anahtarlarını içermeli")
             return trend_df, trigger_df, True
         return market_data, market_data, False
 
@@ -74,9 +72,7 @@ class StrategyEngine:
     ) -> bool:
         return apply_confluence(signal_type, trend_bias, reasons)
 
-    def _check_momentum_confirmation(
-        self, df: pd.DataFrame, threshold: float = 4.0
-    ) -> bool:
+    def _check_momentum_confirmation(self, df: pd.DataFrame, threshold: float = 4.0) -> bool:
         return check_momentum_confirmation(df, threshold)
 
     def _score_momentum(self, last, prev) -> tuple[float, list[str]]:
@@ -99,9 +95,7 @@ class StrategyEngine:
         trend_bias: TrendBias,
         risk_levels,
     ) -> dict[str, float]:
-        ema_long = float(
-            last.get(f"ema_{settings.EMA_LONG}", last.get("close", 0.0)) or 0.0
-        )
+        ema_long = float(last.get(f"ema_{settings.EMA_LONG}", last.get("close", 0.0)) or 0.0)
         close_price = float(last.get("close", 0.0) or 0.0)
         return {
             "score": float(score),
@@ -114,9 +108,7 @@ class StrategyEngine:
             "correlation_scale": float(risk_levels.correlation_scale),
             "trend_bias": float(trend_bias == TrendBias.LONG)
             - float(trend_bias == TrendBias.SHORT),
-            "close_vs_ema_long": ((close_price / ema_long) - 1.0)
-            if ema_long > 0
-            else 0.0,
+            "close_vs_ema_long": ((close_price / ema_long) - 1.0) if ema_long > 0 else 0.0,
         }
 
     def analyze(
@@ -124,7 +116,7 @@ class StrategyEngine:
         ticker: str,
         df: pd.DataFrame | dict[str, pd.DataFrame],
         enforce_sector_limit: bool = False,
-    ) -> Optional[Signal]:
+    ) -> Signal | None:
         """Score a ticker and build a signal when thresholds are met.
 
         Args:
@@ -162,9 +154,7 @@ class StrategyEngine:
             logger.debug(f"  {ticker}: ADX hesaplanamadı (NaN) - sinyal üretme")
             return None
         if adx < getattr(settings, "ADX_THRESHOLD", 20):
-            logger.debug(
-                f"  {ticker}: ADX düşük ({adx:.1f}) - Trend yok, sinyal üretme"
-            )
+            logger.debug(f"  {ticker}: ADX düşük ({adx:.1f}) - Trend yok, sinyal üretme")
             return None
 
         regime = detect_regime(df)
@@ -181,14 +171,10 @@ class StrategyEngine:
         if regime == MarketRegime.SIDEWAYS:
             score *= 0.6
             if abs(score) < self.BUY_THRESHOLD:
-                logger.debug(
-                    f"  {ticker}: Yatay piyasada skor zayıf ({score:.1f}) - sinyal yok"
-                )
+                logger.debug(f"  {ticker}: Yatay piyasada skor zayıf ({score:.1f}) - sinyal yok")
                 return None
 
-        if score > 0 and not self._check_momentum_confirmation(
-            df, self.MOMENTUM_CONFIRMATION
-        ):
+        if score > 0 and not self._check_momentum_confirmation(df, self.MOMENTUM_CONFIRMATION):
             if abs(score) < self.BUY_THRESHOLD + self.SIDEWAYS_EXTRA_THRESHOLD:
                 logger.debug(f"  {ticker}: Momentum onaysiz, sinyal atlandi")
                 return None
@@ -221,9 +207,7 @@ class StrategyEngine:
             confidence = "confidence.low"
 
         if signal_type in {SignalType.STRONG_BUY, SignalType.BUY, SignalType.WEAK_BUY}:
-            if enforce_sector_limit and not self.risk_manager.check_sector_limit(
-                ticker
-            ):
+            if enforce_sector_limit and not self.risk_manager.check_sector_limit(ticker):
                 logger.debug(f"  {ticker}: sektör limiti nedeniyle sinyal atlandı")
                 return None
 
@@ -231,15 +215,11 @@ class StrategyEngine:
         risk_levels = self.risk_manager.calculate(df)
 
         if signal_type in {SignalType.STRONG_BUY, SignalType.BUY, SignalType.WEAK_BUY}:
-            risk_levels = self.risk_manager.apply_portfolio_risk(
-                ticker, df, risk_levels
-            )
+            risk_levels = self.risk_manager.apply_portfolio_risk(ticker, df, risk_levels)
             if risk_levels.blocked_by_correlation or risk_levels.position_size <= 0:
                 logger.debug(f"  {ticker}: portföy riski nedeniyle sinyal atlandı")
                 return None
-            if self.meta_model is not None and hasattr(
-                self.meta_model, "predict_probability"
-            ):
+            if self.meta_model is not None and hasattr(self.meta_model, "predict_probability"):
                 signal_probability = float(
                     self.meta_model.predict_probability(
                         self._build_meta_features(
@@ -257,9 +237,7 @@ class StrategyEngine:
                     signal_probability,
                 )
                 if risk_levels.position_size <= 0:
-                    logger.debug(
-                        f"  {ticker}: meta-model sizing nedeniyle sinyal atlandı"
-                    )
+                    logger.debug(f"  {ticker}: meta-model sizing nedeniyle sinyal atlandı")
                     return None
 
         stop_loss = risk_levels.final_stop
@@ -304,9 +282,7 @@ class StrategyEngine:
             )
 
         if multi_timeframe and getattr(settings, "MTF_ENABLED", True):
-            if not self._apply_confluence(
-                signal.signal_type, trend_bias, signal.reasons
-            ):
+            if not self._apply_confluence(signal.signal_type, trend_bias, signal.reasons):
                 logger.debug(f"  {ticker}: MTF confluence nedeniyle sinyal atlandı")
                 return None
 

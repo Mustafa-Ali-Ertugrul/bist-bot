@@ -72,7 +72,9 @@ class _CircuitBreaker:
             self._last_failure_at = time.monotonic()
             if self._failure_count >= self.failure_threshold:
                 self._state = _CircuitState.OPEN
-                logger.warning("Circuit breaker OPEN – %d consecutive failures", self._failure_count)
+                logger.warning(
+                    "Circuit breaker OPEN – %d consecutive failures", self._failure_count
+                )
 
     def allow_request(self) -> bool:
         return self.state in {_CircuitState.CLOSED, _CircuitState.HALF_OPEN}
@@ -235,11 +237,15 @@ class AlgoLabBroker(BaseExecutionProvider):
         )
 
     def cancel_order(self, order_id: str) -> bool:
-        payload = self._json_request("POST", self._required_endpoint("cancel_order"), json={"order_id": order_id})
+        payload = self._json_request(
+            "POST", self._required_endpoint("cancel_order"), json={"order_id": order_id}
+        )
         return bool(payload.get("cancelled", True))
 
     def get_order_status(self, order_id: str) -> OrderStatus:
-        payload = self._json_request("GET", self._required_endpoint("order_status"), params={"order_id": order_id})
+        payload = self._json_request(
+            "GET", self._required_endpoint("order_status"), params={"order_id": order_id}
+        )
         return OrderStatus(
             order_id=str(payload.get("client_order_id") or order_id),
             broker_order_id=str(payload.get("order_id", "")) or None,
@@ -272,7 +278,9 @@ class AlgoLabBroker(BaseExecutionProvider):
     def _required_endpoint(self, name: str) -> str:
         value = cast(str | None, getattr(self.endpoints, name))
         if not value:
-            raise RuntimeError(f"AlgoLab endpoint '{name}' is not configured. TODO: verify official API path.")
+            raise RuntimeError(
+                f"AlgoLab endpoint '{name}' is not configured. TODO: verify official API path."
+            )
         return value
 
     def _auth_headers(self) -> dict[str, str]:
@@ -306,7 +314,9 @@ class AlgoLabBroker(BaseExecutionProvider):
         for attempt in range(self.max_retries):
             try:
                 self._throttle()
-                response = self.session.request(method, url, headers=headers, timeout=timeout, **kwargs)
+                response = self.session.request(
+                    method, url, headers=headers, timeout=timeout, **kwargs
+                )
                 response.raise_for_status()
                 return response
             except requests.RequestException as exc:
@@ -314,7 +324,9 @@ class AlgoLabBroker(BaseExecutionProvider):
                 if attempt == self.max_retries - 1:
                     break
                 time.sleep(0.5 * (2**attempt))
-        raise RuntimeError(f"AlgoLab request failed after {self.max_retries} attempts") from last_error
+        raise RuntimeError(
+            f"AlgoLab request failed after {self.max_retries} attempts"
+        ) from last_error
 
     def _json_request(self, method: str, url: str, **kwargs: Any) -> dict[str, Any]:
         response = self._request(method, url, **kwargs)

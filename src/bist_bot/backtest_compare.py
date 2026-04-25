@@ -9,6 +9,7 @@ Kullanim:
     python backtest_compare.py
     python backtest_compare.py --tickers THYAO.IS ASELS.IS --period 1y
 """
+
 import argparse
 import logging
 import sys
@@ -44,11 +45,12 @@ class CompareRow:
     benchmark_return: float
     sideways_bars_pct: float
 
+
 def _sideways_pct(df: pd.DataFrame) -> float:
     ti = TechnicalIndicators()
     df = ti.add_all(df).dropna(subset=["rsi", f"sma_{settings.SMA_SLOW}"])
     start = min(50, len(df))
-    regimes = [detect_regime(df.iloc[:i+1]) for i in range(start, len(df))]
+    regimes = [detect_regime(df.iloc[: i + 1]) for i in range(start, len(df))]
     if not regimes:
         return 0.0
     sideways = sum(1 for r in regimes if r == MarketRegime.SIDEWAYS)
@@ -98,9 +100,7 @@ def _print_comparison(rows: list[CompareRow]) -> None:
         avg_trade_change = np.mean([r.new_trades - r.old_trades for r in rows])
         avg_wr_change = np.mean([r.new_win_rate - r.old_win_rate for r in rows])
 
-        print(
-            f"\n  Özet: {improved}/{len(rows)} hissede yeni mantık daha iyi getiri sağladı"
-        )
+        print(f"\n  Özet: {improved}/{len(rows)} hissede yeni mantık daha iyi getiri sağladı")
         print(f"  Ort. getiri farkı  : {avg_delta:+.2f}%")
         print(f"  Ort. işlem farkı   : {avg_trade_change:+.1f} (negatif = daha az false positive)")
         print(f"  Ort. win rate farkı: {avg_wr_change:+.1f}%")

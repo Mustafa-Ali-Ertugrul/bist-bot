@@ -12,8 +12,8 @@ if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
 import bist_bot.backtest_runner as backtest_runner_module  # noqa: E402
-from bist_bot.config.settings import settings  # noqa: E402
 from bist_bot.backtest_runner import run_backtest  # noqa: E402
+from bist_bot.config.settings import settings  # noqa: E402
 
 
 def test_run_backtest_returns_without_crash_on_empty_watchlist(monkeypatch):
@@ -45,7 +45,11 @@ def test_run_backtest_uses_historical_universe_when_requested(monkeypatch):
         "settings",
         replace(settings, WATCHLIST=["THYAO.IS", "ASELS.IS", "GARAN.IS"]),
     )
-    monkeypatch.setattr(backtest_runner_module.sys, "argv", ["backtest_runner.py", "--historical-universe-date", "2023-01-01"])
+    monkeypatch.setattr(
+        backtest_runner_module.sys,
+        "argv",
+        ["backtest_runner.py", "--historical-universe-date", "2023-01-01"],
+    )
 
     fetcher = MagicMock()
     fetcher.fetch_single.return_value = None

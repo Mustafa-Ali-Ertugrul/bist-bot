@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from datetime import datetime
 from time import sleep as default_sleep
-from typing import Callable
 
 from bist_bot.strategy.signal_models import Signal, SignalType
 

@@ -6,17 +6,14 @@ tr = {
     "signal.weak_sell": "🟠 ZAYIF SAT",
     "signal.sell": "🔴 SAT",
     "signal.strong_sell": "🚨 GÜÇLÜ SAT",
-
     "confidence.low": "DÜŞÜK",
     "confidence.medium": "ORTA",
     "confidence.high": "YÜKSEK",
-
     "ui.price": "Fiyat",
     "ui.score": "Skor",
     "ui.stop": "Stop",
     "ui.target": "Hedef",
     "ui.lot": "Lot",
-
     "ui.total_signals": "Toplam Sinyal",
     "ui.signals_over_time": "Tarih boyunca",
     "ui.trades_completed": "Islem Tamamlandi",
@@ -44,7 +41,6 @@ tr = {
     "ui.overview_title": "Genel Bakis",
     "ui.signals_title": "Sinyaller",
     "ui.api_data_failed": "API verileri alinamadi",
-
     "log.scan_starting": "BIST BOT — TARAMA BAŞLIYOR",
     "log.scanning_stocks": "Watchlist: {count} hisse",
     "log.scan_time": "Saat: {time}",
@@ -55,11 +51,9 @@ tr = {
     "log.buy_signal": "Alım sinyali",
     "log.sell_signal": "Satış sinyali",
     "log.actionable": "Aksiyon gerekli",
-
     "api.invalid_credentials": "Gecersiz kimlik bilgileri",
     "api.data_not_found": "Veri bulunamadi",
     "api.scan_error": "Tarama hatasi",
     "api.analyze_error": "Analiz hatasi",
-
     "signal.change": "Sinyal değişikliği: {ticker} {old} → {new}",
 }

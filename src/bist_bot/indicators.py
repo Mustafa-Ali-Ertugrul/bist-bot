@@ -1,6 +1,7 @@
-import pandas as pd
-import numpy as np
 import logging
+
+import numpy as np
+import pandas as pd
 
 from bist_bot.config.settings import settings
 
@@ -105,43 +106,47 @@ class TechnicalIndicators:
     def add_rsi(df: pd.DataFrame, period: int = None) -> pd.DataFrame:
         period = period or settings.RSI_PERIOD
         df = df.copy()
-        
+
         delta = df["close"].diff()
         gain = delta.where(delta > 0, 0)
         loss = (-delta).where(delta < 0, 0)
-        
+
         avg_gain = gain.rolling(window=period, min_periods=period).mean()
         avg_loss = loss.rolling(window=period, min_periods=period).mean()
-        
+
         rs = avg_gain / avg_loss
         df["rsi"] = 100 - (100 / (1 + rs))
-        
+
         df["rsi_zone"] = pd.cut(
             df["rsi"],
             bins=[0, 30, 45, 55, 70, 100],
-            labels=["AŞIRI_SATIM", "SATIN_YAKINI", "NÖTR", "ALIMIN_YAKINI", "AŞIRI_ALIM"]
+            labels=["AŞIRI_SATIM", "SATIN_YAKINI", "NÖTR", "ALIMIN_YAKINI", "AŞIRI_ALIM"],
         )
         return df
 
     @staticmethod
     def add_stochastic(df: pd.DataFrame, k_period: int = 14, d_period: int = 3) -> pd.DataFrame:
         df = df.copy()
-        
+
         low_min = df["low"].rolling(window=k_period).min()
         high_max = df["high"].rolling(window=k_period).max()
-        
+
         df["stoch_k"] = 100 * (df["close"] - low_min) / (high_max - low_min)
         df["stoch_d"] = df["stoch_k"].rolling(window=d_period).mean()
-        
+
         df["stoch_cross"] = "NONE"
-        bullish = (df["stoch_k"] > df["stoch_d"]) & (df["stoch_k"].shift(1) <= df["stoch_d"].shift(1))
-        bearish = (df["stoch_k"] < df["stoch_d"]) & (df["stoch_k"].shift(1) >= df["stoch_d"].shift(1))
+        bullish = (df["stoch_k"] > df["stoch_d"]) & (
+            df["stoch_k"].shift(1) <= df["stoch_d"].shift(1)
+        )
+        bearish = (df["stoch_k"] < df["stoch_d"]) & (
+            df["stoch_k"].shift(1) >= df["stoch_d"].shift(1)
+        )
         df.loc[bullish, "stoch_cross"] = "BULLISH"
         df.loc[bearish, "stoch_cross"] = "BEARISH"
-        
+
         df["stoch_oversold"] = (df["stoch_k"] < 20) & (df["stoch_d"] < 20)
         df["stoch_overbought"] = (df["stoch_k"] > 80) & (df["stoch_d"] > 80)
-        
+
         return df
 
     @staticmethod
@@ -160,8 +165,12 @@ class TechnicalIndicators:
             index=df.index,
         )
 
-        smoothed_plus_dm = df["plus_dm"].ewm(alpha=1 / period, adjust=False, min_periods=period).mean()
-        smoothed_minus_dm = df["minus_dm"].ewm(alpha=1 / period, adjust=False, min_periods=period).mean()
+        smoothed_plus_dm = (
+            df["plus_dm"].ewm(alpha=1 / period, adjust=False, min_periods=period).mean()
+        )
+        smoothed_minus_dm = (
+            df["minus_dm"].ewm(alpha=1 / period, adjust=False, min_periods=period).mean()
+        )
         atr = df["atr"].replace(0, np.nan)
 
         plus_di = 100 * smoothed_plus_dm / atr
@@ -172,14 +181,18 @@ class TechnicalIndicators:
         df["adx"] = dx.ewm(alpha=1 / period, adjust=False, min_periods=period).mean()
         df["plus_di"] = plus_di
         df["minus_di"] = minus_di
-        
+
         df["adx_strong"] = df["adx"] > 25
         df["di_cross"] = "NONE"
-        bullish_di = (df["plus_di"] > df["minus_di"]) & (df["plus_di"].shift(1) <= df["minus_di"].shift(1))
-        bearish_di = (df["plus_di"] < df["minus_di"]) & (df["plus_di"].shift(1) >= df["minus_di"].shift(1))
+        bullish_di = (df["plus_di"] > df["minus_di"]) & (
+            df["plus_di"].shift(1) <= df["minus_di"].shift(1)
+        )
+        bearish_di = (df["plus_di"] < df["minus_di"]) & (
+            df["plus_di"].shift(1) >= df["minus_di"].shift(1)
+        )
         df.loc[bullish_di, "di_cross"] = "BULLISH"
         df.loc[bearish_di, "di_cross"] = "BEARISH"
-        
+
         df = df.drop(columns=["plus_dm", "minus_dm"], errors="ignore")
         return df
 
@@ -201,18 +214,18 @@ class TechnicalIndicators:
     @staticmethod
     def add_cci(df: pd.DataFrame, period: int = 20) -> pd.DataFrame:
         df = df.copy()
-        
+
         typical_price = (df["high"] + df["low"] + df["close"]) / 3
         sma_tp = typical_price.rolling(window=period).mean()
         mean_dev = typical_price.rolling(window=period).apply(
             lambda x: np.abs(x - x.mean()).mean(), raw=True
         )
-        
+
         df["cci"] = (typical_price - sma_tp) / (0.015 * mean_dev)
-        
+
         df["cci_oversold"] = df["cci"] < -100
         df["cci_overbought"] = df["cci"] > 100
-        
+
         return df
 
     @staticmethod
@@ -242,13 +255,13 @@ class TechnicalIndicators:
         fast = fast or settings.SMA_FAST
         slow = slow or settings.SMA_SLOW
         df = df.copy()
-        
+
         df[f"sma_{fast}"] = df["close"].rolling(window=fast).mean()
         df[f"sma_{slow}"] = df["close"].rolling(window=slow).mean()
-        
+
         fast_col = f"sma_{fast}"
         slow_col = f"sma_{slow}"
-        
+
         df["sma_cross"] = "NONE"
         golden = (df[fast_col] > df[slow_col]) & (df[fast_col].shift(1) <= df[slow_col].shift(1))
         death = (df[fast_col] < df[slow_col]) & (df[fast_col].shift(1) >= df[slow_col].shift(1))
@@ -261,39 +274,43 @@ class TechnicalIndicators:
         fast = fast or settings.EMA_FAST
         slow = slow or settings.EMA_SLOW
         df = df.copy()
-        
+
         df[f"ema_{fast}"] = df["close"].ewm(span=fast, adjust=False).mean()
         df[f"ema_{slow}"] = df["close"].ewm(span=slow, adjust=False).mean()
-        
+
         fast_col = f"ema_{fast}"
         slow_col = f"ema_{slow}"
-        
+
         df["ema_cross"] = "NONE"
         bullish = (df[fast_col] > df[slow_col]) & (df[fast_col].shift(1) <= df[slow_col].shift(1))
         bearish = (df[fast_col] < df[slow_col]) & (df[fast_col].shift(1) >= df[slow_col].shift(1))
         df.loc[bullish, "ema_cross"] = "BULLISH"
         df.loc[bearish, "ema_cross"] = "BEARISH"
-        
+
         return df
 
     @staticmethod
     def add_macd(df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
-        
+
         ema12 = df["close"].ewm(span=12, adjust=False).mean()
         ema26 = df["close"].ewm(span=26, adjust=False).mean()
         df["macd"] = ema12 - ema26
         df["macd_signal"] = df["macd"].ewm(span=9, adjust=False).mean()
         df["macd_histogram"] = df["macd"] - df["macd_signal"]
-        
+
         df["macd_cross"] = "NONE"
-        bullish = (df["macd"] > df["macd_signal"]) & (df["macd"].shift(1) <= df["macd_signal"].shift(1))
-        bearish = (df["macd"] < df["macd_signal"]) & (df["macd"].shift(1) >= df["macd_signal"].shift(1))
+        bullish = (df["macd"] > df["macd_signal"]) & (
+            df["macd"].shift(1) <= df["macd_signal"].shift(1)
+        )
+        bearish = (df["macd"] < df["macd_signal"]) & (
+            df["macd"].shift(1) >= df["macd_signal"].shift(1)
+        )
         df.loc[bullish, "macd_cross"] = "BULLISH"
         df.loc[bearish, "macd_cross"] = "BEARISH"
-        
+
         df["macd_hist_increasing"] = df["macd_histogram"].diff() > 0
-        
+
         return df
 
     @staticmethod
@@ -301,48 +318,48 @@ class TechnicalIndicators:
         period = period or settings.BOLLINGER_PERIOD
         std = std or settings.BOLLINGER_STD
         df = df.copy()
-        
+
         df["bb_middle"] = df["close"].rolling(window=period).mean()
         rolling_std = df["close"].rolling(window=period).std()
         df["bb_upper"] = df["bb_middle"] + (rolling_std * std)
         df["bb_lower"] = df["bb_middle"] - (rolling_std * std)
         df["bb_bandwidth"] = (df["bb_upper"] - df["bb_lower"]) / df["bb_middle"] * 100
         df["bb_percent"] = (df["close"] - df["bb_lower"]) / (df["bb_upper"] - df["bb_lower"])
-        
+
         df["bb_position"] = "MIDDLE"
         df.loc[df["close"] <= df["bb_lower"], "bb_position"] = "BELOW_LOWER"
         df.loc[df["close"] >= df["bb_upper"], "bb_position"] = "ABOVE_UPPER"
-        
+
         df["bb_squeeze"] = df["bb_bandwidth"] < df["bb_bandwidth"].rolling(window=20).mean() * 0.7
-        
+
         return df
 
     @staticmethod
     def add_volume_analysis(df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
-        
+
         df["volume_sma_20"] = df["volume"].rolling(window=20).mean()
         df["volume_ratio"] = df["volume"] / df["volume_sma_20"]
         df["volume_spike"] = df["volume_ratio"] >= settings.VOLUME_SPIKE_MULTIPLIER
-        
+
         price_up = df["close"] > df["close"].shift(1)
         vol_up = df["volume"] > df["volume"].shift(1)
         df["price_volume_confirm"] = (price_up & vol_up) | (~price_up & ~vol_up)
-        
+
         df["volume_trend"] = "FLAT"
         df.loc[df["volume_sma_20"].diff() > 0, "volume_trend"] = "INCREASING"
         df.loc[df["volume_sma_20"].diff() < 0, "volume_trend"] = "DECREASING"
-        
+
         return df
-    
+
     @staticmethod
     def volume_confirmed(df: pd.DataFrame, ticker: str = None, threshold: float = None) -> bool:
         if df is None or len(df) < 25:
             return False
-        
+
         last = df.iloc[-1]
         vol_ratio = last.get("volume_ratio", 1.0)
-        
+
         if ticker:
             base_threshold = getattr(settings, "VOLUME_CONFIRM_MULTIPLIER", 1.5)
             liquidity_factor = settings.TICKER_NAMES.get(ticker, "")
@@ -354,13 +371,13 @@ class TechnicalIndicators:
                 threshold = threshold or base_threshold
         else:
             threshold = threshold or 1.5
-        
+
         return vol_ratio >= threshold
 
     @staticmethod
     def add_atr(df: pd.DataFrame, period: int = 14) -> pd.DataFrame:
         df = df.copy()
-        
+
         high_low = df["high"] - df["low"]
         high_close = abs(df["high"] - df["close"].shift(1))
         low_close = abs(df["low"] - df["close"].shift(1))
@@ -374,22 +391,22 @@ class TechnicalIndicators:
     @staticmethod
     def add_support_resistance(df: pd.DataFrame, lookback: int = 20) -> pd.DataFrame:
         df = df.copy()
-        
+
         df["support"] = df["low"].rolling(window=lookback).min()
         df["resistance"] = df["high"].rolling(window=lookback).max()
         df["dist_to_support_pct"] = (df["close"] - df["support"]) / df["close"] * 100
         df["dist_to_resistance_pct"] = (df["resistance"] - df["close"]) / df["close"] * 100
-        
+
         return df
 
     @staticmethod
     def get_snapshot(df: pd.DataFrame) -> dict:
         if df.empty:
             return {}
-        
+
         last = df.iloc[-1]
         prev = df.iloc[-2] if len(df) > 1 else last
-        
+
         cross_values = {
             "sma_cross": str(last.get("sma_cross", "NONE")),
             "macd_cross": str(last.get("macd_cross", "NONE")),
@@ -402,7 +419,9 @@ class TechnicalIndicators:
 
         return {
             "close": round(last.get("close", 0), 2),
-            "change_pct": round((last["close"] - prev["close"]) / prev["close"] * 100, 2) if "close" in last.index else 0,
+            "change_pct": round((last["close"] - prev["close"]) / prev["close"] * 100, 2)
+            if "close" in last.index
+            else 0,
             "volume": int(last.get("volume", 0)),
             "rsi": round(last.get("rsi", 50), 2),
             "rsi_zone": str(last.get("rsi_zone", "NÖTR")),

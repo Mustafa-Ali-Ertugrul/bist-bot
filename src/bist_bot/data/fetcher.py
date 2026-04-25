@@ -1,19 +1,26 @@
 """Market data fetching helpers for BIST symbols."""
 
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-import time
 from typing import Any, cast
 
 import pandas as pd
 
 from bist_bot.app_logging import get_logger
 from bist_bot.config.settings import settings
-from bist_bot.data.bist100 import BIST100_TICKERS
 from bist_bot.data import helpers as fetch_helpers
 from bist_bot.data import quotes as fetch_quotes
-from bist_bot.data.providers import BorsaIstanbulQuoteProvider, MarketDataProvider, OfficialProvider, OfficialProviderStub, QuoteProvider, YFinanceProvider
+from bist_bot.data.bist100 import BIST100_TICKERS
+from bist_bot.data.providers import (
+    BorsaIstanbulQuoteProvider,
+    MarketDataProvider,
+    OfficialProvider,
+    OfficialProviderStub,
+    QuoteProvider,
+    YFinanceProvider,
+)
 
 logger = get_logger(__name__, component="data_fetcher")
 
@@ -128,7 +135,9 @@ class BISTDataFetcher:
 
     def _history_ttl(self, interval: str) -> timedelta:
         if self._is_intraday_interval(interval):
-            return timedelta(seconds=float(getattr(settings, "INTRADAY_FETCH_CACHE_TTL_SECONDS", 120)))
+            return timedelta(
+                seconds=float(getattr(settings, "INTRADAY_FETCH_CACHE_TTL_SECONDS", 120))
+            )
         return timedelta(seconds=float(getattr(settings, "FETCH_CACHE_TTL_SECONDS", 900)))
 
     def _analysis_ttl(self) -> timedelta:
@@ -137,7 +146,9 @@ class BISTDataFetcher:
     def _quote_ttl(self) -> timedelta:
         return timedelta(seconds=float(getattr(settings, "REALTIME_QUOTE_CACHE_TTL_SECONDS", 30)))
 
-    def _get_valid_cache_entry(self, cache: dict[Any, CacheEntry], cache_key: Any, ttl: timedelta) -> Any | None:
+    def _get_valid_cache_entry(
+        self, cache: dict[Any, CacheEntry], cache_key: Any, ttl: timedelta
+    ) -> Any | None:
         entry = cache.get(cache_key)
         if entry is None:
             return None
@@ -166,7 +177,9 @@ class BISTDataFetcher:
             return None
 
         cache_key = self._cache_key(ticker, period, interval)
-        cached = self._get_valid_cache_entry(self._history_cache, cache_key, self._history_ttl(interval))
+        cached = self._get_valid_cache_entry(
+            self._history_cache, cache_key, self._history_ttl(interval)
+        )
         if cached is not None:
             logger.debug(f"  {ticker} cache'den döndürüldü ({interval}/{period})")
             return cast(pd.DataFrame, cached)
@@ -190,7 +203,9 @@ class BISTDataFetcher:
         normalized.columns = [str(col).lower() for col in normalized.columns]
 
         cols_to_keep = ["open", "high", "low", "close", "volume"]
-        normalized = cast(pd.DataFrame, normalized[[c for c in cols_to_keep if c in normalized.columns]])
+        normalized = cast(
+            pd.DataFrame, normalized[[c for c in cols_to_keep if c in normalized.columns]]
+        )
 
         if normalized.empty:
             logger.warning(f"⚠️  {ticker} için uygun fiyat kolonu bulunamadı!")
@@ -243,7 +258,7 @@ class BISTDataFetcher:
         ticker: str,
         period: str | None = None,
         interval: str | None = None,
-        force: bool = False
+        force: bool = False,
     ) -> pd.DataFrame | None:
         """Fetch price history for a single ticker.
 
@@ -311,9 +326,9 @@ class BISTDataFetcher:
         total = len(self.watchlist)
         batch_start = time.perf_counter()
 
-        logger.info(f"{'='*50}")
+        logger.info(f"{'=' * 50}")
         logger.info(f"🔄 {total} hisse için veri çekiliyor...")
-        logger.info(f"{'='*50}")
+        logger.info(f"{'=' * 50}")
 
         missing_tickers = []
         for ticker in self.watchlist:
@@ -325,8 +340,7 @@ class BISTDataFetcher:
 
         if missing_tickers:
             logger.info(
-                f"⚡ Batch fetch başlıyor: {len(missing_tickers)} hisse "
-                f"(cache hit: {len(results)})"
+                f"⚡ Batch fetch başlıyor: {len(missing_tickers)} hisse (cache hit: {len(results)})"
             )
             download_start = time.perf_counter()
             unresolved = list(missing_tickers)
@@ -361,18 +375,15 @@ class BISTDataFetcher:
             except Exception as e:
                 logger.warning(f"⚠️  Batch download hatası: {e}")
 
-            logger.info(
-                f"⏱️  Batch fetch süresi: "
-                f"{time.perf_counter() - download_start:.2f}s"
-            )
+            logger.info(f"⏱️  Batch fetch süresi: {time.perf_counter() - download_start:.2f}s")
 
             if unresolved:
-                logger.info(
-                    f"🔁 Fallback parallel fetch başlıyor: {len(unresolved)} hisse"
-                )
+                logger.info(f"🔁 Fallback parallel fetch başlıyor: {len(unresolved)} hisse")
                 fallback_start = time.perf_counter()
 
-                with ThreadPoolExecutor(max_workers=min(self._max_workers, len(unresolved))) as executor:
+                with ThreadPoolExecutor(
+                    max_workers=min(self._max_workers, len(unresolved))
+                ) as executor:
                     future_map = {
                         executor.submit(self.fetch_single, ticker, period, interval, True): ticker
                         for ticker in unresolved
@@ -388,16 +399,15 @@ class BISTDataFetcher:
                             logger.error(f"❌ {ticker} fallback hatası: {e}")
 
                 logger.info(
-                    f"⏱️  Fallback fetch süresi: "
-                    f"{time.perf_counter() - fallback_start:.2f}s"
+                    f"⏱️  Fallback fetch süresi: {time.perf_counter() - fallback_start:.2f}s"
                 )
 
         success = len(results)
         fail = total - success
-        logger.info(f"{'='*50}")
+        logger.info(f"{'=' * 50}")
         logger.info(f"📊 Sonuç: {success} başarılı, {fail} başarısız")
         logger.info(f"⏱️  Toplam fetch_all süresi: {time.perf_counter() - batch_start:.2f}s")
-        logger.info(f"{'='*50}")
+        logger.info(f"{'=' * 50}")
 
         return results
 
@@ -421,7 +431,9 @@ class BISTDataFetcher:
                 scraped_price = self.quote_provider.fetch_quote(ticker)
             except Exception as exc:
                 scraped_price = None
-                logger.warning("⚠️ %s realtime quote beklenmeyen hatayla başarısız oldu: %s", ticker, exc)
+                logger.warning(
+                    "⚠️ %s realtime quote beklenmeyen hatayla başarısız oldu: %s", ticker, exc
+                )
 
             if scraped_price is not None:
                 self._store_quote(ticker, float(scraped_price))
@@ -521,8 +533,12 @@ class BISTDataFetcher:
         trigger_period = trigger_period or getattr(settings, "MTF_TRIGGER_PERIOD", "1mo")
         trigger_interval = trigger_interval or getattr(settings, "MTF_TRIGGER_INTERVAL", "15m")
 
-        trend_data = self.fetch_all(period=trend_period, interval=trend_interval, force=force_refresh)
-        trigger_data = self.fetch_all(period=trigger_period, interval=trigger_interval, force=force_refresh)
+        trend_data = self.fetch_all(
+            period=trend_period, interval=trend_interval, force=force_refresh
+        )
+        trigger_data = self.fetch_all(
+            period=trigger_period, interval=trigger_interval, force=force_refresh
+        )
 
         combined: dict[str, dict[str, pd.DataFrame]] = {}
         for ticker in self.watchlist:

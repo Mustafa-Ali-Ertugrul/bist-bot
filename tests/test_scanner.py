@@ -30,7 +30,9 @@ def test_scan_once_returns_empty_on_no_data():
 
 def test_scan_once_orchestrates_side_effect_services():
     fetcher = MagicMock()
-    fetcher.fetch_multi_timeframe_all.return_value = {"THYAO.IS": {"trigger": object(), "trend": object()}}
+    fetcher.fetch_multi_timeframe_all.return_value = {
+        "THYAO.IS": {"trigger": object(), "trend": object()}
+    }
     engine = MagicMock()
     notifier = MagicMock()
     db = MagicMock()
@@ -75,7 +77,9 @@ def test_scan_once_orchestrates_side_effect_services():
 
 def test_scan_once_skips_paper_trade_updates_when_disabled():
     fetcher = MagicMock()
-    fetcher.fetch_multi_timeframe_all.return_value = {"THYAO.IS": {"trigger": object(), "trend": object()}}
+    fetcher.fetch_multi_timeframe_all.return_value = {
+        "THYAO.IS": {"trigger": object(), "trend": object()}
+    }
     engine = MagicMock()
     notifier = MagicMock()
     db = MagicMock()
@@ -130,7 +134,9 @@ def test_scan_service_backwards_compatible_wrappers_delegate():
 
 def test_scan_once_force_refresh_uses_selective_invalidation():
     fetcher = MagicMock()
-    fetcher.fetch_multi_timeframe_all.return_value = {"THYAO.IS": {"trigger": object(), "trend": object()}}
+    fetcher.fetch_multi_timeframe_all.return_value = {
+        "THYAO.IS": {"trigger": object(), "trend": object()}
+    }
     engine = MagicMock()
     notifier = MagicMock()
     db = MagicMock()

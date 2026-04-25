@@ -6,7 +6,12 @@ import threading
 from collections import OrderedDict
 
 try:  # pragma: no cover - exercised indirectly depending on environment
-    from prometheus_client import CollectorRegistry, Counter, Gauge, generate_latest  # type: ignore[import-not-found]
+    from prometheus_client import (  # type: ignore[import-not-found]
+        CollectorRegistry,
+        Counter,
+        Gauge,
+        generate_latest,
+    )
 except ImportError:  # pragma: no cover - fallback remains covered
     CollectorRegistry = None
     Counter = None
@@ -41,9 +46,7 @@ class _MetricsRegistry:
         self._counters = OrderedDict(
             (name, float(value)) for name, value in _COUNTER_DEFAULTS.items()
         )
-        self._gauges = OrderedDict(
-            (name, float(value)) for name, value in _GAUGE_DEFAULTS.items()
-        )
+        self._gauges = OrderedDict((name, float(value)) for name, value in _GAUGE_DEFAULTS.items())
         self._prom_registry = None
         self._prom_counters = {}
         self._prom_gauges = {}
@@ -56,8 +59,7 @@ class _MetricsRegistry:
             for name in _COUNTER_DEFAULTS
         }
         self._prom_gauges = {
-            name: Gauge(name, name.replace("_", " "), registry=registry)
-            for name in _GAUGE_DEFAULTS
+            name: Gauge(name, name.replace("_", " "), registry=registry) for name in _GAUGE_DEFAULTS
         }
 
     def reset(self) -> None:

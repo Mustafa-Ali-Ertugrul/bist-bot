@@ -20,7 +20,9 @@ def test_execution_service_uses_signal_position_size_for_broker_order():
     db = MagicMock()
     broker = MagicMock()
     broker.authenticate.return_value = True
-    broker.place_order.return_value = MagicMock(state=MagicMock(value="SENT"), broker_order_id="BRK-1", order_id="ORD-1")
+    broker.place_order.return_value = MagicMock(
+        state=MagicMock(value="SENT"), broker_order_id="BRK-1", order_id="ORD-1"
+    )
     db.create_order.return_value = {"id": 11}
     service = ExecutionService(db, broker=broker, settings=replace(settings, AUTO_EXECUTE=True))
     signal = Signal(

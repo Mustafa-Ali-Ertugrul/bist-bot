@@ -36,9 +36,9 @@ def render_signal_card(signal, df_data=None, chart_factory=None) -> None:
         <div style='background:rgba(255,255,255,0.03);border-radius:10px;padding:10px 12px;'><div style='font-size:10px;color:#8b90a0;font-weight:700;text-transform:uppercase;'>Skor</div><div style='font-size:18px;font-weight:800;color:{chip_color};margin-top:2px;'>{signal.score:+.0f}</div></div>
         <div style='background:rgba(255,255,255,0.03);border-radius:10px;padding:10px 12px;'><div style='font-size:10px;color:#8b90a0;font-weight:700;text-transform:uppercase;'>Stop</div><div style='font-size:18px;font-weight:800;color:#ff796c;margin-top:2px;'>TL{signal.stop_loss:.2f}</div></div>
         <div style='background:rgba(255,255,255,0.03);border-radius:10px;padding:10px 12px;'><div style='font-size:10px;color:#8b90a0;font-weight:700;text-transform:uppercase;'>Hedef</div><div style='font-size:18px;font-weight:800;color:#48ddbc;margin-top:2px;'>TL{signal.target_price:.2f}</div></div>
-        <div style='background:rgba(255,255,255,0.03);border-radius:10px;padding:10px 12px;'><div style='font-size:10px;color:#8b90a0;font-weight:700;text-transform:uppercase;'>Lot</div><div style='font-size:18px;font-weight:800;color:#dfe2eb;margin-top:2px;'>{signal.position_size if signal.position_size is not None else '-'}</div></div>
+        <div style='background:rgba(255,255,255,0.03);border-radius:10px;padding:10px 12px;'><div style='font-size:10px;color:#8b90a0;font-weight:700;text-transform:uppercase;'>Lot</div><div style='font-size:18px;font-weight:800;color:#dfe2eb;margin-top:2px;'>{signal.position_size if signal.position_size is not None else "-"}</div></div>
       </div>
-      <div style='margin-top:12px;color:#99a2b2;font-size:12px;line-height:1.6;'>{'<br>'.join(signal.reasons[:5])}</div>
+      <div style='margin-top:12px;color:#99a2b2;font-size:12px;line-height:1.6;'>{"<br>".join(signal.reasons[:5])}</div>
     </div>
     """
 
@@ -49,7 +49,9 @@ def render_signal_card(signal, df_data=None, chart_factory=None) -> None:
         with col_right:
             try:
                 df_chart = TechnicalIndicators().add_all(df_data.tail(60).copy())
-                render_chart(chart_factory(df_chart, signal.ticker), key=f"signal_chart_{signal.ticker}")
+                render_chart(
+                    chart_factory(df_chart, signal.ticker), key=f"signal_chart_{signal.ticker}"
+                )
             except Exception:
                 st.markdown(left_html, unsafe_allow_html=True)
     else:

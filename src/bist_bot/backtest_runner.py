@@ -8,7 +8,6 @@ from datetime import datetime
 from pathlib import Path
 
 import bist_bot.config as config
-
 from bist_bot.app_logging import get_logger
 from bist_bot.backtest import Backtester, WalkForwardValidator
 from bist_bot.data.universe import get_universe_for_date
@@ -41,7 +40,9 @@ def run_backtest(fetcher, walk_forward: bool | None = None) -> None:
     args = _build_parser().parse_known_args(sys.argv[1:])[0]
     use_walk_forward = args.walk_forward if walk_forward is None else walk_forward
 
-    logger.info("UYARI: yfinance verisi delisted hisseleri icermeyebilir. Survivorship bias olasidir.")
+    logger.info(
+        "UYARI: yfinance verisi delisted hisseleri icermeyebilir. Survivorship bias olasidir."
+    )
     logger.info("\n🧪 BACKTEST BAŞLIYOR")
     logger.info("=" * 55)
 
@@ -56,7 +57,9 @@ def run_backtest(fetcher, walk_forward: bool | None = None) -> None:
         else list(config.settings.WATCHLIST)
     )
     if universe_as_of:
-        logger.info("Point-in-time universe enabled for %s (%s tickers)", universe_as_of, len(universe))
+        logger.info(
+            "Point-in-time universe enabled for %s (%s tickers)", universe_as_of, len(universe)
+        )
 
     for ticker in universe:
         df = fetcher.fetch_single(ticker, period="2y" if use_walk_forward else "1y")
@@ -86,7 +89,9 @@ def run_backtest(fetcher, walk_forward: bool | None = None) -> None:
                     f"Windows {len(result.windows)}"
                 )
         else:
-            backtester = Backtester(initial_capital=getattr(config.settings, "INITIAL_CAPITAL", 8500.0))
+            backtester = Backtester(
+                initial_capital=getattr(config.settings, "INITIAL_CAPITAL", 8500.0)
+            )
             output_path = output_dir / f"backtest_{ticker.replace('.', '_')}.json"
             result = backtester.run(
                 ticker,

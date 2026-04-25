@@ -24,7 +24,7 @@ _SETTINGS_OVERRIDES: ContextVar[tuple[dict[str, Any], ...]] = ContextVar(
 
 
 class SettingsOverride:
-    def __init__(self, settings_obj: "Settings", **overrides: Any) -> None:
+    def __init__(self, settings_obj: Settings, **overrides: Any) -> None:
         valid_fields = settings_obj.__dataclass_fields__
         unknown_fields = sorted(name for name in overrides if name not in valid_fields)
         if unknown_fields:
@@ -33,9 +33,9 @@ class SettingsOverride:
         self._overrides = overrides
         self._token: Token[tuple[dict[str, Any], ...]] | None = None
 
-    def __enter__(self) -> "Settings":
+    def __enter__(self) -> Settings:
         current = _SETTINGS_OVERRIDES.get()
-        self._token = _SETTINGS_OVERRIDES.set(current + (self._overrides,))
+        self._token = _SETTINGS_OVERRIDES.set((*current, self._overrides))
         return settings
 
     def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
@@ -217,62 +217,123 @@ TICKER_NAMES = {
 
 SECTOR_MAP = {
     # Bankacilik & Finans
-    "AKBNK.IS": "BANKA", "GARAN.IS": "BANKA", "HALKB.IS": "BANKA",
-    "ISCTR.IS": "BANKA", "VAKBN.IS": "BANKA", "YKBNK.IS": "BANKA",
-    "ALBRK.IS": "BANKA", "QNBFB.IS": "BANKA", "SKBNK.IS": "BANKA",
+    "AKBNK.IS": "BANKA",
+    "GARAN.IS": "BANKA",
+    "HALKB.IS": "BANKA",
+    "ISCTR.IS": "BANKA",
+    "VAKBN.IS": "BANKA",
+    "YKBNK.IS": "BANKA",
+    "ALBRK.IS": "BANKA",
+    "QNBFB.IS": "BANKA",
+    "SKBNK.IS": "BANKA",
     "TSKB.IS": "BANKA",
     # Holding
-    "KCHOL.IS": "HOLDI", "SAHOL.IS": "HOLDI", "DOHOL.IS": "HOLDI",
-    "GLYHO.IS": "HOLDI", "GSDHO.IS": "HOLDI", "ALARK.IS": "HOLDI",
+    "KCHOL.IS": "HOLDI",
+    "SAHOL.IS": "HOLDI",
+    "DOHOL.IS": "HOLDI",
+    "GLYHO.IS": "HOLDI",
+    "GSDHO.IS": "HOLDI",
+    "ALARK.IS": "HOLDI",
     "ECILC.IS": "HOLDI",
     # Ulastirma & Havayolu
-    "THYAO.IS": "ULASTIRMA", "PGSUS.IS": "ULASTIRMA",
-    "TAVHL.IS": "ULASTIRMA", "CLEBI.IS": "ULASTIRMA", "DOCO.IS": "ULASTIRMA",
+    "THYAO.IS": "ULASTIRMA",
+    "PGSUS.IS": "ULASTIRMA",
+    "TAVHL.IS": "ULASTIRMA",
+    "CLEBI.IS": "ULASTIRMA",
+    "DOCO.IS": "ULASTIRMA",
     # Otomotiv
-    "FROTO.IS": "OTOMOTIV", "TOASO.IS": "OTOMOTIV", "TTRAK.IS": "OTOMOTIV",
-    "OTKAR.IS": "OTOMOTIV", "DOAS.IS": "OTOMOTIV", "KARSN.IS": "OTOMOTIV",
+    "FROTO.IS": "OTOMOTIV",
+    "TOASO.IS": "OTOMOTIV",
+    "TTRAK.IS": "OTOMOTIV",
+    "OTKAR.IS": "OTOMOTIV",
+    "DOAS.IS": "OTOMOTIV",
+    "KARSN.IS": "OTOMOTIV",
     # Metal
-    "EREGL.IS": "METAL", "KRDMD.IS": "METAL", "BRSAN.IS": "METAL",
-    "CEMTS.IS": "METAL", "IZMDC.IS": "METAL",
+    "EREGL.IS": "METAL",
+    "KRDMD.IS": "METAL",
+    "BRSAN.IS": "METAL",
+    "CEMTS.IS": "METAL",
+    "IZMDC.IS": "METAL",
     # Kimya
-    "TUPRS.IS": "KIMYA", "PETKM.IS": "KIMYA", "SASA.IS": "KIMYA",
-    "AKSA.IS": "KIMYA", "ALKIM.IS": "KIMYA", "GUBRF.IS": "KIMYA",
-    "BAGFS.IS": "KIMYA", "HEKTS.IS": "KIMYA",
+    "TUPRS.IS": "KIMYA",
+    "PETKM.IS": "KIMYA",
+    "SASA.IS": "KIMYA",
+    "AKSA.IS": "KIMYA",
+    "ALKIM.IS": "KIMYA",
+    "GUBRF.IS": "KIMYA",
+    "BAGFS.IS": "KIMYA",
+    "HEKTS.IS": "KIMYA",
     # Insaat & Cimento
-    "CIMSA.IS": "INSAAT", "AKCNS.IS": "INSAAT", "OYAKC.IS": "INSAAT",
-    "BTCIM.IS": "INSAAT", "ENKAI.IS": "INSAAT", "TKFEN.IS": "INSAAT",
+    "CIMSA.IS": "INSAAT",
+    "AKCNS.IS": "INSAAT",
+    "OYAKC.IS": "INSAAT",
+    "BTCIM.IS": "INSAAT",
+    "ENKAI.IS": "INSAAT",
+    "TKFEN.IS": "INSAAT",
     # Cam
-    "SISE.IS": "CAM", "ANACM.IS": "CAM",
+    "SISE.IS": "CAM",
+    "ANACM.IS": "CAM",
     # Beyaz Esya
-    "ARCLK.IS": "DAYANIKLI", "VESTL.IS": "DAYANIKLI", "VESBE.IS": "DAYANIKLI",
+    "ARCLK.IS": "DAYANIKLI",
+    "VESTL.IS": "DAYANIKLI",
+    "VESBE.IS": "DAYANIKLI",
     # Gida & Perakende
-    "BIMAS.IS": "PERAK", "MGROS.IS": "PERAK", "SOKM.IS": "PERAK",
-    "AEFES.IS": "GIDA", "CCOLA.IS": "GIDA", "ULKER.IS": "GIDA",
-    "TUKAS.IS": "GIDA", "PNSUT.IS": "GIDA",
+    "BIMAS.IS": "PERAK",
+    "MGROS.IS": "PERAK",
+    "SOKM.IS": "PERAK",
+    "AEFES.IS": "GIDA",
+    "CCOLA.IS": "GIDA",
+    "ULKER.IS": "GIDA",
+    "TUKAS.IS": "GIDA",
+    "PNSUT.IS": "GIDA",
     # Enerji
-    "ENJSA.IS": "ENERJI", "AKSEN.IS": "ENERJI", "AYGAZ.IS": "ENERJI",
-    "ZOREN.IS": "ENERJI", "ODAS.IS": "ENERJI", "AYDEM.IS": "ENERJI",
-    "CWENE.IS": "ENERJI", "SMRTG.IS": "ENERJI", "EUPWR.IS": "ENERJI",
+    "ENJSA.IS": "ENERJI",
+    "AKSEN.IS": "ENERJI",
+    "AYGAZ.IS": "ENERJI",
+    "ZOREN.IS": "ENERJI",
+    "ODAS.IS": "ENERJI",
+    "AYDEM.IS": "ENERJI",
+    "CWENE.IS": "ENERJI",
+    "SMRTG.IS": "ENERJI",
+    "EUPWR.IS": "ENERJI",
     # Teknoloji & Savunma
-    "ASELS.IS": "TEKNO", "LOGO.IS": "TEKNO", "KAREL.IS": "TEKNO",
-    "NETAS.IS": "TEKNO", "INDES.IS": "TEKNO", "ARENA.IS": "TEKNO",
-    "FONET.IS": "TEKNO", "MIATK.IS": "TEKNO", "KONTR.IS": "TEKNO",
-    "GESAN.IS": "TEKNO", "PAPIL.IS": "TEKNO",
+    "ASELS.IS": "TEKNO",
+    "LOGO.IS": "TEKNO",
+    "KAREL.IS": "TEKNO",
+    "NETAS.IS": "TEKNO",
+    "INDES.IS": "TEKNO",
+    "ARENA.IS": "TEKNO",
+    "FONET.IS": "TEKNO",
+    "MIATK.IS": "TEKNO",
+    "KONTR.IS": "TEKNO",
+    "GESAN.IS": "TEKNO",
+    "PAPIL.IS": "TEKNO",
     # Iletisim
-    "TCELL.IS": "ILETISIM", "TTKOM.IS": "ILETISIM",
+    "TCELL.IS": "ILETISIM",
+    "TTKOM.IS": "ILETISIM",
     # Madencilik
-    "KOZAL.IS": "MADEN", "KOZAA.IS": "MADEN", "IPEKE.IS": "MADEN",
+    "KOZAL.IS": "MADEN",
+    "KOZAA.IS": "MADEN",
+    "IPEKE.IS": "MADEN",
     # Lastik & Tekstil
-    "BRISA.IS": "DAYANIKLI", "MAVI.IS": "TEKSTIL", "DESA.IS": "TEKSTIL",
+    "BRISA.IS": "DAYANIKLI",
+    "MAVI.IS": "TEKSTIL",
+    "DESA.IS": "TEKSTIL",
     # Saglik
-    "DEVA.IS": "SAGLIK", "LKMNH.IS": "SAGLIK", "MPARK.IS": "SAGLIK",
+    "DEVA.IS": "SAGLIK",
+    "LKMNH.IS": "SAGLIK",
+    "MPARK.IS": "SAGLIK",
     "SELEC.IS": "SAGLIK",
     # GYO
-    "EKGYO.IS": "GAYRIMENKUL", "ISGYO.IS": "GAYRIMENKUL",
-    "AKMGY.IS": "GAYRIMENKUL", "TRGYO.IS": "GAYRIMENKUL",
+    "EKGYO.IS": "GAYRIMENKUL",
+    "ISGYO.IS": "GAYRIMENKUL",
+    "AKMGY.IS": "GAYRIMENKUL",
+    "TRGYO.IS": "GAYRIMENKUL",
     "YGGYO.IS": "GAYRIMENKUL",
     # Spor
-    "FENER.IS": "SPOR", "BJKAS.IS": "SPOR", "GSRAY.IS": "SPOR",
+    "FENER.IS": "SPOR",
+    "BJKAS.IS": "SPOR",
+    "GSRAY.IS": "SPOR",
 }
 
 
@@ -281,9 +342,7 @@ class Settings:
     DEFAULT_BIST100_WATCHLIST: list[str] = field(
         default_factory=lambda: list(DEFAULT_BIST100_WATCHLIST)
     )
-    WATCHLIST: list[str] = field(
-        default_factory=lambda: list(DEFAULT_BIST100_WATCHLIST)
-    )
+    WATCHLIST: list[str] = field(default_factory=lambda: list(DEFAULT_BIST100_WATCHLIST))
     TICKER_NAMES: dict[str, str] = field(default_factory=lambda: dict(TICKER_NAMES))
     SECTOR_MAP: dict[str, str] = field(default_factory=lambda: dict(SECTOR_MAP))
 
@@ -324,9 +383,7 @@ class Settings:
     OFFICIAL_PASSWORD: str = _get_str_env("OFFICIAL_PASSWORD")
     OFFICIAL_TIMEOUT: float = _get_float_env("OFFICIAL_TIMEOUT", 30.0)
     OFFICIAL_MAX_RETRIES: int = _get_int_env("OFFICIAL_MAX_RETRIES", 3)
-    OFFICIAL_RETRY_BACKOFF_SECONDS: float = _get_float_env(
-        "OFFICIAL_RETRY_BACKOFF_SECONDS", 1.0
-    )
+    OFFICIAL_RETRY_BACKOFF_SECONDS: float = _get_float_env("OFFICIAL_RETRY_BACKOFF_SECONDS", 1.0)
     OFFICIAL_AUTH_ENDPOINT: str = _get_str_env("OFFICIAL_AUTH_ENDPOINT")
     OFFICIAL_HISTORY_ENDPOINT: str = _get_str_env("OFFICIAL_HISTORY_ENDPOINT")
     OFFICIAL_BATCH_ENDPOINT: str = _get_str_env("OFFICIAL_BATCH_ENDPOINT")
@@ -356,9 +413,7 @@ class Settings:
     INTRADAY_FETCH_CACHE_TTL_SECONDS: float = _get_float_env(
         "INTRADAY_FETCH_CACHE_TTL_SECONDS", 120.0
     )
-    ANALYSIS_CACHE_TTL_SECONDS: float = _get_float_env(
-        "ANALYSIS_CACHE_TTL_SECONDS", 180.0
-    )
+    ANALYSIS_CACHE_TTL_SECONDS: float = _get_float_env("ANALYSIS_CACHE_TTL_SECONDS", 180.0)
     REALTIME_QUOTE_CACHE_TTL_SECONDS: float = _get_float_env(
         "REALTIME_QUOTE_CACHE_TTL_SECONDS", 30.0
     )
@@ -369,9 +424,7 @@ class Settings:
     FLASK_DEBUG: bool = _get_bool_env("FLASK_DEBUG", False)
     LOG_FORMAT: str = _get_str_env("LOG_FORMAT", "console")
     LOG_LEVEL: str = _get_str_env("LOG_LEVEL", "INFO")
-    STREAMLIT_SCAN_COOLDOWN_SECONDS: float = _get_float_env(
-        "STREAMLIT_SCAN_COOLDOWN_SECONDS", 8.0
-    )
+    STREAMLIT_SCAN_COOLDOWN_SECONDS: float = _get_float_env("STREAMLIT_SCAN_COOLDOWN_SECONDS", 8.0)
     STREAMLIT_ANALYZE_COOLDOWN_SECONDS: float = _get_float_env(
         "STREAMLIT_ANALYZE_COOLDOWN_SECONDS", 4.0
     )
@@ -382,9 +435,7 @@ class Settings:
     JWT_SECRET_KEY: str = _get_str_env("JWT_SECRET_KEY")
     ADMIN_BOOTSTRAP_EMAIL: str = _get_str_env("ADMIN_BOOTSTRAP_EMAIL")
     ADMIN_BOOTSTRAP_PASSWORD_HASH: str = _get_str_env("ADMIN_BOOTSTRAP_PASSWORD_HASH")
-    CORS_ORIGINS: tuple[str, ...] = field(
-        default_factory=lambda: _get_csv_env("CORS_ORIGINS")
-    )
+    CORS_ORIGINS: tuple[str, ...] = field(default_factory=lambda: _get_csv_env("CORS_ORIGINS"))
 
     INITIAL_CAPITAL: float = _get_float_env("INITIAL_CAPITAL", 100000.0)
     ML_SEQUENCE_LENGTH: int = _get_int_env("ML_SEQUENCE_LENGTH", 60)
@@ -409,9 +460,7 @@ class Settings:
     ALGOLAB_PASSWORD: str = _get_str_env("ALGOLAB_PASSWORD")
     ALGOLAB_OTP_CODE: str = _get_str_env("ALGOLAB_OTP_CODE")
     ALGOLAB_DRY_RUN: bool = _get_bool_env("ALGOLAB_DRY_RUN", True)
-    AUTO_EXECUTE_WARN_MAX_QUANTITY: int = _get_int_env(
-        "AUTO_EXECUTE_WARN_MAX_QUANTITY", 100000
-    )
+    AUTO_EXECUTE_WARN_MAX_QUANTITY: int = _get_int_env("AUTO_EXECUTE_WARN_MAX_QUANTITY", 100000)
     SLIPPAGE: float = _get_float_env("SLIPPAGE", 0.001)
     SLIPPAGE_PCT: float = _get_float_env("SLIPPAGE_PCT", 0.001)
     SLIPPAGE_PENALTY_RATIO: float = _get_float_env("SLIPPAGE_PENALTY_RATIO", 0.15)
@@ -434,9 +483,7 @@ class Settings:
     SELL_THRESHOLD: int = _get_int_env("SELL_THRESHOLD", -20)
     STRONG_SELL_THRESHOLD: int = _get_int_env("STRONG_SELL_THRESHOLD", -48)
     SIDEWAYS_EXTRA_THRESHOLD: float = _get_float_env("SIDEWAYS_EXTRA_THRESHOLD", 5.0)
-    MOMENTUM_CONFIRMATION_THRESHOLD: float = _get_float_env(
-        "MOMENTUM_CONFIRMATION_THRESHOLD", 4.0
-    )
+    MOMENTUM_CONFIRMATION_THRESHOLD: float = _get_float_env("MOMENTUM_CONFIRMATION_THRESHOLD", 4.0)
 
     WALKFORWARD_TRAIN_DAYS: int = _get_int_env("WALKFORWARD_TRAIN_DAYS", 180)
     WALKFORWARD_TEST_DAYS: int = _get_int_env("WALKFORWARD_TEST_DAYS", 30)
@@ -467,18 +514,10 @@ class Settings:
             raise RuntimeError(f"Unsupported BROKER_PROVIDER: {self.BROKER_PROVIDER}")
         if self.BROKER_PROVIDER != "algolab":
             return
-        if (
-            not self.ALGOLAB_API_KEY
-            or not self.ALGOLAB_USERNAME
-            or not self.ALGOLAB_PASSWORD
-        ):
-            raise RuntimeError(
-                "Missing required AlgoLab credentials for BROKER_PROVIDER=algolab"
-            )
+        if not self.ALGOLAB_API_KEY or not self.ALGOLAB_USERNAME or not self.ALGOLAB_PASSWORD:
+            raise RuntimeError("Missing required AlgoLab credentials for BROKER_PROVIDER=algolab")
         if not self.ALGOLAB_DRY_RUN and not self.CONFIRM_LIVE_TRADING:
-            raise RuntimeError(
-                "CONFIRM_LIVE_TRADING=true is required when ALGOLAB_DRY_RUN=false"
-            )
+            raise RuntimeError("CONFIRM_LIVE_TRADING=true is required when ALGOLAB_DRY_RUN=false")
 
     def validate_data_provider_config(self) -> None:
         if self.DATA_PROVIDER == "official":

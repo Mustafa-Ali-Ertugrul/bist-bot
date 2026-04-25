@@ -3,15 +3,15 @@ from __future__ import annotations
 import streamlit as st
 
 from bist_bot.config.settings import settings
-from bist_bot.ui.session_cooldown import consume_cooldown
 from bist_bot.ui.components.chart_widget import plot_candlestick, render_chart
 from bist_bot.ui.runtime import api_request
+from bist_bot.ui.session_cooldown import consume_cooldown
 
 
 def render_analyze_page() -> None:
     st.title("Tekil Analiz")
 
-    col1, col2 = st.columns([1, 3])
+    col1, _col2 = st.columns([1, 3])
     with col1:
         ticker_input = st.text_input("Hisse (THYAO.IS)", value="THYAO.IS").strip().upper()
         analyze_btn = st.button("Analiz Et", type="primary", use_container_width=True)

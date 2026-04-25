@@ -8,7 +8,9 @@ import pandas as pd
 from bist_bot.risk.models import RiskLevels
 
 
-def calc_atr_levels(df: pd.DataFrame, price: float, levels: RiskLevels, atr_stop_mult: float, atr_target_mult: float) -> RiskLevels:
+def calc_atr_levels(
+    df: pd.DataFrame, price: float, levels: RiskLevels, atr_stop_mult: float, atr_target_mult: float
+) -> RiskLevels:
     atr = df.get("atr")
     if atr is not None and pd.notna(atr.iloc[-1]):
         atr_val = float(atr.iloc[-1])
@@ -64,7 +66,9 @@ def calc_fibonacci(df: pd.DataFrame, price: float, levels: RiskLevels) -> RiskLe
     return levels
 
 
-def calc_fixed_percent(price: float, levels: RiskLevels, fixed_stop_pct: float, fixed_target_pct: float) -> RiskLevels:
+def calc_fixed_percent(
+    price: float, levels: RiskLevels, fixed_stop_pct: float, fixed_target_pct: float
+) -> RiskLevels:
     levels.stop_percent = round(price * (1 - fixed_stop_pct / 100), 2)
     levels.target_percent = round(price * (1 + fixed_target_pct / 100), 2)
     return levels
@@ -111,8 +115,12 @@ def determine_final_levels(price: float, levels: RiskLevels) -> RiskLevels:
         "Swing": levels.stop_swing,
     }
     valid_stops = {key: value for key, value in all_stops.items() if value > 0 and value < price}
-    reasonable_stops = {key: value for key, value in valid_stops.items() if (price - value) / price > 0.01}
-    reasonable_stops = {key: value for key, value in reasonable_stops.items() if (price - value) / price < 0.10}
+    reasonable_stops = {
+        key: value for key, value in valid_stops.items() if (price - value) / price > 0.01
+    }
+    reasonable_stops = {
+        key: value for key, value in reasonable_stops.items() if (price - value) / price < 0.10
+    }
 
     if reasonable_stops:
         best_stop_method = max(reasonable_stops, key=reasonable_stops.get)
@@ -134,7 +142,9 @@ def determine_final_levels(price: float, levels: RiskLevels) -> RiskLevels:
         "Swing": levels.target_swing,
     }
     valid_targets = {key: value for key, value in all_targets.items() if value > price}
-    reasonable_targets = {key: value for key, value in valid_targets.items() if (value - price) / price > 0.02}
+    reasonable_targets = {
+        key: value for key, value in valid_targets.items() if (value - price) / price > 0.02
+    }
 
     if reasonable_targets:
         best_target_method = min(reasonable_targets, key=reasonable_targets.get)

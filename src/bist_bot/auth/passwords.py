@@ -5,7 +5,6 @@ from __future__ import annotations
 import bcrypt
 from werkzeug.security import check_password_hash, generate_password_hash
 
-
 _MODERN_HASH_PREFIX = "scrypt:"
 
 

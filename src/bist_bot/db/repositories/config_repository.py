@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy import select
 
@@ -9,7 +9,7 @@ from bist_bot.db.database import ConfigRecord, DatabaseManager
 
 
 class ConfigRepository:
-    def __init__(self, manager: Optional[DatabaseManager] = None) -> None:
+    def __init__(self, manager: DatabaseManager | None = None) -> None:
         self.manager = manager or DatabaseManager()
 
     def save_config(self, key: str, value: Any) -> None:

@@ -28,13 +28,23 @@ def render_overview_page() -> None:
 
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-        render_metric_block(get_message("ui.total_signals"), str(total_signals), get_message("ui.signals_over_time"))
+        render_metric_block(
+            get_message("ui.total_signals"), str(total_signals), get_message("ui.signals_over_time")
+        )
     with c2:
-        render_metric_block(get_message("ui.trades_completed"), str(completed), get_message("ui.trade_result_known"))
+        render_metric_block(
+            get_message("ui.trades_completed"), str(completed), get_message("ui.trade_result_known")
+        )
     with c3:
-        render_metric_block(get_message("ui.profitable"), str(profitable), get_message("ui.profit_made"))
+        render_metric_block(
+            get_message("ui.profitable"), str(profitable), get_message("ui.profit_made")
+        )
     with c4:
-        render_metric_block(get_message("ui.win_rate"), f"%{win_rate:.1f}", f"{get_message('ui.avg_profit')}: %{avg_profit:.1f}")
+        render_metric_block(
+            get_message("ui.win_rate"),
+            f"%{win_rate:.1f}",
+            f"{get_message('ui.avg_profit')}: %{avg_profit:.1f}",
+        )
 
     st.subheader(get_message("ui.recent_signals"))
     if not signals_payload:
@@ -50,7 +60,7 @@ def render_overview_page() -> None:
             get_message("ui.status"),
             get_message("ui.date"),
         ]
-        for col, header in zip(cols, headers):
+        for col, header in zip(cols, headers, strict=False):
             col.markdown(f"**{header}**")
 
         for sig in signals_payload[:10]:

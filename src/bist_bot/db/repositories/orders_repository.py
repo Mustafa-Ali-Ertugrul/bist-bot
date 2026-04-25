@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy import select
 
@@ -8,7 +8,7 @@ from bist_bot.db.database import DatabaseManager, OrderRecord
 
 
 class OrdersRepository:
-    def __init__(self, manager: Optional[DatabaseManager] = None) -> None:
+    def __init__(self, manager: DatabaseManager | None = None) -> None:
         self.manager = manager or DatabaseManager()
 
     def create_order(
@@ -50,7 +50,7 @@ class OrdersRepository:
         broker_order_id: str | None = None,
         filled_qty: float | None = None,
         avg_fill_price: float | None = None,
-    ) -> Optional[dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         with self.manager.session_scope() as session:
             row = session.get(OrderRecord, order_id)
             if row is None:
@@ -76,7 +76,7 @@ class OrdersRepository:
             ).all()
         return [self._to_dict(row) for row in rows]
 
-    def get_order(self, order_id: int) -> Optional[dict[str, Any]]:
+    def get_order(self, order_id: int) -> dict[str, Any] | None:
         with self.manager.session_scope() as session:
             row = session.get(OrderRecord, order_id)
         return self._to_dict(row) if row is not None else None

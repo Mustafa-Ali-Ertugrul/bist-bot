@@ -1,5 +1,74 @@
 [tool.ruff]
 src = ["src", "tests"]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "UP",   # pyupgrade
+    "SIM",  # flake8-simplify
+    "TID",  # flake8-tidy-imports
+    "ARG",  # unused arguments
+    "RUF",  # ruff-specific
+]
+ignore = [
+    "E501",   # line-too-long (line-length already enforced)
+    "B008",   # function call in default arg (FastAPI/Flask pattern)
+    "SIM108", # ternary instead of if-else (readability)
+    "SIM102", # nested if (often clearer than combined)
+    "SIM105", # contextlib.suppress (try/except is clearer here)
+    "RUF001", # ambiguous unicode in string (Turkish content)
+    "RUF002", # ambiguous unicode in docstring (Turkish content)
+    "RUF003", # ambiguous unicode in comment (Turkish content)
+    "RUF012", # mutable class attribute (dataclass default_factory exists)
+    "RUF013", # implicit Optional (legacy code; gradual migration)
+    "UP042",  # str-enum (StrEnum requires Python 3.11+ everywhere)
+    "ARG002", # unused method argument (interface signatures)
+    "B024",   # abstract base class without abstract methods
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["ARG", "B011", "SIM"]
+"scripts/**/*.py" = ["ARG"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--tb=short",
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: integration tests requiring external services",
+]
+
+[tool.coverage.run]
+source = ["src/bist_bot"]
+omit = [
+    "*/tests/*",
+    "*/__main__.py",
+    "*/start_app.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+]
+show_missing = true
+skip_covered = true
+
+[tool.bandit]
+exclude_dirs = ["tests", "scripts"]
+skips = ["B101"]  # assert_used (acceptable in tests)

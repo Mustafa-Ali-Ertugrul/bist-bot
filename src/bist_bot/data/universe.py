@@ -29,7 +29,9 @@ def _load_snapshot(snapshot_path: Path) -> list[str]:
     return clean_ticker_list([str(member) for member in members])
 
 
-def get_universe_for_date(as_of: date | datetime | str, current_universe: list[str] | None = None) -> list[str]:
+def get_universe_for_date(
+    as_of: date | datetime | str, current_universe: list[str] | None = None
+) -> list[str]:
     target_date = _coerce_date(as_of)
     fallback = clean_ticker_list(current_universe or BIST100_TICKERS)
 

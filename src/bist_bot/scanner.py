@@ -12,7 +12,6 @@ from bist_bot.services.paper_trade_service import PaperTradeService
 from bist_bot.services.signal_change_service import SignalChangeService
 from bist_bot.strategy.signal_models import Signal, SignalType
 
-
 logger = get_logger(__name__, component="scanner")
 
 
@@ -38,10 +37,21 @@ class ScanService:
         self.broker = broker
         self.settings = settings or default_settings
         self.signal_change_service = signal_change_service or SignalChangeService(db, notifier)
-        self.execution_service = execution_service or ExecutionService(db, broker=broker, settings=self.settings)
-        self.paper_trade_service = paper_trade_service or PaperTradeService(fetcher, db, settings=self.settings)
-        self.notification_service = notification_service or NotificationDispatchService(notifier, settings=self.settings)
-        self.last_scan_stats: dict[str, int] = {"scanned": 0, "actionable": 0, "buys": 0, "sells": 0}
+        self.execution_service = execution_service or ExecutionService(
+            db, broker=broker, settings=self.settings
+        )
+        self.paper_trade_service = paper_trade_service or PaperTradeService(
+            fetcher, db, settings=self.settings
+        )
+        self.notification_service = notification_service or NotificationDispatchService(
+            notifier, settings=self.settings
+        )
+        self.last_scan_stats: dict[str, int] = {
+            "scanned": 0,
+            "actionable": 0,
+            "buys": 0,
+            "sells": 0,
+        }
 
     def _auto_execute_signals(self, signals: list[Signal]) -> None:
         self.execution_service.auto_execute_signals(signals)

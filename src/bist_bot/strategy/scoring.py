@@ -7,7 +7,7 @@ import pandas as pd
 from bist_bot.config.settings import settings
 
 
-def score_momentum(params, last, prev) -> tuple[float, list[str]]:
+def score_momentum(params, last, prev) -> tuple[float, list[str]]:  # noqa: ARG001
     score = 0.0
     reasons: list[str] = []
 

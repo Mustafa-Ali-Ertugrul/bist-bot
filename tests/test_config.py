@@ -67,7 +67,10 @@ def test_load_settings_merges_persisted_ui_preferences(tmp_path, monkeypatch):
     loaded = config_store.load_settings()
 
     assert loaded["indicator"]["rsi_period"] == 21
-    assert loaded["indicator"]["adx_threshold"] == config_store.DEFAULT_SETTINGS["indicator"]["adx_threshold"]
+    assert (
+        loaded["indicator"]["adx_threshold"]
+        == config_store.DEFAULT_SETTINGS["indicator"]["adx_threshold"]
+    )
     assert loaded["scan"]["refresh_interval"] == 15
     assert loaded["telegram"]["enabled"] == config_store.DEFAULT_SETTINGS["telegram"]["enabled"]
 

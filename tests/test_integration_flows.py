@@ -7,10 +7,10 @@ from datetime import datetime
 from typing import Any, cast
 
 import pandas as pd
+from dashboard import create_dashboard_app
 from flask_jwt_extended import create_access_token
 from sqlalchemy import text
 
-from dashboard import create_dashboard_app
 from bist_bot.config.settings import settings
 from bist_bot.db import DataAccess, DatabaseManager
 from bist_bot.execution.base import OrderResult, OrderState
@@ -33,7 +33,12 @@ def _history_frame(periods: int = 80) -> pd.DataFrame:
 
 
 class ApiFetcherStub:
-    def __init__(self, *, scan_payload: dict[str, dict[str, pd.DataFrame]] | None = None, analyze_df: pd.DataFrame | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        scan_payload: dict[str, dict[str, pd.DataFrame]] | None = None,
+        analyze_df: pd.DataFrame | None = None,
+    ) -> None:
         self.scan_payload = scan_payload if scan_payload is not None else {}
         self.analyze_df = analyze_df if analyze_df is not None else _history_frame()
         self.scan_calls = 0
@@ -84,7 +89,9 @@ class ApiFetcherStub:
 
 
 class ApiEngineStub:
-    def __init__(self, scan_signals: list[Signal] | None = None, analyze_signal: Signal | None = None) -> None:
+    def __init__(
+        self, scan_signals: list[Signal] | None = None, analyze_signal: Signal | None = None
+    ) -> None:
         self.scan_signals = scan_signals or []
         self.analyze_signal = analyze_signal
 
@@ -169,7 +176,9 @@ def test_api_scan_persists_actionable_signals_and_logs(tmp_path) -> None:
         reasons=["Momentum"],
         timestamp=datetime(2025, 1, 1, 10, 0, 0),
     )
-    fetcher = ApiFetcherStub(scan_payload={"THYAO.IS": {"trend": _history_frame(), "trigger": _history_frame()}})
+    fetcher = ApiFetcherStub(
+        scan_payload={"THYAO.IS": {"trend": _history_frame(), "trigger": _history_frame()}}
+    )
     engine = ApiEngineStub(scan_signals=[signal])
     client, db, manager, token = _build_client(tmp_path, fetcher, engine)
 
@@ -209,7 +218,9 @@ def test_api_analyze_returns_signal_payload(tmp_path) -> None:
         reasons=["Trend"],
         timestamp=datetime(2025, 1, 1, 10, 0, 0),
     )
-    client, _db, _manager, token = _build_client(tmp_path, ApiFetcherStub(), ApiEngineStub(analyze_signal=signal))
+    client, _db, _manager, token = _build_client(
+        tmp_path, ApiFetcherStub(), ApiEngineStub(analyze_signal=signal)
+    )
 
     response = client.get("/api/analyze/THYAO", headers={"Authorization": f"Bearer {token}"})
 
@@ -257,7 +268,9 @@ def test_signal_and_order_persistence_integration(tmp_path) -> None:
         price=None,
         state="CREATED",
     )
-    updated = db.update_order(created["id"], state="FILLED", broker_order_id="BRK-9", filled_qty=12, avg_fill_price=56.0)
+    updated = db.update_order(
+        created["id"], state="FILLED", broker_order_id="BRK-9", filled_qty=12, avg_fill_price=56.0
+    )
 
     latest_signal = db.get_latest_signal("ASELS.IS")
     stored_order = db.get_order(created["id"])
@@ -276,7 +289,9 @@ def test_scan_orchestration_auto_execute_creates_sent_order(tmp_path) -> None:
     manager = DatabaseManager(sqlite_path=str(tmp_path / "integration_scan.db"))
     db = DataAccess(manager)
     broker = BrokerStub()
-    execution_service = ExecutionService(db, broker=broker, settings=replace(settings, AUTO_EXECUTE=True))
+    execution_service = ExecutionService(
+        db, broker=broker, settings=replace(settings, AUTO_EXECUTE=True)
+    )
     signal = Signal(
         ticker="THYAO.IS",
         signal_type=SignalType.STRONG_BUY,
@@ -287,7 +302,9 @@ def test_scan_orchestration_auto_execute_creates_sent_order(tmp_path) -> None:
         position_size=10,
         timestamp=datetime(2025, 1, 3, 10, 0, 0),
     )
-    fetcher = ApiFetcherStub(scan_payload={"THYAO.IS": {"trend": _history_frame(), "trigger": _history_frame()}})
+    fetcher = ApiFetcherStub(
+        scan_payload={"THYAO.IS": {"trend": _history_frame(), "trigger": _history_frame()}}
+    )
     engine = ApiEngineStub(scan_signals=[signal])
     service = ScanService(
         fetcher,
@@ -295,12 +312,28 @@ def test_scan_orchestration_auto_execute_creates_sent_order(tmp_path) -> None:
         notifier=cast(Any, object()),
         db=db,
         execution_service=execution_service,
-        signal_change_service=cast(Any, type("NoopChange", (), {"check_signal_changes": lambda self, signals: None})()),
-        paper_trade_service=cast(Any, type("NoopPaper", (), {
-            "queue_actionable_signals": lambda self, signals: None,
-            "update_open_trades": lambda self: None,
-        })()),
-        notification_service=cast(Any, type("NoopNotify", (), {"notify_scan_results": lambda self, signals, actionable, total: None})()),
+        signal_change_service=cast(
+            Any, type("NoopChange", (), {"check_signal_changes": lambda self, signals: None})()
+        ),
+        paper_trade_service=cast(
+            Any,
+            type(
+                "NoopPaper",
+                (),
+                {
+                    "queue_actionable_signals": lambda self, signals: None,
+                    "update_open_trades": lambda self: None,
+                },
+            )(),
+        ),
+        notification_service=cast(
+            Any,
+            type(
+                "NoopNotify",
+                (),
+                {"notify_scan_results": lambda self, signals, actionable, total: None},
+            )(),
+        ),
         settings=replace(settings, AUTO_EXECUTE=True, PAPER_MODE=False),
     )
 
@@ -317,7 +350,9 @@ def test_scan_orchestration_marks_order_rejected_when_broker_fails(tmp_path) -> 
     manager = DatabaseManager(sqlite_path=str(tmp_path / "integration_scan_fail.db"))
     db = DataAccess(manager)
     broker = BrokerStub(should_raise=True)
-    execution_service = ExecutionService(db, broker=broker, settings=replace(settings, AUTO_EXECUTE=True))
+    execution_service = ExecutionService(
+        db, broker=broker, settings=replace(settings, AUTO_EXECUTE=True)
+    )
     signal = Signal(
         ticker="THYAO.IS",
         signal_type=SignalType.STRONG_BUY,
@@ -328,7 +363,9 @@ def test_scan_orchestration_marks_order_rejected_when_broker_fails(tmp_path) -> 
         position_size=10,
         timestamp=datetime(2025, 1, 3, 10, 0, 0),
     )
-    fetcher = ApiFetcherStub(scan_payload={"THYAO.IS": {"trend": _history_frame(), "trigger": _history_frame()}})
+    fetcher = ApiFetcherStub(
+        scan_payload={"THYAO.IS": {"trend": _history_frame(), "trigger": _history_frame()}}
+    )
     engine = ApiEngineStub(scan_signals=[signal])
     service = ScanService(
         fetcher,
@@ -336,17 +373,35 @@ def test_scan_orchestration_marks_order_rejected_when_broker_fails(tmp_path) -> 
         notifier=cast(Any, object()),
         db=db,
         execution_service=execution_service,
-        signal_change_service=cast(Any, type("NoopChange", (), {"check_signal_changes": lambda self, signals: None})()),
-        paper_trade_service=cast(Any, type("NoopPaper", (), {
-            "queue_actionable_signals": lambda self, signals: None,
-            "update_open_trades": lambda self: None,
-        })()),
-        notification_service=cast(Any, type("NoopNotify", (), {"notify_scan_results": lambda self, signals, actionable, total: None})()),
+        signal_change_service=cast(
+            Any, type("NoopChange", (), {"check_signal_changes": lambda self, signals: None})()
+        ),
+        paper_trade_service=cast(
+            Any,
+            type(
+                "NoopPaper",
+                (),
+                {
+                    "queue_actionable_signals": lambda self, signals: None,
+                    "update_open_trades": lambda self: None,
+                },
+            )(),
+        ),
+        notification_service=cast(
+            Any,
+            type(
+                "NoopNotify",
+                (),
+                {"notify_scan_results": lambda self, signals, actionable, total: None},
+            )(),
+        ),
         settings=replace(settings, AUTO_EXECUTE=True, PAPER_MODE=False),
     )
 
     service.scan_once()
 
     with manager.session_scope() as session:
-        row = session.execute(text("SELECT state FROM orders ORDER BY id DESC LIMIT 1")).scalar_one()
+        row = session.execute(
+            text("SELECT state FROM orders ORDER BY id DESC LIMIT 1")
+        ).scalar_one()
     assert row == "REJECTED"

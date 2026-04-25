@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import os
 import sys
-
-import pytest
 from dataclasses import replace
+
 import pandas as pd
+import pytest
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:
@@ -43,7 +43,9 @@ def test_rate_limiter_waits_when_called_too_soon(monkeypatch):
     sleep_calls: list[float] = []
     clock = iter([100.0, 100.0, 101.0, 101.0, 103.0])
 
-    monkeypatch.setattr(data_fetcher, "settings", replace(data_fetcher.settings, RATE_LIMIT_SECONDS=2.0))
+    monkeypatch.setattr(
+        data_fetcher, "settings", replace(data_fetcher.settings, RATE_LIMIT_SECONDS=2.0)
+    )
     monkeypatch.setattr(data_fetcher.time, "time", lambda: next(clock))
     monkeypatch.setattr(data_fetcher.time, "sleep", lambda seconds: sleep_calls.append(seconds))
 
@@ -55,8 +57,9 @@ def test_rate_limiter_waits_when_called_too_soon(monkeypatch):
 
 def test_clean_ticker_list_normalizes_and_deduplicates():
     """Ticker normalization should append .IS and remove duplicates."""
-    from bist_bot.data.fetcher import _clean_ticker_list, normalize_ticker, validate_data
     import pandas as pd
+
+    from bist_bot.data.fetcher import _clean_ticker_list, normalize_ticker, validate_data
 
     raw = ["thyao", "THYAO.IS", " asels ", "ASELS.IS", ""]
 
@@ -139,15 +142,17 @@ def test_fetcher_uses_provider_quote_fallback_before_history(monkeypatch):
             return None
 
     fetcher = BISTDataFetcher(provider=StubProvider(), quote_provider=NullQuoteProvider())
-    monkeypatch.setattr(data_fetcher, "settings", replace(data_fetcher.settings, ENABLE_REALTIME_SCRAPING=True))
+    monkeypatch.setattr(
+        data_fetcher, "settings", replace(data_fetcher.settings, ENABLE_REALTIME_SCRAPING=True)
+    )
 
     assert fetcher.get_current_price("THYAO.IS") == 111.0
 
 
 def test_dependencies_selects_configured_data_provider():
-    from bist_bot.dependencies import _build_data_provider
     from bist_bot.config.settings import settings
     from bist_bot.data.providers import OfficialProviderStub, YFinanceProvider
+    from bist_bot.dependencies import _build_data_provider
 
     with settings.override(DATA_PROVIDER="official_stub"):
         assert isinstance(_build_data_provider(), OfficialProviderStub)
@@ -239,7 +244,9 @@ def test_fetch_single_force_refresh_bypasses_cache(monkeypatch):
 
     provider = CountingProvider()
     fetcher = BISTDataFetcher(watchlist=["THYAO.IS"], provider=provider)
-    monkeypatch.setattr(fetcher, "_now", lambda: pd.Timestamp("2025-01-01 10:00:00").to_pydatetime())
+    monkeypatch.setattr(
+        fetcher, "_now", lambda: pd.Timestamp("2025-01-01 10:00:00").to_pydatetime()
+    )
 
     fetcher.fetch_single("THYAO.IS", period="1mo", interval="15m")
     fetcher.fetch_single("THYAO.IS", period="1mo", interval="15m", force=True)

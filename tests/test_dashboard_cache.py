@@ -15,6 +15,7 @@ if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
 from dashboard import create_dashboard_app  # noqa: E402
+
 from bist_bot.config.settings import settings  # noqa: E402
 from bist_bot.db import DataAccess, DatabaseManager  # noqa: E402
 from bist_bot.execution.base import OrderResult, OrderState  # noqa: E402
@@ -114,7 +115,9 @@ class BrokerSpy:
     def place_order(self, ticker, side, quantity, order_type, price=None, stop_price=None):
         _ = ticker, side, quantity, order_type, price, stop_price
         self.order_calls += 1
-        return OrderResult(accepted=True, order_id="ord-1", broker_order_id="brk-1", state=OrderState.SENT)
+        return OrderResult(
+            accepted=True, order_id="ord-1", broker_order_id="brk-1", state=OrderState.SENT
+        )
 
 
 def _build_authorized_client(

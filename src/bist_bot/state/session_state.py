@@ -6,8 +6,8 @@ import uuid
 
 import streamlit as st
 
-from bist_bot.config.settings import settings
 from bist_bot.config import store as config_store
+from bist_bot.config.settings import settings
 from bist_bot.dependencies import get_default_container
 
 
@@ -52,7 +52,9 @@ def init_session_state(container=None) -> None:
     defaults_ind = config_store.get_indicator_defaults()
     st.session_state["ind_rsi_period"] = ind.get("rsi_period", defaults_ind["rsi_period"])
     st.session_state["ind_rsi_oversold"] = ind.get("rsi_oversold", defaults_ind["rsi_oversold"])
-    st.session_state["ind_rsi_overbought"] = ind.get("rsi_overbought", defaults_ind["rsi_overbought"])
+    st.session_state["ind_rsi_overbought"] = ind.get(
+        "rsi_overbought", defaults_ind["rsi_overbought"]
+    )
     st.session_state["ind_sma_fast"] = ind.get("sma_fast", defaults_ind["sma_fast"])
     st.session_state["ind_sma_slow"] = ind.get("sma_slow", defaults_ind["sma_slow"])
     st.session_state["ind_ema_fast"] = ind.get("ema_fast", defaults_ind["ema_fast"])
@@ -68,7 +70,9 @@ def init_session_state(container=None) -> None:
     tg_defaults = config_store.get_telegram_settings()
     st.session_state["tg_token_input"] = settings.TELEGRAM_BOT_TOKEN or tg_defaults["bot_token"]
     st.session_state["tg_chat_input"] = settings.TELEGRAM_CHAT_ID or tg_defaults["chat_id"]
-    st.session_state["notify_min_score"] = tg.get("notify_min_score", tg_defaults["notify_min_score"])
+    st.session_state["notify_min_score"] = tg.get(
+        "notify_min_score", tg_defaults["notify_min_score"]
+    )
     st.session_state["notify_telegram"] = bool(
         tg.get("enabled", tg_defaults["enabled"])
         and settings.TELEGRAM_BOT_TOKEN
@@ -78,10 +82,16 @@ def init_session_state(container=None) -> None:
     scan = stored.get("scan", {})
     scan_defaults = config_store.get_scan_settings()
     st.session_state["auto_refresh"] = scan.get("auto_refresh", scan_defaults["auto_refresh"])
-    st.session_state["refresh_interval"] = scan.get("refresh_interval", scan_defaults["refresh_interval"])
-    st.session_state["min_score_filter"] = scan.get("min_score_filter", scan_defaults["min_score_filter"])
+    st.session_state["refresh_interval"] = scan.get(
+        "refresh_interval", scan_defaults["refresh_interval"]
+    )
+    st.session_state["min_score_filter"] = scan.get(
+        "min_score_filter", scan_defaults["min_score_filter"]
+    )
     st.session_state["rsi_min_filter"] = scan.get("rsi_min_filter", scan_defaults["rsi_min_filter"])
     st.session_state["rsi_max_filter"] = scan.get("rsi_max_filter", scan_defaults["rsi_max_filter"])
-    st.session_state["vol_ratio_filter"] = scan.get("vol_ratio_filter", scan_defaults["vol_ratio_filter"])
+    st.session_state["vol_ratio_filter"] = scan.get(
+        "vol_ratio_filter", scan_defaults["vol_ratio_filter"]
+    )
 
     st.session_state["_initialized"] = True

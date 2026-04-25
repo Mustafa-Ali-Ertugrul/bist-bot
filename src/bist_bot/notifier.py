@@ -1,8 +1,9 @@
-import requests
 import logging
 import time
-from datetime import datetime, timezone, timedelta
-from typing import Callable
+from collections.abc import Callable
+from datetime import datetime, timedelta, timezone
+
+import requests
 
 from bist_bot.config.settings import settings
 from bist_bot.strategy.signal_models import Signal, SignalType
@@ -113,12 +114,10 @@ class TelegramNotifier:
         }
         emoji = emoji_map.get(signal.signal_type, "📊")
 
-        reasons_html = "\n".join(
-            [f"  • {r}" for r in signal.reasons]
-        )
+        reasons_html = "\n".join([f"  • {r}" for r in signal.reasons])
 
         message = f"""
-{emoji} <b>{name}</b> ({signal.ticker.replace('.IS', '')})
+{emoji} <b>{name}</b> ({signal.ticker.replace(".IS", "")})
 ━━━━━━━━━━━━━━━━━━━━
 
 📊 <b>Sinyal:</b> {signal.signal_type.value}
@@ -132,17 +131,13 @@ class TelegramNotifier:
 📋 <b>Nedenler:</b>
 {reasons_html}
 
-⏰ {signal.timestamp.strftime('%d.%m.%Y %H:%M')}
+⏰ {signal.timestamp.strftime("%d.%m.%Y %H:%M")}
 ━━━━━━━━━━━━━━━━━━━━
 ⚠️ <i>Bu bir yatırım tavsiyesi değildir!</i>
 """
         return self.send_message(message.strip())
 
-    def send_scan_summary(
-        self,
-        signals: list[Signal],
-        total_scanned: int
-    ) -> bool:
+    def send_scan_summary(self, signals: list[Signal], total_scanned: int) -> bool:
         buys = [s for s in signals if s.score > 0]
         sells = [s for s in signals if s.score < 0]
         holds = [s for s in signals if s.score == 0]
@@ -150,17 +145,27 @@ class TelegramNotifier:
         top_buys = sorted(buys, key=lambda s: s.score, reverse=True)[:3]
         top_sells = sorted(sells, key=lambda s: s.score)[:3]
 
-        top_buys_text = "\n".join([
-            f"  🟢 {settings.TICKER_NAMES.get(s.ticker, s.ticker)}: "
-            f"₺{s.price:.2f} (Skor: {s.score:+.0f})"
-            for s in top_buys
-        ]) or "  Yok"
+        top_buys_text = (
+            "\n".join(
+                [
+                    f"  🟢 {settings.TICKER_NAMES.get(s.ticker, s.ticker)}: "
+                    f"₺{s.price:.2f} (Skor: {s.score:+.0f})"
+                    for s in top_buys
+                ]
+            )
+            or "  Yok"
+        )
 
-        top_sells_text = "\n".join([
-            f"  🔴 {settings.TICKER_NAMES.get(s.ticker, s.ticker)}: "
-            f"₺{s.price:.2f} (Skor: {s.score:+.0f})"
-            for s in top_sells
-        ]) or "  Yok"
+        top_sells_text = (
+            "\n".join(
+                [
+                    f"  🔴 {settings.TICKER_NAMES.get(s.ticker, s.ticker)}: "
+                    f"₺{s.price:.2f} (Skor: {s.score:+.0f})"
+                    for s in top_sells
+                ]
+            )
+            or "  Yok"
+        )
 
         now = datetime.now(TR).strftime("%d.%m.%Y %H:%M")
 
@@ -183,12 +188,7 @@ class TelegramNotifier:
 """
         return self.send_message(message.strip())
 
-    def send_signal_change(
-        self,
-        ticker: str,
-        old_signal: Signal,
-        new_signal: Signal
-    ) -> bool:
+    def send_signal_change(self, ticker: str, old_signal: Signal, new_signal: Signal) -> bool:
         name = settings.TICKER_NAMES.get(ticker, ticker)
 
         emoji_map = {
@@ -210,7 +210,7 @@ class TelegramNotifier:
 🔔 <b>SİNYAL DEĞİŞİKLİĞİ!</b>
 ━━━━━━━━━━━━━━━━━━━━
 
-📊 <b>{name}</b> ({ticker.replace('.IS', '')})
+📊 <b>{name}</b> ({ticker.replace(".IS", "")})
 
 {old_emoji} {old_signal.signal_type.value}
      ↓
@@ -223,7 +223,7 @@ class TelegramNotifier:
 🛑 <b>Stop-Loss:</b> ₺{new_signal.stop_loss:.2f}
 🎯 <b>Hedef:</b> ₺{new_signal.target_price:.2f}
 
-⏰ {datetime.now(TR).strftime('%d.%m.%Y %H:%M')}
+⏰ {datetime.now(TR).strftime("%d.%m.%Y %H:%M")}
 ━━━━━━━━━━━━━━━━━━━━
 ⚠️ <i>Yatırım tavsiyesi değildir!</i>
 """

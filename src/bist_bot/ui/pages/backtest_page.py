@@ -4,7 +4,6 @@ from pathlib import Path
 
 import streamlit as st
 
-
 REPORTS = [
     ("Significant Top 10", Path("data/top10_significant_report.md")),
     ("Strict Profitable Watchlist", Path("data/strict_profitable_watchlist.md")),

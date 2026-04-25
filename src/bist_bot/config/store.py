@@ -68,7 +68,7 @@ def load_settings() -> dict:
     try:
         if not CONFIG_FILE.exists():
             return _deepcopy_defaults()
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+        with open(CONFIG_FILE, encoding="utf-8") as f:
             data = json.load(f)
         return _merge_with_defaults(data)
     except Exception as e:

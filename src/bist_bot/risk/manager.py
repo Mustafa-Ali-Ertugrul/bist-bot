@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import logging
 from contextlib import contextmanager
-from typing import Any, Optional, cast
+from typing import Any, cast
 
 import pandas as pd
 
 from bist_bot.config.settings import settings
 from bist_bot.risk import correlation as correlation_helpers
-from bist_bot.risk.models import RiskLevels
 from bist_bot.risk import sizing as sizing_helpers
 from bist_bot.risk import stops as stop_helpers
+from bist_bot.risk.models import RiskLevels
 
 logger = logging.getLogger(__name__)
 
@@ -44,33 +44,17 @@ class RiskManager:
         self._sector_signal_counts: dict[str, int] = {}
         self.sector_positions = self._sector_signal_counts
         self._portfolio_history: dict[str, pd.DataFrame] = {}
-        self._global_corr_cache: Optional[pd.DataFrame] = None
-        self.correlation_threshold = float(
-            getattr(settings, "CORRELATION_THRESHOLD", 0.70)
-        )
-        self.correlation_risk_step = float(
-            getattr(settings, "CORRELATION_RISK_STEP", 0.35)
-        )
-        self.correlation_min_scale = float(
-            getattr(settings, "CORRELATION_MIN_SCALE", 0.25)
-        )
-        self.correlation_max_cluster = int(
-            getattr(settings, "CORRELATION_MAX_CLUSTER", 2)
-        )
+        self._global_corr_cache: pd.DataFrame | None = None
+        self.correlation_threshold = float(getattr(settings, "CORRELATION_THRESHOLD", 0.70))
+        self.correlation_risk_step = float(getattr(settings, "CORRELATION_RISK_STEP", 0.35))
+        self.correlation_min_scale = float(getattr(settings, "CORRELATION_MIN_SCALE", 0.25))
+        self.correlation_max_cluster = int(getattr(settings, "CORRELATION_MAX_CLUSTER", 2))
         self.atr_baseline_pct = float(getattr(settings, "ATR_BASELINE_PCT", 0.025))
         self.atr_min_risk_scale = float(getattr(settings, "ATR_MIN_RISK_SCALE", 0.35))
-        self.max_position_cap_pct = float(
-            getattr(settings, "MAX_POSITION_CAP_PCT", 90.0)
-        )
-        self.kelly_fraction_scale = float(
-            getattr(settings, "KELLY_FRACTION_SCALE", 0.25)
-        )
-        self.min_signal_probability = float(
-            getattr(settings, "MIN_SIGNAL_PROBABILITY", 0.50)
-        )
-        self.min_liquidity_value_tl = float(
-            getattr(settings, "MIN_LIQUIDITY_VALUE_TL", 0.0)
-        )
+        self.max_position_cap_pct = float(getattr(settings, "MAX_POSITION_CAP_PCT", 90.0))
+        self.kelly_fraction_scale = float(getattr(settings, "KELLY_FRACTION_SCALE", 0.25))
+        self.min_signal_probability = float(getattr(settings, "MIN_SIGNAL_PROBABILITY", 0.50))
+        self.min_liquidity_value_tl = float(getattr(settings, "MIN_LIQUIDITY_VALUE_TL", 0.0))
         self.daily_loss_cap_pct = float(getattr(settings, "DAILY_LOSS_CAP_PCT", 0.0))
         self.daily_realized_pnl = 0.0
 
@@ -107,14 +91,10 @@ class RiskManager:
     def daily_loss_limit_reached(self) -> bool:
         if self.daily_loss_cap_pct <= 0:
             return False
-        return self.daily_realized_pnl <= -(
-            self.capital * self.daily_loss_cap_pct / 100.0
-        )
+        return self.daily_realized_pnl <= -(self.capital * self.daily_loss_cap_pct / 100.0)
 
     def build_global_correlation_cache(self, data: dict) -> None:
-        self._global_corr_cache = correlation_helpers.build_global_correlation_cache(
-            data
-        )
+        self._global_corr_cache = correlation_helpers.build_global_correlation_cache(data)
         self._restore_persisted_positions(data)
 
     def get_correlation_matrix(self) -> pd.DataFrame:
@@ -151,9 +131,7 @@ class RiskManager:
                 continue
             self.register_position(ticker, cast(pd.DataFrame, df))
 
-    def apply_portfolio_risk(
-        self, ticker: str, df: pd.DataFrame, levels: RiskLevels
-    ) -> RiskLevels:
+    def apply_portfolio_risk(self, ticker: str, df: pd.DataFrame, levels: RiskLevels) -> RiskLevels:
         return correlation_helpers.apply_portfolio_risk(
             ticker=ticker,
             df=df,
@@ -184,9 +162,7 @@ class RiskManager:
         levels = self._calc_position_size(price, levels)
         return levels
 
-    def _calc_atr_levels(
-        self, df: pd.DataFrame, price: float, levels: RiskLevels
-    ) -> RiskLevels:
+    def _calc_atr_levels(self, df: pd.DataFrame, price: float, levels: RiskLevels) -> RiskLevels:
         return stop_helpers.calc_atr_levels(
             df, price, levels, self.atr_stop_mult, self.atr_target_mult
         )
@@ -196,9 +172,7 @@ class RiskManager:
     ) -> RiskLevels:
         return stop_helpers.calc_support_resistance(df, price, levels)
 
-    def _calc_fibonacci(
-        self, df: pd.DataFrame, price: float, levels: RiskLevels
-    ) -> RiskLevels:
+    def _calc_fibonacci(self, df: pd.DataFrame, price: float, levels: RiskLevels) -> RiskLevels:
         return stop_helpers.calc_fibonacci(df, price, levels)
 
     def _calc_fixed_percent(self, price: float, levels: RiskLevels) -> RiskLevels:
@@ -206,9 +180,7 @@ class RiskManager:
             price, levels, self.fixed_stop_pct, self.fixed_target_pct
         )
 
-    def _calc_swing_levels(
-        self, df: pd.DataFrame, price: float, levels: RiskLevels
-    ) -> RiskLevels:
+    def _calc_swing_levels(self, df: pd.DataFrame, price: float, levels: RiskLevels) -> RiskLevels:
         return stop_helpers.calc_swing_levels(df, price, levels)
 
     def _determine_final_levels(self, price: float, levels: RiskLevels) -> RiskLevels:
@@ -245,12 +217,8 @@ class RiskManager:
         liquidity_value = 0.0
         if "close" in df.columns and "volume" in df.columns and not df.empty:
             recent = cast(pd.DataFrame, df[["close", "volume"]].tail(20).copy())
-            liquidity_series = recent["close"].astype(float) * recent["volume"].astype(
-                float
-            )
-            liquidity_value = (
-                float(liquidity_series.mean()) if not liquidity_series.empty else 0.0
-            )
+            liquidity_series = recent["close"].astype(float) * recent["volume"].astype(float)
+            liquidity_value = float(liquidity_series.mean()) if not liquidity_series.empty else 0.0
         return sizing_helpers.apply_probability_sizing(
             price,
             levels,
@@ -272,9 +240,7 @@ class RiskManager:
             atr_pct, self.atr_baseline_pct, self.atr_min_risk_scale
         )
 
-    def _get_correlated_positions(
-        self, ticker: str, candidate_df: pd.DataFrame
-    ) -> list[str]:
+    def _get_correlated_positions(self, ticker: str, candidate_df: pd.DataFrame) -> list[str]:
         return correlation_helpers.get_correlated_positions(
             ticker,
             candidate_df,

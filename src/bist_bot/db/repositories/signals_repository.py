@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy import func, select
 
@@ -14,7 +14,7 @@ def _serialize_reasons(reasons: list[str]) -> str:
     return json.dumps(reasons, ensure_ascii=False)
 
 
-def _deserialize_reasons(raw: Optional[str]) -> list[str]:
+def _deserialize_reasons(raw: str | None) -> list[str]:
     if not raw:
         return []
     try:
@@ -29,7 +29,7 @@ def _deserialize_reasons(raw: Optional[str]) -> list[str]:
 
 
 class SignalsRepository:
-    def __init__(self, manager: Optional[DatabaseManager] = None) -> None:
+    def __init__(self, manager: DatabaseManager | None = None) -> None:
         self.manager = manager or DatabaseManager()
 
     def save_signal(self, signal: Signal) -> None:
@@ -56,26 +56,32 @@ class SignalsRepository:
                     price=float(signal.price),
                     stop_loss=float(signal.stop_loss),
                     target_price=float(signal.target_price),
-                    position_size=int(signal.position_size) if signal.position_size is not None else None,
+                    position_size=int(signal.position_size)
+                    if signal.position_size is not None
+                    else None,
                     confidence=signal.confidence,
                     reasons=" | ".join(signal.reasons),
                     conditions=_serialize_reasons(signal.reasons),
                 )
             )
 
-    def get_signals(self, limit: int = 50, ticker: Optional[str] = None) -> list[dict[str, Any]]:
+    def get_signals(self, limit: int = 50, ticker: str | None = None) -> list[dict[str, Any]]:
         with self.manager.session_scope() as session:
             statement = select(SignalRecord)
             if ticker:
                 statement = statement.where(SignalRecord.ticker == ticker)
-            statement = statement.order_by(SignalRecord.timestamp.desc(), SignalRecord.id.desc()).limit(limit)
+            statement = statement.order_by(
+                SignalRecord.timestamp.desc(), SignalRecord.id.desc()
+            ).limit(limit)
             rows = session.scalars(statement).all()
         return [self._signal_to_dict(row) for row in rows]
 
-    def get_recent_signals(self, limit: int = 50, ticker: Optional[str] = None) -> list[dict[str, Any]]:
+    def get_recent_signals(
+        self, limit: int = 50, ticker: str | None = None
+    ) -> list[dict[str, Any]]:
         return self.get_signals(limit=limit, ticker=ticker)
 
-    def get_latest_signal(self, ticker: str) -> Optional[dict[str, Any]]:
+    def get_latest_signal(self, ticker: str) -> dict[str, Any] | None:
         with self.manager.session_scope() as session:
             row = session.scalar(
                 select(SignalRecord)
@@ -85,9 +91,13 @@ class SignalsRepository:
             )
             return self._signal_to_dict(row) if row else None
 
-    def signal_exists(self, ticker: str, signal_type: Optional[str] = None, timestamp: Optional[str] = None) -> bool:
+    def signal_exists(
+        self, ticker: str, signal_type: str | None = None, timestamp: str | None = None
+    ) -> bool:
         with self.manager.session_scope() as session:
-            statement = select(func.count()).select_from(SignalRecord).where(SignalRecord.ticker == ticker)
+            statement = (
+                select(func.count()).select_from(SignalRecord).where(SignalRecord.ticker == ticker)
+            )
             if signal_type:
                 statement = statement.where(SignalRecord.signal_type == signal_type)
             if timestamp:
@@ -120,9 +130,27 @@ class SignalsRepository:
     def get_performance_stats(self) -> dict[str, Any]:
         with self.manager.session_scope() as session:
             total = session.scalar(select(func.count()).select_from(SignalRecord)) or 0
-            completed = session.scalar(select(func.count()).select_from(SignalRecord).where(SignalRecord.outcome != "PENDING")) or 0
-            profitable = session.scalar(select(func.count()).select_from(SignalRecord).where(SignalRecord.profit_pct > 0)) or 0
-            avg_profit = session.scalar(select(func.avg(SignalRecord.profit_pct)).where(SignalRecord.profit_pct.is_not(None)))
+            completed = (
+                session.scalar(
+                    select(func.count())
+                    .select_from(SignalRecord)
+                    .where(SignalRecord.outcome != "PENDING")
+                )
+                or 0
+            )
+            profitable = (
+                session.scalar(
+                    select(func.count())
+                    .select_from(SignalRecord)
+                    .where(SignalRecord.profit_pct > 0)
+                )
+                or 0
+            )
+            avg_profit = session.scalar(
+                select(func.avg(SignalRecord.profit_pct)).where(
+                    SignalRecord.profit_pct.is_not(None)
+                )
+            )
         return {
             "total_signals": int(total),
             "completed": int(completed),

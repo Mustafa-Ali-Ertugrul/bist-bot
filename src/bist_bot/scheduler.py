@@ -6,7 +6,6 @@ from time import sleep
 
 from bist_bot.config.settings import settings as default_settings
 
-
 logger = logging.getLogger(__name__)
 
 TR = timezone(timedelta(hours=3))
@@ -40,8 +39,7 @@ class MarketScheduler:
             if hour < self.settings.MARKET_OPEN_HOUR:
                 wait = (self.settings.MARKET_OPEN_HOUR - hour) * 3600
                 logger.info(
-                    f"⏰ Borsa henüz açılmadı. "
-                    f"{self.settings.MARKET_OPEN_HOUR}:00'da başlayacak..."
+                    f"⏰ Borsa henüz açılmadı. {self.settings.MARKET_OPEN_HOUR}:00'da başlayacak..."
                 )
                 sleep(min(wait, 1800))
                 continue
@@ -72,10 +70,7 @@ class MarketScheduler:
                 logger.error(f"❌ Tarama hatası: {e}")
                 self.notifier.send_message(f"⚠️ Bot hatası: {e}")
 
-            logger.info(
-                f"\n⏳ Sonraki tarama: "
-                f"{self.settings.SCAN_INTERVAL_MINUTES} dakika sonra"
-            )
+            logger.info(f"\n⏳ Sonraki tarama: {self.settings.SCAN_INTERVAL_MINUTES} dakika sonra")
 
             for _ in range(self.settings.SCAN_INTERVAL_MINUTES * 6):
                 if not self.running:

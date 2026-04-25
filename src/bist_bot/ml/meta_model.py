@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import Iterable, Literal, Mapping
+from typing import Literal
 
 import numpy as np
 import pandas as pd
-
 from sklearn.isotonic import IsotonicRegression  # type: ignore[import-not-found]
 from sklearn.linear_model import LogisticRegression  # type: ignore[import-not-found]
-
 
 CalibrationMethod = Literal["none", "platt", "isotonic"]
 
@@ -22,10 +21,8 @@ class ProbabilityCalibrator:
 
     def fit(
         self, raw_probabilities: Iterable[float], labels: Iterable[int]
-    ) -> "ProbabilityCalibrator":
-        probabilities = np.clip(
-            np.asarray(list(raw_probabilities), dtype=float), 1e-6, 1.0 - 1e-6
-        )
+    ) -> ProbabilityCalibrator:
+        probabilities = np.clip(np.asarray(list(raw_probabilities), dtype=float), 1e-6, 1.0 - 1e-6)
         targets = np.asarray(list(labels), dtype=int)
         if probabilities.size == 0 or probabilities.size != targets.size:
             raise ValueError("Calibration data must be non-empty and aligned")
@@ -43,16 +40,12 @@ class ProbabilityCalibrator:
         return self
 
     def predict(self, raw_probabilities: Iterable[float]) -> np.ndarray:
-        probabilities = np.clip(
-            np.asarray(list(raw_probabilities), dtype=float), 1e-6, 1.0 - 1e-6
-        )
+        probabilities = np.clip(np.asarray(list(raw_probabilities), dtype=float), 1e-6, 1.0 - 1e-6)
         if self._model is None:
             return probabilities
         if self.method == "platt":
             return self._model.predict_proba(probabilities.reshape(-1, 1))[:, 1]
-        return np.clip(
-            np.asarray(self._model.predict(probabilities), dtype=float), 0.0, 1.0
-        )
+        return np.clip(np.asarray(self._model.predict(probabilities), dtype=float), 0.0, 1.0)
 
 
 @dataclass
@@ -65,7 +58,7 @@ class SignalMetaModel:
         self.calibrator = ProbabilityCalibrator(self.calibration_method)
         self.feature_names: list[str] = []
 
-    def fit(self, features: pd.DataFrame, labels: Iterable[int]) -> "SignalMetaModel":
+    def fit(self, features: pd.DataFrame, labels: Iterable[int]) -> SignalMetaModel:
         if features.empty:
             raise ValueError("features must not be empty")
         targets = np.asarray(list(labels), dtype=int)
@@ -88,16 +81,12 @@ class SignalMetaModel:
         self.calibrator.fit(raw_probabilities, calib_y)
         return self
 
-    def predict_probability(
-        self, features: Mapping[str, float] | pd.DataFrame
-    ) -> float:
+    def predict_probability(self, features: Mapping[str, float] | pd.DataFrame) -> float:
         frame = self._coerce_features(features)
         raw_probability = self.model.predict_proba(frame)[:, 1]
         return float(self.calibrator.predict(raw_probability)[0])
 
-    def _coerce_features(
-        self, features: Mapping[str, float] | pd.DataFrame
-    ) -> pd.DataFrame:
+    def _coerce_features(self, features: Mapping[str, float] | pd.DataFrame) -> pd.DataFrame:
         if isinstance(features, pd.DataFrame):
             frame = features.copy()
         else:
