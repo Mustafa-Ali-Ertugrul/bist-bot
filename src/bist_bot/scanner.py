@@ -113,7 +113,13 @@ class ScanService:
 
             for signal in signals:
                 if signal.signal_type is not SignalType.HOLD:
-                    print(signal)
+                    logger.info(
+                        "signal_emitted",
+                        ticker=signal.ticker,
+                        signal_type=signal.signal_type.value,
+                        score=signal.score,
+                        price=signal.price,
+                    )
 
             return cast(list[Signal], signals)
         except Exception as exc:

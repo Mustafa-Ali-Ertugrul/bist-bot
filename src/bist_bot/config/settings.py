@@ -268,7 +268,7 @@ class Settings:
         default_factory=lambda: _get_csv_env("CORS_ORIGINS")
     )
 
-    INITIAL_CAPITAL: float = _get_float_env("INITIAL_CAPITAL", 8500.0)
+    INITIAL_CAPITAL: float = _get_float_env("INITIAL_CAPITAL", 100000.0)
     ML_SEQUENCE_LENGTH: int = _get_int_env("ML_SEQUENCE_LENGTH", 60)
     ML_EPOCHS: int = _get_int_env("ML_EPOCHS", 50)
     ML_BATCH_SIZE: int = _get_int_env("ML_BATCH_SIZE", 32)

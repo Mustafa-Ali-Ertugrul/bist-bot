@@ -33,7 +33,7 @@ class RiskManager:
         self.capital = (
             float(capital)
             if capital is not None
-            else float(getattr(settings, "INITIAL_CAPITAL", 8500.0))
+            else float(getattr(settings, "INITIAL_CAPITAL", 100000.0))
         )
         self.max_risk_pct = max_risk_per_trade_pct
         self.atr_stop_mult = atr_stop_multiplier

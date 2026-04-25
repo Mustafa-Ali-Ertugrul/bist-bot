@@ -59,8 +59,8 @@ def send_telegram_with_retry(
 class TelegramNotifier:
     def __init__(
         self,
-        token: str = None,
-        chat_id: str = None,
+        token: str | None = None,
+        chat_id: str | None = None,
         sender: Callable[..., bool] = send_telegram_with_retry,
     ):
         self.token = token or settings.TELEGRAM_BOT_TOKEN

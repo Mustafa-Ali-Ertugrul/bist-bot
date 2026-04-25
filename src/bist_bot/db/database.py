@@ -185,16 +185,15 @@ class DatabaseManager:
             return
 
         now = self.now_iso()
+        # Atomic insert: only when users table is empty. NOT EXISTS guard + UNIQUE(email)
+        # together prevent duplicate inserts under concurrent worker startup.
         with self.engine.begin() as conn:
-            has_users = conn.execute(text("SELECT id FROM users LIMIT 1")).scalar_one_or_none()
-            if has_users is not None:
-                return
-
             conn.execute(
                 text(
                     """
-                    INSERT INTO users (email, password_hash, role, created_at, updated_at)
-                    VALUES (:email, :password_hash, 'admin', :created_at, :updated_at)
+                    INSERT OR IGNORE INTO users (email, password_hash, role, created_at, updated_at)
+                    SELECT :email, :password_hash, 'admin', :created_at, :updated_at
+                    WHERE NOT EXISTS (SELECT 1 FROM users)
                     """
                 ),
                 {

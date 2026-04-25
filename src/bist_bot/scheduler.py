@@ -1,13 +1,15 @@
 """Market-hours scheduler for the CLI bot runtime."""
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from time import sleep
 
 from bist_bot.config.settings import settings as default_settings
 
 
 logger = logging.getLogger(__name__)
+
+TR = timezone(timedelta(hours=3))
 
 
 class MarketScheduler:
@@ -24,7 +26,7 @@ class MarketScheduler:
         self.notifier.send_startup_message()
 
         while self.running:
-            now = datetime.now()
+            now = datetime.now(TR)
             hour = now.hour
             minute = now.minute
 

@@ -40,7 +40,7 @@ class StrategyEngine:
         """Initialize injectable indicator and risk-management dependencies."""
         self.indicators = indicators or TechnicalIndicators()
         self.risk_manager = risk_manager or RiskManager(
-            capital=getattr(settings, "INITIAL_CAPITAL", 8500.0)
+            capital=getattr(settings, "INITIAL_CAPITAL", 100000.0)
         )
         self.params = params or StrategyParams()
         self.meta_model = meta_model
@@ -158,12 +158,14 @@ class StrategyEngine:
         reasons = []
 
         adx = last.get("adx")
-        if pd.notna(adx):
-            if adx < getattr(settings, "ADX_THRESHOLD", 20):
-                logger.debug(
-                    f"  {ticker}: ADX düşük ({adx:.1f}) - Trend yok, sinyal üretme"
-                )
-                return None
+        if not pd.notna(adx):
+            logger.debug(f"  {ticker}: ADX hesaplanamadı (NaN) - sinyal üretme")
+            return None
+        if adx < getattr(settings, "ADX_THRESHOLD", 20):
+            logger.debug(
+                f"  {ticker}: ADX düşük ({adx:.1f}) - Trend yok, sinyal üretme"
+            )
+            return None
 
         regime = detect_regime(df)
         if regime == MarketRegime.SIDEWAYS:
