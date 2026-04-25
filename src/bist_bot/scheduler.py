@@ -1,10 +1,11 @@
 """Market-hours scheduler for the CLI bot runtime."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from time import sleep
 
 from bist_bot.app_logging import get_logger
 from bist_bot.config.settings import settings as default_settings
+from bist_bot.market_calendar import is_bist_holiday, next_bist_session
 from bist_bot.notifier import TR
 
 logger = get_logger(__name__, component="scheduler")
@@ -31,11 +32,13 @@ class MarketScheduler:
             hour = now.hour
             minute = now.minute
 
-            weekday = now.weekday()
-
-            if weekday >= 5:
-                logger.info("scheduler_weekend_idle")
-                sleep(3600)
+            if is_bist_holiday(now.date()):
+                logger.info("scheduler_holiday_idle")
+                next_session = next_bist_session(now)
+                wait_seconds = max(
+                    60, min((next_session - now).total_seconds(), 3600)
+                )
+                sleep(wait_seconds)
                 continue
 
             if hour < self.settings.MARKET_OPEN_HOUR:
@@ -53,7 +56,11 @@ class MarketScheduler:
             if hour >= self.settings.MARKET_CLOSE_HOUR:
                 logger.info("scheduler_market_closed")
                 self.scanner.scan_once()
-                sleep(3600 * 14)
+                next_session = next_bist_session(now)
+                wait_seconds = max(
+                    60, min((next_session - now).total_seconds(), 3600 * 14)
+                )
+                sleep(wait_seconds)
                 continue
 
             if hour == self.settings.MARKET_OPEN_HOUR and minute < warmup_minutes:

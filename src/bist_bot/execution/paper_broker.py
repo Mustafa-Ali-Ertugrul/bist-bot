@@ -14,14 +14,22 @@ from bist_bot.execution.base import (
     Position,
     utc_now,
 )
+from bist_bot.risk.costs import DEFAULT_COSTS, TradingCosts
 
 
 class PaperBroker(BaseExecutionProvider):
     """Simple in-memory broker implementation."""
 
-    def __init__(self, initial_cash: float = 0.0, manual_confirm: bool = False) -> None:
+    def __init__(
+        self,
+        initial_cash: float = 0.0,
+        manual_confirm: bool = False,
+        costs: TradingCosts | None = None,
+    ) -> None:
         self.cash = float(initial_cash)
         self.manual_confirm = manual_confirm
+        self.costs = costs or DEFAULT_COSTS
+        self.cumulative_fees: float = 0.0
         self.positions: dict[str, Position] = {}
         self.orders: dict[str, Order] = {}
 
@@ -145,26 +153,29 @@ class PaperBroker(BaseExecutionProvider):
 
     def _apply_fill(self, order: Order, quantity: float, fill_price: float) -> None:
         ticker = order.ticker
+        notional = quantity * fill_price
         if order.side is OrderSide.BUY:
-            total_cost = quantity * fill_price
-            self.cash -= total_cost
+            fee = self.costs.buy_cost(notional)
+            self.cash -= notional + fee
+            self.cumulative_fees += fee
             position = self.positions.get(ticker)
             if position is None:
-                self.positions[ticker] = Position(ticker=ticker, quantity=quantity, average_price=fill_price, market_value=total_cost)
+                self.positions[ticker] = Position(ticker=ticker, quantity=quantity, average_price=fill_price, market_value=notional)
                 return
 
             combined_qty = position.quantity + quantity
             if combined_qty <= 0:
                 self.positions.pop(ticker, None)
                 return
-            position.average_price = ((position.average_price * position.quantity) + total_cost) / combined_qty
+            position.average_price = ((position.average_price * position.quantity) + notional) / combined_qty
             position.quantity = combined_qty
             position.market_value = combined_qty * position.average_price
             position.updated_at = utc_now()
             return
 
-        proceeds = quantity * fill_price
-        self.cash += proceeds
+        fee = self.costs.sell_cost(notional)
+        self.cash += notional - fee
+        self.cumulative_fees += fee
         position = self.positions.get(ticker)
         if position is None:
             return

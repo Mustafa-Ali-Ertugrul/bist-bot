@@ -280,7 +280,7 @@ class DataSettings:
 @dataclass(frozen=True)
 class DatabaseSettings:
     DATABASE_URL: str = _get_str_env("DATABASE_URL")
-    DB_PATH: str = _get_str_env("DB_PATH", "bist_signals.db")
+    DB_PATH: str = _get_str_env("DB_PATH", "/tmp/bist_signals.db")
 
 
 @dataclass(frozen=True)
