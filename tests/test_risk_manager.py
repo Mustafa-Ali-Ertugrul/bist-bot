@@ -32,7 +32,8 @@ def build_frame(scale: float = 1.0, atr: float = 2.0) -> pd.DataFrame:
 
 
 def test_high_atr_reduces_position_size():
-    manager = RiskManager(capital=10000)
+    manager = RiskManager(capital=100000)
+    manager.max_position_cap_pct = 100.0
     low_vol = manager.calculate(build_frame(1.0, atr=1.0))
     high_vol = manager.calculate(build_frame(1.0, atr=8.0))
 
@@ -41,7 +42,7 @@ def test_high_atr_reduces_position_size():
 
 
 def test_correlation_risk_limit_scales_position_and_matrix():
-    manager = RiskManager(capital=10000)
+    manager = RiskManager(capital=100000)
     existing = build_frame(1.0, atr=2.0)
     candidate = build_frame(1.02, atr=2.0)
 

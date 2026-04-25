@@ -27,7 +27,7 @@ class RiskManager:
     def __init__(
         self,
         capital: float | None = None,
-        max_risk_per_trade_pct: float = 2.0,
+        max_risk_per_trade_pct: float | None = None,
         atr_stop_multiplier: float = 2.0,
         atr_target_multiplier: float = 3.0,
         fixed_stop_pct: float = 5.0,
@@ -72,7 +72,7 @@ class RiskManager:
             getattr(settings, "MAX_SECTOR_CAP_PCT", 20.0)
         )
         self.max_total_risk_pct = float(
-            getattr(settings, "MAX_TOTAL_RISK_PCT", 2.0)
+            max_risk_per_trade_pct if max_risk_per_trade_pct is not None else getattr(settings, "MAX_TOTAL_RISK_PCT", 2.0)
         )
         self.max_risk_pct = self.max_total_risk_pct
         self.kelly_fraction_scale = float(

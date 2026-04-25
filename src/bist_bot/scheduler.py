@@ -5,10 +5,9 @@ from time import sleep
 
 from bist_bot.app_logging import get_logger
 from bist_bot.config.settings import settings as default_settings
-
+from bist_bot.notifier import TR
 
 logger = get_logger(__name__, component="scheduler")
-TR = timezone(timedelta(hours=3))
 
 
 class MarketScheduler:

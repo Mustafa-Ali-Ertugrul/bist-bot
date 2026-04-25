@@ -368,7 +368,7 @@ class DatabaseManager:
                 conn.execute(
                     text(
                         """
-                        INSERT INTO users (email, password_hash, role, created_at, updated_at)
+                        INSERT OR IGNORE INTO users (email, password_hash, role, created_at, updated_at)
                         VALUES (:email, :password_hash, 'admin', :created_at, :updated_at)
                         """
                     ),
