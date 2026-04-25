@@ -1,6 +1,6 @@
 """Market-hours scheduler for the CLI bot runtime."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from time import sleep
 
 from bist_bot.app_logging import get_logger
@@ -87,9 +87,7 @@ class MarketScheduler:
                     sleep(backoff)
                     try:
                         self.scanner.scan_once()
-                        logger.info(
-                            "scheduler_scan_retry_succeeded", attempt=attempt
-                        )
+                        logger.info("scheduler_scan_retry_succeeded", attempt=attempt)
                         break
                     except Exception as retry_exc:
                         logger.error(
