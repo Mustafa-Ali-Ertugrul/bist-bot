@@ -1,19 +1,23 @@
 """Market data fetching helpers for BIST symbols."""
 
+# Standard library imports
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 import time
 from typing import Any, cast
 
+# Third-party imports
 import pandas as pd
 
+# Local application imports
 from bist_bot.app_metrics import inc_counter, set_gauge
 from bist_bot.app_logging import get_logger
 from bist_bot.config.settings import settings
 from bist_bot.data.bist100 import BIST100_TICKERS
 from bist_bot.data import helpers as fetch_helpers
 from bist_bot.data import quotes as fetch_quotes
+from bist_bot.data.schemas import validate_dataframe
 from bist_bot.data.providers import (
     BorsaIstanbulQuoteProvider,
     MarketDataProvider,
@@ -207,47 +211,23 @@ class BISTDataFetcher:
         return None
 
     def _normalize_history(
-        self, ticker: str, df: pd.DataFrame | None
+        self, ticker: str, df: pd.DataFrame | None, validate: bool = True
     ) -> pd.DataFrame | None:
         """Normalize downloaded price history into the expected schema.
 
         Args:
             ticker: Stock symbol.
             df: Raw dataframe returned by the data source.
+            validate: Ensure clean dataframe schema.
 
         Returns:
             Cleaned dataframe or ``None`` when the payload is unusable.
         """
-        if df is None or df.empty:
-            logger.warning("no_data_for_ticker", ticker=ticker)
+        valid_df = validate_dataframe(df, validate=validate)
+        if valid_df is None or valid_df.empty:
+            logger.warning("invalid_data_schema", ticker=ticker)
             return None
-
-        normalized = cast(pd.DataFrame, df.copy())
-        normalized.columns = [str(col).lower() for col in normalized.columns]
-
-        cols_to_keep = ["open", "high", "low", "close", "volume"]
-        normalized = cast(
-            pd.DataFrame,
-            normalized[[c for c in cols_to_keep if c in normalized.columns]],
-        )
-
-        if normalized.empty:
-            logger.warning("no_price_columns", ticker=ticker)
-            return None
-
-        normalized.index = pd.DatetimeIndex(
-            pd.to_datetime(normalized.index)
-        ).tz_localize(None)
-
-        if bool(normalized.isnull().to_numpy().sum()):
-            normalized = cast(pd.DataFrame, normalized.dropna())
-            logger.info("nan_rows_dropped", ticker=ticker)
-
-        if normalized.empty:
-            logger.warning("empty_after_cleanup", ticker=ticker)
-            return None
-
-        return cast(pd.DataFrame, normalized)
+        return valid_df
 
     def _store_cache(
         self, ticker: str, period: str, interval: str, df: pd.DataFrame
@@ -293,6 +273,7 @@ class BISTDataFetcher:
         period: str | None = None,
         interval: str | None = None,
         force: bool = False,
+        validate: bool = True,
     ) -> pd.DataFrame | None:
         """Fetch price history for a single ticker.
 
@@ -301,6 +282,7 @@ class BISTDataFetcher:
             period: Data source lookback period.
             interval: Candle interval.
             force: Ignore cache when ``True``.
+            validate: Ensure clean dataframe schema.
 
         Returns:
             Normalized price dataframe or ``None`` on failure.
@@ -333,7 +315,7 @@ class BISTDataFetcher:
                 period=period,
                 interval=interval,
             )
-            df = self._normalize_history(normalized_ticker, raw_df)
+            df = self._normalize_history(normalized_ticker, raw_df, validate=validate)
             if df is None:
                 return None
 
@@ -360,12 +342,15 @@ class BISTDataFetcher:
         period: str | None = None,
         interval: str | None = None,
         force: bool = False,
+        validate: bool = True,
     ) -> dict[str, pd.DataFrame]:
         """Fetch price history for the entire watchlist.
 
         Args:
             period: Data source lookback period.
             interval: Candle interval.
+            force: Ignore cache when ``True``.
+            validate: Ensure clean dataframe schema.
 
         Returns:
             Mapping of ticker symbols to normalized dataframes.
@@ -411,7 +396,7 @@ class BISTDataFetcher:
                     for ticker in missing_tickers:
                         ticker_frame = raw_batch.get(ticker)
 
-                        df = self._normalize_history(ticker, ticker_frame)
+                        df = self._normalize_history(ticker, ticker_frame, validate=validate)
                         if df is None:
                             unresolved.append(ticker)
                             continue
@@ -451,7 +436,7 @@ class BISTDataFetcher:
                 ) as executor:
                     future_map = {
                         executor.submit(
-                            self.fetch_single, ticker, period, interval, True
+                            self.fetch_single, ticker, period, interval, True, validate
                         ): ticker
                         for ticker in unresolved
                     }
@@ -629,6 +614,7 @@ class BISTDataFetcher:
         trigger_period: str | None = None,
         trigger_interval: str | None = None,
         force_refresh: bool = False,
+        validate: bool = True,
     ) -> dict[str, dict[str, pd.DataFrame]]:
         trend_period = trend_period or getattr(settings, "MTF_TREND_PERIOD", "6mo")
         trend_interval = trend_interval or getattr(settings, "MTF_TREND_INTERVAL", "1d")
@@ -640,10 +626,10 @@ class BISTDataFetcher:
         )
 
         trend_data = self.fetch_all(
-            period=trend_period, interval=trend_interval, force=force_refresh
+            period=trend_period, interval=trend_interval, force=force_refresh, validate=validate
         )
         trigger_data = self.fetch_all(
-            period=trigger_period, interval=trigger_interval, force=force_refresh
+            period=trigger_period, interval=trigger_interval, force=force_refresh, validate=validate
         )
 
         combined: dict[str, dict[str, pd.DataFrame]] = {}

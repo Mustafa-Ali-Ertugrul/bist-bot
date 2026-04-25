@@ -1,0 +1,23 @@
+# Default Risk Profile for BIST Bot
+# -----------------------------------
+# Edit this file to tune risk parameters without touching any Python code.
+# All percentage values are given as floats (e.g. 2.0 means %2).
+
+# ── Position Sizing ──────────────────────────────────────────────────────────
+max_risk_pct: 2.0              # Max % of capital risked per trade
+max_position_cap_pct: 5.0     # Max single position size as % of total capital
+max_sector_cap_pct: 20.0      # Max total exposure in a single sector (%)
+
+# ── Stop-Loss & Target ───────────────────────────────────────────────────────
+default_stop_loss_pct: 3.0    # Default stop-loss distance from entry (%)
+default_target_ratio: 2.0     # Risk-reward ratio (target distance = stop * ratio)
+atr_stop_multiplier: 2.0      # ATR multiplier when computing volatility-based stop
+
+# ── Circuit Breaker ──────────────────────────────────────────────────────────
+max_daily_loss_pct: 3.0       # Halt trading if daily P&L drops below this (%)
+max_consecutive_losses: 3     # Halt after this many consecutive losing trades
+
+# ── Transaction Costs ────────────────────────────────────────────────────────
+slippage_pct: 0.1             # Expected slippage (market impact) per trade (%)
+commission_pct: 0.1           # Brokerage commission per trade (%)
+bsmv_pct: 0.1                 # BSMV (Banka ve Sigorta Muameleleri Vergisi) (%)

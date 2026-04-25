@@ -1,0 +1,333 @@
+﻿ruff : warning: Encountered
+ error: Eri┼ƒim engellendi.
+ (os error 5)
+At line:1 char:1
++ ruff check . 2>&1 | Out-F
+ile -Encoding utf8 ruff_err
+.txt
++ ~~~~~~~~~~~~~~~~~
+    + CategoryInfo         
+     : NotSpecified: (war  
+  ning: Encoun...i. (os    
+ error 5):String) [], R    
+emoteException
+    + FullyQualifiedErrorI 
+   d : NativeCommandError
+ 
+warning: Encountered error:
+ Eri┼ƒim engellendi. (os er
+ror 5)
+warning: Encountered error:
+ Eri┼ƒim engellendi. (os er
+ror 5)
+F401 `bist_bot.backtest.models.AblationComparison` imported but unused; consider removing, adding to `__all__`, or using a redundant alias
+ --> src\bist_bot\backtest\__init__.py:2:5
+  |
+1 | from bist_bot.backtest.models import (
+2 |     AblationComparison,
+  |     ^^^^^^^^^^^^^^^^^^
+3 |     BacktestAblationResult,
+4 |     BacktestMode,
+  |
+help: Use an explicit re-export: `AblationComparison as AblationComparison`
+
+F401 `bist_bot.backtest.models.BacktestAblationResult` imported but unused; consider removing, adding to `__all__`, or using a redundant alias
+ --> src\bist_bot\backtest\__init__.py:3:5
+  |
+1 | from bist_bot.backtest.models import (
+2 |     AblationComparison,
+3 |     BacktestAblationResult,
+  |     ^^^^^^^^^^^^^^^^^^^^^^
+4 |     BacktestMode,
+5 |     BacktestResult,
+  |
+help: Use an explicit re-export: `BacktestAblationResult as BacktestAblationResult`
+
+F401 `bist_bot.backtest.models.BacktestMode` imported but unused; consider removing, adding to `__all__`, or using a redundant alias
+ --> src\bist_bot\backtest\__init__.py:4:5
+  |
+2 |     AblationComparison,
+3 |     BacktestAblationResult,
+4 |     BacktestMode,
+  |     ^^^^^^^^^^^^
+5 |     BacktestResult,
+6 |     BacktestTrade,
+  |
+help: Use an explicit re-export: `BacktestMode as BacktestMode`
+
+F401 `bist_bot.backtest.models.BacktestResult` imported but unused; consider removing, adding to `__all__`, or using a redundant alias
+ --> src\bist_bot\backtest\__init__.py:5:5
+  |
+3 |     BacktestAblationResult,
+4 |     BacktestMode,
+5 |     BacktestResult,
+  |     ^^^^^^^^^^^^^^
+6 |     BacktestTrade,
+7 |     CostBreakdown,
+  |
+help: Use an explicit re-export: `BacktestResult as BacktestResult`
+
+F401 `bist_bot.backtest.models.BacktestTrade` imported but unused; consider removing, adding to `__all__`, or using a redundant alias
+ --> src\bist_bot\backtest\__init__.py:6:5
+  |
+4 |     BacktestMode,
+5 |     BacktestResult,
+6 |     BacktestTrade,
+  |     ^^^^^^^^^^^^^
+7 |     CostBreakdown,
+8 |     CostModel,
+  |
+help: Use an explicit re-export: `BacktestTrade as BacktestTrade`
+
+F401 `bist_bot.backtest.models.CostBreakdown` imported but unused; consider removing, adding to `__all__`, or using a redundant alias
+ --> src\bist_bot\backtest\__init__.py:7:5
+  |
+5 |     BacktestResult,
+6 |     BacktestTrade,
+7 |     CostBreakdown,
+  |     ^^^^^^^^^^^^^
+8 |     CostModel,
+9 |     IntrabarExit,
+  |
+help: Use an explicit re-export: `CostBreakdown as CostBreakdown`
+
+F401 `bist_bot.backtest.models.CostModel` imported but unused; consider removing, adding to `__all__`, or using a redundant alias
+  --> src\bist_bot\backtest\__init__.py:8:5
+   |
+ 6 |     BacktestTrade,
+ 7 |     CostBreakdown,
+ 8 |     CostModel,
+   |     ^^^^^^^^^
+ 9 |     IntrabarExit,
+10 |     SignalBuilder,
+   |
+help: Use an explicit re-export: `CostModel as CostModel`
+
+F401 `bist_bot.backtest.models.IntrabarExit` imported but unused; consider removing, adding to `__all__`, or using a redundant alias
+  --> src\bist_bot\backtest\__init__.py:9:5
+   |
+ 7 |     CostBreakdown,
+ 8 |     CostModel,
+ 9 |     IntrabarExit,
+   |     ^^^^^^^^^^^^
+10 |     SignalBuilder,
+11 |     VectorizedSignals,
+   |
+help: Use an explicit re-export: `IntrabarExit as IntrabarExit`
+
+F401 `bist_bot.backtest.models.SignalBuilder` imported but unused; consider removing, adding to `__all__`, or using a redundant alias
+  --> src\bist_bot\backtest\__init__.py:10:5
+   |
+ 8 |     CostModel,
+ 9 |     IntrabarExit,
+10 |     SignalBuilder,
+   |     ^^^^^^^^^^^^^
+11 |     VectorizedSignals,
+12 |     WalkForwardResult,
+   |
+help: Use an explicit re-export: `SignalBuilder as SignalBuilder`
+
+F401 `bist_bot.backtest.models.VectorizedSignals` imported but unused; consider removing, adding to `__all__`, or using a redundant alias
+  --> src\bist_bot\backtest\__init__.py:11:5
+   |
+ 9 |     IntrabarExit,
+10 |     SignalBuilder,
+11 |     VectorizedSignals,
+   |     ^^^^^^^^^^^^^^^^^
+12 |     WalkForwardResult,
+13 |     WalkForwardWindowResult,
+   |
+help: Use an explicit re-export: `VectorizedSignals as VectorizedSignals`
+
+F401 `bist_bot.backtest.models.WalkForwardResult` imported but unused; consider removing, adding to `__all__`, or using a redundant alias
+  --> src\bist_bot\backtest\__init__.py:12:5
+   |
+10 |     SignalBuilder,
+11 |     VectorizedSignals,
+12 |     WalkForwardResult,
+   |     ^^^^^^^^^^^^^^^^^
+13 |     WalkForwardWindowResult,
+14 |     WindowMode,
+   |
+help: Use an explicit re-export: `WalkForwardResult as WalkForwardResult`
+
+F401 `bist_bot.backtest.models.WalkForwardWindowResult` imported but unused; consider removing, adding to `__all__`, or using a redundant alias
+  --> src\bist_bot\backtest\__init__.py:13:5
+   |
+11 |     VectorizedSignals,
+12 |     WalkForwardResult,
+13 |     WalkForwardWindowResult,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^
+14 |     WindowMode,
+15 |     _build_cost_breakdown,
+   |
+help: Use an explicit re-export: `WalkForwardWindowResult as WalkForwardWindowResult`
+
+F401 `bist_bot.backtest.models.WindowMode` imported but unused; consider removing, adding to `__all__`, or using a redundant alias
+  --> src\bist_bot\backtest\__init__.py:14:5
+   |
+12 |     WalkForwardResult,
+13 |     WalkForwardWindowResult,
+14 |     WindowMode,
+   |     ^^^^^^^^^^
+15 |     _build_cost_breakdown,
+16 |     _calculate_cagr,
+   |
+help: Use an explicit re-export: `WindowMode as WindowMode`
+
+F401 `bist_bot.backtest.models._build_cost_breakdown` imported but unused; consider removing, adding to `__all__`, or using a redundant alias
+  --> src\bist_bot\backtest\__init__.py:15:5
+   |
+13 |     WalkForwardWindowResult,
+14 |     WindowMode,
+15 |     _build_cost_breakdown,
+   |     ^^^^^^^^^^^^^^^^^^^^^
+16 |     _calculate_cagr,
+17 |     _longest_loss_streak,
+   |
+help: Use an explicit re-export: `_build_cost_breakdown as _build_cost_breakdown`
+
+F401 `bist_bot.backtest.models._calculate_cagr` imported but unused; consider removing, adding to `__all__`, or using a redundant alias
+  --> src\bist_bot\backtest\__init__.py:16:5
+   |
+14 |     WindowMode,
+15 |     _build_cost_breakdown,
+16 |     _calculate_cagr,
+   |     ^^^^^^^^^^^^^^^
+17 |     _longest_loss_streak,
+18 |     _probability_diagnostics,
+   |
+help: Use an explicit re-export: `_calculate_cagr as _calculate_cagr`
+
+F401 `bist_bot.backtest.models._longest_loss_streak` imported but unused; consider removing, adding to `__all__`, or using a redundant alias
+  --> src\bist_bot\backtest\__init__.py:17:5
+   |
+15 |     _build_cost_breakdown,
+16 |     _calculate_cagr,
+17 |     _longest_loss_streak,
+   |     ^^^^^^^^^^^^^^^^^^^^
+18 |     _probability_diagnostics,
+19 |     _summarize_trades_and_equity,
+   |
+help: Use an explicit re-export: `_longest_loss_streak as _longest_loss_streak`
+
+F401 `bist_bot.backtest.models._probability_diagnostics` imported but unused; consider removing, adding to `__all__`, or using a redundant alias
+  --> src\bist_bot\backtest\__init__.py:18:5
+   |
+16 |     _calculate_cagr,
+17 |     _longest_loss_streak,
+18 |     _probability_diagnostics,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^
+19 |     _summarize_trades_and_equity,
+20 |     _to_datetime,
+   |
+help: Use an explicit re-export: `_probability_diagnostics as _probability_diagnostics`
+
+F401 `bist_bot.backtest.models._summarize_trades_and_equity` imported but unused; consider removing, adding to `__all__`, or using a redundant alias
+  --> src\bist_bot\backtest\__init__.py:19:5
+   |
+17 |     _longest_loss_streak,
+18 |     _probability_diagnostics,
+19 |     _summarize_trades_and_equity,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+20 |     _to_datetime,
+21 |     _to_float,
+   |
+help: Use an explicit re-export: `_summarize_trades_and_equity as _summarize_trades_and_equity`
+
+F401 `bist_bot.backtest.models._to_datetime` imported but unused; consider removing, adding to `__all__`, or using a redundant alias
+  --> src\bist_bot\backtest\__init__.py:20:5
+   |
+18 |     _probability_diagnostics,
+19 |     _summarize_trades_and_equity,
+20 |     _to_datetime,
+   |     ^^^^^^^^^^^^
+21 |     _to_float,
+22 | )
+   |
+help: Use an explicit re-export: `_to_datetime as _to_datetime`
+
+F401 `bist_bot.backtest.models._to_float` imported but unused; consider removing, adding to `__all__`, or using a redundant alias
+  --> src\bist_bot\backtest\__init__.py:21:5
+   |
+19 |     _summarize_trades_and_equity,
+20 |     _to_datetime,
+21 |     _to_float,
+   |     ^^^^^^^^^
+22 | )
+23 | from bist_bot.backtest.engine import Backtester
+   |
+help: Use an explicit re-export: `_to_float as _to_float`
+
+F401 `bist_bot.backtest.engine.Backtester` imported but unused; consider removing, adding to `__all__`, or using a redundant alias
+  --> src\bist_bot\backtest\__init__.py:23:38
+   |
+21 |     _to_float,
+22 | )
+23 | from bist_bot.backtest.engine import Backtester
+   |                                      ^^^^^^^^^^
+24 | from bist_bot.backtest.strategy import StrategyBacktester
+25 | from bist_bot.backtest.walkforward import WalkForwardValidator
+   |
+help: Use an explicit re-export: `Backtester as Backtester`
+
+F401 `bist_bot.backtest.strategy.StrategyBacktester` imported but unused; consider removing, adding to `__all__`, or using a redundant alias
+  --> src\bist_bot\backtest\__init__.py:24:40
+   |
+22 | )
+23 | from bist_bot.backtest.engine import Backtester
+24 | from bist_bot.backtest.strategy import StrategyBacktester
+   |                                        ^^^^^^^^^^^^^^^^^^
+25 | from bist_bot.backtest.walkforward import WalkForwardValidator
+26 | from bist_bot.backtest.report import (
+   |
+help: Use an explicit re-export: `StrategyBacktester as StrategyBacktester`
+
+F401 `bist_bot.backtest.walkforward.WalkForwardValidator` imported but unused; consider removing, adding to `__all__`, or using a redundant alias
+  --> src\bist_bot\backtest\__init__.py:25:43
+   |
+23 | from bist_bot.backtest.engine import Backtester
+24 | from bist_bot.backtest.strategy import StrategyBacktester
+25 | from bist_bot.backtest.walkforward import WalkForwardValidator
+   |                                           ^^^^^^^^^^^^^^^^^^^^
+26 | from bist_bot.backtest.report import (
+27 |     calculate_metrics,
+   |
+help: Use an explicit re-export: `WalkForwardValidator as WalkForwardValidator`
+
+F401 `bist_bot.backtest.report.calculate_metrics` imported but unused; consider removing, adding to `__all__`, or using a redundant alias
+  --> src\bist_bot\backtest\__init__.py:27:5
+   |
+25 | from bist_bot.backtest.walkforward import WalkForwardValidator
+26 | from bist_bot.backtest.report import (
+27 |     calculate_metrics,
+   |     ^^^^^^^^^^^^^^^^^
+28 |     compare_benchmark,
+29 |     generate_report,
+   |
+help: Use an explicit re-export: `calculate_metrics as calculate_metrics`
+
+F401 `bist_bot.backtest.report.compare_benchmark` imported but unused; consider removing, adding to `__all__`, or using a redundant alias
+  --> src\bist_bot\backtest\__init__.py:28:5
+   |
+26 | from bist_bot.backtest.report import (
+27 |     calculate_metrics,
+28 |     compare_benchmark,
+   |     ^^^^^^^^^^^^^^^^^
+29 |     generate_report,
+30 | )
+   |
+help: Use an explicit re-export: `compare_benchmark as compare_benchmark`
+
+F401 `bist_bot.backtest.report.generate_report` imported but unused; consider removing, adding to `__all__`, or using a redundant alias
+  --> src\bist_bot\backtest\__init__.py:29:5
+   |
+27 |     calculate_metrics,
+28 |     compare_benchmark,
+29 |     generate_report,
+   |     ^^^^^^^^^^^^^^^
+30 | )
+   |
+help: Use an explicit re-export: `generate_report as generate_report`
+
+Found 26 errors.

@@ -5,6 +5,8 @@ from typing import Any, Optional, cast
 
 import pandas as pd
 
+from bist_bot.strategy.base import BaseStrategy
+
 from bist_bot.app_logging import get_logger
 from bist_bot.config.settings import settings
 from bist_bot.indicators import TechnicalIndicators
@@ -63,6 +65,8 @@ class StrategyEngine:
         self.STRONG_SELL_THRESHOLD = self.params.strong_sell_threshold
         self.SIDEWAYS_EXTRA_THRESHOLD = self.params.sideways_extra_threshold
         self.MOMENTUM_CONFIRMATION = self.params.momentum_confirmation_threshold
+        # Plugin registry — external strategies can be added at runtime
+        self._strategies: list[BaseStrategy] = []
 
     def _extract_timeframes(
         self, market_data: pd.DataFrame | dict[str, pd.DataFrame]
@@ -329,3 +333,95 @@ class StrategyEngine:
     def get_actionable_signals(self, signals: list[Signal]) -> list[Signal]:
         """Filter out hold signals from the signal list."""
         return [s for s in signals if s.signal_type != SignalType.HOLD]
+
+    # ------------------------------------------------------------------
+    # Plugin registry API
+    # ------------------------------------------------------------------
+
+    def register_strategy(self, strategy: BaseStrategy) -> None:
+        """Register an external strategy plugin.
+
+        The strategy will be invoked alongside the built-in engine logic when
+        ``scan_with_plugins`` is called.
+
+        Args:
+            strategy: Any object implementing ``BaseStrategy``.
+        """
+        self._strategies.append(strategy)
+        logger.info("strategy_registered", strategy_name=strategy.name)
+
+    def unregister_strategy(self, name: str) -> bool:
+        """Remove a registered strategy by name.
+
+        Args:
+            name: The ``strategy.name`` to remove.
+
+        Returns:
+            True if the strategy was found and removed, False otherwise.
+        """
+        before = len(self._strategies)
+        self._strategies = [s for s in self._strategies if s.name != name]
+        removed = len(self._strategies) < before
+        if removed:
+            logger.info("strategy_unregistered", strategy_name=name)
+        return removed
+
+    def scan_with_plugins(
+        self,
+        data: dict[str, pd.DataFrame] | dict[str, dict[str, pd.DataFrame]],
+    ) -> list[Signal]:
+        """Run all registered plugin strategies against the full dataset.
+
+        Falls back to the built-in ``scan_all`` when no plugins are registered.
+        Plugin signals are merged with built-in signals and de-duplicated by
+        (ticker, signal_type) keeping the highest-score entry.
+
+        Args:
+            data: Mapping of ticker → OHLCV DataFrame (or multi-timeframe dict).
+
+        Returns:
+            Deduplicated, sorted list of signals from all strategies.
+        """
+        # Always run the built-in engine first.
+        builtin_signals = self.scan_all(data)
+
+        if not self._strategies:
+            return builtin_signals
+
+        plugin_signals: list[Signal] = []
+        for ticker, df in data.items():
+            for strategy in self._strategies:
+                try:
+                    sig = strategy.analyze(ticker, df)
+                    if sig is not None:
+                        plugin_signals.append(sig)
+                        logger.info(
+                            "plugin_signal_generated",
+                            strategy=strategy.name,
+                            ticker=ticker,
+                            score=sig.score,
+                        )
+                except Exception as exc:
+                    logger.error(
+                        "plugin_strategy_error",
+                        strategy=strategy.name,
+                        ticker=ticker,
+                        error_type=type(exc).__name__,
+                    )
+
+        # Merge: prefer higher score per (ticker, signal_type)
+        all_signals = builtin_signals + plugin_signals
+        seen: dict[tuple[str, str], Signal] = {}
+        for sig in all_signals:
+            key = (sig.ticker, sig.signal_type.name)
+            if key not in seen or sig.score > seen[key].score:
+                seen[key] = sig
+
+        merged = sorted(seen.values(), key=lambda s: s.score, reverse=True)
+        logger.info(
+            "scan_with_plugins_finished",
+            builtin_count=len(builtin_signals),
+            plugin_count=len(plugin_signals),
+            merged_count=len(merged),
+        )
+        return merged

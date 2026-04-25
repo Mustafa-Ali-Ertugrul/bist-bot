@@ -22,7 +22,11 @@ spec:
             - name: DB_PATH
               value: "/tmp/bist_signals.db"
             - name: JWT_SECRET_KEY
-              value: "REPLACE_WITH_LONG_RANDOM_SECRET"
+              # WARNING: Do not hardcode secret values in this file!
+              # In Cloud Run, JWT_SECRET_KEY must be configured as:
+              # 1. A secret mounted to the container (using Cloud Run Secret Manager), OR
+              # 2. An environment variable set in the Cloud Run service configuration
+              # For local development, set JWT_SECRET_KEY via environment variable or .env file
             - name: RATE_LIMIT_STORAGE_URI
               value: "memory://"
             - name: CORS_ORIGINS
