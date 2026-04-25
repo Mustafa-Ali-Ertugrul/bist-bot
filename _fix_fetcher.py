@@ -1,8 +1,11 @@
-"""Apply data_fetcher.py fixes using precise line numbers (0-indexed)."""
+"""Apply fetcher.py fixes using precise line numbers (0-indexed)."""
 
 import ast
+from pathlib import Path
 
-with open("data_fetcher.py", encoding="utf-8") as f:
+FETCHER_PATH = Path("src/bist_bot/data/fetcher.py")
+
+with FETCHER_PATH.open(encoding="utf-8") as f:
     lines = f.readlines()
 
 inserts = {}
@@ -65,9 +68,7 @@ for i, line in enumerate(lines):
     if i in inserts:
         result.extend(inserts[i])
 
-with open("data_fetcher.py", "w", encoding="utf-8", newline="") as f:
-    f.writelines(result)
+FETCHER_PATH.write_text("".join(result), encoding="utf-8", newline="")
 
-with open("data_fetcher.py", encoding="utf-8") as f:
-    ast.parse(f.read())
-print("OK - all changes applied and syntax verified")
+ast.parse(FETCHER_PATH.read_text(encoding="utf-8"))
+print(f"OK - all changes applied to {FETCHER_PATH} and syntax verified")
