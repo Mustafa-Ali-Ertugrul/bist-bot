@@ -1,4 +1,7 @@
 """Apply data_fetcher.py fixes using precise line numbers (0-indexed)."""
+
+import ast
+
 with open("data_fetcher.py", encoding="utf-8") as f:
     lines = f.readlines()
 
@@ -16,7 +19,7 @@ inserts.setdefault(128, []).append('                outcomes[ticker] = "skipped"
 inserts.setdefault(162, []).extend([
     "            if ticker_frame is None:\n",
     "                outcomes[ticker] = \"batch_missing\"\n",
-    "                logger.warning(f\"\u26a0\ufe0f {ticker}: batch verisinde bulunamad\u0131\")\n",
+    "                logger.warning(f\"⚠️ {ticker}: batch verisinde bulunamadı\")\n",
     "                unresolved.append(ticker)\n",
     "                continue\n",
     "\n",
@@ -65,7 +68,6 @@ for i, line in enumerate(lines):
 with open("data_fetcher.py", "w", encoding="utf-8", newline="") as f:
     f.writelines(result)
 
-import ast
 with open("data_fetcher.py", encoding="utf-8") as f:
     ast.parse(f.read())
 print("OK - all changes applied and syntax verified")
