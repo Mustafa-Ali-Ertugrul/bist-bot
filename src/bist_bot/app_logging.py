@@ -16,6 +16,7 @@ except ImportError:  # pragma: no cover - optional dependency
     _structlog = None
 
 from bist_bot.config.settings import settings
+from bist_bot.exceptions import DataFetchError, SignalProcessingError, OrderExecutionError
 
 
 _DEFAULT_COMPONENT = "app"
@@ -61,7 +62,17 @@ def configure_logging(
         handlers.append(logging.FileHandler(log_file))
     else:
         handlers.append(logging.StreamHandler(target))
-    formatter = logging.Formatter(fmt or "%(message)s")
+    if _json_enabled():
+        # JSON formatter using python-json-logger
+        try:
+            from pythonjsonlogger import jsonlogger
+            formatter = jsonlogger.JsonFormatter(
+                fmt or "%(asctime)s %(levelname)s %(name)s %(component)s %(message)s"
+            )
+        except ImportError:
+            formatter = logging.Formatter(fmt or "%(message)s")
+    else:
+        formatter = logging.Formatter(fmt or "%(message)s")
     for h in handlers:
         h.setFormatter(formatter)
     root = logging.getLogger()
