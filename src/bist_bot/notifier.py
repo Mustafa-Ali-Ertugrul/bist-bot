@@ -1,15 +1,16 @@
-import requests
-from bist_bot.app_logging import get_logger
+import logging
 import time
-from datetime import datetime, timezone, timedelta
-from typing import Callable
+from collections.abc import Callable
+from datetime import datetime, timedelta, timezone
+
+import requests
 
 from bist_bot.config.settings import settings
 from bist_bot.strategy.signal_models import Signal, SignalType
 
 TR = timezone(timedelta(hours=3))
 
-logger = get_logger(__name__, component="notifier")
+logger = logging.getLogger(__name__)
 
 
 def send_telegram_with_retry(
@@ -71,13 +72,14 @@ class TelegramNotifier:
 
         if not self.enabled:
             logger.warning(
-                "telegram_not_configured",
-                detail="Telegram ayarlanmamış. .env dosyasına TELEGRAM_BOT_TOKEN ve TELEGRAM_CHAT_ID ekle.",
+                "⚠️  Telegram ayarlanmamış. "
+                ".env dosyasına TELEGRAM_BOT_TOKEN ve "
+                "TELEGRAM_CHAT_ID ekle."
             )
 
     def send_message(self, text: str, parse_mode: str = "HTML") -> bool:
         if not self.enabled:
-            logger.info("telegram_disabled", preview=text[:80])
+            logger.info(f"[TELEGRAM DEVRE DIŞI] {text[:80]}...")
             return False
 
         try:
@@ -90,12 +92,12 @@ class TelegramNotifier:
                 retry_delay=getattr(settings, "NOTIFICATION_RETRY_DELAY", 5),
             )
             if sent:
-                logger.info("telegram_message_sent", preview=text[:80])
+                logger.info("📨 Telegram mesajı gönderildi")
                 return True
             return False
 
         except requests.exceptions.RequestException as e:
-            logger.error("telegram_error", error=str(e))
+            logger.error(f"❌ Telegram hatası: {e}")
             return False
 
     def send_signal(self, signal: Signal) -> bool:
@@ -186,9 +188,7 @@ class TelegramNotifier:
 """
         return self.send_message(message.strip())
 
-    def send_signal_change(
-        self, ticker: str, old_signal: Signal, new_signal: Signal
-    ) -> bool:
+    def send_signal_change(self, ticker: str, old_signal: Signal, new_signal: Signal) -> bool:
         name = settings.TICKER_NAMES.get(ticker, ticker)
 
         emoji_map = {
@@ -204,9 +204,7 @@ class TelegramNotifier:
         old_emoji = emoji_map.get(old_signal.signal_type, "📊")
         new_emoji = emoji_map.get(new_signal.signal_type, "📊")
 
-        direction = (
-            "⬆️ YÜKSELİYOR" if new_signal.score > old_signal.score else "⬇️ DÜŞÜYOR"
-        )
+        direction = "⬆️ YÜKSELİYOR" if new_signal.score > old_signal.score else "⬇️ DÜŞÜYOR"
 
         message = f"""
 🔔 <b>SİNYAL DEĞİŞİKLİĞİ!</b>
