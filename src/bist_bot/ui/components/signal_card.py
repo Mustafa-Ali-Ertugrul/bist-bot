@@ -19,12 +19,8 @@ def _accent(score: float) -> tuple[str, str, str]:
 def render_signal_card(signal, df_data=None, chart_factory=None) -> None:
     ticker = getattr(signal, "ticker", "")
     short_name = ticker.replace(".IS", "")
-    badge_class, accent_color, panel_accent = _accent(
-        float(getattr(signal, "score", 0))
-    )
-    confidence = str(getattr(signal, "confidence", "CACHE") or "CACHE").replace(
-        "confidence.", ""
-    )
+    badge_class, accent_color, panel_accent = _accent(float(getattr(signal, "score", 0)))
+    confidence = str(getattr(signal, "confidence", "CACHE") or "CACHE").replace("confidence.", "")
     reasons = [html.escape(str(item)) for item in getattr(signal, "reasons", [])[:4]]
     reasons_html = "".join(
         f"<div class='bb-list-row'><div class='bb-list-row-subtitle'>{reason}</div></div>"

@@ -89,10 +89,7 @@ def test_load_settings_merges_persisted_ui_preferences(tmp_path, monkeypatch):
         == config_store.DEFAULT_SETTINGS["indicator"]["adx_threshold"]
     )
     assert loaded["scan"]["refresh_interval"] == 15
-    assert (
-        loaded["telegram"]["enabled"]
-        == config_store.DEFAULT_SETTINGS["telegram"]["enabled"]
-    )
+    assert loaded["telegram"]["enabled"] == config_store.DEFAULT_SETTINGS["telegram"]["enabled"]
 
 
 def test_reset_settings_removes_persisted_file(tmp_path, monkeypatch):

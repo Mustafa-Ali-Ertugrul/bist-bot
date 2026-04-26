@@ -23,9 +23,7 @@ def calc_atr_levels(
     return levels
 
 
-def calc_support_resistance(
-    df: pd.DataFrame, price: float, levels: RiskLevels
-) -> RiskLevels:
+def calc_support_resistance(df: pd.DataFrame, price: float, levels: RiskLevels) -> RiskLevels:
     supports: list[float] = []
     resistances: list[float] = []
     for window in [10, 20, 50]:
@@ -129,20 +127,14 @@ def determine_final_levels(price: float, levels: RiskLevels) -> RiskLevels:
         key: value for key, value in all_stops.items() if value > 0 and value < price
     }
     reasonable_stops: dict[str, float] = {
-        key: value
-        for key, value in valid_stops.items()
-        if (price - value) / price > 0.01
+        key: value for key, value in valid_stops.items() if (price - value) / price > 0.01
     }
     reasonable_stops = {
-        key: value
-        for key, value in reasonable_stops.items()
-        if (price - value) / price < 0.10
+        key: value for key, value in reasonable_stops.items() if (price - value) / price < 0.10
     }
 
     if reasonable_stops:
-        best_stop_method = max(
-            reasonable_stops, key=lambda method: reasonable_stops[method]
-        )
+        best_stop_method = max(reasonable_stops, key=lambda method: reasonable_stops[method])
         levels.final_stop = reasonable_stops[best_stop_method]
         stop_method = best_stop_method
     elif valid_stops:
@@ -164,9 +156,7 @@ def determine_final_levels(price: float, levels: RiskLevels) -> RiskLevels:
         key: value for key, value in all_targets.items() if value > price
     }
     reasonable_targets: dict[str, float] = {
-        key: value
-        for key, value in valid_targets.items()
-        if (value - price) / price > 0.02
+        key: value for key, value in valid_targets.items() if (value - price) / price > 0.02
     }
 
     target_priority = ["Direnç", "ATR", "Fibonacci", "Swing", "Yüzdelik"]

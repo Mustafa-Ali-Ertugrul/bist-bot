@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-from contextlib import contextmanager
-from datetime import UTC, datetime
-from pathlib import Path
 import random
 import re
 import threading
 import time
-from typing import Any, Callable, Iterator, Optional, TypeVar
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any, TypeVar
 
 from sqlalchemy import (
     DateTime,
@@ -19,7 +20,7 @@ from sqlalchemy import (
     event,
     text,
 )
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import (
     DeclarativeBase,
     Mapped,
@@ -38,10 +39,8 @@ class Base(DeclarativeBase):
 
 
 def _validate_table_name(name: str) -> str:
-    if not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', name):
-        raise ValueError(
-            f'Invalid SQL table name configured for PAPER_TRADES_TABLE: {name!r}'
-        )
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
+        raise ValueError(f"Invalid SQL table name configured for PAPER_TRADES_TABLE: {name!r}")
     return name
 
 
@@ -56,15 +55,15 @@ class SignalRecord(Base):
     signal_type: Mapped[str] = mapped_column(String, nullable=False)
     score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     price: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
-    stop_loss: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    target_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    position_size: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    confidence: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    reasons: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    stop_loss: Mapped[float | None] = mapped_column(Float, nullable=True)
+    target_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    position_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    confidence: Mapped[str | None] = mapped_column(String, nullable=True)
+    reasons: Mapped[str | None] = mapped_column(Text, nullable=True)
     outcome: Mapped[str] = mapped_column(String, nullable=False, default="PENDING")
-    outcome_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    outcome_date: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    profit_pct: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    outcome_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    outcome_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    profit_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     conditions: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=lambda: datetime.now(UTC)
@@ -81,18 +80,18 @@ class PaperTradeRecord(Base):
     signal_time: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=lambda: datetime.now(UTC)
     )
-    stop_loss: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    target_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    close_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    score: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    regime: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    filled_at: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    stop_loss: Mapped[float | None] = mapped_column(Float, nullable=True)
+    target_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    close_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    regime: Mapped[str | None] = mapped_column(String, nullable=True)
+    filled_at: Mapped[float | None] = mapped_column(Float, nullable=True)
     outcome: Mapped[str] = mapped_column(String, nullable=False, default="OPEN")
-    actual_profit_pct: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    exit_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    exit_date: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    close_reason: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    close_time: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    actual_profit_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    exit_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    exit_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    close_reason: Mapped[str | None] = mapped_column(String, nullable=True)
+    close_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class ScanLogRecord(Base):
@@ -102,10 +101,10 @@ class ScanLogRecord(Base):
     timestamp: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=lambda: datetime.now(UTC)
     )
-    total_scanned: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    signals_generated: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    buy_signals: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    sell_signals: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    total_scanned: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    signals_generated: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    buy_signals: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    sell_signals: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class ConfigRecord(Base):
@@ -141,11 +140,9 @@ class OrderRecord(Base):
     side: Mapped[str] = mapped_column(String, nullable=False)
     qty: Mapped[float] = mapped_column(Float, nullable=False)
     type: Mapped[str] = mapped_column(String, nullable=False)
-    price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    price: Mapped[float | None] = mapped_column(Float, nullable=True)
     state: Mapped[str] = mapped_column(String, nullable=False, index=True)
-    broker_order_id: Mapped[Optional[str]] = mapped_column(
-        String, nullable=True, index=True
-    )
+    broker_order_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=lambda: datetime.now(UTC)
     )
@@ -153,7 +150,7 @@ class OrderRecord(Base):
         DateTime, nullable=False, default=lambda: datetime.now(UTC)
     )
     filled_qty: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
-    avg_fill_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    avg_fill_price: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
 _T = TypeVar("_T")
@@ -163,8 +160,8 @@ _INIT_LOCK = threading.RLock()
 class DatabaseManager:
     def __init__(
         self,
-        database_url: Optional[str] = None,
-        sqlite_path: Optional[str] = None,
+        database_url: str | None = None,
+        sqlite_path: str | None = None,
         pool_size: int = 5,
         max_overflow: int = 10,
         pool_timeout: int = 30,
@@ -173,10 +170,8 @@ class DatabaseManager:
         write_retry_backoff_seconds: float = 0.05,
     ) -> None:
         self.database_url = (database_url or settings.DATABASE_URL or "").strip()
-        self.sqlite_path = sqlite_path or settings.DB_PATH or '/tmp/bist_signals.db'
-        self._is_sqlite = not self.database_url or self.database_url.startswith(
-            "sqlite"
-        )
+        self.sqlite_path = sqlite_path or settings.DB_PATH or "/tmp/bist_signals.db"
+        self._is_sqlite = not self.database_url or self.database_url.startswith("sqlite")
         if self._is_sqlite:
             self._ensure_sqlite_parent_dir()
         self.busy_timeout_ms = busy_timeout_ms
@@ -200,9 +195,7 @@ class DatabaseManager:
         if self._is_sqlite:
             self._register_pragmas()
         self.session_factory = scoped_session(
-            sessionmaker(
-                bind=self.engine, autoflush=False, expire_on_commit=False, future=True
-            )
+            sessionmaker(bind=self.engine, autoflush=False, expire_on_commit=False, future=True)
         )
         self._initialized = False
         self.initialize()
@@ -233,7 +226,7 @@ class DatabaseManager:
                 Base.metadata.create_all(self.engine)
             except OperationalError as exc:
                 raise RuntimeError(
-                    'Veri deposu başlatılamadı. DB_PATH veya DATABASE_URL yapılandırmasını kontrol edin.'
+                    "Veri deposu başlatılamadı. DB_PATH veya DATABASE_URL yapılandırmasını kontrol edin."
                 ) from exc
             self._migrate_legacy_schema()
             self._seed_admin_user()
@@ -245,68 +238,34 @@ class DatabaseManager:
         paper_table = _validate_table_name(settings.PAPER_TRADES_TABLE)
         with self.engine.begin() as conn:
             signal_columns = {
-                row[1]
-                for row in conn.execute(text("PRAGMA table_info(signals)")).fetchall()
+                row[1] for row in conn.execute(text("PRAGMA table_info(signals)")).fetchall()
             }
             if "conditions" not in signal_columns:
                 conn.execute(
-                    text(
-                        "ALTER TABLE signals ADD COLUMN conditions TEXT NOT NULL DEFAULT '[]'"
-                    )
+                    text("ALTER TABLE signals ADD COLUMN conditions TEXT NOT NULL DEFAULT '[]'")
                 )
             if "created_at" not in signal_columns:
                 conn.execute(
-                    text(
-                        "ALTER TABLE signals ADD COLUMN created_at TEXT NOT NULL DEFAULT ''"
-                    )
+                    text("ALTER TABLE signals ADD COLUMN created_at TEXT NOT NULL DEFAULT ''")
                 )
             if "position_size" not in signal_columns:
-                conn.execute(
-                    text("ALTER TABLE signals ADD COLUMN position_size INTEGER")
-                )
+                conn.execute(text("ALTER TABLE signals ADD COLUMN position_size INTEGER"))
 
             paper_columns = {
-                row[1]
-for row in conn.execute(
-                    text(f'PRAGMA table_info({paper_table})')
-                ).fetchall()
+                row[1] for row in conn.execute(text(f"PRAGMA table_info({paper_table})")).fetchall()
             }
             if "stop_loss" not in paper_columns:
-                conn.execute(
-text(
-                        f'ALTER TABLE {paper_table} ADD COLUMN stop_loss REAL'
-                    )
-                )
+                conn.execute(text(f"ALTER TABLE {paper_table} ADD COLUMN stop_loss REAL"))
             if "target_price" not in paper_columns:
-                conn.execute(
-text(
-                        f'ALTER TABLE {paper_table} ADD COLUMN target_price REAL'
-                    )
-                )
+                conn.execute(text(f"ALTER TABLE {paper_table} ADD COLUMN target_price REAL"))
             if "exit_price" not in paper_columns:
-                conn.execute(
-text(
-                        f'ALTER TABLE {paper_table} ADD COLUMN exit_price REAL'
-                    )
-                )
+                conn.execute(text(f"ALTER TABLE {paper_table} ADD COLUMN exit_price REAL"))
             if "exit_date" not in paper_columns:
-                conn.execute(
-text(
-                        f'ALTER TABLE {paper_table} ADD COLUMN exit_date TEXT'
-                    )
-                )
+                conn.execute(text(f"ALTER TABLE {paper_table} ADD COLUMN exit_date TEXT"))
             if "close_reason" not in paper_columns:
-                conn.execute(
-text(
-                        f'ALTER TABLE {paper_table} ADD COLUMN close_reason TEXT'
-                    )
-                )
+                conn.execute(text(f"ALTER TABLE {paper_table} ADD COLUMN close_reason TEXT"))
             if "close_time" not in paper_columns:
-                conn.execute(
-text(
-                        f'ALTER TABLE {paper_table} ADD COLUMN close_time TEXT'
-                    )
-                )
+                conn.execute(text(f"ALTER TABLE {paper_table} ADD COLUMN close_time TEXT"))
 
             self._normalize_timestamp_columns(conn)
 
@@ -320,28 +279,24 @@ text(
                     "CREATE INDEX IF NOT EXISTS idx_signals_ticker_created_at ON signals(ticker, created_at DESC)"
                 )
             )
-            conn.execute(
-                text("CREATE INDEX IF NOT EXISTS idx_orders_state ON orders(state)")
-            )
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_orders_state ON orders(state)"))
 
     @staticmethod
-    def _normalize_timestamp_columns_static(self, conn) -> None:
-        paper_trades_table = _validate_table_name(settings.PAPER_TRADES_TABLE)
+    def _normalize_timestamp_columns_static(conn) -> None:
+        paper_trades_table = _validate_table_name(settings.PAPER_TRADS_TABLE)
         migrations = {
-            'signals': ['timestamp', 'created_at', 'outcome_date'],
-            paper_trades_table: ['signal_time', 'exit_date', 'close_time'],
-            'scan_log': ['timestamp'],
-            'users': ['created_at', 'updated_at'],
-            'orders': ['created_at', 'updated_at'],
-            'app_settings': ['updated_at'],
+            "signals": ["timestamp", "created_at", "outcome_date"],
+            paper_trades_table: ["signal_time", "exit_date", "close_time"],
+            "scan_log": ["timestamp"],
+            "users": ["created_at", "updated_at"],
+            "orders": ["created_at", "updated_at"],
+            "app_settings": ["updated_at"],
         }
         for table, columns in migrations.items():
             try:
                 col_info = {
                     row[1]: row[2]
-                    for row in conn.execute(
-                        text(f'PRAGMA table_info({table})')
-                    ).fetchall()
+                    for row in conn.execute(text(f"PRAGMA table_info({table})")).fetchall()
                 }
             except OperationalError:
                 continue
@@ -350,15 +305,19 @@ text(
                     continue
                 conn.execute(
                     text(
-                        'UPDATE ' + table + ' SET ' + col + ' = '
-                        'CASE '
-                        '  WHEN ' + col + ' IS NULL OR ' + col + ' = ‘’ THEN NULL '
-                        '  WHEN ' + col + ' GLOB ‘*[a-zA-Z]*’ AND ' + col + ' NOT GLOB ‘*[0-9]*’ THEN NULL '
-                        '  WHEN substr(' + col + ', 11, 1) = ‘ ’ THEN '
-                        '    substr(' + col + ', 1, 10) || ‘T’ || substr(' + col + ', 12) '
-                        '  ELSE ' + col + ' '
-                        'END '
-                        'WHERE ' + col + ' IS NOT NULL AND ' + col + ' != ‘’'
+                        "UPDATE " + table + " SET " + col + " = "
+                        "CASE "
+                        "  WHEN " + col + " IS NULL OR " + col + " = ‘’ THEN NULL "
+                        "  WHEN "
+                        + col
+                        + " GLOB ‘*[a-zA-Z]*’ AND "
+                        + col
+                        + " NOT GLOB ‘*[0-9]*’ THEN NULL "
+                        "  WHEN substr(" + col + ", 11, 1) = ‘ ’ THEN "
+                        "    substr(" + col + ", 1, 10) || ‘T’ || substr(" + col + ", 12) "
+                        "  ELSE " + col + " "
+                        "END "
+                        "WHERE " + col + " IS NOT NULL AND " + col + " != ‘’"
                     )
                 )
 
@@ -383,9 +342,7 @@ text(
             try:
                 col_info = {
                     row[1]: row[2]
-                    for row in conn.execute(
-                        text(f"PRAGMA table_info({table})")
-                    ).fetchall()
+                    for row in conn.execute(text(f"PRAGMA table_info({table})")).fetchall()
                 }
             except OperationalError:
                 continue
@@ -412,21 +369,26 @@ text(
 
         now = self.now_utc()
         with self.engine.begin() as conn:
-            conn.execute(
-                text(
-                    """
-                    INSERT OR IGNORE INTO users (email, password_hash, role, created_at, updated_at)
-                    SELECT :email, :password_hash, 'admin', :created_at, :updated_at
-                    WHERE NOT EXISTS (SELECT 1 FROM users)
-                    """
-                ),
-                {
-                    "email": settings.ADMIN_BOOTSTRAP_EMAIL,
-                    "password_hash": settings.ADMIN_BOOTSTRAP_PASSWORD_HASH,
-                    "created_at": now,
-                    "updated_at": now,
-                },
-            )
+            has_users = conn.execute(text("SELECT id FROM users LIMIT 1")).scalar_one_or_none()
+            if has_users is not None:
+                return
+            try:
+                conn.execute(
+                    text(
+                        """
+                        INSERT OR IGNORE INTO users (email, password_hash, role, created_at, updated_at)
+                        VALUES (:email, :password_hash, 'admin', :created_at, :updated_at)
+                        """
+                    ),
+                    {
+                        "email": settings.ADMIN_BOOTSTRAP_EMAIL,
+                        "password_hash": settings.ADMIN_BOOTSTRAP_PASSWORD_HASH,
+                        "created_at": now,
+                        "updated_at": now,
+                    },
+                )
+            except IntegrityError:
+                return
 
     @contextmanager
     def session_scope(self, *, read_only: bool = False) -> Iterator[Session]:
@@ -458,10 +420,7 @@ text(
                 with self.session_scope(read_only=False) as session:
                     return operation(session)
             except OperationalError as exc:
-                if (
-                    not self._is_locked_error(exc)
-                    or attempt >= self.write_retry_attempts - 1
-                ):
+                if not self._is_locked_error(exc) or attempt >= self.write_retry_attempts - 1:
                     raise
                 backoff = self.write_retry_backoff_seconds * (2**attempt)
                 jitter = random.uniform(0, backoff * 0.5)

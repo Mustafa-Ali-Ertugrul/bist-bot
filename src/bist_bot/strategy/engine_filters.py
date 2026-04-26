@@ -60,11 +60,11 @@ def passes_adx_filter(params: StrategyParams, ticker: str, last: pd.Series) -> b
     except (TypeError, ValueError):
         logger.debug("strategy_adx_missing_type", ticker=ticker)
         return False
-        
+
     if not pd.notna(adx):
         logger.debug("strategy_adx_missing_nan", ticker=ticker)
         return False
-        
+
     if adx >= params.adx_threshold:
         return True
     logger.debug("strategy_adx_filtered", ticker=ticker, adx=round(float(adx), 2))

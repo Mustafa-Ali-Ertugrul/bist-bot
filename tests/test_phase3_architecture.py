@@ -14,16 +14,17 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
+from pydantic import ValidationError
 
 from bist_bot.data.schemas import MarketCandle, validate_dataframe
 from bist_bot.risk.profile import RiskProfile, RiskProfileLoader
 from bist_bot.strategy.base import BaseStrategy
 from bist_bot.strategy.signal_models import Signal, SignalType
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def _make_df(rows: int = 50) -> pd.DataFrame:
     dates = pd.date_range("2024-01-01", periods=rows, freq="D")
@@ -51,6 +52,7 @@ def _make_signal(ticker: str = "TEST.IS", score: float = 60.0) -> Signal:
 # ─────────────────────────────────────────────────────────────────────────────
 # BaseStrategy ABC
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class _ConcreteStrategy(BaseStrategy):
     """Minimal strategy that always returns a fixed signal."""
@@ -101,6 +103,7 @@ def test_no_signal_strategy_returns_none():
 # ─────────────────────────────────────────────────────────────────────────────
 # StrategyEngine plugin registry
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def test_register_strategy_adds_to_registry():
     from bist_bot.strategy.engine import StrategyEngine
@@ -158,7 +161,9 @@ def test_scan_with_plugins_merges_and_deduplicates(monkeypatch):
 
     result = engine.scan_with_plugins({"ASELS.IS": _make_df()})
     # After dedup only one BUY for ASELS.IS should remain (the higher score)
-    asels_signals = [s for s in result if s.ticker == "ASELS.IS" and s.signal_type == SignalType.BUY]
+    asels_signals = [
+        s for s in result if s.ticker == "ASELS.IS" and s.signal_type == SignalType.BUY
+    ]
     assert len(asels_signals) == 1
     assert asels_signals[0].score == 60.0
 
@@ -166,6 +171,7 @@ def test_scan_with_plugins_merges_and_deduplicates(monkeypatch):
 # ─────────────────────────────────────────────────────────────────────────────
 # MarketCandle Pydantic validation
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def test_market_candle_valid():
     candle = MarketCandle(
@@ -180,7 +186,7 @@ def test_market_candle_valid():
 
 
 def test_market_candle_negative_price_rejected():
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         MarketCandle(
             timestamp=datetime(2024, 1, 1),
             open=-1.0,
@@ -222,6 +228,7 @@ def test_validate_dataframe_strips_nan_rows():
 # ─────────────────────────────────────────────────────────────────────────────
 # RiskProfileLoader
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def test_risk_profile_defaults():
     profile = RiskProfile()
@@ -276,5 +283,5 @@ def test_risk_profile_loader_invalid_format(tmp_path: Path):
 
 def test_risk_profile_constraint_violation():
     """Values outside allowed range should raise ValidationError."""
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         RiskProfile(max_risk_pct=200.0)  # exceeds le=100

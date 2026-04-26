@@ -39,9 +39,7 @@ def render_analyze_page() -> None:
         ticker_input = st.text_input("Ticker", value="THYAO.IS").strip().upper()
     with c2:
         st.markdown("<div style='height:28px;'></div>", unsafe_allow_html=True)
-        analyze_btn = st.button(
-            "Analyze asset", type="primary", use_container_width=True
-        )
+        analyze_btn = st.button("Analyze asset", type="primary", use_container_width=True)
 
     if not ticker_input.endswith(".IS"):
         ticker_input = f"{ticker_input}.IS"
@@ -53,14 +51,10 @@ def render_analyze_page() -> None:
         allowed, remaining = consume_cooldown(
             cooldown_state,
             action="analyze",
-            cooldown_seconds=float(
-                getattr(settings, "STREAMLIT_ANALYZE_COOLDOWN_SECONDS", 4.0)
-            ),
+            cooldown_seconds=float(getattr(settings, "STREAMLIT_ANALYZE_COOLDOWN_SECONDS", 4.0)),
         )
         if not allowed:
-            st.warning(
-                f"Cok sik istek gonderildi, birkac saniye bekleyin. ({remaining:.1f}s)"
-            )
+            st.warning(f"Cok sik istek gonderildi, birkac saniye bekleyin. ({remaining:.1f}s)")
             return
         try:
             response = api_request("GET", f"/api/analyze/{ticker_input}")
@@ -69,9 +63,7 @@ def render_analyze_page() -> None:
             return
 
         if not response.ok:
-            st.error(
-                f"Analiz basarisiz: {response.json().get('message', 'Bilinmeyen hata')}"
-            )
+            st.error(f"Analiz basarisiz: {response.json().get('message', 'Bilinmeyen hata')}")
             return
 
         data = response.json()
@@ -97,9 +89,7 @@ def render_analyze_page() -> None:
     signal_type = str(signal.get("type", "N/A"))
     trend = str(snapshot.get("trend", "N/A"))
     verdict_badge = (
-        "bb-badge bb-badge-positive"
-        if signal_score >= 10
-        else "bb-badge bb-badge-danger"
+        "bb-badge bb-badge-positive" if signal_score >= 10 else "bb-badge bb-badge-danger"
     )
 
     headline_html = (
@@ -111,9 +101,7 @@ def render_analyze_page() -> None:
         f"<span class='{verdict_badge}'>{html.escape(signal_type)}</span>"
         "</div>"
     )
-    render_html_panel(
-        headline_html, accent="positive" if signal_score >= 10 else "danger"
-    )
+    render_html_panel(headline_html, accent="positive" if signal_score >= 10 else "danger")
 
     m1, m2, m3, m4 = st.columns(4)
     with m1:
@@ -145,9 +133,7 @@ def render_analyze_page() -> None:
         df_ind = TechnicalIndicators().add_all(df.copy())
 
         render_section_title("Technical view", "Price structure and momentum")
-        render_chart(
-            plot_candlestick(df_ind, ticker_input), "analysis_candlestick_main"
-        )
+        render_chart(plot_candlestick(df_ind, ticker_input), "analysis_candlestick_main")
 
         c_left, c_right = st.columns([1, 1], gap="large")
         with c_left:
@@ -179,12 +165,8 @@ def render_analyze_page() -> None:
             f"<div class='bb-list-row'><div class='bb-list-row-subtitle'>{html.escape(str(reason))}</div></div>"
             for reason in reasons
         )
-        reasons_html = (
-            reason_rows or "<div class='bb-note'>No analysis reasons returned.</div>"
-        )
+        reasons_html = reason_rows or "<div class='bb-note'>No analysis reasons returned.</div>"
         render_html_panel(
-            (
-                "<div class='bb-section-caption'>Model rationale</div>"
-                f"<div class='bb-list' style='margin-top:12px;'>{reasons_html}</div>"
-            )
+            "<div class='bb-section-caption'>Model rationale</div>"
+            f"<div class='bb-list' style='margin-top:12px;'>{reasons_html}</div>"
         )

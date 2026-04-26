@@ -7,7 +7,7 @@ import json
 import logging
 import sys
 from contextvars import ContextVar
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 try:
@@ -17,13 +17,14 @@ except ImportError:  # pragma: no cover - optional dependency
 
 from bist_bot.config.settings import settings
 
-
 _DEFAULT_COMPONENT = "app"
 
 _correlation_id_ctx: ContextVar[str | None] = ContextVar("correlation_id", default=None)
 
+
 def get_correlation_id() -> str | None:
     return _correlation_id_ctx.get()
+
 
 def set_correlation_id(cid: str | None) -> None:
     _correlation_id_ctx.set(cid)
@@ -65,6 +66,7 @@ def configure_logging(
         # JSON formatter using python-json-logger
         try:
             from pythonjsonlogger import jsonlogger
+
             formatter = jsonlogger.JsonFormatter(
                 fmt or "%(asctime)s %(levelname)s %(name)s %(component)s %(message)s"
             )
@@ -80,9 +82,7 @@ def configure_logging(
         root.addHandler(h)
     if level is not None:
         root.setLevel(
-            level
-            if isinstance(level, int)
-            else getattr(logging, str(level).upper(), logging.INFO)
+            level if isinstance(level, int) else getattr(logging, str(level).upper(), logging.INFO)
         )
     else:
         root.setLevel(_normalize_level())
@@ -110,7 +110,7 @@ class BoundLogger:
         self._logger = logging.getLogger(name)
         self._context = {"component": context.pop("component", name), **context}
 
-    def bind(self, **context: Any) -> "BoundLogger":
+    def bind(self, **context: Any) -> BoundLogger:
         return BoundLogger(self._logger.name, **{**self._context, **context})
 
     def _emit(self, level: int, event: str, *args: Any, **fields: Any) -> None:
@@ -120,16 +120,16 @@ class BoundLogger:
             except TypeError:
                 event = event.format(*args)
         payload = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             **self._context,
             **fields,
             "event": event,
         }
-        
+
         cid = _correlation_id_ctx.get()
         if cid is not None:
             payload["correlation_id"] = cid
-            
+
         self._logger.log(level, _serialize_event(payload))
 
     def debug(self, event: str, *args: Any, **fields: Any) -> None:

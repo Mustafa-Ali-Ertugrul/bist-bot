@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from bist_bot.app_logging import get_logger
 import re
+from dataclasses import dataclass
 from typing import Protocol
 
 import requests
 from bs4 import BeautifulSoup
+
+from bist_bot.app_logging import get_logger
 
 logger = get_logger(__name__, component="scraper")
 
@@ -115,8 +116,6 @@ def scrape_bist_quote(ticker: str, rate_limiter: RateLimiterProtocol) -> ScrapeQ
             return result
 
         last_failure = f"parse-hatasi:{result.detail}"
-        logger.warning(
-            "scrape_parse_failed", symbol=symbol, detail=result.detail, url=url
-        )
+        logger.warning("scrape_parse_failed", symbol=symbol, detail=result.detail, url=url)
 
     return ScrapeQuoteResult(success=False, detail=last_failure)

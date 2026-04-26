@@ -5,8 +5,8 @@ from __future__ import annotations
 import os
 import sys
 
-import pytest
 import pandas as pd
+import pytest
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:
@@ -43,12 +43,10 @@ def test_rate_limiter_waits_when_called_too_soon(monkeypatch):
     clock = iter([100.0, 100.0, 101.0, 101.0, 103.0])
 
     monkeypatch.setattr(
-        data_fetcher, "settings", data_fetcher.settings.replace( RATE_LIMIT_SECONDS=2.0)
+        data_fetcher, "settings", data_fetcher.settings.replace(RATE_LIMIT_SECONDS=2.0)
     )
     monkeypatch.setattr(data_fetcher.time, "time", lambda: next(clock))
-    monkeypatch.setattr(
-        data_fetcher.time, "sleep", lambda seconds: sleep_calls.append(seconds)
-    )
+    monkeypatch.setattr(data_fetcher.time, "sleep", lambda seconds: sleep_calls.append(seconds))
 
     limiter.wait_if_needed("borsaistanbul.com.tr")
     limiter.wait_if_needed("borsaistanbul.com.tr")
@@ -109,9 +107,7 @@ def test_fetcher_uses_injected_provider_for_history_and_batch():
             _ = force_refresh
             return ["THYAO.IS", "ASELS.IS"]
 
-    fetcher = BISTDataFetcher(
-        watchlist=["THYAO.IS", "ASELS.IS"], provider=StubProvider()
-    )
+    fetcher = BISTDataFetcher(watchlist=["THYAO.IS", "ASELS.IS"], provider=StubProvider())
 
     single = fetcher.fetch_single("THYAO.IS", force=True)
     batch = fetcher.fetch_all(period="1mo", interval="1d")
@@ -197,22 +193,20 @@ def test_fetcher_uses_provider_quote_fallback_before_history(monkeypatch):
             _ = ticker
             return None
 
-    fetcher = BISTDataFetcher(
-        provider=StubProvider(), quote_provider=NullQuoteProvider()
-    )
+    fetcher = BISTDataFetcher(provider=StubProvider(), quote_provider=NullQuoteProvider())
     monkeypatch.setattr(
         data_fetcher,
         "settings",
-        data_fetcher.settings.replace( ENABLE_REALTIME_SCRAPING=True),
+        data_fetcher.settings.replace(ENABLE_REALTIME_SCRAPING=True),
     )
 
     assert fetcher.get_current_price("THYAO.IS") == 111.0
 
 
 def test_dependencies_selects_configured_data_provider():
-    from bist_bot.dependencies import _build_data_provider
     from bist_bot.config.settings import settings
     from bist_bot.data.providers import OfficialProviderStub, YFinanceProvider
+    from bist_bot.dependencies import _build_data_provider
 
     with settings.override(DATA_PROVIDER="official_stub"):
         assert isinstance(_build_data_provider(), OfficialProviderStub)
@@ -315,8 +309,8 @@ def test_fetch_single_force_refresh_bypasses_cache(monkeypatch):
 
 
 def test_fetch_all_recovers_partial_batch_failures_with_fallback():
-    from bist_bot.data.fetcher import BISTDataFetcher
     from bist_bot.app_metrics import render_metrics, reset_metrics
+    from bist_bot.data.fetcher import BISTDataFetcher
 
     reset_metrics()
 

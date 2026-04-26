@@ -26,10 +26,10 @@ from bist_bot.strategy.base import BaseStrategy
 from bist_bot.strategy.engine import StrategyEngine
 from bist_bot.strategy.signal_models import Signal, SignalType
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Step 1: Implement a custom strategy
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class GoldenCrossStrategy(BaseStrategy):
     """Simple 50/200 MA Golden-Cross strategy.
@@ -44,9 +44,7 @@ class GoldenCrossStrategy(BaseStrategy):
     def name(self) -> str:
         return "GoldenCrossStrategy"
 
-    def analyze(
-        self, ticker: str, data: pd.DataFrame | dict[str, pd.DataFrame]
-    ) -> Signal | None:
+    def analyze(self, ticker: str, data: pd.DataFrame | dict[str, pd.DataFrame]) -> Signal | None:
         # Handle multi-timeframe dict – use the trigger frame
         df = data.get("trigger") if isinstance(data, dict) else data
         if df is None or len(df) < 200:
@@ -99,9 +97,11 @@ print(f"\n🔧  Registered strategies: {[s.name for s in engine._strategies]}")
 # Step 4: Create synthetic data and run scan_with_plugins
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def _make_golden_cross_df(n: int = 210) -> pd.DataFrame:
     """Create a dataframe where a golden cross occurs on the last candle."""
     import numpy as np
+
     dates = pd.date_range("2023-01-01", periods=n, freq="D")
     close = pd.Series(100.0, index=range(n))
     # Simulate a gradual uptrend that causes MA cross near the end

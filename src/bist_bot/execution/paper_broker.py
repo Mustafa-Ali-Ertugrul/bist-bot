@@ -40,7 +40,9 @@ class PaperBroker(BaseExecutionProvider):
         return list(self.positions.values())
 
     def get_account_info(self) -> AccountInfo:
-        market_value = sum(position.quantity * position.average_price for position in self.positions.values())
+        market_value = sum(
+            position.quantity * position.average_price for position in self.positions.values()
+        )
         equity = self.cash + market_value
         return AccountInfo(cash_balance=self.cash, buying_power=self.cash, equity=equity)
 
@@ -82,7 +84,7 @@ class PaperBroker(BaseExecutionProvider):
         order = self.orders.get(order_id)
         if order is None or order.state != OrderState.CREATED:
             return False
-            
+
         order.state = OrderState.SENT
         order.updated_at = utc_now()
         if order.order_type is OrderType.MARKET or fill_price is not None:
@@ -92,7 +94,11 @@ class PaperBroker(BaseExecutionProvider):
 
     def cancel_order(self, order_id: str) -> bool:
         order = self.orders.get(order_id)
-        if order is None or order.state in {OrderState.FILLED, OrderState.CANCELLED, OrderState.REJECTED}:
+        if order is None or order.state in {
+            OrderState.FILLED,
+            OrderState.CANCELLED,
+            OrderState.REJECTED,
+        }:
             return False
         order.state = OrderState.CANCELLED
         order.updated_at = utc_now()
@@ -109,11 +115,19 @@ class PaperBroker(BaseExecutionProvider):
         )
 
     def get_open_orders(self) -> list[Order]:
-        return [order for order in self.orders.values() if order.state in {OrderState.SENT, OrderState.PARTIAL}]
+        return [
+            order
+            for order in self.orders.values()
+            if order.state in {OrderState.SENT, OrderState.PARTIAL}
+        ]
 
     def reject_order(self, order_id: str, reason: str) -> bool:
         order = self.orders.get(order_id)
-        if order is None or order.state in {OrderState.FILLED, OrderState.CANCELLED, OrderState.REJECTED}:
+        if order is None or order.state in {
+            OrderState.FILLED,
+            OrderState.CANCELLED,
+            OrderState.REJECTED,
+        }:
             return False
         order.state = OrderState.REJECTED
         order.metadata["reason"] = reason
@@ -127,11 +141,17 @@ class PaperBroker(BaseExecutionProvider):
         order = self.orders.get(order_id)
         if order is None:
             return False
-        return self._fill_order(order_id, quantity=order.remaining_quantity(), fill_price=fill_price)
+        return self._fill_order(
+            order_id, quantity=order.remaining_quantity(), fill_price=fill_price
+        )
 
     def _fill_order(self, order_id: str, quantity: float, fill_price: float) -> bool:
         order = self.orders.get(order_id)
-        if order is None or order.state in {OrderState.CANCELLED, OrderState.REJECTED, OrderState.FILLED}:
+        if order is None or order.state in {
+            OrderState.CANCELLED,
+            OrderState.REJECTED,
+            OrderState.FILLED,
+        }:
             return False
 
         fill_qty = min(float(quantity), order.remaining_quantity())
@@ -143,7 +163,9 @@ class PaperBroker(BaseExecutionProvider):
         if previous_filled <= 0:
             order.average_fill_price = fill_price
         elif order.average_fill_price is not None:
-            order.average_fill_price = ((order.average_fill_price * previous_filled) + (fill_price * fill_qty)) / new_total
+            order.average_fill_price = (
+                (order.average_fill_price * previous_filled) + (fill_price * fill_qty)
+            ) / new_total
 
         order.filled_quantity = new_total
         order.state = OrderState.FILLED if order.remaining_quantity() == 0 else OrderState.PARTIAL
@@ -160,14 +182,21 @@ class PaperBroker(BaseExecutionProvider):
             self.cumulative_fees += fee
             position = self.positions.get(ticker)
             if position is None:
-                self.positions[ticker] = Position(ticker=ticker, quantity=quantity, average_price=fill_price, market_value=notional)
+                self.positions[ticker] = Position(
+                    ticker=ticker,
+                    quantity=quantity,
+                    average_price=fill_price,
+                    market_value=notional,
+                )
                 return
 
             combined_qty = position.quantity + quantity
             if combined_qty <= 0:
                 self.positions.pop(ticker, None)
                 return
-            position.average_price = ((position.average_price * position.quantity) + notional) / combined_qty
+            position.average_price = (
+                (position.average_price * position.quantity) + notional
+            ) / combined_qty
             position.quantity = combined_qty
             position.market_value = combined_qty * position.average_price
             position.updated_at = utc_now()

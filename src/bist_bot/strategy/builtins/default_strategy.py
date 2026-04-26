@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 import pandas as pd
 
 from bist_bot.strategy.base import BaseStrategy
@@ -18,7 +16,7 @@ class DefaultEngineStrategy(BaseStrategy):
     ``bist_bot.strategy.engine``, keeping the plugin interface stable.
     """
 
-    def __init__(self, engine: Optional[object] = None) -> None:
+    def __init__(self, engine: object | None = None) -> None:
         """Initialize with an optional pre-built ``StrategyEngine`` instance.
 
         If no engine is supplied one is created with default parameters so the
@@ -38,9 +36,7 @@ class DefaultEngineStrategy(BaseStrategy):
     def name(self) -> str:
         return "DefaultEngineStrategy"
 
-    def analyze(
-        self, ticker: str, data: pd.DataFrame | dict[str, pd.DataFrame]
-    ) -> Signal | None:
+    def analyze(self, ticker: str, data: pd.DataFrame | dict[str, pd.DataFrame]) -> Signal | None:
         """Delegate to the underlying ``StrategyEngine.analyze`` method.
 
         Args:

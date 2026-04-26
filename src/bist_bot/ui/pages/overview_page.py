@@ -31,17 +31,13 @@ def render_overview_page() -> None:
 
     try:
         stats_response = api_request("GET", "/api/stats")
-        signals_response = api_request(
-            "GET", "/api/signals/history", params={"limit": 20}
-        )
+        signals_response = api_request("GET", "/api/signals/history", params={"limit": 20})
     except Exception as exc:
         st.warning(f"{get_message('ui.api_data_failed')}: {exc}")
         return
 
     stats = stats_response.json().get("stats", {}) if stats_response.ok else {}
-    recent_signals = (
-        signals_response.json().get("signals", []) if signals_response.ok else []
-    )
+    recent_signals = signals_response.json().get("signals", []) if signals_response.ok else []
     index_data = fetch_index_data()
 
     total_signals = int(stats.get("total_signals", len(signals)) or 0)
@@ -50,13 +46,9 @@ def render_overview_page() -> None:
     win_rate = float(stats.get("win_rate", 0.0) or 0.0)
     avg_profit = float(stats.get("avg_profit_pct", 0.0) or 0.0)
     positive_flow = len([s for s in signals if s.score >= 10])
-    strong = sorted(
-        [s for s in signals if s.score >= 40], key=lambda s: s.score, reverse=True
-    )
+    strong = sorted([s for s in signals if s.score >= 40], key=lambda s: s.score, reverse=True)
     active_watch = (
-        strong[:4]
-        if strong
-        else sorted(signals, key=lambda s: s.score, reverse=True)[:4]
+        strong[:4] if strong else sorted(signals, key=lambda s: s.score, reverse=True)[:4]
     )
 
     render_page_hero(
@@ -73,13 +65,9 @@ def render_overview_page() -> None:
 
     k1, k2, k3, k4 = st.columns(4)
     with k1:
-        render_metric_block(
-            "Signal volume", str(total_signals), "Captured by the scan engine"
-        )
+        render_metric_block("Signal volume", str(total_signals), "Captured by the scan engine")
     with k2:
-        render_metric_block(
-            "Completed trades", str(completed), "Closed trade count in history"
-        )
+        render_metric_block("Completed trades", str(completed), "Closed trade count in history")
     with k3:
         render_metric_block(
             "Profitable closes",
@@ -112,9 +100,7 @@ def render_overview_page() -> None:
                 "</div>"
                 "</div>"
             )
-        radar_html = (
-            "".join(radar_rows) or "<div class='bb-note'>Scan data not ready yet.</div>"
-        )
+        radar_html = "".join(radar_rows) or "<div class='bb-note'>Scan data not ready yet.</div>"
         render_html_panel(
             (
                 f"<div class='bb-section-caption'>Scan coverage {summary.get('total_analyzed', 0)} assets</div>"
@@ -146,19 +132,17 @@ def render_overview_page() -> None:
             )
         tone = summary.get("sector_dist", {})
         render_html_panel(
-            (
-                "<div class='bb-list'>"
-                + "".join(index_rows)
-                + "</div>"
-                + "<div style='height:14px;'></div>"
-                + "<div class='bb-list-row'>"
-                + "<div><div class='bb-label'>Sentiment map</div><div class='bb-list-row-subtitle'>Oversold / neutral / overbought split</div></div>"
-                + "<div style='display:flex;gap:8px;flex-wrap:wrap;'>"
-                + _badge(f"OS {tone.get('Asiri Satim', 0)}")
-                + _badge(f"NTR {tone.get('Notr', 0)}", positive=False)
-                + _badge(f"OB {tone.get('Asiri Alim', 0)}")
-                + "</div></div>"
-            )
+            "<div class='bb-list'>"
+            + "".join(index_rows)
+            + "</div>"
+            + "<div style='height:14px;'></div>"
+            + "<div class='bb-list-row'>"
+            + "<div><div class='bb-label'>Sentiment map</div><div class='bb-list-row-subtitle'>Oversold / neutral / overbought split</div></div>"
+            + "<div style='display:flex;gap:8px;flex-wrap:wrap;'>"
+            + _badge(f"OS {tone.get('Asiri Satim', 0)}")
+            + _badge(f"NTR {tone.get('Notr', 0)}", positive=False)
+            + _badge(f"OB {tone.get('Asiri Alim', 0)}")
+            + "</div></div>"
         )
 
     render_section_title("Recent flow", "Last 10 recorded signals")

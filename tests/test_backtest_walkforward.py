@@ -29,9 +29,7 @@ def build_two_year_frame() -> pd.DataFrame:
 
 
 class DummyOptimizer:
-    def __init__(
-        self, ticker: str, train_df: pd.DataFrame, initial_capital: float
-    ) -> None:
+    def __init__(self, ticker: str, train_df: pd.DataFrame, initial_capital: float) -> None:
         self.ticker = ticker
         self.train_df = train_df
         self.initial_capital = initial_capital
@@ -46,9 +44,7 @@ class DummyBacktester:
         self.initial_capital = initial_capital
         self.params = params
 
-    def run(
-        self, ticker: str, df: pd.DataFrame, verbose: bool = False
-    ) -> BacktestResult:
+    def run(self, ticker: str, df: pd.DataFrame, verbose: bool = False) -> BacktestResult:
         _ = verbose
         entry_date = df.index[0].to_pydatetime()
         exit_date = df.index[-1].to_pydatetime()

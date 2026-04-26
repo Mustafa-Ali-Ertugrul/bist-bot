@@ -34,9 +34,7 @@ class DummySettings:
 
 
 def test_scheduler_uses_tr_timezone(monkeypatch) -> None:
-    scheduler = MarketScheduler(
-        DummyScanner(), DummyNotifier(), settings=DummySettings()
-    )
+    scheduler = MarketScheduler(DummyScanner(), DummyNotifier(), settings=DummySettings())
     seen = {"tz": None}
 
     class FakeDateTime:

@@ -9,11 +9,14 @@ import pytest
 
 from bist_bot.data.fetcher import BISTDataFetcher
 
+
 def test_get_current_price_realtime_success():
     """Test get_current_price when realtime scraping succeeds."""
     provider = MockProvider()
     quote_provider = MockQuoteProvider(price=123.45)
-    fetcher = BISTDataFetcher(watchlist=["THYAO.IS"], provider=provider, quote_provider=quote_provider)
+    fetcher = BISTDataFetcher(
+        watchlist=["THYAO.IS"], provider=provider, quote_provider=quote_provider
+    )
 
     with patch("bist_bot.data.fetcher.settings") as mock_settings:
         mock_settings.ENABLE_REALTIME_SCRAPING = True
@@ -28,15 +31,20 @@ def test_get_current_price_realtime_failure_yahoo_fallback():
     """Test get_current_price when realtime scraping fails and Yahoo Finance fallback succeeds."""
     provider = MockProvider()
     quote_provider = MockQuoteProvider(price=None)
-    fetcher = BISTDataFetcher(watchlist=["THYAO.IS"], provider=provider, quote_provider=quote_provider)
+    fetcher = BISTDataFetcher(
+        watchlist=["THYAO.IS"], provider=provider, quote_provider=quote_provider
+    )
 
-    mock_df = pd.DataFrame({
-        "open": [100, 101, 102],
-        "high": [101, 102, 103],
-        "low": [99, 100, 101],
-        "close": [100, 101, 102],
-        "volume": [1000, 1100, 1200]
-    }, index=pd.date_range(start="2025-01-01", periods=3))
+    mock_df = pd.DataFrame(
+        {
+            "open": [100, 101, 102],
+            "high": [101, 102, 103],
+            "low": [99, 100, 101],
+            "close": [100, 101, 102],
+            "volume": [1000, 1100, 1200],
+        },
+        index=pd.date_range(start="2025-01-01", periods=3),
+    )
 
     with patch("bist_bot.data.fetcher.settings") as mock_settings:
         mock_settings.ENABLE_REALTIME_SCRAPING = True
@@ -52,7 +60,9 @@ def test_get_current_price_both_fail():
     """Test get_current_price when both realtime scraping and Yahoo fallback fail."""
     provider = MockProvider()
     quote_provider = MockQuoteProvider(price=None)
-    fetcher = BISTDataFetcher(watchlist=["THYAO.IS"], provider=provider, quote_provider=quote_provider)
+    fetcher = BISTDataFetcher(
+        watchlist=["THYAO.IS"], provider=provider, quote_provider=quote_provider
+    )
 
     with patch("bist_bot.data.fetcher.settings") as mock_settings:
         mock_settings.ENABLE_REALTIME_SCRAPING = True
@@ -68,15 +78,20 @@ def test_get_current_price_realtime_disabled():
     """Test get_current_price when realtime scraping is disabled in settings."""
     provider = MockProvider()
     quote_provider = MockQuoteProvider(price=123.45)
-    fetcher = BISTDataFetcher(watchlist=["THYAO.IS"], provider=provider, quote_provider=quote_provider)
+    fetcher = BISTDataFetcher(
+        watchlist=["THYAO.IS"], provider=provider, quote_provider=quote_provider
+    )
 
-    mock_df = pd.DataFrame({
-        "open": [100, 101, 102],
-        "high": [101, 102, 103],
-        "low": [99, 100, 101],
-        "close": [100, 101, 102],
-        "volume": [1000, 1100, 1200]
-    }, index=pd.date_range(start="2025-01-01", periods=3))
+    mock_df = pd.DataFrame(
+        {
+            "open": [100, 101, 102],
+            "high": [101, 102, 103],
+            "low": [99, 100, 101],
+            "close": [100, 101, 102],
+            "volume": [1000, 1100, 1200],
+        },
+        index=pd.date_range(start="2025-01-01", periods=3),
+    )
     with patch("bist_bot.data.fetcher.settings") as mock_settings:
         mock_settings.ENABLE_REALTIME_SCRAPING = False
 

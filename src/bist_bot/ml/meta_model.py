@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import json
 import pickle
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable, Literal, Mapping, cast
+from typing import Any, Literal, cast
 
 import numpy as np
 import numpy.typing as npt
@@ -33,10 +34,8 @@ class ProbabilityCalibrator:
 
     def fit(
         self, raw_probabilities: Iterable[float], labels: Iterable[int]
-    ) -> "ProbabilityCalibrator":
-        probabilities = np.clip(
-            np.asarray(list(raw_probabilities), dtype=float), 1e-6, 1.0 - 1e-6
-        )
+    ) -> ProbabilityCalibrator:
+        probabilities = np.clip(np.asarray(list(raw_probabilities), dtype=float), 1e-6, 1.0 - 1e-6)
         targets = np.asarray(list(labels), dtype=int)
         if probabilities.size == 0 or probabilities.size != targets.size:
             raise ValueError("Calibration data must be non-empty and aligned")
@@ -54,9 +53,7 @@ class ProbabilityCalibrator:
         return self
 
     def predict(self, raw_probabilities: Iterable[float]) -> npt.NDArray[np.float64]:
-        probabilities = np.clip(
-            np.asarray(list(raw_probabilities), dtype=float), 1e-6, 1.0 - 1e-6
-        )
+        probabilities = np.clip(np.asarray(list(raw_probabilities), dtype=float), 1e-6, 1.0 - 1e-6)
         if self._model is None:
             return cast(npt.NDArray[np.float64], probabilities)
         if self.method == "platt":
@@ -121,7 +118,7 @@ class SignalMetaModel:
     # Training
     # ------------------------------------------------------------------
 
-    def fit(self, features: pd.DataFrame, labels: Iterable[int]) -> "SignalMetaModel":
+    def fit(self, features: pd.DataFrame, labels: Iterable[int]) -> SignalMetaModel:
         """Train the model and calibrate probabilities with Time-Series CV.
 
         Walk-forward out-of-fold predictions are used to fit the calibrator
@@ -182,16 +179,12 @@ class SignalMetaModel:
     # Inference
     # ------------------------------------------------------------------
 
-    def predict_probability(
-        self, features: Mapping[str, float] | pd.DataFrame
-    ) -> float:
+    def predict_probability(self, features: Mapping[str, float] | pd.DataFrame) -> float:
         frame = self._coerce_features(features)
         raw_probability = self.model.predict_proba(frame)[:, 1]
         return float(self.calibrator.predict(raw_probability)[0])
 
-    def _coerce_features(
-        self, features: Mapping[str, float] | pd.DataFrame
-    ) -> pd.DataFrame:
+    def _coerce_features(self, features: Mapping[str, float] | pd.DataFrame) -> pd.DataFrame:
         if isinstance(features, pd.DataFrame):
             frame = features.copy()
         else:
@@ -233,11 +226,9 @@ class SignalMetaModel:
         return path
 
     @classmethod
-    def load_artifacts(cls, artifact_dir: str | Path) -> "SignalMetaModel":
+    def load_artifacts(cls, artifact_dir: str | Path) -> SignalMetaModel:
         path = Path(artifact_dir)
-        feature_names = json.loads(
-            (path / "feature_columns.json").read_text(encoding="utf-8")
-        )
+        feature_names = json.loads((path / "feature_columns.json").read_text(encoding="utf-8"))
         model = pickle.loads((path / "meta_model.pkl").read_bytes())
         calibrator = pickle.loads((path / "probability_calibrator.pkl").read_bytes())
         instance = cls(getattr(calibrator, "method", "platt"))

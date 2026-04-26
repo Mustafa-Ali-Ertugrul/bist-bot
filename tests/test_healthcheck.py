@@ -30,7 +30,7 @@ def mock_circuit() -> MagicMock:
 def app(mock_db, mock_circuit) -> Flask:
     from bist_bot.config.settings import settings
 
-    with settings.override(JWT_SECRET_KEY='test-secret'):
+    with settings.override(JWT_SECRET_KEY="test-secret"):
         fetcher = MagicMock()
         engine = MagicMock()
 
@@ -40,7 +40,7 @@ def app(mock_db, mock_circuit) -> Flask:
             db=mock_db,
             circuit_breaker=mock_circuit,
         )
-        app.config['TESTING'] = True
+        app.config["TESTING"] = True
         return app
 
 

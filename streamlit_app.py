@@ -1,7 +1,6 @@
-# ruff: noqa: E402
-from pathlib import Path
 import runpy
 import sys
+from pathlib import Path
 
 SRC_DIR = Path(__file__).resolve().parent / "src"
 if str(SRC_DIR) not in sys.path:
