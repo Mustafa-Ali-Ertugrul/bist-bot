@@ -9,6 +9,7 @@ from typing import Any, cast
 
 import streamlit as st
 
+from bist_bot.app_logging import get_logger
 from bist_bot.config.settings import settings
 from bist_bot.streamlit_utils import check_signals, send_signal_notification
 from bist_bot.ui.runtime_types import ScanResult
@@ -18,6 +19,8 @@ TR = timezone(timedelta(hours=3))
 SCAN_LOCK = threading.Lock()
 PENDING_SCAN_RESULTS: dict[str, ScanResult] = {}
 ACTIVE_SCAN_SESSIONS: set[str] = set()
+
+logger = get_logger(__name__, component="ui_scan")
 
 
 def _should_clear_cache(
@@ -60,6 +63,7 @@ def collect_scan_result(
     db,
     last_scan_time: datetime | None = None,
     force_clear: bool = False,
+    limited_tickers: list[str] | None = None,
 ) -> ScanResult:
     """Run one scan cycle and return the runtime payload."""
     scan_started_at = datetime.now(TR)
@@ -67,13 +71,23 @@ def collect_scan_result(
         fetcher.clear_cache(scope="intraday_fetch")
         fetcher.clear_cache(scope="analysis")
 
-    timeframe_data = fetcher.fetch_multi_timeframe_all(
-        trend_period=settings.MTF_TREND_PERIOD,
-        trend_interval=settings.MTF_TREND_INTERVAL,
-        trigger_period=settings.MTF_TRIGGER_PERIOD,
-        trigger_interval=settings.MTF_TRIGGER_INTERVAL,
-        force_refresh=force_clear,
-    )
+    if limited_tickers:
+        timeframe_data = fetcher.fetch_multi_timeframe(
+            tickers=limited_tickers,
+            trend_period=settings.MTF_TREND_PERIOD,
+            trend_interval=settings.MTF_TREND_INTERVAL,
+            trigger_period=settings.MTF_TRIGGER_PERIOD,
+            trigger_interval=settings.MTF_TRIGGER_INTERVAL,
+            force_refresh=force_clear,
+        )
+    else:
+        timeframe_data = fetcher.fetch_multi_timeframe_all(
+            trend_period=settings.MTF_TREND_PERIOD,
+            trend_interval=settings.MTF_TREND_INTERVAL,
+            trigger_period=settings.MTF_TRIGGER_PERIOD,
+            trigger_interval=settings.MTF_TRIGGER_INTERVAL,
+            force_refresh=force_clear,
+        )
     signals = engine.scan_all(timeframe_data)
     all_data = {
         ticker: data["trigger"]
@@ -132,7 +146,41 @@ def request_scan(force_clear: bool = False) -> bool:
     return True
 
 
-def start_background_scan(force_clear: bool = False) -> bool:
+def check_scan_timeout() -> bool:
+    """Reset stale scan_in_progress if background scan exceeds timeout.
+
+    Returns True if a timeout was detected and handled.
+    """
+    if not st.session_state.get("scan_in_progress"):
+        return False
+    scan_started_at = st.session_state.get("scan_started_at")
+    if scan_started_at is None:
+        return False
+    timeout_seconds = int(
+        getattr(settings, "STREAMLIT_BACKGROUND_SCAN_TIMEOUT_SECONDS", 90)
+    )
+    elapsed = (datetime.now(TR) - scan_started_at).total_seconds()
+    if elapsed < timeout_seconds:
+        return False
+    session_key = st.session_state.get("_scan_session_key")
+    logger.warning(
+        "ui_background_scan_timeout",
+        session_key=session_key,
+        duration_seconds=round(elapsed, 1),
+        timeout_seconds=timeout_seconds,
+    )
+    st.session_state.scan_in_progress = False
+    st.session_state.scan_error = (
+        f"Arka plan taramasi {timeout_seconds} saniye icinde tamamlanamadi. "
+        "Manuel tarama baslatmayi deneyin."
+    )
+    with SCAN_LOCK:
+        ACTIVE_SCAN_SESSIONS.discard(session_key or "")
+        PENDING_SCAN_RESULTS.pop(session_key or "", None)
+    return True
+
+
+def start_background_scan(force_clear: bool = False, limited: bool = False) -> bool:
     """Start a background scan for the current Streamlit session."""
     session_key = st.session_state.get("_scan_session_key")
     if not session_key:
@@ -144,7 +192,21 @@ def start_background_scan(force_clear: bool = False) -> bool:
 
     fetcher, engine, notifier, db, last_scan_time = _session_dependencies()
     st.session_state.scan_in_progress = True
+    st.session_state.scan_started_at = datetime.now(TR)
     st.session_state.scan_error = None
+
+    limited_tickers = None
+    if limited:
+        limit = int(getattr(settings, "STREAMLIT_INITIAL_SCAN_LIMIT", 20))
+        watchlist = list(getattr(settings, "WATCHLIST", []))
+        limited_tickers = watchlist[:limit] if watchlist else None
+
+    logger.info(
+        "ui_background_scan_started",
+        session_key=session_key,
+        limited=limited,
+        ticker_count=len(limited_tickers) if limited_tickers else "all",
+    )
 
     def worker():
         try:
@@ -155,12 +217,27 @@ def start_background_scan(force_clear: bool = False) -> bool:
                 db,
                 last_scan_time=last_scan_time,
                 force_clear=force_clear,
+                limited_tickers=limited_tickers,
+            )
+            logger.info(
+                "ui_background_scan_completed",
+                session_key=session_key,
+                duration_seconds=round(
+                    (datetime.now(TR) - st.session_state.get("scan_started_at", datetime.now(TR))).total_seconds(), 1
+                ),
+                signal_count=len(result.get("signals", [])),
             )
         except Exception as exc:
             result = _empty_scan_result(last_scan_time, str(exc))
-        with SCAN_LOCK:
-            PENDING_SCAN_RESULTS[session_key] = result
-            ACTIVE_SCAN_SESSIONS.discard(session_key)
+            logger.error(
+                "ui_background_scan_failed",
+                session_key=session_key,
+                error=str(exc),
+            )
+        finally:
+            with SCAN_LOCK:
+                PENDING_SCAN_RESULTS[session_key] = result
+                ACTIVE_SCAN_SESSIONS.discard(session_key)
 
     threading.Thread(target=worker, daemon=True).start()
     return True
@@ -190,16 +267,18 @@ def ensure_initial_data() -> None:
     apply_pending_scan_result()
     if st.session_state.signals:
         return
+    if st.session_state.get("scan_in_progress"):
+        return
     try:
         from bist_bot.ui.runtime_data import map_cached_signals
 
         cached = st.session_state.db.get_recent_signals(limit=len(settings.WATCHLIST))
         if cached:
             st.session_state.signals = map_cached_signals(cached)
-            start_background_scan(force_clear=False)
+            start_background_scan(force_clear=False, limited=False)
             return
-        if start_background_scan(force_clear=False):
+        if start_background_scan(force_clear=False, limited=True):
             st.session_state.scan_in_progress = True
-            st.info("İlk tarama hazırlanıyor, lütfen bekleyin...")
     except Exception as exc:
+        logger.error("ui_initial_scan_failed", error=str(exc))
         st.error(f"Tarama hatasi: {exc}")
