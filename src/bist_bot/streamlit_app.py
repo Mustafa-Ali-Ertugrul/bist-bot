@@ -61,6 +61,7 @@ def _complete_auth(email: str, token: str) -> None:
     st.session_state.app_bootstrapped = False
     st.session_state.just_logged_in = True
     set_active_page("dashboard")
+    st.rerun()
 
 
 def _login_form() -> bool:
