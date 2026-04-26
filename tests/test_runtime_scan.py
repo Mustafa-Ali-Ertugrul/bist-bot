@@ -17,9 +17,11 @@ def test_ensure_initial_data_starts_background_scan_when_no_cache():
     mock_session._scan_session_key = "test-key"
     mock_session.db = mock_db
 
-    with patch("bist_bot.ui.runtime_scan.st") as mock_st, \
-         patch("bist_bot.ui.runtime_scan.start_background_scan") as mock_start, \
-         patch("bist_bot.ui.runtime_scan.apply_pending_scan_result"):
+    with (
+        patch("bist_bot.ui.runtime_scan.st") as mock_st,
+        patch("bist_bot.ui.runtime_scan.start_background_scan") as mock_start,
+        patch("bist_bot.ui.runtime_scan.apply_pending_scan_result"),
+    ):
         mock_st.session_state = mock_session
         mock_start.return_value = True
 
@@ -46,10 +48,12 @@ def test_ensure_initial_data_uses_cached_signals_when_available():
     mock_session._scan_session_key = "test-key"
     mock_session.db = mock_db
 
-    with patch("bist_bot.ui.runtime_scan.st") as mock_st, \
-         patch("bist_bot.ui.runtime_scan.start_background_scan") as mock_start, \
-         patch("bist_bot.ui.runtime_scan.apply_pending_scan_result"), \
-         patch("bist_bot.ui.runtime_data.map_cached_signals") as mock_map:
+    with (
+        patch("bist_bot.ui.runtime_scan.st") as mock_st,
+        patch("bist_bot.ui.runtime_scan.start_background_scan") as mock_start,
+        patch("bist_bot.ui.runtime_scan.apply_pending_scan_result"),
+        patch("bist_bot.ui.runtime_data.map_cached_signals") as mock_map,
+    ):
         mock_st.session_state = mock_session
         mock_start.return_value = True
         mock_map.return_value = [MagicMock()]
@@ -78,8 +82,10 @@ def test_sync_runtime_feedback_skips_rerun_during_bootstrap():
         "last_scan_time": None,
     }.get(key, default)
 
-    with patch("bist_bot.ui.runtime_refresh.st") as mock_st, \
-         patch("bist_bot.ui.runtime_refresh.time") as mock_time:
+    with (
+        patch("bist_bot.ui.runtime_refresh.st") as mock_st,
+        patch("bist_bot.ui.runtime_refresh.time") as mock_time,
+    ):
         mock_st.session_state = mock_session
 
         from bist_bot.ui.runtime_refresh import sync_runtime_feedback
@@ -109,8 +115,10 @@ def test_sync_runtime_feedback_reruns_when_scan_in_progress_after_bootstrap():
         "last_scan_time": None,
     }.get(key, default)
 
-    with patch("bist_bot.ui.runtime_refresh.st") as mock_st, \
-         patch("bist_bot.ui.runtime_refresh.time") as mock_time:
+    with (
+        patch("bist_bot.ui.runtime_refresh.st") as mock_st,
+        patch("bist_bot.ui.runtime_refresh.time") as mock_time,
+    ):
         mock_st.session_state = mock_session
 
         from bist_bot.ui.runtime_refresh import sync_runtime_feedback
