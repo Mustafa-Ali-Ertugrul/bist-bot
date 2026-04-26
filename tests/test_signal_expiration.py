@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import os
 import tempfile
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from bist_bot.db.database import DatabaseManager
 from bist_bot.db.repositories.signals_repository import SignalsRepository
 from bist_bot.strategy.signal_models import Signal, SignalType
-
 
 # ── Settings defaults ──────────────────────────────────────────────────────
 
@@ -43,20 +42,20 @@ def test_is_expired_returns_false_when_expires_at_is_none():
 
 
 def test_is_expired_returns_false_before_expires_at():
-    future = datetime.now(timezone.utc) + timedelta(hours=1)
+    future = datetime.now(UTC) + timedelta(hours=1)
     signal = Signal(
         ticker="TEST.IS",
         signal_type=SignalType.BUY,
         score=25.0,
         price=100.0,
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
         expires_at=future,
     )
     assert signal.is_expired() is False
 
 
 def test_is_expired_returns_true_at_expires_at():
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     signal = Signal(
         ticker="TEST.IS",
         signal_type=SignalType.BUY,
@@ -69,7 +68,7 @@ def test_is_expired_returns_true_at_expires_at():
 
 
 def test_is_expired_returns_true_after_expires_at():
-    past = datetime.now(timezone.utc) - timedelta(hours=1)
+    past = datetime.now(UTC) - timedelta(hours=1)
     signal = Signal(
         ticker="TEST.IS",
         signal_type=SignalType.BUY,
@@ -96,7 +95,7 @@ def test_naive_aware_comparison_does_not_crash():
 
 
 def test_signal_auto_sets_expires_at():
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     signal = Signal(
         ticker="TEST.IS",
         signal_type=SignalType.BUY,
@@ -129,7 +128,7 @@ def signals_repo():
 
 
 def test_signal_record_supports_expires_at(signals_repo):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     signal = Signal(
         ticker="THYAO.IS",
         signal_type=SignalType.STRONG_BUY,
@@ -145,7 +144,7 @@ def test_signal_record_supports_expires_at(signals_repo):
 
 
 def test_expired_signal_marked_in_dict(signals_repo):
-    past = datetime.now(timezone.utc) - timedelta(hours=2)
+    past = datetime.now(UTC) - timedelta(hours=2)
     signal = Signal(
         ticker="ASELS.IS",
         signal_type=SignalType.SELL,
@@ -165,8 +164,8 @@ def test_null_expires_at_backward_compatible(signals_repo):
     def _insert_null(session):
         session.add(
             SignalRecord(
-                timestamp=datetime.now(timezone.utc),
-                created_at=datetime.now(timezone.utc),
+                timestamp=datetime.now(UTC),
+                created_at=datetime.now(UTC),
                 ticker="GARAN.IS",
                 signal_type="AL",
                 score=30.0,
@@ -199,14 +198,14 @@ def test_expired_signal_not_sent_to_notifier():
         def send_signal(self, signal):
             sent.append(signal)
 
-    past = datetime.now(timezone.utc) - timedelta(hours=2)
+    past = datetime.now(UTC) - timedelta(hours=2)
     actionable = [
         Signal(
             ticker="FRESH.IS",
             signal_type=SignalType.STRONG_BUY,
             score=50.0,
             price=100.0,
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
         ),
         Signal(
             ticker="STALE.IS",

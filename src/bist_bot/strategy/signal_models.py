@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from enum import Enum
 
 from bist_bot.config.settings import settings
@@ -81,12 +81,12 @@ class Signal:
         if self.expires_at is None:
             return False
         if now is None:
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
         expires = self.expires_at
         if expires.tzinfo is None and now.tzinfo is not None:
-            expires = expires.replace(tzinfo=timezone.utc)
+            expires = expires.replace(tzinfo=UTC)
         elif expires.tzinfo is not None and now.tzinfo is None:
-            now = now.replace(tzinfo=timezone.utc)
+            now = now.replace(tzinfo=UTC)
         return now >= expires
 
     @property
