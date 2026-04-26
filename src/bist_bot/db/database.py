@@ -169,7 +169,7 @@ class DatabaseManager:
         pool_size: int = 5,
         max_overflow: int = 10,
         pool_timeout: int = 30,
-        busy_timeout_ms: int = 5000,
+        busy_timeout_ms: int = 200,
         write_retry_attempts: int = 3,
         write_retry_backoff_seconds: float = 0.05,
     ) -> None:
