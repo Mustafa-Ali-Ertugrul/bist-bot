@@ -1,31 +1,132 @@
-"""Static fallback ticker universe for BIST watchlists."""
+"""Static fallback ticker universe for BIST watchlists.
+
+BIST 100 endeksi referans listesi (2024-2025 donemi). Endeks periyodik olarak
+guncellenir; surekli takip icin BorsaIstanbulQuoteProvider veya official provider
+kullanilmasi onerilir. Bu liste sadece veri saglayicidan canli tickerlar
+cekilemediginde fallback amacli kullanilir.
+
+Liste tekrarsizdir ve gercek BIST tickerlarini icerir. Bilinmeyen veya delist
+edilen tickerlar dahil edilmemistir.
+"""
 
 BIST100_TICKERS = [
-    "THYAO.IS", "ASELS.IS", "SASA.IS", "KCHOL.IS", "EREGL.IS",
-    "BIMAS.IS", "TUPRS.IS", "SAHOL.IS", "GARAN.IS", "AKBNK.IS",
-    "PGSUS.IS", "SISE.IS", "TAVHL.IS", "TOASO.IS", "FROTO.IS",
-    "PETKM.IS", "KRDMD.IS", "HEKTS.IS", "AYGAZ.IS", "ISCTR.IS",
-    "YKBNK.IS", "HALKB.IS", "VAKBN.IS", "AKSA.IS", "ARCLK.IS",
-    "CCOLA.IS", "CIMSA.IS", "CLEBI.IS", "ENJSA.IS", "ERBOS.IS",
-    "FENIS.IS", "FMIZP.IS", "FORMT.IS", "GENTS.IS", "GLYHO.IS",
-    "IPEKE.IS", "IZMDC.IS", "KARSN.IS", "KAYSE.IS", "KONTR.IS",
-    "KORFM.IS", "LKMNH.IS", "MAKIM.IS", "MGROS.IS", "MRGYO.IS",
-    "ODAS.IS", "PNLSN.IS", "PSDTC.IS", "SEKFK.IS", "SEKFS.IS",
-    "SOKM.IS", "AEFES.IS", "AFYON.IS", "AKSEN.IS", "ALARK.IS",
-    "ALKIM.IS", "ALTNY.IS", "ANACM.IS", "ARENA.IS", "ATAGY.IS",
-    "ATATP.IS", "AVOD.IS", "AYDEM.IS", "BAGFS.IS", "BASGZ.IS",
-    "BAYRK.IS", "BLCOM.IS", "BFRYS.IS", "BKENP.IS", "BKSST.IS",
-    "BOBBR.IS", "BOMSN.IS", "BRISA.IS", "BRSAN.IS", "BRYAT.IS",
-    "BSOKE.IS", "BTCIM.IS", "CANTE.IS", "CEMAS.IS", "CEMTS.IS",
-    "CLDNM.IS", "CMBT.IS", "COSKUN.IS", "CRDFA.IS", "CUSAN.IS",
-    "DAKOL.IS", "DENGE.IS", "DERIM.IS", "DESA.IS", "DEVA.IS",
-    "DGKLB.IS", "DGGYO.IS", "DINBNK.IS", "DKRNK.IS", "DOAS.IS",
-    "DOCO.IS", "DOHOL.IS", "ECZYO.IS", "EENFA.IS", "EGGUB.IS",
-    "EKGYO.IS", "ELITE.IS", "EMKEL.IS", "ENKAI.IS", "ESCOM.IS",
-    "EUPRO.IS", "EUREN.IS", "FADE.IS", "FENER.IS", "FLAP.IS",
-    "FONET.IS", "FRIGO.IS", "GEDIK.IS", "GENIL.IS", "GESAN.IS",
-    "GIPTA.IS", "GOLTS.IS", "GOODY.IS", "GOZDE.IS", "GRTHO.IS",
-    "GSDHO.IS", "GUBRF.IS", "HASAN.IS", "HDFGS.IS", "HURGZ.IS",
-    "HUSEIN.IS", "ICBCT.IS", "ICTURKEY.IS", "IDGIS.IS", "IHEVA.IS",
-    "IHGZ.IS", "INDES.IS", "INFO.IS", "INGRM.IS",
+    # Bankacilik & Finans (10)
+    "AKBNK.IS",
+    "GARAN.IS",
+    "HALKB.IS",
+    "ISCTR.IS",
+    "VAKBN.IS",
+    "YKBNK.IS",
+    "ALBRK.IS",
+    "QNBFB.IS",
+    "SKBNK.IS",
+    "TSKB.IS",
+    # Holding (8)
+    "KCHOL.IS",
+    "SAHOL.IS",
+    "DOHOL.IS",
+    "GLYHO.IS",
+    "GSDHO.IS",
+    "ALARK.IS",
+    "ECILC.IS",
+    "YGGYO.IS",
+    # Havayolu & Ulastirma (5)
+    "THYAO.IS",
+    "PGSUS.IS",
+    "TAVHL.IS",
+    "CLEBI.IS",
+    "DOCO.IS",
+    # Otomotiv (6)
+    "FROTO.IS",
+    "TOASO.IS",
+    "TTRAK.IS",
+    "OTKAR.IS",
+    "DOAS.IS",
+    "KARSN.IS",
+    # Demir-Celik & Metal (5)
+    "EREGL.IS",
+    "KRDMD.IS",
+    "BRSAN.IS",
+    "CEMTS.IS",
+    "IZMDC.IS",
+    # Kimya & Petrokimya & Rafineri (8)
+    "TUPRS.IS",
+    "PETKM.IS",
+    "SASA.IS",
+    "AKSA.IS",
+    "ALKIM.IS",
+    "GUBRF.IS",
+    "BAGFS.IS",
+    "HEKTS.IS",
+    # Cimento & Insaat (6)
+    "CIMSA.IS",
+    "AKCNS.IS",
+    "OYAKC.IS",
+    "BTCIM.IS",
+    "ENKAI.IS",
+    "TKFEN.IS",
+    # Cam (2)
+    "SISE.IS",
+    "ANACM.IS",
+    # Beyaz Esya & Dayanikli Tuketim (3)
+    "ARCLK.IS",
+    "VESTL.IS",
+    "VESBE.IS",
+    # Gida & Icecek & Perakende (8)
+    "BIMAS.IS",
+    "MGROS.IS",
+    "SOKM.IS",
+    "AEFES.IS",
+    "CCOLA.IS",
+    "ULKER.IS",
+    "TUKAS.IS",
+    "PNSUT.IS",
+    # Enerji & Elektrik (9)
+    "ENJSA.IS",
+    "AKSEN.IS",
+    "AYGAZ.IS",
+    "ZOREN.IS",
+    "ODAS.IS",
+    "AYDEM.IS",
+    "CWENE.IS",
+    "SMRTG.IS",
+    "EUPWR.IS",
+    # Teknoloji & Savunma (11)
+    "ASELS.IS",
+    "LOGO.IS",
+    "KAREL.IS",
+    "NETAS.IS",
+    "INDES.IS",
+    "ARENA.IS",
+    "FONET.IS",
+    "MIATK.IS",
+    "KONTR.IS",
+    "GESAN.IS",
+    "PAPIL.IS",
+    # Iletisim (2)
+    "TCELL.IS",
+    "TTKOM.IS",
+    # Madencilik (3)
+    "KOZAL.IS",
+    "KOZAA.IS",
+    "IPEKE.IS",
+    # Lastik (1)
+    "BRISA.IS",
+    # Tekstil & Hazir Giyim (2)
+    "MAVI.IS",
+    "DESA.IS",
+    # Ilac & Saglik (4)
+    "DEVA.IS",
+    "LKMNH.IS",
+    "MPARK.IS",
+    "SELEC.IS",
+    # Gayrimenkul (4)
+    "EKGYO.IS",
+    "ISGYO.IS",
+    "AKMGY.IS",
+    "TRGYO.IS",
+    # Spor & Diger Sanayi (3)
+    "FENER.IS",
+    "BJKAS.IS",
+    "GSRAY.IS",
 ]
