@@ -351,6 +351,7 @@ def test_login_does_not_trigger_fetcher_network():
         assert not spy.fetch_single_called, "login must not call fetch_single"
         assert not spy.fetch_all_called, "login must not call fetch_all"
 
+
 def test_login_db_exception_returns_401_quickly():
     from bist_bot.contracts import (
         DataFetcherProtocol,
@@ -384,12 +385,14 @@ def test_login_db_exception_returns_401_quickly():
         def manager(self):
             mock_manager = MagicMock()
             mock_manager.engine.begin.return_value.__enter__ = MagicMock(
-                side_effect=SQLAlchemyOperationalError('statement', {}, Exception('database locked'))
+                side_effect=SQLAlchemyOperationalError(
+                    "statement", {}, Exception("database locked")
+                )
             )
             mock_manager.engine.begin.return_value.__exit__ = MagicMock(return_value=False)
             return mock_manager
 
-    with settings.override(JWT_SECRET_KEY='test-secret-key-for-db-exception-tests'):
+    with settings.override(JWT_SECRET_KEY="test-secret-key-for-db-exception-tests"):
         app = create_dashboard_app(
             fetcher=FakeFetcher(),
             engine=FakeEngine(),
@@ -399,9 +402,9 @@ def test_login_db_exception_returns_401_quickly():
     with app.test_client() as client:
         start = time.monotonic()
         response = client.post(
-            '/api/auth/login',
-            json={'email': 'fake@test.com', 'password': 'wrong'},
+            "/api/auth/login",
+            json={"email": "fake@test.com", "password": "wrong"},
         )
         elapsed = time.monotonic() - start
         assert response.status_code == 401
-        assert elapsed < 2.0, f'Login took {elapsed:.2f}s, should be < 2s with DB error'
+        assert elapsed < 2.0, f"Login took {elapsed:.2f}s, should be < 2s with DB error"

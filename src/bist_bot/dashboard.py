@@ -113,55 +113,55 @@ def create_dashboard_app(
         )
 
     def verify_admin(email: str, password: str) -> bool:
-            logger.info('verify_admin_start', email=email)
-            manager = getattr(get_db(), 'manager', None)
-            if manager is None:
-                logger.warning('login_db_unavailable', email=email)
-                return False
-            try:
-                logger.info('verify_admin_db_transaction_start', email=email)
-                with manager.engine.begin() as conn:
-                    logger.info('verify_admin_select_user_start', email=email)
-                    row = (
-                        conn.execute(
-                            text('SELECT id, password_hash FROM users WHERE email = :email LIMIT 1'),
-                            {'email': email},
-                        )
-                        .mappings()
-                        .first()
+        logger.info("verify_admin_start", email=email)
+        manager = getattr(get_db(), "manager", None)
+        if manager is None:
+            logger.warning("login_db_unavailable", email=email)
+            return False
+        try:
+            logger.info("verify_admin_db_transaction_start", email=email)
+            with manager.engine.begin() as conn:
+                logger.info("verify_admin_select_user_start", email=email)
+                row = (
+                    conn.execute(
+                        text("SELECT id, password_hash FROM users WHERE email = :email LIMIT 1"),
+                        {"email": email},
                     )
-                    logger.info('verify_admin_select_user_end', email=email)
+                    .mappings()
+                    .first()
+                )
+                logger.info("verify_admin_select_user_end", email=email)
+        except SQLAlchemyError as exc:
+            logger.error("verify_admin_db_error", email=email, error=str(exc))
+            return False
+        if row is None:
+            logger.info("login_user_not_found", email=email)
+            return False
+        logger.info("verify_admin_password_check_start", email=email)
+        verified, upgraded_hash = verify_and_rehash_password(password, str(row["password_hash"]))
+        logger.info("verify_admin_password_check_end", email=email)
+        if not verified:
+            logger.info("login_password_invalid", email=email)
+            return False
+        if upgraded_hash is not None:
+            try:
+                logger.info("verify_admin_hash_upgrade_start", email=email)
+                with manager.engine.begin() as conn:
+                    conn.execute(
+                        text(
+                            "UPDATE users SET password_hash = :password_hash, updated_at = :updated_at WHERE id = :id"
+                        ),
+                        {
+                            "id": int(row["id"]),
+                            "password_hash": upgraded_hash,
+                            "updated_at": datetime.now(TR),
+                        },
+                    )
+                logger.info("verify_admin_hash_upgrade_end", email=email)
             except SQLAlchemyError as exc:
-                logger.error('verify_admin_db_error', email=email, error=str(exc))
-                return False
-            if row is None:
-                logger.info('login_user_not_found', email=email)
-                return False
-            logger.info('verify_admin_password_check_start', email=email)
-            verified, upgraded_hash = verify_and_rehash_password(password, str(row['password_hash']))
-            logger.info('verify_admin_password_check_end', email=email)
-            if not verified:
-                logger.info('login_password_invalid', email=email)
-                return False
-            if upgraded_hash is not None:
-                try:
-                    logger.info('verify_admin_hash_upgrade_start', email=email)
-                    with manager.engine.begin() as conn:
-                        conn.execute(
-                            text(
-                                'UPDATE users SET password_hash = :password_hash, updated_at = :updated_at WHERE id = :id'
-                            ),
-                            {
-                                'id': int(row['id']),
-                                'password_hash': upgraded_hash,
-                                'updated_at': datetime.now(TR),
-                            },
-                        )
-                    logger.info('verify_admin_hash_upgrade_end', email=email)
-                except SQLAlchemyError as exc:
-                    logger.warning('verify_admin_hash_upgrade_failed', email=email, error=str(exc))
-            logger.info('login_success', email=email)
-            return True
+                logger.warning("verify_admin_hash_upgrade_failed", email=email, error=str(exc))
+        logger.info("login_success", email=email)
+        return True
 
     def create_user(email: str, password: str) -> tuple[bool, str]:
         manager = getattr(get_db(), "manager", None)
