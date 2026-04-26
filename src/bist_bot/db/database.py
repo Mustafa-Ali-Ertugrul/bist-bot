@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import random
 import re
 import threading
@@ -32,9 +31,10 @@ from sqlalchemy.orm import (
 )
 from sqlalchemy.pool import QueuePool
 
+from bist_bot.app_logging import get_logger
 from bist_bot.config.settings import settings
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__, component="database")
 
 
 class Base(DeclarativeBase):
@@ -223,6 +223,8 @@ class DatabaseManager:
             cursor.close()
 
     def initialize(self) -> None:
+        _db_logger = get_logger(__name__, component="db")
+        logger.info("db_initialization_started")
         with _INIT_LOCK:
             if self._initialized:
                 return
@@ -236,6 +238,7 @@ class DatabaseManager:
             self._seed_admin_user()
             self._warn_if_no_users()
             self._initialized = True
+        logger.info("db_initialization_completed")
 
     def _warn_if_no_users(self) -> None:
         if not self._is_sqlite:
@@ -429,6 +432,7 @@ class DatabaseManager:
                     email=settings.ADMIN_BOOTSTRAP_EMAIL,
                 )
                 return
+        logger.info("admin_seed_completed")
 
     @contextmanager
     def session_scope(self, *, read_only: bool = False) -> Iterator[Session]:
