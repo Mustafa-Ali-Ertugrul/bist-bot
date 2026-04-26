@@ -400,9 +400,16 @@ class DatabaseManager:
 
         now = self.now_utc()
         with self.engine.begin() as conn:
-            has_users = conn.execute(text("SELECT id FROM users LIMIT 1")).scalar_one_or_none()
-            if has_users is not None:
-                logger.info("admin_bootstrap_skipped", reason="users table already has entries")
+            admin_exists = conn.execute(
+                text("SELECT id FROM users WHERE email = :email LIMIT 1"),
+                {"email": settings.ADMIN_BOOTSTRAP_EMAIL},
+            ).scalar_one_or_none()
+            if admin_exists is not None:
+                logger.info(
+                    "admin_bootstrap_skipped",
+                    reason="admin_exists",
+                    email=settings.ADMIN_BOOTSTRAP_EMAIL,
+                )
                 return
             try:
                 conn.execute(
@@ -429,7 +436,6 @@ class DatabaseManager:
                     email=settings.ADMIN_BOOTSTRAP_EMAIL,
                 )
                 return
-        logger.info("admin_seed_completed")
 
     @contextmanager
     def session_scope(self, *, read_only: bool = False) -> Iterator[Session]:
