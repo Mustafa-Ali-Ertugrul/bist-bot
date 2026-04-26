@@ -475,3 +475,141 @@ def test_no_admin_seed_no_crash(tmp_path):
             json={"email": "nobody@bistbot.local", "password": "anything"},
         )
         assert response.status_code == 401
+
+
+def test_existing_admin_not_updated_by_default(tmp_path):
+    """Existing admin password hash must not change unless ADMIN_BOOTSTRAP_UPDATE_EXISTING=true."""
+    import sqlite3
+
+    admin_email = "bootstrap@bistbot.local"
+    db_path = str(tmp_path / "auth_no_update.db")
+
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        """CREATE TABLE users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'admin',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )"""
+    )
+    original_hash = hash_password("original-password")
+    conn.execute(
+        "INSERT INTO users (email, password_hash, role, created_at, updated_at) VALUES (?, ?, 'admin', datetime('now'), datetime('now'))",
+        (admin_email, original_hash),
+    )
+    conn.commit()
+    conn.close()
+
+    with settings.override(
+        DB_PATH=db_path,
+        JWT_SECRET_KEY="test_secret_key_12345678901234567890",
+        CORS_ORIGINS=("http://localhost:8501",),
+        ADMIN_BOOTSTRAP_EMAIL=admin_email,
+        ADMIN_BOOTSTRAP_PASSWORD_HASH=hash_password("new-password"),
+        ADMIN_BOOTSTRAP_UPDATE_EXISTING=False,
+    ):
+        manager = DatabaseManager(sqlite_path=db_path)
+
+    with manager.engine.begin() as conn:
+        stored_hash = conn.execute(
+            text("SELECT password_hash FROM users WHERE email = :email"),
+            {"email": admin_email},
+        ).scalar_one()
+    assert stored_hash == original_hash
+
+
+def test_existing_admin_updated_when_flag_true(tmp_path):
+    """When ADMIN_BOOTSTRAP_UPDATE_EXISTING=true, existing admin hash should be replaced."""
+    import sqlite3
+
+    admin_email = "bootstrap@bistbot.local"
+    db_path = str(tmp_path / "auth_update.db")
+
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        """CREATE TABLE users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'admin',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )"""
+    )
+    old_hash = hash_password("old-password")
+    conn.execute(
+        "INSERT INTO users (email, password_hash, role, created_at, updated_at) VALUES (?, ?, 'admin', datetime('now'), datetime('now'))",
+        (admin_email, old_hash),
+    )
+    conn.commit()
+    conn.close()
+
+    new_hash = hash_password("new-password")
+    with settings.override(
+        DB_PATH=db_path,
+        JWT_SECRET_KEY="test_secret_key_12345678901234567890",
+        CORS_ORIGINS=("http://localhost:8501",),
+        ADMIN_BOOTSTRAP_EMAIL=admin_email,
+        ADMIN_BOOTSTRAP_PASSWORD_HASH=new_hash,
+        ADMIN_BOOTSTRAP_UPDATE_EXISTING=True,
+    ):
+        manager = DatabaseManager(sqlite_path=db_path)
+
+    with manager.engine.begin() as conn:
+        stored_hash = conn.execute(
+            text("SELECT password_hash FROM users WHERE email = :email"),
+            {"email": admin_email},
+        ).scalar_one()
+    assert stored_hash == new_hash
+
+
+def test_updated_admin_can_login_with_new_password(tmp_path):
+    """After admin hash is updated via bootstrap flag, login should succeed with new password."""
+    import sqlite3
+
+    admin_email = "bootstrap@bistbot.local"
+    db_path = str(tmp_path / "auth_login_after_update.db")
+
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        """CREATE TABLE users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'admin',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )"""
+    )
+    conn.execute(
+        "INSERT INTO users (email, password_hash, role, created_at, updated_at) VALUES (?, ?, 'admin', datetime('now'), datetime('now'))",
+        (admin_email, hash_password("old-wrong-password")),
+    )
+    conn.commit()
+    conn.close()
+
+    new_password = "new-correct-password"
+    with settings.override(
+        DB_PATH=db_path,
+        JWT_SECRET_KEY="test_secret_key_12345678901234567890",
+        CORS_ORIGINS=("http://localhost:8501",),
+        ADMIN_BOOTSTRAP_EMAIL=admin_email,
+        ADMIN_BOOTSTRAP_PASSWORD_HASH=hash_password(new_password),
+        ADMIN_BOOTSTRAP_UPDATE_EXISTING=True,
+    ):
+        manager = DatabaseManager(sqlite_path=db_path)
+        db = DataAccess(manager)
+        app = create_dashboard_app(cast(Any, DummyFetcher()), cast(Any, DummyEngine()), db)
+        app.config["TESTING"] = True
+        client = app.test_client()
+
+    response = client.post(
+        "/api/auth/login",
+        json={"email": admin_email, "password": new_password},
+    )
+    assert response.status_code == 200
+    data = response.get_json()
+    assert "access_token" in data
