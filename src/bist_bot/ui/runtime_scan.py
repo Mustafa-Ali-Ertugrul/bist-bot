@@ -198,7 +198,8 @@ def ensure_initial_data() -> None:
             st.session_state.signals = map_cached_signals(cached)
             start_background_scan(force_clear=False)
             return
-        run_scan(force_clear=False)
-        st.rerun()
+        if start_background_scan(force_clear=False):
+            st.session_state.scan_in_progress = True
+            st.info("İlk tarama hazırlanıyor, lütfen bekleyin...")
     except Exception as exc:
         st.error(f"Tarama hatasi: {exc}")

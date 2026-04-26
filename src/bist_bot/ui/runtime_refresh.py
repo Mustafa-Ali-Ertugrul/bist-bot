@@ -21,6 +21,8 @@ def sync_runtime_feedback(run_scan_callback) -> None:
         st.rerun()
 
     if st.session_state.get("scan_in_progress"):
+        if st.session_state.get("just_logged_in"):
+            return
         st.caption("Arka planda guncel tarama suruyor; sonuc hazir oldugunda ekran yenilenir.")
         time.sleep(1)
         st.rerun()
