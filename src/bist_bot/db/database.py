@@ -31,7 +31,10 @@ from sqlalchemy.orm import (
 )
 from sqlalchemy.pool import QueuePool
 
+from bist_bot.app_logging import get_logger
 from bist_bot.config.settings import settings
+
+logger = get_logger(__name__, component="database")
 
 
 class Base(DeclarativeBase):
@@ -220,6 +223,8 @@ class DatabaseManager:
             cursor.close()
 
     def initialize(self) -> None:
+        _db_logger = get_logger(__name__, component="db")
+        logger.info("db_initialization_started")
         with _INIT_LOCK:
             if self._initialized:
                 return
@@ -231,7 +236,24 @@ class DatabaseManager:
                 ) from exc
             self._migrate_legacy_schema()
             self._seed_admin_user()
+            self._warn_if_no_users()
             self._initialized = True
+        logger.info("db_initialization_completed")
+
+    def _warn_if_no_users(self) -> None:
+        if not self._is_sqlite:
+            return
+        try:
+            with self.engine.connect() as conn:
+                count = conn.execute(text("SELECT COUNT(*) FROM users")).scalar_one()
+            if count == 0 and not settings.ALLOW_PUBLIC_REGISTRATION:
+                logger.warning(
+                    "no_users_and_registration_disabled",
+                    message="Users table is empty and public registration is off. "
+                    "Set ADMIN_BOOTSTRAP_EMAIL and ADMIN_BOOTSTRAP_PASSWORD_HASH to seed an admin user.",
+                )
+        except Exception:
+            pass
 
     def _migrate_legacy_schema(self) -> None:
         if not self._is_sqlite:
@@ -368,12 +390,22 @@ class DatabaseManager:
 
     def _seed_admin_user(self) -> None:
         if not settings.admin_bootstrap_enabled:
+            logger.info(
+                "admin_bootstrap_skipped",
+                reason="ADMIN_BOOTSTRAP_EMAIL or ADMIN_BOOTSTRAP_PASSWORD_HASH not set",
+            )
             return
+
+        logger.info(
+            "admin_bootstrap_start",
+            email=settings.ADMIN_BOOTSTRAP_EMAIL,
+        )
 
         now = self.now_utc()
         with self.engine.begin() as conn:
             has_users = conn.execute(text("SELECT id FROM users LIMIT 1")).scalar_one_or_none()
             if has_users is not None:
+                logger.info("admin_bootstrap_skipped", reason="users table already has entries")
                 return
             try:
                 conn.execute(
@@ -390,8 +422,17 @@ class DatabaseManager:
                         "updated_at": now,
                     },
                 )
+                logger.info(
+                    "admin_bootstrap_created",
+                    email=settings.ADMIN_BOOTSTRAP_EMAIL,
+                )
             except IntegrityError:
+                logger.warning(
+                    "admin_bootstrap_duplicate",
+                    email=settings.ADMIN_BOOTSTRAP_EMAIL,
+                )
                 return
+        logger.info("admin_seed_completed")
 
     @contextmanager
     def session_scope(self, *, read_only: bool = False) -> Iterator[Session]:
