@@ -221,11 +221,20 @@ def create_dashboard_app(
         payload = request.get_json(silent=True) or {}
         email = str(payload.get("email", "")).strip().lower()
         password = str(payload.get("password", ""))
-        if not email or not password or not verify_admin(email, password):
+        if not email or not password:
+            logger.warning("api_login_failed", reason="missing_credentials", email=email or "")
             return jsonify(
                 {"status": "error", "message": get_message("api.invalid_credentials")}
             ), 401
 
+        logger.info("api_login_attempt", email=email)
+        if not verify_admin(email, password):
+            logger.warning("api_login_failed", reason="invalid_credentials", email=email)
+            return jsonify(
+                {"status": "error", "message": get_message("api.invalid_credentials")}
+            ), 401
+
+        logger.info("api_login_succeeded", email=email)
         token = create_access_token(identity=email)
         return jsonify({"status": "ok", "access_token": token, "expires_in_hours": 12})
 

@@ -343,3 +343,74 @@ def test_legacy_bcrypt_hash_migrates_on_successful_login(tmp_path):
             ).scalar_one()
         assert isinstance(migrated_hash, str)
         assert migrated_hash.startswith("scrypt:")
+
+
+def test_admin_seed_creates_loginable_user(tmp_path):
+    """When bootstrap env vars are set and users table is empty, seed creates a loginable user."""
+    password = "bootstrap-secret-123"
+    password_hash = hash_password(password)
+    with settings.override(
+        DB_PATH=str(tmp_path / "auth_bootstrap.db"),
+        JWT_SECRET_KEY="test_secret_key_12345678901234567890",
+        ADMIN_BOOTSTRAP_EMAIL="bootstrap@bistbot.local",
+        ADMIN_BOOTSTRAP_PASSWORD_HASH=password_hash,
+        CORS_ORIGINS=("http://localhost:8501",),
+    ):
+        manager = DatabaseManager(sqlite_path=str(tmp_path / "auth_bootstrap.db"))
+        db = DataAccess(manager)
+        app = create_dashboard_app(cast(Any, DummyFetcher()), cast(Any, DummyEngine()), db)
+        app.config["TESTING"] = True
+        client = app.test_client()
+
+        response = client.post(
+            "/api/auth/login",
+            json={"email": "bootstrap@bistbot.local", "password": password},
+        )
+        assert response.status_code == 200
+        payload = response.get_json()
+        assert "access_token" in payload
+
+
+def test_admin_seed_wrong_password_returns_401(tmp_path):
+    """When bootstrap env vars are set but password is wrong, login returns 401."""
+    password_hash = hash_password("correct-password")
+    with settings.override(
+        DB_PATH=str(tmp_path / "auth_bootstrap_wrong.db"),
+        JWT_SECRET_KEY="test_secret_key_12345678901234567890",
+        ADMIN_BOOTSTRAP_EMAIL="bootstrap@bistbot.local",
+        ADMIN_BOOTSTRAP_PASSWORD_HASH=password_hash,
+        CORS_ORIGINS=("http://localhost:8501",),
+    ):
+        manager = DatabaseManager(sqlite_path=str(tmp_path / "auth_bootstrap_wrong.db"))
+        db = DataAccess(manager)
+        app = create_dashboard_app(cast(Any, DummyFetcher()), cast(Any, DummyEngine()), db)
+        app.config["TESTING"] = True
+        client = app.test_client()
+
+        response = client.post(
+            "/api/auth/login",
+            json={"email": "bootstrap@bistbot.local", "password": "wrong-password"},
+        )
+        assert response.status_code == 401
+
+
+def test_no_admin_seed_no_crash(tmp_path):
+    """When bootstrap env vars are not set, app starts normally without crashing."""
+    with settings.override(
+        DB_PATH=str(tmp_path / "auth_no_seed.db"),
+        JWT_SECRET_KEY="test_secret_key_12345678901234567890",
+        ADMIN_BOOTSTRAP_EMAIL="",
+        ADMIN_BOOTSTRAP_PASSWORD_HASH="",
+        CORS_ORIGINS=("http://localhost:8501",),
+    ):
+        manager = DatabaseManager(sqlite_path=str(tmp_path / "auth_no_seed.db"))
+        db = DataAccess(manager)
+        app = create_dashboard_app(cast(Any, DummyFetcher()), cast(Any, DummyEngine()), db)
+        app.config["TESTING"] = True
+        client = app.test_client()
+
+        response = client.post(
+            "/api/auth/login",
+            json={"email": "nobody@bistbot.local", "password": "anything"},
+        )
+        assert response.status_code == 401
