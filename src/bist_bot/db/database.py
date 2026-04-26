@@ -223,8 +223,6 @@ class DatabaseManager:
             cursor.close()
 
     def initialize(self) -> None:
-        _db_logger = get_logger(__name__, component="db")
-        logger.info("db_initialization_started")
         with _INIT_LOCK:
             if self._initialized:
                 return
@@ -238,7 +236,6 @@ class DatabaseManager:
             self._seed_admin_user()
             self._warn_if_no_users()
             self._initialized = True
-        logger.info("db_initialization_completed")
 
     def _warn_if_no_users(self) -> None:
         if not self._is_sqlite:
