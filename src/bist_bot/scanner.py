@@ -28,6 +28,7 @@ class ScanService:
         execution_service: ExecutionService | None = None,
         paper_trade_service: PaperTradeService | None = None,
         notification_service: NotificationDispatchService | None = None,
+        circuit_breaker: Any | None = None,
     ):
         """Compose fetch, analyze, persistence, and notification steps."""
         self.fetcher = fetcher
@@ -36,6 +37,7 @@ class ScanService:
         self.db = db
         self.broker = broker
         self.settings = settings or default_settings
+        self.circuit_breaker = circuit_breaker
         self.signal_change_service = signal_change_service or SignalChangeService(db, notifier)
         self.execution_service = execution_service or ExecutionService(
             db, broker=broker, settings=self.settings

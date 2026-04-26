@@ -24,6 +24,7 @@ from bist_bot.strategy.scoring import (
     score_trend,
     score_volume,
 )
+from bist_bot.strategy.base import BaseStrategy
 from bist_bot.strategy.signal_models import Signal, SignalType
 
 logger = logging.getLogger(__name__)
@@ -44,6 +45,7 @@ class StrategyEngine:
         )
         self.params = params or StrategyParams()
         self.meta_model = meta_model
+        self._strategies: dict[str, BaseStrategy] = {}
         self.STRONG_BUY_THRESHOLD = self.params.strong_buy_threshold
         self.BUY_THRESHOLD = self.params.buy_threshold
         self.WEAK_BUY_THRESHOLD = self.params.weak_buy_threshold
@@ -52,6 +54,30 @@ class StrategyEngine:
         self.STRONG_SELL_THRESHOLD = self.params.strong_sell_threshold
         self.SIDEWAYS_EXTRA_THRESHOLD = self.params.sideways_extra_threshold
         self.MOMENTUM_CONFIRMATION = self.params.momentum_confirmation_threshold
+
+    def register_strategy(self, strategy: BaseStrategy) -> None:
+        self._strategies[strategy.name] = strategy
+
+    def unregister_strategy(self, name: str) -> bool:
+        if name in self._strategies:
+            del self._strategies[name]
+            return True
+        return False
+
+    def scan_with_plugins(self, market_data: dict[str, pd.DataFrame]) -> list[Signal]:
+        if not self._strategies:
+            return self.scan_all(market_data)
+        all_signals: list[Signal] = []
+        for ticker, df in market_data.items():
+            for strategy in self._strategies.values():
+                signal = strategy.analyze(ticker, df)
+                if signal:
+                    all_signals.append(signal)
+        seen: dict[str, Signal] = {}
+        for s in all_signals:
+            if s.ticker not in seen or s.score > seen[s.ticker].score:
+                seen[s.ticker] = s
+        return list(seen.values())
 
     def _extract_timeframes(
         self, market_data: pd.DataFrame | dict[str, pd.DataFrame]
@@ -130,7 +156,8 @@ class StrategyEngine:
         """
         trend_df, trigger_df, multi_timeframe = self._extract_timeframes(df)
 
-        if trigger_df is None or len(trigger_df) < 30:
+        min_candles = getattr(self.params, "min_trigger_candles", 30)
+        if trigger_df is None or len(trigger_df) < min_candles:
             logger.warning(
                 f"  {ticker}: Yetersiz veri ({len(trigger_df) if trigger_df is not None else 0} mum)"
             )
@@ -153,7 +180,8 @@ class StrategyEngine:
         if not pd.notna(adx):
             logger.debug(f"  {ticker}: ADX hesaplanamadı (NaN) - sinyal üretme")
             return None
-        if adx < getattr(settings, "ADX_THRESHOLD", 20):
+        adx_threshold = getattr(self.params, "adx_threshold", getattr(settings, "ADX_THRESHOLD", 20))
+        if adx < adx_threshold:
             logger.debug(f"  {ticker}: ADX düşük ({adx:.1f}) - Trend yok, sinyal üretme")
             return None
 

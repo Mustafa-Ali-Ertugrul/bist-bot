@@ -18,6 +18,9 @@ class MarketScheduler:
         self.settings = settings
         self.running = False
 
+    def _now(self) -> datetime:
+        return datetime.now(TR)
+
     def run_loop(self):
         self.running = True
 
