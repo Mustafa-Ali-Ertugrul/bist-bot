@@ -164,7 +164,7 @@ class DatabaseManager:
         write_retry_backoff_seconds: float = 0.05,
     ) -> None:
         self.database_url = (database_url or settings.DATABASE_URL or "").strip()
-        self.sqlite_path = sqlite_path or settings.DB_PATH
+        self.sqlite_path = sqlite_path or settings.DB_PATH or '/tmp/bist_signals.db'
         self._is_sqlite = not self.database_url or self.database_url.startswith(
             "sqlite"
         )
@@ -220,8 +220,9 @@ class DatabaseManager:
             try:
                 Base.metadata.create_all(self.engine)
             except OperationalError as exc:
-                if "already exists" not in str(exc).lower():
-                    raise
+                raise RuntimeError(
+                    'Veri deposu başlatılamadı. DB_PATH veya DATABASE_URL yapılandırmasını kontrol edin.'
+                ) from exc
             self._migrate_legacy_schema()
             self._seed_admin_user()
 

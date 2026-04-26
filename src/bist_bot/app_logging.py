@@ -16,7 +16,6 @@ except ImportError:  # pragma: no cover - optional dependency
     _structlog = None
 
 from bist_bot.config.settings import settings
-from bist_bot.exceptions import OrderExecutionError
 
 
 _DEFAULT_COMPONENT = "app"
