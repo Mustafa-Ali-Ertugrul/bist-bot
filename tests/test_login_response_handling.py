@@ -6,7 +6,6 @@ from unittest.mock import MagicMock
 
 from bist_bot.streamlit_app import _extract_token, _response_message
 
-
 # ── _response_message tests ────────────────────────────────────────────────
 
 
