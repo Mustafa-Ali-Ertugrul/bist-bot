@@ -68,6 +68,7 @@ class SignalRecord(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=lambda: datetime.now(UTC)
     )
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class PaperTradeRecord(Base):
@@ -250,6 +251,8 @@ class DatabaseManager:
                 )
             if "position_size" not in signal_columns:
                 conn.execute(text("ALTER TABLE signals ADD COLUMN position_size INTEGER"))
+            if "expires_at" not in signal_columns:
+                conn.execute(text("ALTER TABLE signals ADD COLUMN expires_at TEXT"))
 
             paper_columns = {
                 row[1] for row in conn.execute(text(f"PRAGMA table_info({paper_table})")).fetchall()

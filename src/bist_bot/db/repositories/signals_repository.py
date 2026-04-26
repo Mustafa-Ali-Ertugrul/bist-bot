@@ -63,6 +63,7 @@ class SignalsRepository:
                     confidence=signal.confidence,
                     reasons=" | ".join(signal.reasons),
                     conditions=_serialize_reasons(signal.reasons),
+                    expires_at=signal.expires_at,
                 )
             )
             return None
@@ -182,6 +183,20 @@ class SignalsRepository:
         }
 
     def _signal_to_dict(self, row: SignalRecord) -> dict[str, Any]:
+        expires_at_iso = None
+        is_expired = False
+        if row.expires_at is not None:
+            expires_at_iso = (
+                row.expires_at.isoformat()
+                if isinstance(row.expires_at, datetime)
+                else row.expires_at
+            )
+            now = datetime.now(UTC)
+            expires = row.expires_at
+            if expires.tzinfo is None:
+                expires = expires.replace(tzinfo=UTC)
+            is_expired = now >= expires
+
         return {
             "id": row.id,
             "timestamp": row.timestamp.isoformat()
@@ -206,4 +221,6 @@ class SignalsRepository:
             else row.outcome_date,
             "profit_pct": row.profit_pct,
             "conditions": _deserialize_reasons(row.conditions),
+            "expires_at": expires_at_iso,
+            "is_expired": is_expired,
         }
