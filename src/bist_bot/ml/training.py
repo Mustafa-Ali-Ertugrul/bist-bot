@@ -108,14 +108,12 @@ def build_training_dataset(
             feature_row["ticker"] = ticker
             feature_row["date"] = str(enriched.index[idx])[:10]
             feature_row["future_return"] = float(future_return.iloc[idx])
-            feature_row["label"] = int(
-                future_return.iloc[idx] >= label_definition.return_threshold
-            )
+            feature_row["label"] = int(future_return.iloc[idx] >= label_definition.return_threshold)
             rows.append(feature_row)
     dataset = pd.DataFrame(rows)
     if dataset.empty:
         raise ValueError("No training rows could be built from price data")
-    dataset = dataset.dropna(subset=FEATURE_COLUMNS + ["future_return", "label"])
+    dataset = dataset.dropna(subset=[*FEATURE_COLUMNS, "future_return", "label"])
     dataset = dataset.sort_values(["date", "ticker"]).reset_index(drop=True)
     return dataset
 
@@ -130,16 +128,12 @@ def _date_range(frame: pd.DataFrame) -> dict[str, str | None]:
     }
 
 
-def split_dataset(
-    dataset: pd.DataFrame, split_config: SplitConfig
-) -> dict[str, pd.DataFrame]:
+def split_dataset(dataset: pd.DataFrame, split_config: SplitConfig) -> dict[str, pd.DataFrame]:
     unique_dates = sorted(pd.to_datetime(dataset["date"].drop_duplicates()).tolist())
     if len(unique_dates) < 10:
         raise ValueError("Need at least 10 unique dates for time-based split")
     train_end = max(1, int(len(unique_dates) * split_config.train_fraction))
-    validation_end = train_end + max(
-        1, int(len(unique_dates) * split_config.validation_fraction)
-    )
+    validation_end = train_end + max(1, int(len(unique_dates) * split_config.validation_fraction))
     calibration_end = validation_end + max(
         1, int(len(unique_dates) * split_config.calibration_fraction)
     )
@@ -149,36 +143,26 @@ def split_dataset(
     test_dates = list(unique_dates[calibration_end:])
     date_series = pd.to_datetime(dataset["date"])
     if not validation_dates or not calibration_dates or not test_dates:
-        raise ValueError(
-            "Split config leaves an empty validation/calibration/test partition"
-        )
+        raise ValueError("Split config leaves an empty validation/calibration/test partition")
     return {
         "train": dataset[date_series.isin(train_dates)].reset_index(drop=True),
-        "validation": dataset[date_series.isin(validation_dates)].reset_index(
-            drop=True
-        ),
-        "calibration": dataset[date_series.isin(calibration_dates)].reset_index(
-            drop=True
-        ),
+        "validation": dataset[date_series.isin(validation_dates)].reset_index(drop=True),
+        "calibration": dataset[date_series.isin(calibration_dates)].reset_index(drop=True),
         "test": dataset[date_series.isin(test_dates)].reset_index(drop=True),
     }
 
 
-def _classification_metrics(
-    labels: np.ndarray, probabilities: np.ndarray
-) -> dict[str, Any]:
+def _classification_metrics(labels: np.ndarray, probabilities: np.ndarray) -> dict[str, Any]:
     probabilities = np.clip(probabilities.astype(float), 1e-6, 1.0 - 1e-6)
     metrics: dict[str, Any] = {
-        "count": int(len(labels)),
+        "count": len(labels),
         "positive_rate": round(float(np.mean(labels)), 4) if len(labels) else 0.0,
         "brier_score": round(float(np.mean((probabilities - labels) ** 2)), 4)
         if len(labels)
         else 0.0,
     }
     if len(labels) and log_loss is not None:
-        metrics["log_loss"] = round(
-            float(log_loss(labels, probabilities, labels=[0, 1])), 4
-        )
+        metrics["log_loss"] = round(float(log_loss(labels, probabilities, labels=[0, 1])), 4)
     if len(np.unique(labels)) > 1 and roc_auc_score is not None:
         metrics["roc_auc"] = round(float(roc_auc_score(labels, probabilities)), 4)
     bucket_rows = []
@@ -191,9 +175,7 @@ def _classification_metrics(
                 "avg_probability": round(float(np.mean(probabilities[mask])), 4)
                 if np.any(mask)
                 else 0.0,
-                "realized_rate": round(float(np.mean(labels[mask])), 4)
-                if np.any(mask)
-                else 0.0,
+                "realized_rate": round(float(np.mean(labels[mask])), 4) if np.any(mask) else 0.0,
             }
         )
     metrics["probability_buckets"] = bucket_rows
@@ -203,9 +185,7 @@ def _classification_metrics(
 def _git_commit() -> str:
     root = Path(__file__).resolve().parents[3]
     try:
-        output = subprocess.check_output(
-            ["git", "rev-parse", "HEAD"], cwd=root, text=True
-        )
+        output = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True)
         return output.strip()
     except Exception:
         return "unknown"
@@ -225,18 +205,12 @@ def train_meta_model_from_dataset(
     train_labels = splits["train"]["label"].to_numpy(dtype=int)
     model.fit(train_features, train_labels)
 
-    validation_probs = model.model.predict_proba(splits["validation"][FEATURE_COLUMNS])[
-        :, 1
-    ]
-    calibration_probs = model.model.predict_proba(
-        splits["calibration"][FEATURE_COLUMNS]
-    )[:, 1]
+    validation_probs = model.model.predict_proba(splits["validation"][FEATURE_COLUMNS])[:, 1]
+    calibration_probs = model.model.predict_proba(splits["calibration"][FEATURE_COLUMNS])[:, 1]
     train_probs = model.model.predict_proba(train_features)[:, 1]
     test_probs = model.model.predict_proba(splits["test"][FEATURE_COLUMNS])[:, 1]
     calibrator = ProbabilityCalibrator(calibration_method)
-    calibrator.fit(
-        calibration_probs, splits["calibration"]["label"].to_numpy(dtype=int)
-    )
+    calibrator.fit(calibration_probs, splits["calibration"]["label"].to_numpy(dtype=int))
     model.calibrator = calibrator
     model.feature_names = list(FEATURE_COLUMNS)
 
@@ -275,7 +249,7 @@ def train_meta_model_from_dataset(
         "feature_schema_path": "feature_columns.json",
         "commit": _git_commit(),
         "version": 1,
-        "row_counts": {name: int(len(frame)) for name, frame in splits.items()},
+        "row_counts": {name: len(frame) for name, frame in splits.items()},
     }
     model.save_artifacts(output_dir, manifest=manifest, metrics=metrics)
     return model, manifest, metrics

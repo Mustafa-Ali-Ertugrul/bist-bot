@@ -40,12 +40,12 @@ def validate_data(df: pd.DataFrame | None, min_rows: int = 5) -> bool:
         return False
     if len(df) < min_rows:
         return False
-    if df.isnull().all(axis=1).mean() > 0.20:
-        return False
-    return True
+    return not df.isnull().all(axis=1).mean() > 0.2
 
 
-def fetch_history_with_provider(provider: HistoryProviderProtocol, ticker: str, period: str, interval: str) -> pd.DataFrame | None:
+def fetch_history_with_provider(
+    provider: HistoryProviderProtocol, ticker: str, period: str, interval: str
+) -> pd.DataFrame | None:
     normalized_ticker = normalize_ticker(ticker)
     df = provider.fetch_history(normalized_ticker, period=period, interval=interval)
     if not validate_data(df):

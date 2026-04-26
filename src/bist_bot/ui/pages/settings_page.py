@@ -39,9 +39,7 @@ def render_settings_page() -> None:
     with runtime_right:
         tg_ready = bool(settings.TELEGRAM_BOT_TOKEN and settings.TELEGRAM_CHAT_ID)
         token_preview = mask_secret(getattr(settings, "TELEGRAM_BOT_TOKEN", ""))
-        chat_preview = mask_secret(
-            getattr(settings, "TELEGRAM_CHAT_ID", ""), prefix=3, suffix=2
-        )
+        chat_preview = mask_secret(getattr(settings, "TELEGRAM_CHAT_ID", ""), prefix=3, suffix=2)
         render_section_title("Alert routing", "Secrets stay masked")
         render_html_panel(
             (
@@ -68,12 +66,8 @@ def render_settings_page() -> None:
         st.session_state.ind_rsi_oversold = st.slider(
             "RSI Asiri Satim", 10, 40, st.session_state.ind_rsi_oversold
         )
-        st.session_state.ind_sma_fast = st.slider(
-            "SMA Hizli", 5, 30, st.session_state.ind_sma_fast
-        )
-        st.session_state.ind_ema_fast = st.slider(
-            "EMA Hizli", 5, 30, st.session_state.ind_ema_fast
-        )
+        st.session_state.ind_sma_fast = st.slider("SMA Hizli", 5, 30, st.session_state.ind_sma_fast)
+        st.session_state.ind_ema_fast = st.slider("EMA Hizli", 5, 30, st.session_state.ind_ema_fast)
     with i2:
         st.session_state.ind_rsi_overbought = st.slider(
             "RSI Asiri Alim", 60, 90, st.session_state.ind_rsi_overbought
@@ -94,9 +88,7 @@ def render_settings_page() -> None:
 
     c_save, c_reset = st.columns(2)
     with c_save:
-        if st.button(
-            "Kaydet ve taramayi yenile", use_container_width=True, type="primary"
-        ):
+        if st.button("Kaydet ve taramayi yenile", use_container_width=True, type="primary"):
             user_settings = config_store.load_settings()
             user_settings["indicator"] = {
                 "rsi_period": st.session_state.ind_rsi_period,
@@ -131,9 +123,7 @@ def render_settings_page() -> None:
             if request_scan():
                 st.success("Ayarlar kaydedildi.")
             else:
-                st.info(
-                    "Ayarlar kaydedildi. Tarama icin cooldown suresinin bitmesi bekleniyor."
-                )
+                st.info("Ayarlar kaydedildi. Tarama icin cooldown suresinin bitmesi bekleniyor.")
     with c_reset:
         if st.button("Varsayilanlara don", use_container_width=True):
             config_store.reset_settings()

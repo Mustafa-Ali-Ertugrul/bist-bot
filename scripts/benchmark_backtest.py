@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 import math
 import os
 import sys
+from datetime import datetime
 from time import perf_counter
 
 import pandas as pd

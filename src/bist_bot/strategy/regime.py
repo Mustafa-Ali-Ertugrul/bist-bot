@@ -72,9 +72,19 @@ def get_trend_bias(indicators, df: pd.DataFrame) -> TrendBias:
     plus_di = last.get("plus_di", 0)
     minus_di = last.get("minus_di", 0)
 
-    if regime == MarketRegime.BULL and pd.notna(ema_long) and close >= float(ema_long) and plus_di >= minus_di:
+    if (
+        regime == MarketRegime.BULL
+        and pd.notna(ema_long)
+        and close >= float(ema_long)
+        and plus_di >= minus_di
+    ):
         return TrendBias.LONG
-    if regime == MarketRegime.BEAR and pd.notna(ema_long) and close <= float(ema_long) and minus_di >= plus_di:
+    if (
+        regime == MarketRegime.BEAR
+        and pd.notna(ema_long)
+        and close <= float(ema_long)
+        and minus_di >= plus_di
+    ):
         return TrendBias.SHORT
     return TrendBias.NEUTRAL
 
@@ -101,7 +111,9 @@ def apply_confluence(signal_type: SignalType, trend_bias: TrendBias, reasons: li
     return True
 
 
-def check_regime_persistence(df: pd.DataFrame, target_regime: MarketRegime, min_bars: int = 2) -> bool:
+def check_regime_persistence(
+    df: pd.DataFrame, target_regime: MarketRegime, min_bars: int = 2
+) -> bool:
     """Check whether a target regime persisted for the latest bars."""
     if len(df) < min_bars + 1:
         return False

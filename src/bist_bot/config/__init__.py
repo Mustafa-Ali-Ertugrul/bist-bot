@@ -3,8 +3,8 @@ from bist_bot.config.subsettings import (
     AuthSettings,
     BacktestSettings,
     BrokerSettings,
-    DataSettings,
     DatabaseSettings,
+    DataSettings,
     MLSettings,
     NotificationSettings,
     RiskSettings,
@@ -13,8 +13,6 @@ from bist_bot.config.subsettings import (
 )
 
 __all__ = [
-    "Settings",
-    "settings",
     "AuthSettings",
     "BacktestSettings",
     "BrokerSettings",
@@ -24,5 +22,7 @@ __all__ = [
     "NotificationSettings",
     "RiskSettings",
     "ServerSettings",
+    "Settings",
     "TradingSettings",
+    "settings",
 ]

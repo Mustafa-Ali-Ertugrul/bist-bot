@@ -25,6 +25,7 @@ class PaperTradeService:
         costs: Any | None = None,
     ) -> float:
         from bist_bot.risk.costs import DEFAULT_COSTS, TradingCosts
+
         trading_costs: TradingCosts = costs if isinstance(costs, TradingCosts) else DEFAULT_COSTS
         if entry_price <= 0:
             return 0.0

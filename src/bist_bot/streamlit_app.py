@@ -87,9 +87,7 @@ def _login_form() -> bool:
         with st.form("login_form"):
             email = st.text_input("Email", value=st.session_state.get("auth_email", ""))
             password = st.text_input("Sifre", type="password")
-            submitted = st.form_submit_button(
-                "Giris yap", use_container_width=True, type="primary"
-            )
+            submitted = st.form_submit_button("Giris yap", use_container_width=True, type="primary")
 
         if submitted:
             try:
@@ -105,11 +103,7 @@ def _login_form() -> bool:
                 payload = response.json()
                 _complete_auth(str(email), payload["access_token"])
             else:
-                st.error(
-                    _response_message(
-                        response, "Giris basarisiz. Email veya sifre hatali."
-                    )
-                )
+                st.error(_response_message(response, "Giris basarisiz. Email veya sifre hatali."))
 
     if not settings.ALLOW_PUBLIC_REGISTRATION:
         st.info("Yeni hesap kaydi kapali. Lutfen tanimli operator hesabi ile giris yapin.")
@@ -118,9 +112,7 @@ def _login_form() -> bool:
     with tabs[1]:
         with st.form("register_form"):
             register_email = st.text_input("Email", key="register_email")
-            register_password = st.text_input(
-                "Sifre", type="password", key="register_password"
-            )
+            register_password = st.text_input("Sifre", type="password", key="register_password")
             register_password_confirm = st.text_input(
                 "Sifre tekrar", type="password", key="register_password_confirm"
             )

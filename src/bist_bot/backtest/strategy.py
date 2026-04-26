@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 import pandas as pd
 
 from bist_bot import strategy as strategy_module
@@ -16,16 +14,16 @@ from .models import BacktestResult
 class StrategyBacktester:
     def __init__(
         self,
-        initial_capital: Optional[float] = None,
-        engine: Optional[StrategyEngineProtocol] = None,
-        backtester: Optional[Backtester] = None,
+        initial_capital: float | None = None,
+        engine: StrategyEngineProtocol | None = None,
+        backtester: Backtester | None = None,
     ) -> None:
         self.engine = engine or strategy_module.StrategyEngine()
         self.backtester = backtester or Backtester(
             initial_capital=initial_capital,
             indicators=TechnicalIndicators(),
         )
-        self._enriched_cache: Optional[pd.DataFrame] = None
+        self._enriched_cache: pd.DataFrame | None = None
 
     @staticmethod
     def _empty_signal_context() -> dict[str, float | bool]:
@@ -37,26 +35,16 @@ class StrategyBacktester:
             "target_price": 0.0,
         }
 
-    def run(
-        self, ticker: str, df: pd.DataFrame, verbose: bool = False
-    ) -> Optional[BacktestResult]:
+    def run(self, ticker: str, df: pd.DataFrame, verbose: bool = False) -> BacktestResult | None:
         self._enriched_cache = TechnicalIndicators().add_all(df.copy())
 
-        def signal_builder(
-            ticker: str, history: pd.DataFrame
-        ) -> dict[str, float | bool]:
+        def signal_builder(ticker: str, history: pd.DataFrame) -> dict[str, float | bool]:
             idx = len(history) - 1
-            if (
-                self._enriched_cache is None
-                or idx < 0
-                or idx >= len(self._enriched_cache)
-            ):
+            if self._enriched_cache is None or idx < 0 or idx >= len(self._enriched_cache):
                 return self._empty_signal_context()
 
             enriched_slice = self._enriched_cache.iloc[: idx + 1]
-            signal = self.engine.analyze(
-                ticker, enriched_slice, enforce_sector_limit=False
-            )
+            signal = self.engine.analyze(ticker, enriched_slice, enforce_sector_limit=False)
             if signal is None:
                 return self._empty_signal_context()
             return {

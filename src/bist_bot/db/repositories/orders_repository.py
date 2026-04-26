@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Optional, cast
+from typing import Any, cast
 
 from sqlalchemy import select
 
@@ -9,7 +9,7 @@ from bist_bot.db.database import DatabaseManager, OrderRecord
 
 
 class OrdersRepository:
-    def __init__(self, manager: Optional[DatabaseManager] = None) -> None:
+    def __init__(self, manager: DatabaseManager | None = None) -> None:
         self.manager = manager or DatabaseManager()
 
     def create_order(
@@ -54,7 +54,7 @@ class OrdersRepository:
         broker_order_id: str | None = None,
         filled_qty: float | None = None,
         avg_fill_price: float | None = None,
-    ) -> Optional[dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         def _write(session) -> dict[str, Any] | None:
             row = session.get(OrderRecord, order_id)
             if row is None:
@@ -71,7 +71,7 @@ class OrdersRepository:
             session.flush()
             return self._to_dict(row)
 
-        return cast(Optional[dict[str, Any]], self.manager.run_session(_write))
+        return cast(dict[str, Any] | None, self.manager.run_session(_write))
 
     def get_pending_orders(self) -> list[dict[str, Any]]:
         rows = self.manager.run_session(
@@ -84,7 +84,7 @@ class OrdersRepository:
         )
         return [self._to_dict(row) for row in rows]
 
-    def get_order(self, order_id: int) -> Optional[dict[str, Any]]:
+    def get_order(self, order_id: int) -> dict[str, Any] | None:
         row = self.manager.run_session(
             lambda session: session.get(OrderRecord, order_id),
             read_only=True,
@@ -109,9 +109,7 @@ class OrdersRepository:
             signed_qty = executed_qty if row.side == "BUY" else -executed_qty
             net_positions[row.ticker] = net_positions.get(row.ticker, 0.0) + signed_qty
 
-        return sorted(
-            ticker for ticker, quantity in net_positions.items() if quantity > 0
-        )
+        return sorted(ticker for ticker, quantity in net_positions.items() if quantity > 0)
 
     def _to_dict(self, row: OrderRecord) -> dict[str, Any]:
         return {

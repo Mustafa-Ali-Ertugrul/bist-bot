@@ -15,16 +15,22 @@ from bist_bot.data.providers import (
     MatriksProvider,
     OfficialProvider,
     OfficialProviderEndpoints,
-    RequestsOfficialHTTPClient,
     OfficialProviderStub,
     RateLimitError,
+    RequestsOfficialHTTPClient,
     build_official_provider,
     resolve_official_endpoints,
 )
 
 
 class _FakeResponse:
-    def __init__(self, status_code: int = 200, json_body: dict | None = None, text: str = "", headers: dict | None = None):
+    def __init__(
+        self,
+        status_code: int = 200,
+        json_body: dict | None = None,
+        text: str = "",
+        headers: dict | None = None,
+    ):
         self.status_code = status_code
         self._json = json_body or {}
         self.text = text
@@ -72,30 +78,54 @@ def _make_provider(**overrides) -> OfficialProvider:
 
 class TestOfficialProviderAuth:
     def test_auth_success_stores_token(self):
-        provider = _make_provider(http_client=RequestsOfficialHTTPClient(session=_FakeSession([_FakeResponse(200, {"token": "abc123"})])))
+        provider = _make_provider(
+            http_client=RequestsOfficialHTTPClient(
+                session=_FakeSession([_FakeResponse(200, {"token": "abc123"})])
+            )
+        )
         token = provider._authenticate()
         assert token == "abc123"
 
     def test_auth_success_access_token_field(self):
-        provider = _make_provider(http_client=RequestsOfficialHTTPClient(session=_FakeSession([_FakeResponse(200, {"access_token": "xyz"})])))
+        provider = _make_provider(
+            http_client=RequestsOfficialHTTPClient(
+                session=_FakeSession([_FakeResponse(200, {"access_token": "xyz"})])
+            )
+        )
         assert provider._authenticate() == "xyz"
 
     def test_auth_success_nested_data_token(self):
-        provider = _make_provider(http_client=RequestsOfficialHTTPClient(session=_FakeSession([_FakeResponse(200, {"data": {"token": "nested-tok"}})])))
+        provider = _make_provider(
+            http_client=RequestsOfficialHTTPClient(
+                session=_FakeSession([_FakeResponse(200, {"data": {"token": "nested-tok"}})])
+            )
+        )
         assert provider._authenticate() == "nested-tok"
 
     def test_auth_401_raises_authentication_error(self):
-        provider = _make_provider(http_client=RequestsOfficialHTTPClient(session=_FakeSession([_FakeResponse(401, text="Unauthorized")])))
+        provider = _make_provider(
+            http_client=RequestsOfficialHTTPClient(
+                session=_FakeSession([_FakeResponse(401, text="Unauthorized")])
+            )
+        )
         with pytest.raises(AuthenticationError, match="Authentication failed"):
             provider._authenticate()
 
     def test_auth_no_token_in_response_raises(self):
-        provider = _make_provider(http_client=RequestsOfficialHTTPClient(session=_FakeSession([_FakeResponse(200, {"message": "ok"})])))
+        provider = _make_provider(
+            http_client=RequestsOfficialHTTPClient(
+                session=_FakeSession([_FakeResponse(200, {"message": "ok"})])
+            )
+        )
         with pytest.raises(AuthenticationError, match="No token"):
             provider._authenticate()
 
     def test_auth_429_raises_rate_limit_error(self):
-        provider = _make_provider(http_client=RequestsOfficialHTTPClient(session=_FakeSession([_FakeResponse(429, headers={"Retry-After": "5"})])))
+        provider = _make_provider(
+            http_client=RequestsOfficialHTTPClient(
+                session=_FakeSession([_FakeResponse(429, headers={"Retry-After": "5"})])
+            )
+        )
         with pytest.raises(RateLimitError) as exc_info:
             provider._authenticate()
         assert exc_info.value.retry_after == 5.0
@@ -127,17 +157,35 @@ class TestOfficialProviderFetchHistory:
 
     def test_fetch_history_returns_dataframe(self, authenticated_provider):
         ohlcv_data = [
-            {"date": "2025-01-01", "open": 100, "high": 105, "low": 98, "close": 102, "volume": 1000},
-            {"date": "2025-01-02", "open": 102, "high": 108, "low": 101, "close": 106, "volume": 1200},
+            {
+                "date": "2025-01-01",
+                "open": 100,
+                "high": 105,
+                "low": 98,
+                "close": 102,
+                "volume": 1000,
+            },
+            {
+                "date": "2025-01-02",
+                "open": 102,
+                "high": 108,
+                "low": 101,
+                "close": 106,
+                "volume": 1200,
+            },
         ]
-        authenticated_provider.http_client = RequestsOfficialHTTPClient(session=_FakeSession([_FakeResponse(200, {"data": ohlcv_data})]))
+        authenticated_provider.http_client = RequestsOfficialHTTPClient(
+            session=_FakeSession([_FakeResponse(200, {"data": ohlcv_data})])
+        )
         df = authenticated_provider.fetch_history("THYAO.IS", "3mo", "1d")
         assert df is not None
         assert "close" in df.columns
         assert len(df) == 2
 
     def test_fetch_history_empty_data_returns_none(self, authenticated_provider):
-        authenticated_provider.http_client = RequestsOfficialHTTPClient(session=_FakeSession([_FakeResponse(200, {"data": []})]))
+        authenticated_provider.http_client = RequestsOfficialHTTPClient(
+            session=_FakeSession([_FakeResponse(200, {"data": []})])
+        )
         df = authenticated_provider.fetch_history("THYAO.IS", "3mo", "1d")
         assert df is None
 
@@ -151,7 +199,9 @@ class TestOfficialProviderFetchHistory:
         provider = _make_provider(rate_limiter=limiter)
         provider._session_token = "tok"
         provider._token_expires = datetime(2099, 1, 1)
-        provider.http_client = RequestsOfficialHTTPClient(session=_FakeSession([_FakeResponse(200, {"data": []})]))
+        provider.http_client = RequestsOfficialHTTPClient(
+            session=_FakeSession([_FakeResponse(200, {"data": []})])
+        )
         provider.fetch_history("THYAO.IS", "3mo", "1d")
         assert "official.provider" in limiter.calls
 
@@ -165,12 +215,16 @@ class TestOfficialProviderFetchQuote:
         return provider
 
     def test_fetch_quote_returns_price(self, authenticated_provider):
-        authenticated_provider.http_client = RequestsOfficialHTTPClient(session=_FakeSession([_FakeResponse(200, {"data": {"price": 152.50}})]))
+        authenticated_provider.http_client = RequestsOfficialHTTPClient(
+            session=_FakeSession([_FakeResponse(200, {"data": {"price": 152.50}})])
+        )
         price = authenticated_provider.fetch_quote("THYAO.IS")
         assert price == 152.50
 
     def test_fetch_quote_missing_price_returns_none(self, authenticated_provider):
-        authenticated_provider.http_client = RequestsOfficialHTTPClient(session=_FakeSession([_FakeResponse(200, {"data": {}})]))
+        authenticated_provider.http_client = RequestsOfficialHTTPClient(
+            session=_FakeSession([_FakeResponse(200, {"data": {}})])
+        )
         price = authenticated_provider.fetch_quote("THYAO.IS")
         assert price is None
 
@@ -190,10 +244,30 @@ class TestOfficialProviderFetchBatch:
 
     def test_fetch_batch_returns_results(self, authenticated_provider):
         batch_data = {
-            "THYAO.IS": [{"date": "2025-01-01", "open": 100, "high": 105, "low": 98, "close": 102, "volume": 1000}],
-            "ASELS.IS": [{"date": "2025-01-01", "open": 50, "high": 52, "low": 49, "close": 51, "volume": 500}],
+            "THYAO.IS": [
+                {
+                    "date": "2025-01-01",
+                    "open": 100,
+                    "high": 105,
+                    "low": 98,
+                    "close": 102,
+                    "volume": 1000,
+                }
+            ],
+            "ASELS.IS": [
+                {
+                    "date": "2025-01-01",
+                    "open": 50,
+                    "high": 52,
+                    "low": 49,
+                    "close": 51,
+                    "volume": 500,
+                }
+            ],
         }
-        authenticated_provider.http_client = RequestsOfficialHTTPClient(session=_FakeSession([_FakeResponse(200, {"data": batch_data})]))
+        authenticated_provider.http_client = RequestsOfficialHTTPClient(
+            session=_FakeSession([_FakeResponse(200, {"data": batch_data})])
+        )
         results = authenticated_provider.fetch_batch(["THYAO.IS", "ASELS.IS"], "3mo", "1d")
         assert results["THYAO.IS"] is not None
         assert results["ASELS.IS"] is not None
@@ -217,7 +291,9 @@ class TestOfficialProviderFetchUniverse:
         return provider
 
     def test_fetch_universe_returns_list(self, authenticated_provider):
-        authenticated_provider.http_client = RequestsOfficialHTTPClient(session=_FakeSession([_FakeResponse(200, {"data": ["THYAO.IS", "ASELS.IS"]})]))
+        authenticated_provider.http_client = RequestsOfficialHTTPClient(
+            session=_FakeSession([_FakeResponse(200, {"data": ["THYAO.IS", "ASELS.IS"]})])
+        )
         universe = authenticated_provider.fetch_universe()
         assert universe == ["THYAO.IS", "ASELS.IS"]
 
@@ -232,7 +308,13 @@ class TestOfficialProviderRetry:
         provider = _make_provider(max_retries=3, retry_backoff=0.01)
         provider._session_token = "tok"
         provider._token_expires = datetime(2099, 1, 1)
-        provider._request = MagicMock(side_effect=[BadResponseError(503, "temporarily unavailable"), BadResponseError(503, "temporarily unavailable"), {"data": []}])
+        provider._request = MagicMock(
+            side_effect=[
+                BadResponseError(503, "temporarily unavailable"),
+                BadResponseError(503, "temporarily unavailable"),
+                {"data": []},
+            ]
+        )
 
         provider._retry_request("GET", "/api/test")
 
@@ -272,7 +354,9 @@ class TestOfficialProviderRetry:
         provider = _make_provider()
         provider._session_token = "tok"
         provider._token_expires = datetime(2099, 1, 1)
-        provider.http_client = RequestsOfficialHTTPClient(session=_FakeSession([_FakeResponse(401, text="expired")]))
+        provider.http_client = RequestsOfficialHTTPClient(
+            session=_FakeSession([_FakeResponse(401, text="expired")])
+        )
         with pytest.raises(AuthenticationError):
             provider._request("GET", "/api/test")
         assert provider._session_token is None
@@ -285,7 +369,7 @@ class TestOfficialProviderPeriodMapping:
         assert start < end
 
     def test_period_ytd(self):
-        start, end = OfficialProvider._period_to_start_end("ytd")
+        start, _end = OfficialProvider._period_to_start_end("ytd")
         assert start.startswith(str(datetime.now().year))
 
     def test_period_unknown_defaults(self):
@@ -296,7 +380,14 @@ class TestOfficialProviderPeriodMapping:
 class TestOfficialProviderOHLCVParsing:
     def test_ohlcv_from_records_valid(self):
         records = [
-            {"date": "2025-01-01", "open": 100, "high": 105, "low": 98, "close": 102, "volume": 1000},
+            {
+                "date": "2025-01-01",
+                "open": 100,
+                "high": 105,
+                "low": 98,
+                "close": 102,
+                "volume": 1000,
+            },
         ]
         df = OfficialProvider._ohlcv_from_records(records)
         assert df is not None
@@ -372,8 +463,8 @@ class TestOfficialProviderStub:
 
 class TestDependenciesDataProviderSelection:
     def test_official_provider_selected(self):
-        from bist_bot.dependencies import _build_data_provider
         from bist_bot.config.settings import settings
+        from bist_bot.dependencies import _build_data_provider
 
         with settings.override(
             DATA_PROVIDER="official",
@@ -387,8 +478,8 @@ class TestDependenciesDataProviderSelection:
         assert isinstance(provider, MatriksProvider)
 
     def test_official_provider_endpoint_override_selected(self):
-        from bist_bot.dependencies import _build_data_provider
         from bist_bot.config.settings import settings
+        from bist_bot.dependencies import _build_data_provider
 
         with settings.override(
             DATA_PROVIDER="official",
@@ -404,20 +495,21 @@ class TestDependenciesDataProviderSelection:
         assert provider.endpoints.quote == "/vendor/quote"
 
     def test_official_stub_selected(self):
-        from bist_bot.dependencies import _build_data_provider
         from bist_bot.config.settings import settings
+        from bist_bot.dependencies import _build_data_provider
 
         with settings.override(DATA_PROVIDER="official_stub"):
             provider = _build_data_provider()
         assert isinstance(provider, OfficialProviderStub)
 
     def test_yfinance_selected_by_default(self):
-        from bist_bot.dependencies import _build_data_provider
         from bist_bot.config.settings import settings
+        from bist_bot.dependencies import _build_data_provider
 
         with settings.override(DATA_PROVIDER="yfinance"):
             provider = _build_data_provider()
         from bist_bot.data.providers import YFinanceProvider
+
         assert isinstance(provider, YFinanceProvider)
 
 

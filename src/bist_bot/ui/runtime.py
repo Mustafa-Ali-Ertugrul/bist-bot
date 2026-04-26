@@ -8,9 +8,20 @@ import requests
 import streamlit as st
 
 from bist_bot.config.settings import settings
-from bist_bot.ui.runtime_data import fetch_index_data, fetch_stock_news, filter_signals, get_market_summary, map_cached_signals
+from bist_bot.ui.runtime_data import (
+    fetch_index_data,
+    fetch_stock_news,
+    filter_signals,
+    get_market_summary,
+    map_cached_signals,
+)
 from bist_bot.ui.runtime_refresh import sync_runtime_feedback
-from bist_bot.ui.runtime_scan import apply_pending_scan_result, ensure_initial_data, request_scan, run_scan
+from bist_bot.ui.runtime_scan import (
+    apply_pending_scan_result,
+    ensure_initial_data,
+    request_scan,
+    run_scan,
+)
 from bist_bot.ui.runtime_styles import inject_styles
 
 
@@ -43,9 +54,9 @@ def api_request(method: str, path: str, **kwargs: Any) -> requests.Response:
 
 
 __all__ = [
-    "apply_pending_scan_result",
     "api_headers",
     "api_request",
+    "apply_pending_scan_result",
     "ensure_initial_data",
     "fetch_index_data",
     "fetch_stock_news",

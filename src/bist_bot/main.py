@@ -19,14 +19,14 @@ def main():
     """
     configure_logging()
 
+    from threading import Thread
+
+    from bist_bot.backtest_runner import run_backtest
+    from bist_bot.config.settings import settings
     from bist_bot.dashboard import create_default_dashboard_app
     from bist_bot.dependencies import build_scan_service, get_default_container
     from bist_bot.execution.order_tracker import OrderTracker
     from bist_bot.scheduler import MarketScheduler
-    from bist_bot.backtest_runner import run_backtest
-    from threading import Thread
-
-    from bist_bot.config.settings import settings
 
     container = get_default_container()
     scanner = build_scan_service(container)
@@ -40,6 +40,7 @@ def main():
         order_tracker.stop()
 
     import signal as _signal
+
     _signal.signal(_signal.SIGINT, shutdown)
 
     if "--once" in sys.argv:
@@ -61,8 +62,10 @@ def main():
         order_tracker.start()
         app = create_default_dashboard_app(container)
         t = Thread(
-            target=lambda: app.run(host="0.0.0.0", port=settings.FLASK_PORT, debug=False, use_reloader=False),
-            daemon=True
+            target=lambda: app.run(
+                host="0.0.0.0", port=settings.FLASK_PORT, debug=False, use_reloader=False
+            ),
+            daemon=True,
         )
         t.start()
         logger.info("dashboard_started", port=settings.FLASK_PORT)

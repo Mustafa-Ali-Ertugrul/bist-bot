@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from bist_bot.app_logging import get_logger
 import time
 from datetime import datetime
 from typing import Protocol
 
 import requests
 
+from bist_bot.app_logging import get_logger
 from bist_bot.data.bist100 import BIST100_TICKERS
 from bist_bot.data.helpers import clean_ticker_list
 from bist_bot.data.scraper import _parse_number, scrape_bist_quote
@@ -45,12 +45,16 @@ def parse_tr_number(raw: str) -> float | None:
     return _parse_number(raw)
 
 
-def get_price_from_bist_website(ticker: str, rate_limiter: RateLimiterProtocol) -> dict[str, float | str] | None:
+def get_price_from_bist_website(
+    ticker: str, rate_limiter: RateLimiterProtocol
+) -> dict[str, float | str] | None:
     """Fetch a near real-time quote from the Borsa Istanbul website."""
     return scrape_bist_quote(ticker, rate_limiter).to_payload()
 
 
-def get_bist100_tickers(rate_limiter: RateLimiterProtocol, force_refresh: bool = False) -> list[str]:
+def get_bist100_tickers(
+    rate_limiter: RateLimiterProtocol, force_refresh: bool = False
+) -> list[str]:
     """Build the watchlist ticker set with cache and fallback support."""
     global _BIST100_CACHE, _BIST100_CACHE_TIME
 

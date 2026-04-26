@@ -2,14 +2,20 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from time import sleep as default_sleep
-from typing import Any, Callable
+from typing import Any
 
 from bist_bot.config.settings import settings as default_settings
 
 
 class NotificationDispatchService:
-    def __init__(self, notifier, settings: Any | None = None, sleeper: Callable[[float], None] = default_sleep) -> None:
+    def __init__(
+        self,
+        notifier,
+        settings: Any | None = None,
+        sleeper: Callable[[float], None] = default_sleep,
+    ) -> None:
         self.notifier = notifier
         self.settings = settings or default_settings
         self.sleeper = sleeper

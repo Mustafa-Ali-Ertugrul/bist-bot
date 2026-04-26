@@ -22,15 +22,21 @@ class ExecutionService:
     def resolve_execution_quantity(self, signal: Signal) -> float | None:
         quantity = signal.position_size
         if quantity is None:
-            logger.warning("auto_execute_skipped", ticker=signal.ticker, error_type="missing_quantity")
+            logger.warning(
+                "auto_execute_skipped", ticker=signal.ticker, error_type="missing_quantity"
+            )
             return None
         if quantity <= 0:
-            logger.info("auto_execute_skipped", ticker=signal.ticker, error_type="non_positive_quantity")
+            logger.info(
+                "auto_execute_skipped", ticker=signal.ticker, error_type="non_positive_quantity"
+            )
             return None
 
         max_warn_quantity = getattr(self.settings, "AUTO_EXECUTE_WARN_MAX_QUANTITY", 100000)
         if quantity > max_warn_quantity:
-            logger.warning("auto_execute_large_quantity", ticker=signal.ticker, actionable_count=quantity)
+            logger.warning(
+                "auto_execute_large_quantity", ticker=signal.ticker, actionable_count=quantity
+            )
         return float(quantity)
 
     def auto_execute_signals(self, signals: list[Signal]) -> None:
@@ -83,7 +89,11 @@ class ExecutionService:
                     broker_order_id=result.broker_order_id or result.order_id,
                 )
                 inc_counter("bist_auto_execute_total")
-                logger.info("auto_execute_succeeded", ticker=signal.ticker, signal_type=signal.signal_type.value)
+                logger.info(
+                    "auto_execute_succeeded",
+                    ticker=signal.ticker,
+                    signal_type=signal.signal_type.value,
+                )
             except Exception as exc:
                 self.db.update_order(int(order_row["id"]), state="REJECTED")
                 inc_counter("bist_auto_execute_fail_total")

@@ -15,6 +15,7 @@ if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
 from dashboard import create_dashboard_app  # noqa: E402
+
 from bist_bot.app_logging import configure_logging, get_logger  # noqa: E402
 from bist_bot.app_metrics import reset_metrics  # noqa: E402
 from bist_bot.config.settings import settings  # noqa: E402
@@ -23,7 +24,13 @@ from bist_bot.strategy.signal_models import Signal, SignalType  # noqa: E402
 
 
 class MetricsFetcher:
-    def clear_cache(self, scope: str = "all", ticker: str | None = None, period: str | None = None, interval: str | None = None) -> None:
+    def clear_cache(
+        self,
+        scope: str = "all",
+        ticker: str | None = None,
+        period: str | None = None,
+        interval: str | None = None,
+    ) -> None:
         _ = scope, ticker, period, interval
 
     def fetch_all(self, period: str = "3mo", interval: str = "1d", force: bool = False):
@@ -41,7 +48,9 @@ class MetricsFetcher:
         _ = trend_period, trend_interval, trigger_period, trigger_interval, force_refresh
         return {"THYAO.IS": {"trend": object(), "trigger": object()}}
 
-    def fetch_single(self, ticker: str, period: str = "6mo", interval: str = "1d", force: bool = False):
+    def fetch_single(
+        self, ticker: str, period: str = "6mo", interval: str = "1d", force: bool = False
+    ):
         _ = ticker, period, interval, force
         return None
 

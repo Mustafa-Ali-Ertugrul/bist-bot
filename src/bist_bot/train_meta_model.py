@@ -28,15 +28,11 @@ def _build_parser() -> argparse.ArgumentParser:
         default=str(Path(settings.ML_MODEL_PATH) / "latest"),
         help="Artifact output directory",
     )
-    parser.add_argument(
-        "--horizon-bars", type=int, default=5, help="Forward label horizon in bars"
-    )
+    parser.add_argument("--horizon-bars", type=int, default=5, help="Forward label horizon in bars")
     parser.add_argument(
         "--return-threshold", type=float, default=0.02, help="Positive label threshold"
     )
-    parser.add_argument(
-        "--train-fraction", type=float, default=0.6, help="Train split fraction"
-    )
+    parser.add_argument("--train-fraction", type=float, default=0.6, help="Train split fraction")
     parser.add_argument(
         "--validation-fraction",
         type=float,
@@ -59,8 +55,7 @@ def main() -> None:
     args = _build_parser().parse_args()
     fetcher = BISTDataFetcher()
     price_data = {
-        ticker: fetcher.fetch_single(ticker, period=args.period)
-        for ticker in args.tickers
+        ticker: fetcher.fetch_single(ticker, period=args.period) for ticker in args.tickers
     }
     _, manifest, metrics = train_meta_model_from_price_data(
         price_data,

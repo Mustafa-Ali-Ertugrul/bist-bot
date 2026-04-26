@@ -21,7 +21,7 @@ class TestRiskManagerShimRemoved:
 
 class TestCanonicalImportPaths:
     def test_risk_package_exports_risk_manager(self):
-        from bist_bot.risk import RiskManager, RiskLevels
+        from bist_bot.risk import RiskLevels, RiskManager
 
         assert RiskManager is not None
         assert RiskLevels is not None

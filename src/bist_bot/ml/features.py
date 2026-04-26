@@ -8,7 +8,6 @@ import pandas as pd
 
 from bist_bot.config.settings import settings
 
-
 FEATURE_COLUMNS = [
     "score",
     "adx",
@@ -46,9 +45,7 @@ def build_feature_payload(
     ema_long = to_float(row.get(f"ema_{settings.EMA_LONG}"), close_price)
     risk_per_share = max(close_price - stop_loss, close_price * 0.01)
     reward_per_share = max(target_price - close_price, 0.0)
-    reward_to_risk_ratio = (
-        reward_per_share / risk_per_share if risk_per_share > 0 else 0.0
-    )
+    reward_to_risk_ratio = reward_per_share / risk_per_share if risk_per_share > 0 else 0.0
     inferred_bias = 1.0 if score > 0 else -1.0 if score < 0 else 0.0
     return {
         "score": float(score),

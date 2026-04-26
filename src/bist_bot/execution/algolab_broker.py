@@ -14,7 +14,6 @@ Features:
 
 from __future__ import annotations
 
-from bist_bot.app_logging import get_logger
 import threading
 import time
 from dataclasses import dataclass, field
@@ -23,6 +22,7 @@ from typing import Any, cast
 
 import requests
 
+from bist_bot.app_logging import get_logger
 from bist_bot.execution.base import (
     AccountInfo,
     BaseExecutionProvider,
@@ -206,7 +206,13 @@ class AlgoLabBroker(BaseExecutionProvider):
         stop_price: float | None = None,
     ) -> OrderResult:
         if self.dry_run:
-            logger.info("dry_run_order", side=side.value, ticker=ticker, quantity=quantity, order_type=order_type.value)
+            logger.info(
+                "dry_run_order",
+                side=side.value,
+                ticker=ticker,
+                quantity=quantity,
+                order_type=order_type.value,
+            )
             return OrderResult(
                 accepted=True,
                 order_id=f"dryrun-{ticker}-{int(time.time() * 1000)}",
@@ -236,11 +242,15 @@ class AlgoLabBroker(BaseExecutionProvider):
         )
 
     def cancel_order(self, order_id: str) -> bool:
-        payload = self._json_request("POST", self._required_endpoint("cancel_order"), json={"order_id": order_id})
+        payload = self._json_request(
+            "POST", self._required_endpoint("cancel_order"), json={"order_id": order_id}
+        )
         return bool(payload.get("cancelled", True))
 
     def get_order_status(self, order_id: str) -> OrderStatus:
-        payload = self._json_request("GET", self._required_endpoint("order_status"), params={"order_id": order_id})
+        payload = self._json_request(
+            "GET", self._required_endpoint("order_status"), params={"order_id": order_id}
+        )
         return OrderStatus(
             order_id=str(payload.get("client_order_id") or order_id),
             broker_order_id=str(payload.get("order_id", "")) or None,
@@ -310,7 +320,9 @@ class AlgoLabBroker(BaseExecutionProvider):
         for attempt in range(self.max_retries):
             try:
                 self._throttle()
-                response = self.session.request(method, url, headers=headers, timeout=timeout, **kwargs)
+                response = self.session.request(
+                    method, url, headers=headers, timeout=timeout, **kwargs
+                )
                 response.raise_for_status()
                 return response
             except requests.RequestException as exc:
@@ -318,7 +330,9 @@ class AlgoLabBroker(BaseExecutionProvider):
                 if attempt == self.max_retries - 1:
                     break
                 time.sleep(0.5 * (2**attempt))
-        raise RuntimeError(f"AlgoLab request failed after {self.max_retries} attempts") from last_error
+        raise RuntimeError(
+            f"AlgoLab request failed after {self.max_retries} attempts"
+        ) from last_error
 
     def _json_request(self, method: str, url: str, **kwargs: Any) -> dict[str, Any]:
         response = self._request(method, url, **kwargs)

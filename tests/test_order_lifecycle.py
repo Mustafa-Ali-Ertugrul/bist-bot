@@ -38,7 +38,9 @@ def test_order_lifecycle_created_to_sent_to_filled(tmp_path) -> None:
         order_type=OrderType.LIMIT,
         price=100.0,
     )
-    sent = db.update_order(created["id"], state=order_result.state.value, broker_order_id=order_result.order_id)
+    sent = db.update_order(
+        created["id"], state=order_result.state.value, broker_order_id=order_result.order_id
+    )
     assert sent is not None
     assert sent["state"] == "SENT"
 

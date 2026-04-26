@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any, NamedTuple, Optional
+from typing import Any, NamedTuple
 
 from sqlalchemy import select
 
@@ -14,22 +14,22 @@ class PaperTrade(NamedTuple):
     signal_type: str
     signal_price: float
     signal_time: datetime
-    stop_loss: Optional[float]
-    target_price: Optional[float]
-    close_price: Optional[float]
-    score: Optional[int]
-    regime: Optional[str]
-    filled_at: Optional[float]
+    stop_loss: float | None
+    target_price: float | None
+    close_price: float | None
+    score: int | None
+    regime: str | None
+    filled_at: float | None
     outcome: str
-    actual_profit_pct: Optional[float]
-    exit_price: Optional[float]
-    exit_date: Optional[datetime]
-    close_reason: Optional[str]
-    close_time: Optional[datetime]
+    actual_profit_pct: float | None
+    exit_price: float | None
+    exit_date: datetime | None
+    close_reason: str | None
+    close_time: datetime | None
 
 
 class PortfolioRepository:
-    def __init__(self, manager: Optional[DatabaseManager] = None) -> None:
+    def __init__(self, manager: DatabaseManager | None = None) -> None:
         self.manager = manager or DatabaseManager()
 
     def add_paper_trade(
@@ -37,9 +37,9 @@ class PortfolioRepository:
         ticker: str,
         signal_type: str,
         signal_price: float,
-        signal_time: Optional[datetime] = None,
-        stop_loss: Optional[float] = None,
-        target_price: Optional[float] = None,
+        signal_time: datetime | None = None,
+        stop_loss: float | None = None,
+        target_price: float | None = None,
         score: int = 0,
         regime: str = "UNKNOWN",
     ) -> None:
@@ -61,7 +61,9 @@ class PortfolioRepository:
 
         self.manager.run_session(_write)
 
-    def update_paper_close(self, ticker: str, close_price: float, actual_profit_pct: Optional[float] = None) -> None:
+    def update_paper_close(
+        self, ticker: str, close_price: float, actual_profit_pct: float | None = None
+    ) -> None:
         def _write(session):
             trade = session.scalar(
                 select(PaperTradeRecord)
@@ -105,7 +107,9 @@ class PortfolioRepository:
                 ticker=row.ticker,
                 signal_type=row.signal_type,
                 signal_price=row.signal_price,
-                signal_time=row.signal_time if isinstance(row.signal_time, datetime) else datetime.now(UTC),
+                signal_time=row.signal_time
+                if isinstance(row.signal_time, datetime)
+                else datetime.now(UTC),
                 stop_loss=row.stop_loss,
                 target_price=row.target_price,
                 close_price=row.close_price,
@@ -130,7 +134,7 @@ class PortfolioRepository:
         ticker: str,
         exit_price: float,
         close_reason: str,
-        actual_profit_pct: Optional[float] = None,
+        actual_profit_pct: float | None = None,
     ) -> None:
         def _write(session):
             trade = session.scalar(
@@ -165,15 +169,11 @@ class PortfolioRepository:
         if not trades:
             return {}
         profitable = sum(
-            1
-            for trade in trades
-            if trade.actual_profit_pct and trade.actual_profit_pct > 0
+            1 for trade in trades if trade.actual_profit_pct and trade.actual_profit_pct > 0
         )
         total = len(trades)
         profits = [
-            trade.actual_profit_pct
-            for trade in trades
-            if trade.actual_profit_pct is not None
+            trade.actual_profit_pct for trade in trades if trade.actual_profit_pct is not None
         ]
         avg_profit = sum(profits) / len(profits) if profits else 0
         return {

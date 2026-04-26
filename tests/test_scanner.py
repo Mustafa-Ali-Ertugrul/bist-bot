@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import sys
-
 from datetime import datetime
 from unittest.mock import MagicMock
 
@@ -30,7 +29,9 @@ def test_scan_once_returns_empty_on_no_data():
 
 def test_scan_once_orchestrates_side_effect_services():
     fetcher = MagicMock()
-    fetcher.fetch_multi_timeframe_all.return_value = {"THYAO.IS": {"trigger": object(), "trend": object()}}
+    fetcher.fetch_multi_timeframe_all.return_value = {
+        "THYAO.IS": {"trigger": object(), "trend": object()}
+    }
     engine = MagicMock()
     notifier = MagicMock()
     db = MagicMock()
@@ -54,7 +55,7 @@ def test_scan_once_orchestrates_side_effect_services():
         engine,
         notifier,
         db,
-        settings=settings.replace( PAPER_MODE=True),
+        settings=settings.replace(PAPER_MODE=True),
         signal_change_service=signal_change_service,
         execution_service=execution_service,
         paper_trade_service=paper_trade_service,
@@ -75,7 +76,9 @@ def test_scan_once_orchestrates_side_effect_services():
 
 def test_scan_once_skips_paper_trade_updates_when_disabled():
     fetcher = MagicMock()
-    fetcher.fetch_multi_timeframe_all.return_value = {"THYAO.IS": {"trigger": object(), "trend": object()}}
+    fetcher.fetch_multi_timeframe_all.return_value = {
+        "THYAO.IS": {"trigger": object(), "trend": object()}
+    }
     engine = MagicMock()
     notifier = MagicMock()
     db = MagicMock()
@@ -90,7 +93,7 @@ def test_scan_once_skips_paper_trade_updates_when_disabled():
         engine,
         notifier,
         db,
-        settings=settings.replace( PAPER_MODE=False),
+        settings=settings.replace(PAPER_MODE=False),
         paper_trade_service=paper_trade_service,
     )
 
@@ -130,7 +133,9 @@ def test_scan_service_backwards_compatible_wrappers_delegate():
 
 def test_scan_once_force_refresh_uses_selective_invalidation():
     fetcher = MagicMock()
-    fetcher.fetch_multi_timeframe_all.return_value = {"THYAO.IS": {"trigger": object(), "trend": object()}}
+    fetcher.fetch_multi_timeframe_all.return_value = {
+        "THYAO.IS": {"trigger": object(), "trend": object()}
+    }
     engine = MagicMock()
     notifier = MagicMock()
     db = MagicMock()

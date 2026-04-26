@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-from bist_bot.app_logging import get_logger
-from typing import Optional
-
 import pandas as pd
 
+from bist_bot.app_logging import get_logger
 from bist_bot.risk.models import RiskLevels
 from bist_bot.risk.sizing import apply_position_budget
 
@@ -51,13 +49,19 @@ def get_correlation_matrix(portfolio_history: dict[str, pd.DataFrame]) -> pd.Dat
     return returns.corr()
 
 
-def get_correlated_positions(ticker: str, candidate_df: pd.DataFrame, portfolio_history: dict[str, pd.DataFrame], global_corr_cache: Optional[pd.DataFrame], correlation_threshold: float) -> list[str]:
+def get_correlated_positions(
+    ticker: str,
+    candidate_df: pd.DataFrame,
+    portfolio_history: dict[str, pd.DataFrame],
+    global_corr_cache: pd.DataFrame | None,
+    correlation_threshold: float,
+) -> list[str]:
     if not portfolio_history:
         return []
     correlated: list[str] = []
 
     if global_corr_cache is not None and ticker in global_corr_cache.columns:
-        for existing_ticker in portfolio_history.keys():
+        for existing_ticker in portfolio_history:
             if existing_ticker in global_corr_cache.columns:
                 corr = global_corr_cache.loc[ticker, existing_ticker]
                 if pd.notna(corr) and abs(float(corr)) >= correlation_threshold:
@@ -76,8 +80,22 @@ def get_correlated_positions(ticker: str, candidate_df: pd.DataFrame, portfolio_
     return correlated
 
 
-def apply_portfolio_risk(ticker: str, df: pd.DataFrame, levels: RiskLevels, portfolio_history: dict[str, pd.DataFrame], global_corr_cache: Optional[pd.DataFrame], correlation_threshold: float, correlation_max_cluster: int, correlation_min_scale: float, correlation_risk_step: float, capital: float, max_risk_pct: float) -> RiskLevels:
-    correlated = get_correlated_positions(ticker, df, portfolio_history, global_corr_cache, correlation_threshold)
+def apply_portfolio_risk(
+    ticker: str,
+    df: pd.DataFrame,
+    levels: RiskLevels,
+    portfolio_history: dict[str, pd.DataFrame],
+    global_corr_cache: pd.DataFrame | None,
+    correlation_threshold: float,
+    correlation_max_cluster: int,
+    correlation_min_scale: float,
+    correlation_risk_step: float,
+    capital: float,
+    max_risk_pct: float,
+) -> RiskLevels:
+    correlated = get_correlated_positions(
+        ticker, df, portfolio_history, global_corr_cache, correlation_threshold
+    )
     levels.correlated_tickers = correlated
 
     if len(correlated) > correlation_max_cluster:
@@ -86,7 +104,9 @@ def apply_portfolio_risk(ticker: str, df: pd.DataFrame, levels: RiskLevels, port
         levels.position_size = 0
         levels.max_loss_tl = 0.0
         levels.risk_budget_tl = 0.0
-        logger.warning("correlation_limit_applied", ticker=ticker, correlated_tickers=", ".join(correlated))
+        logger.warning(
+            "correlation_limit_applied", ticker=ticker, correlated_tickers=", ".join(correlated)
+        )
         return levels
 
     correlation_scale = max(correlation_min_scale, 1.0 - (len(correlated) * correlation_risk_step))

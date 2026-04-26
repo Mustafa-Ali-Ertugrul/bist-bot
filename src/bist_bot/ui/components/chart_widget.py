@@ -73,9 +73,7 @@ def plot_volume(df):
 def plot_rsi(df):
     fig = go.Figure()
     fig.add_trace(
-        go.Scatter(
-            x=df.index, y=df["rsi"], mode="lines", line=dict(color="#48ddbc", width=2)
-        )
+        go.Scatter(x=df.index, y=df["rsi"], mode="lines", line=dict(color="#48ddbc", width=2))
     )
     fig.add_hrect(y0=0, y1=30, fillcolor="green", opacity=0.08, line_width=0)
     fig.add_hrect(y0=70, y1=100, fillcolor="red", opacity=0.08, line_width=0)

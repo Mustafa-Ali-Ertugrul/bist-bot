@@ -1,7 +1,7 @@
-import pandas as pd
 import numpy as np
-from bist_bot.app_logging import get_logger
+import pandas as pd
 
+from bist_bot.app_logging import get_logger
 from bist_bot.config.settings import settings
 
 logger = get_logger(__name__, component="indicators")
@@ -34,12 +34,8 @@ class TechnicalIndicators:
         n_rows = len(df)
         row_positions = np.arange(n_rows)
 
-        current_min = source.rolling(
-            window=lookback + 1, min_periods=lookback + 1
-        ).min()
-        current_argmin = source.rolling(
-            window=lookback + 1, min_periods=lookback + 1
-        ).apply(
+        current_min = source.rolling(window=lookback + 1, min_periods=lookback + 1).min()
+        current_argmin = source.rolling(window=lookback + 1, min_periods=lookback + 1).apply(
             TechnicalIndicators._nanargmin,
             raw=True,
         )
@@ -51,9 +47,7 @@ class TechnicalIndicators:
             raw=True,
         )
 
-        current_positions = (
-            row_positions - lookback + current_argmin.to_numpy(dtype=float)
-        )
+        current_positions = row_positions - lookback + current_argmin.to_numpy(dtype=float)
         previous_starts = np.maximum(0, row_positions - (lookback * 2))
         previous_positions = previous_starts + previous_argmin.to_numpy(dtype=float)
 
@@ -133,9 +127,7 @@ class TechnicalIndicators:
         return df
 
     @staticmethod
-    def add_stochastic(
-        df: pd.DataFrame, k_period: int = 14, d_period: int = 3
-    ) -> pd.DataFrame:
+    def add_stochastic(df: pd.DataFrame, k_period: int = 14, d_period: int = 3) -> pd.DataFrame:
         df = df.copy()
 
         low_min = df["low"].rolling(window=k_period).min()
@@ -181,9 +173,7 @@ class TechnicalIndicators:
             df["plus_dm"].ewm(alpha=1 / period, adjust=False, min_periods=period).mean()
         )
         smoothed_minus_dm = (
-            df["minus_dm"]
-            .ewm(alpha=1 / period, adjust=False, min_periods=period)
-            .mean()
+            df["minus_dm"].ewm(alpha=1 / period, adjust=False, min_periods=period).mean()
         )
         atr = df["atr"].replace(0, np.nan)
 
@@ -192,11 +182,7 @@ class TechnicalIndicators:
 
         di_sum = (plus_di + minus_di).replace(0, np.nan)
         dx = 100 * (plus_di - minus_di).abs() / di_sum
-        df["adx"] = (
-            dx.ewm(alpha=1 / period, adjust=False, min_periods=period)
-            .mean()
-            .clip(0, 100)
-        )
+        df["adx"] = dx.ewm(alpha=1 / period, adjust=False, min_periods=period).mean().clip(0, 100)
         df["plus_di"] = plus_di.clip(0, 100)
         df["minus_di"] = minus_di.clip(0, 100)
 
@@ -269,9 +255,7 @@ class TechnicalIndicators:
         )
 
     @staticmethod
-    def add_sma(
-        df: pd.DataFrame, fast: int | None = None, slow: int | None = None
-    ) -> pd.DataFrame:
+    def add_sma(df: pd.DataFrame, fast: int | None = None, slow: int | None = None) -> pd.DataFrame:
         fast = fast or settings.SMA_FAST
         slow = slow or settings.SMA_SLOW
         df = df.copy()
@@ -287,20 +271,14 @@ class TechnicalIndicators:
         slow_col = f"sma_{slow}"
 
         df["sma_cross"] = "NONE"
-        golden = (df[fast_col] > df[slow_col]) & (
-            df[fast_col].shift(1) <= df[slow_col].shift(1)
-        )
-        death = (df[fast_col] < df[slow_col]) & (
-            df[fast_col].shift(1) >= df[slow_col].shift(1)
-        )
+        golden = (df[fast_col] > df[slow_col]) & (df[fast_col].shift(1) <= df[slow_col].shift(1))
+        death = (df[fast_col] < df[slow_col]) & (df[fast_col].shift(1) >= df[slow_col].shift(1))
         df.loc[golden, "sma_cross"] = "GOLDEN_CROSS"
         df.loc[death, "sma_cross"] = "DEATH_CROSS"
         return df
 
     @staticmethod
-    def add_ema(
-        df: pd.DataFrame, fast: int | None = None, slow: int | None = None
-    ) -> pd.DataFrame:
+    def add_ema(df: pd.DataFrame, fast: int | None = None, slow: int | None = None) -> pd.DataFrame:
         fast = fast or settings.EMA_FAST
         slow = slow or settings.EMA_SLOW
         df = df.copy()
@@ -312,12 +290,8 @@ class TechnicalIndicators:
         slow_col = f"ema_{slow}"
 
         df["ema_cross"] = "NONE"
-        bullish = (df[fast_col] > df[slow_col]) & (
-            df[fast_col].shift(1) <= df[slow_col].shift(1)
-        )
-        bearish = (df[fast_col] < df[slow_col]) & (
-            df[fast_col].shift(1) >= df[slow_col].shift(1)
-        )
+        bullish = (df[fast_col] > df[slow_col]) & (df[fast_col].shift(1) <= df[slow_col].shift(1))
+        bearish = (df[fast_col] < df[slow_col]) & (df[fast_col].shift(1) >= df[slow_col].shift(1))
         df.loc[bullish, "ema_cross"] = "BULLISH"
         df.loc[bearish, "ema_cross"] = "BEARISH"
 
@@ -333,9 +307,7 @@ class TechnicalIndicators:
         ema_fast = df["close"].ewm(span=fast, adjust=False).mean()
         ema_slow = df["close"].ewm(span=slow, adjust=False).mean()
         df["macd"] = ema_fast - ema_slow
-        df["macd_signal"] = (
-            df["macd"].ewm(span=signal_period, adjust=False, min_periods=1).mean()
-        )
+        df["macd_signal"] = df["macd"].ewm(span=signal_period, adjust=False, min_periods=1).mean()
         df["macd_histogram"] = df["macd"] - df["macd_signal"]
         df["macd_hist"] = df["macd_histogram"]
 
@@ -363,26 +335,18 @@ class TechnicalIndicators:
 
         df["bb_middle"] = df["close"].rolling(window=period, min_periods=1).mean()
         rolling_std = (
-            df["close"]
-            .rolling(window=period, min_periods=1)
-            .std()
-            .fillna(0.0)
-            .clip(lower=1e-9)
+            df["close"].rolling(window=period, min_periods=1).std().fillna(0.0).clip(lower=1e-9)
         )
         df["bb_upper"] = df["bb_middle"] + (rolling_std * std)
         df["bb_lower"] = df["bb_middle"] - (rolling_std * std)
         df["bb_bandwidth"] = (df["bb_upper"] - df["bb_lower"]) / df["bb_middle"] * 100
-        df["bb_percent"] = (df["close"] - df["bb_lower"]) / (
-            df["bb_upper"] - df["bb_lower"]
-        )
+        df["bb_percent"] = (df["close"] - df["bb_lower"]) / (df["bb_upper"] - df["bb_lower"])
 
         df["bb_position"] = "MIDDLE"
         df.loc[df["close"] <= df["bb_lower"], "bb_position"] = "BELOW_LOWER"
         df.loc[df["close"] >= df["bb_upper"], "bb_position"] = "ABOVE_UPPER"
 
-        df["bb_squeeze"] = (
-            df["bb_bandwidth"] < df["bb_bandwidth"].rolling(window=20).mean() * 0.7
-        )
+        df["bb_squeeze"] = df["bb_bandwidth"] < df["bb_bandwidth"].rolling(window=20).mean() * 0.7
 
         return df
 
@@ -456,9 +420,7 @@ class TechnicalIndicators:
         df["support"] = df["low"].rolling(window=lookback).min()
         df["resistance"] = df["high"].rolling(window=lookback).max()
         df["dist_to_support_pct"] = (df["close"] - df["support"]) / df["close"] * 100
-        df["dist_to_resistance_pct"] = (
-            (df["resistance"] - df["close"]) / df["close"] * 100
-        )
+        df["dist_to_resistance_pct"] = (df["resistance"] - df["close"]) / df["close"] * 100
 
         return df
 
@@ -482,9 +444,7 @@ class TechnicalIndicators:
 
         return {
             "close": round(last.get("close", 0), 2),
-            "change_pct": round(
-                (last["close"] - prev["close"]) / prev["close"] * 100, 2
-            )
+            "change_pct": round((last["close"] - prev["close"]) / prev["close"] * 100, 2)
             if "close" in last.index
             else 0,
             "volume": int(last.get("volume", 0)),

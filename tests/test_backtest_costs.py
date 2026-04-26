@@ -66,10 +66,22 @@ def build_cost_frame() -> pd.DataFrame:
 def test_cost_models_reduce_net_return() -> None:
     df = build_cost_frame()
 
-    no_cost = ScriptedCostBacktester(cost_model=CostModel(commission_bps=0.0, bsmv_bps=0.0, exchange_fee_bps=0.0, fixed_slippage_bps=0.0))
-    fixed_cost = ScriptedCostBacktester(cost_model=CostModel(slippage_model="fixed", fixed_slippage_bps=5.0))
-    volume_cost = ScriptedCostBacktester(cost_model=CostModel(slippage_model="volume_aware", volume_slippage_bps_per_volume_ratio=400.0))
-    atr_cost = ScriptedCostBacktester(cost_model=CostModel(slippage_model="atr_aware", atr_slippage_ratio=0.25))
+    no_cost = ScriptedCostBacktester(
+        cost_model=CostModel(
+            commission_bps=0.0, bsmv_bps=0.0, exchange_fee_bps=0.0, fixed_slippage_bps=0.0
+        )
+    )
+    fixed_cost = ScriptedCostBacktester(
+        cost_model=CostModel(slippage_model="fixed", fixed_slippage_bps=5.0)
+    )
+    volume_cost = ScriptedCostBacktester(
+        cost_model=CostModel(
+            slippage_model="volume_aware", volume_slippage_bps_per_volume_ratio=400.0
+        )
+    )
+    atr_cost = ScriptedCostBacktester(
+        cost_model=CostModel(slippage_model="atr_aware", atr_slippage_ratio=0.25)
+    )
 
     no_cost_result = no_cost.run("TEST.IS", df, verbose=False)
     fixed_cost_result = fixed_cost.run("TEST.IS", df, verbose=False)

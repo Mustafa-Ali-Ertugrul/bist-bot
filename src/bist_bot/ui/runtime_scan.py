@@ -11,8 +11,8 @@ import streamlit as st
 
 from bist_bot.config.settings import settings
 from bist_bot.streamlit_utils import check_signals, send_signal_notification
-from bist_bot.ui.session_cooldown import consume_cooldown
 from bist_bot.ui.runtime_types import ScanResult
+from bist_bot.ui.session_cooldown import consume_cooldown
 
 TR = timezone(timedelta(hours=3))
 SCAN_LOCK = threading.Lock()
@@ -123,14 +123,10 @@ def request_scan(force_clear: bool = False) -> bool:
     allowed, remaining = consume_cooldown(
         cast(MutableMapping[str, Any], st.session_state),
         action="scan",
-        cooldown_seconds=float(
-            getattr(settings, "STREAMLIT_SCAN_COOLDOWN_SECONDS", 8.0)
-        ),
+        cooldown_seconds=float(getattr(settings, "STREAMLIT_SCAN_COOLDOWN_SECONDS", 8.0)),
     )
     if not allowed:
-        st.warning(
-            f"Cok sik istek gonderildi, birkac saniye bekleyin. ({remaining:.1f}s)"
-        )
+        st.warning(f"Cok sik istek gonderildi, birkac saniye bekleyin. ({remaining:.1f}s)")
         return False
     run_scan(force_clear=force_clear)
     return True

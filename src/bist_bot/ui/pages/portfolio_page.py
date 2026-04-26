@@ -19,7 +19,9 @@ def render_portfolio_page() -> None:
     pos_rate = round(len(strong + buy) / len(signals) * 100) if signals else 0
 
     st.title("Portfoy ve Piyasa Ozeti")
-    st.caption(f"Son guncelleme: {st.session_state.last_scan_time.strftime('%d.%m.%Y %H:%M') if st.session_state.last_scan_time else '-'}")
+    st.caption(
+        f"Son guncelleme: {st.session_state.last_scan_time.strftime('%d.%m.%Y %H:%M') if st.session_state.last_scan_time else '-'}"
+    )
 
     c1, c2, c3, c4 = st.columns(4)
     with c1:
@@ -41,7 +43,7 @@ def render_portfolio_page() -> None:
             for signal in top:
                 name = settings.TICKER_NAMES.get(signal.ticker, signal.ticker)
                 st.markdown(
-                    f"**{signal.ticker.replace('.IS','')}** - {name}  \n"
+                    f"**{signal.ticker.replace('.IS', '')}** - {name}  \n"
                     f"{signal.signal_type.value} | Fiyat: ₺{signal.price:.2f} | Skor: {signal.score:+.0f}"
                 )
                 st.divider()

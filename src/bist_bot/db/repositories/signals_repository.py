@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
-from typing import Any, Optional, cast
+from typing import Any, cast
 
 from sqlalchemy import func, select
 
@@ -14,7 +14,7 @@ def _serialize_reasons(reasons: list[str]) -> str:
     return json.dumps(reasons, ensure_ascii=False)
 
 
-def _deserialize_reasons(raw: Optional[str]) -> list[str]:
+def _deserialize_reasons(raw: str | None) -> list[str]:
     if not raw:
         return []
     try:
@@ -29,7 +29,7 @@ def _deserialize_reasons(raw: Optional[str]) -> list[str]:
 
 
 class SignalsRepository:
-    def __init__(self, manager: Optional[DatabaseManager] = None) -> None:
+    def __init__(self, manager: DatabaseManager | None = None) -> None:
         self.manager = manager or DatabaseManager()
 
     def save_signal(self, signal: Signal) -> None:
@@ -69,9 +69,7 @@ class SignalsRepository:
 
         self.manager.run_session(_write)
 
-    def get_signals(
-        self, limit: int = 50, ticker: Optional[str] = None
-    ) -> list[dict[str, Any]]:
+    def get_signals(self, limit: int = 50, ticker: str | None = None) -> list[dict[str, Any]]:
         def _read(session):
             statement = select(SignalRecord)
             if ticker:
@@ -85,11 +83,11 @@ class SignalsRepository:
         return [self._signal_to_dict(row) for row in rows]
 
     def get_recent_signals(
-        self, limit: int = 50, ticker: Optional[str] = None
+        self, limit: int = 50, ticker: str | None = None
     ) -> list[dict[str, Any]]:
         return self.get_signals(limit=limit, ticker=ticker)
 
-    def get_latest_signal(self, ticker: str) -> Optional[dict[str, Any]]:
+    def get_latest_signal(self, ticker: str) -> dict[str, Any] | None:
         row = self.manager.run_session(
             lambda session: session.scalar(
                 select(SignalRecord)
@@ -104,14 +102,12 @@ class SignalsRepository:
     def signal_exists(
         self,
         ticker: str,
-        signal_type: Optional[str] = None,
-        timestamp: Optional[str] = None,
+        signal_type: str | None = None,
+        timestamp: str | None = None,
     ) -> bool:
         def _read(session) -> bool:
             statement = (
-                select(func.count())
-                .select_from(SignalRecord)
-                .where(SignalRecord.ticker == ticker)
+                select(func.count()).select_from(SignalRecord).where(SignalRecord.ticker == ticker)
             )
             if signal_type:
                 statement = statement.where(SignalRecord.signal_type == signal_type)
@@ -136,9 +132,7 @@ class SignalsRepository:
 
         self.manager.run_session(_write)
 
-    def update_outcome(
-        self, signal_id: int, outcome: str, outcome_price: float
-    ) -> None:
+    def update_outcome(self, signal_id: int, outcome: str, outcome_price: float) -> None:
         def _write(session):
             row = session.get(SignalRecord, signal_id)
             if row is None:
@@ -147,9 +141,7 @@ class SignalsRepository:
             row.outcome = outcome
             row.outcome_price = outcome_price
             row.outcome_date = datetime.now(UTC)
-            row.profit_pct = round(
-                (outcome_price - original_price) / original_price * 100, 2
-            )
+            row.profit_pct = round((outcome_price - original_price) / original_price * 100, 2)
             return None
 
         self.manager.run_session(_write)
@@ -180,17 +172,13 @@ class SignalsRepository:
             )
             return total, completed, profitable, avg_profit
 
-        total, completed, profitable, avg_profit = self.manager.run_session(
-            _read, read_only=True
-        )
+        total, completed, profitable, avg_profit = self.manager.run_session(_read, read_only=True)
         return {
             "total_signals": int(total),
             "completed": int(completed),
             "profitable": int(profitable),
             "win_rate": round(profitable / completed * 100, 1) if completed > 0 else 0,
-            "avg_profit_pct": round(float(avg_profit), 2)
-            if avg_profit is not None
-            else 0,
+            "avg_profit_pct": round(float(avg_profit), 2) if avg_profit is not None else 0,
         }
 
     def _signal_to_dict(self, row: SignalRecord) -> dict[str, Any]:
@@ -210,8 +198,7 @@ class SignalsRepository:
             "target_price": row.target_price,
             "position_size": row.position_size,
             "confidence": row.confidence,
-            "reasons": _deserialize_reasons(row.conditions)
-            or _deserialize_reasons(row.reasons),
+            "reasons": _deserialize_reasons(row.conditions) or _deserialize_reasons(row.reasons),
             "outcome": row.outcome,
             "outcome_price": row.outcome_price,
             "outcome_date": row.outcome_date.isoformat()

@@ -26,12 +26,8 @@ def render_signals_page() -> None:
     all_data = st.session_state.get("all_data", {})
     signals = filter_signals(st.session_state.get("signals", []), all_data)
 
-    strong = sorted(
-        [s for s in signals if s.score >= 40], key=lambda s: s.score, reverse=True
-    )
-    buy = sorted(
-        [s for s in signals if 10 <= s.score < 40], key=lambda s: s.score, reverse=True
-    )
+    strong = sorted([s for s in signals if s.score >= 40], key=lambda s: s.score, reverse=True)
+    buy = sorted([s for s in signals if 10 <= s.score < 40], key=lambda s: s.score, reverse=True)
     watch = sorted([s for s in signals if s.score < 10], key=lambda s: s.score)
 
     render_page_hero(

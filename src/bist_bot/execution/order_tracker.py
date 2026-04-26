@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from bist_bot.app_logging import get_logger
 import threading
 
+from bist_bot.app_logging import get_logger
 from bist_bot.contracts import ExecutionProviderProtocol, SignalRepositoryProtocol
 
 logger = get_logger(__name__, component="order_tracker")

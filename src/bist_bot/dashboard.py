@@ -27,8 +27,8 @@ from bist_bot.contracts import (
 from bist_bot.dependencies import AppContainer, get_default_container
 from bist_bot.indicators import TechnicalIndicators
 from bist_bot.locales import get_message
-from bist_bot.scanner import ScanService
 from bist_bot.risk.circuit_breaker import CircuitBreaker
+from bist_bot.scanner import ScanService
 
 TR = timezone(timedelta(hours=3))
 logger = get_logger(__name__, component="dashboard")
@@ -119,9 +119,7 @@ def create_dashboard_app(
         with manager.engine.begin() as conn:
             row = (
                 conn.execute(
-                    text(
-                        "SELECT id, password_hash FROM users WHERE email = :email LIMIT 1"
-                    ),
+                    text("SELECT id, password_hash FROM users WHERE email = :email LIMIT 1"),
                     {"email": email},
                 )
                 .mappings()
@@ -129,9 +127,7 @@ def create_dashboard_app(
             )
         if row is None:
             return False
-        verified, upgraded_hash = verify_and_rehash_password(
-            password, str(row["password_hash"])
-        )
+        verified, upgraded_hash = verify_and_rehash_password(password, str(row["password_hash"]))
         if not verified:
             return False
         if upgraded_hash is not None:
@@ -183,9 +179,7 @@ def create_dashboard_app(
     def add_security_headers(response):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
-        response.headers["Strict-Transport-Security"] = (
-            "max-age=31536000; includeSubDomains"
-        )
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         return response
 
     @app.route("/health")
@@ -210,9 +204,7 @@ def create_dashboard_app(
 
     @app.route("/metrics")
     def metrics():
-        return app.response_class(
-            render_metrics(), mimetype="text/plain; version=0.0.4"
-        )
+        return app.response_class(render_metrics(), mimetype="text/plain; version=0.0.4")
 
     @app.route("/api/auth/login", methods=["POST"])
     @limiter.limit("5 per minute", key_func=_auth_rate_limit_key)
@@ -244,9 +236,7 @@ def create_dashboard_app(
             return jsonify({"status": "error", "message": message}), 400
 
         token = create_access_token(identity=email)
-        return jsonify(
-            {"status": "ok", "access_token": token, "expires_in_hours": 12}
-        ), 201
+        return jsonify({"status": "ok", "access_token": token, "expires_in_hours": 12}), 201
 
     @app.route("/api/scan", methods=["POST"])
     @jwt_required()
@@ -314,9 +304,7 @@ def create_dashboard_app(
             force_refresh = _coerce_bool(request.args.get("force_refresh"))
             cache_key = f"{normalized_ticker}|analyze|6mo"
 
-            cached_response = runtime_fetcher.get_cached_analysis(
-                cache_key, force=force_refresh
-            )
+            cached_response = runtime_fetcher.get_cached_analysis(cache_key, force=force_refresh)
             if cached_response is not None:
                 payload = dict(cached_response)
                 payload["duration_ms"] = round((time.time() - start_time) * 1000, 2)
@@ -331,9 +319,7 @@ def create_dashboard_app(
             if force_refresh:
                 runtime_fetcher.clear_cache(scope="analysis", ticker=normalized_ticker)
 
-            df = runtime_fetcher.fetch_single(
-                normalized_ticker, period="6mo", force=force_refresh
-            )
+            df = runtime_fetcher.fetch_single(normalized_ticker, period="6mo", force=force_refresh)
             if df is None:
                 return jsonify(
                     {"status": "error", "message": get_message("api.data_not_found")}
@@ -376,9 +362,7 @@ def create_dashboard_app(
             }
             runtime_fetcher.store_analysis(cache_key, response_payload)
             response_payload["force_refresh"] = force_refresh
-            response_payload["duration_ms"] = round(
-                (time.time() - start_time) * 1000, 2
-            )
+            response_payload["duration_ms"] = round((time.time() - start_time) * 1000, 2)
             logger.info(
                 "api_analyze_completed",
                 ticker=normalized_ticker,

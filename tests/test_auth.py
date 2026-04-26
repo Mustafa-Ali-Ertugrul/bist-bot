@@ -13,10 +13,11 @@ if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
 from dashboard import create_dashboard_app  # noqa: E402
-from bist_bot.auth.passwords import hash_password  # noqa: E402
-from bist_bot.db import DataAccess, DatabaseManager  # noqa: E402
-from bist_bot.config.settings import settings  # noqa: E402
 from sqlalchemy import text  # noqa: E402
+
+from bist_bot.auth.passwords import hash_password  # noqa: E402
+from bist_bot.config.settings import settings  # noqa: E402
+from bist_bot.db import DataAccess, DatabaseManager  # noqa: E402
 
 
 class DummyFetcher:
@@ -71,9 +72,7 @@ def build_test_client(tmp_path):
     ):
         manager = DatabaseManager(sqlite_path=str(tmp_path / "auth_test.db"))
         db = DataAccess(manager)
-        app = create_dashboard_app(
-            cast(Any, DummyFetcher()), cast(Any, DummyEngine()), db
-        )
+        app = create_dashboard_app(cast(Any, DummyFetcher()), cast(Any, DummyEngine()), db)
         app.config["TESTING"] = True
         app.config["ALLOW_PUBLIC_REGISTRATION"] = True
         return app.test_client()
@@ -95,9 +94,7 @@ def build_db_user_client(
     }
     if include_bootstrap:
         override_kwargs["ADMIN_BOOTSTRAP_EMAIL"] = "bootstrap@bistbot.local"
-        override_kwargs["ADMIN_BOOTSTRAP_PASSWORD_HASH"] = hash_password(
-            "bootstrap-password"
-        )
+        override_kwargs["ADMIN_BOOTSTRAP_PASSWORD_HASH"] = hash_password("bootstrap-password")
 
     with settings.override(**override_kwargs):
         manager = DatabaseManager(sqlite_path=str(tmp_path / "auth_db_only.db"))
@@ -117,9 +114,7 @@ def build_db_user_client(
                 },
             )
         db = DataAccess(manager)
-        app = create_dashboard_app(
-            cast(Any, DummyFetcher()), cast(Any, DummyEngine()), db
-        )
+        app = create_dashboard_app(cast(Any, DummyFetcher()), cast(Any, DummyEngine()), db)
         app.config["TESTING"] = True
         return app.test_client(), manager
 
@@ -271,9 +266,7 @@ def test_existing_db_users_prevent_env_bootstrap_override(tmp_path):
         ADMIN_BOOTSTRAP_PASSWORD_HASH=hash_password("bootstrap-password"),
     ):
         db = DataAccess(manager)
-        app = create_dashboard_app(
-            cast(Any, DummyFetcher()), cast(Any, DummyEngine()), db
-        )
+        app = create_dashboard_app(cast(Any, DummyFetcher()), cast(Any, DummyEngine()), db)
         app.config["TESTING"] = True
         client = app.test_client()
 
@@ -300,15 +293,11 @@ def test_missing_jwt_secret_prevents_app_startup(tmp_path):
         db = DataAccess(manager)
 
         try:
-            create_dashboard_app(
-                cast(Any, DummyFetcher()), cast(Any, DummyEngine()), db
-            )
+            create_dashboard_app(cast(Any, DummyFetcher()), cast(Any, DummyEngine()), db)
         except RuntimeError as exc:
             assert "JWT_SECRET_KEY" in str(exc)
         else:
-            raise AssertionError(
-                "Expected create_dashboard_app to fail without JWT secret"
-            )
+            raise AssertionError("Expected create_dashboard_app to fail without JWT secret")
 
 
 def test_legacy_bcrypt_hash_migrates_on_successful_login(tmp_path):
@@ -337,9 +326,7 @@ def test_legacy_bcrypt_hash_migrates_on_successful_login(tmp_path):
                 },
             )
         db = DataAccess(manager)
-        app = create_dashboard_app(
-            cast(Any, DummyFetcher()), cast(Any, DummyEngine()), db
-        )
+        app = create_dashboard_app(cast(Any, DummyFetcher()), cast(Any, DummyEngine()), db)
         app.config["TESTING"] = True
         client = app.test_client()
 

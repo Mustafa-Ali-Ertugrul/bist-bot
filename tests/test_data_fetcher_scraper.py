@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+
 import requests
 
 from bist_bot.data.scraper import (
-    _parse_number,
-    _extract_quote_from_text,
     _extract_quote_from_html,
+    _extract_quote_from_text,
+    _parse_number,
     scrape_bist_quote,
 )
 
@@ -16,6 +17,7 @@ from bist_bot.data.scraper import (
 @dataclass
 class MockResponse:
     """Mock HTTP response for testing."""
+
     text: str
     status_code: int = 200
 
@@ -27,6 +29,7 @@ class MockResponse:
 @dataclass
 class MockRateLimiter:
     """Mock rate limiter that records calls."""
+
     waited_domains: list[str]
 
     def wait_if_needed(self, domain: str) -> None:
@@ -51,7 +54,7 @@ def test_extract_quote_from_text_finds_price_and_change():
     price, change = _extract_quote_from_text(blob)
     assert price == 123.45
     assert change == 2.5
-    
+
     # Test negative percentage
     blob2 = "LastPrice 50,00 changePercent -1,25"
     price2, change2 = _extract_quote_from_text(blob2)
@@ -121,20 +124,20 @@ def test_scrape_bist_quote_success(monkeypatch):
     </html>
     """
     mock_response = MockResponse(text=mock_html)
-    
+
     waited_domains = []
     mock_limiter = MockRateLimiter(waited_domains)
-    
+
     def mock_get(url, timeout, headers):
         assert timeout == 10
         assert headers == {"User-Agent": "Mozilla/5.0"}
         return mock_response
-    
+
     monkeypatch.setattr("bist_bot.data.scraper.requests.get", mock_get)
-    
+
     # Execute
     result = scrape_bist_quote("THYAO.IS", mock_limiter)
-    
+
     # Verify
     assert result.success is True
     assert result.price == 123.45
@@ -145,7 +148,7 @@ def test_scrape_bist_quote_success(monkeypatch):
 def test_scrape_bist_quote_timeout_retry(monkeypatch):
     """Scraping retries on timeout and succeeds on second attempt."""
     call_count = 0
-    
+
     def mock_get(url, timeout, headers):
         nonlocal call_count
         call_count += 1
@@ -160,14 +163,14 @@ def test_scrape_bist_quote_timeout_retry(monkeypatch):
         </html>
         """
         return MockResponse(text=mock_html)
-    
+
     waited_domains = []
     mock_limiter = MockRateLimiter(waited_domains)
-    
+
     monkeypatch.setattr("bist_bot.data.scraper.requests.get", mock_get)
-    
+
     result = scrape_bist_quote("THYAO.IS", mock_limiter)
-    
+
     assert result.success is True
     assert result.price == 100.0
     assert len(waited_domains) == 2  # Called twice
@@ -177,14 +180,14 @@ def test_scrape_bist_quote_all_failures(monkeypatch):
     """Scraping returns failure when all attempts fail."""
     waited_domains = []
     mock_limiter = MockRateLimiter(waited_domains)
-    
+
     def mock_get(url, timeout, headers):
         raise requests.exceptions.RequestException("network error")
-    
+
     monkeypatch.setattr("bist_bot.data.scraper.requests.get", mock_get)
-    
+
     result = scrape_bist_quote("THYAO.IS", mock_limiter)
-    
+
     assert result.success is False
     assert "ag-hatasi:" in result.detail or "timeout:" in result.detail
     assert len(waited_domains) == 2  # Two URLs attempted

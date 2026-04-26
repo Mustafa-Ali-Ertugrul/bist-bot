@@ -46,9 +46,7 @@ def test_split_dataset_creates_time_ordered_partitions() -> None:
 
     splits = split_dataset(
         dataset,
-        SplitConfig(
-            train_fraction=0.5, validation_fraction=0.2, calibration_fraction=0.1
-        ),
+        SplitConfig(train_fraction=0.5, validation_fraction=0.2, calibration_fraction=0.1),
     )
 
     assert splits["train"]["date"].max() < splits["validation"]["date"].min()

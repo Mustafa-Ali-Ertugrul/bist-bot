@@ -5,7 +5,8 @@ from __future__ import annotations
 import importlib
 import threading
 from collections import OrderedDict
-from typing import Any, Callable, cast
+from collections.abc import Callable
+from typing import Any, cast
 
 try:  # pragma: no cover - exercised indirectly depending on environment
     _prometheus_client: Any = importlib.import_module("prometheus_client")
@@ -40,9 +41,7 @@ class _MetricsRegistry:
         self._counters = OrderedDict(
             (name, float(value)) for name, value in _COUNTER_DEFAULTS.items()
         )
-        self._gauges = OrderedDict(
-            (name, float(value)) for name, value in _GAUGE_DEFAULTS.items()
-        )
+        self._gauges = OrderedDict((name, float(value)) for name, value in _GAUGE_DEFAULTS.items())
         self._prom_registry: Any | None = None
         self._prom_counters: dict[str, Any] = {}
         self._prom_gauges: dict[str, Any] = {}
@@ -72,9 +71,7 @@ class _MetricsRegistry:
             return None
         counter = self._prom_counters.get(name)
         if counter is None:
-            counter = counter_cls(
-                name, name.replace("_", " "), registry=self._prom_registry
-            )
+            counter = counter_cls(name, name.replace("_", " "), registry=self._prom_registry)
             self._prom_counters[name] = counter
         return counter
 
@@ -84,9 +81,7 @@ class _MetricsRegistry:
             return None
         gauge = self._prom_gauges.get(name)
         if gauge is None:
-            gauge = gauge_cls(
-                name, name.replace("_", " "), registry=self._prom_registry
-            )
+            gauge = gauge_cls(name, name.replace("_", " "), registry=self._prom_registry)
             self._prom_gauges[name] = gauge
         return gauge
 

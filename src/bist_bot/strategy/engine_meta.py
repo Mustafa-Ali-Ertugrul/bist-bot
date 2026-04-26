@@ -31,8 +31,7 @@ def build_meta_features(
         target_price=float(risk_levels.final_target),
         volatility_scale=float(risk_levels.volatility_scale),
         correlation_scale=float(risk_levels.correlation_scale),
-        trend_bias=float(trend_bias == TrendBias.LONG)
-        - float(trend_bias == TrendBias.SHORT),
+        trend_bias=float(trend_bias == TrendBias.LONG) - float(trend_bias == TrendBias.SHORT),
     )
 
 
@@ -87,9 +86,7 @@ def apply_buy_side_risk(
 
 def append_signal_reasons(signal: Signal, risk_levels: RiskLevels) -> None:
     """Append risk sizing and meta-model details to a generated signal."""
-    signal.reasons.append(
-        f"R/R: 1:{risk_levels.risk_reward_ratio:.1f} | {risk_levels.method_used}"
-    )
+    signal.reasons.append(f"R/R: 1:{risk_levels.risk_reward_ratio:.1f} | {risk_levels.method_used}")
     signal.reasons.append(
         f"Pozisyon: {risk_levels.position_size} lot | Risk Butcesi: TL{risk_levels.risk_budget_tl:.2f}"
     )
@@ -101,9 +98,7 @@ def append_signal_reasons(signal: Signal, risk_levels: RiskLevels) -> None:
             f"Meta-model: P(up) %{risk_levels.signal_probability * 100:.1f} | Kelly %{risk_levels.kelly_fraction * 100:.2f}"
         )
     if risk_levels.liquidity_value > 0:
-        signal.reasons.append(
-            f"Likidite: TL{risk_levels.liquidity_value:,.0f} ort. islem degeri"
-        )
+        signal.reasons.append(f"Likidite: TL{risk_levels.liquidity_value:,.0f} ort. islem degeri")
     if risk_levels.correlated_tickers:
         signal.reasons.append(
             f"Korelasyon limiti: x{risk_levels.correlation_scale:.2f} | Iliskili: {', '.join(risk_levels.correlated_tickers)}"

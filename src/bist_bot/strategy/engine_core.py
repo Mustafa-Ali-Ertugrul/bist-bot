@@ -17,9 +17,7 @@ def extract_timeframes(
         trend_df = market_data.get("trend")
         trigger_df = market_data.get("trigger")
         if trend_df is None or trigger_df is None:
-            raise ValueError(
-                "Multi-timeframe veri 'trend' ve 'trigger' anahtarlarini icermeli"
-            )
+            raise ValueError("Multi-timeframe veri 'trend' ve 'trigger' anahtarlarini icermeli")
         return trend_df, trigger_df, True
     return market_data, market_data, False
 

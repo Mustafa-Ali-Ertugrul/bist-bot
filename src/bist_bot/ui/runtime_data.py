@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 from typing import cast
-import xml.etree.ElementTree as ET
 
 import pandas as pd
 import requests
@@ -41,7 +41,9 @@ def map_cached_signals(rows: list[dict]) -> list[Signal]:
                 reasons=reasons,
                 stop_loss=float(row.get("stop_loss", 0.0) or 0.0),
                 target_price=float(row.get("target_price", 0.0) or 0.0),
-                position_size=int(row["position_size"]) if row.get("position_size") is not None else None,
+                position_size=int(row["position_size"])
+                if row.get("position_size") is not None
+                else None,
                 timestamp=timestamp,
                 confidence=str(row.get("confidence", "CACHE") or "CACHE"),
             )
@@ -60,14 +62,21 @@ def fetch_stock_news(ticker, max_results=5):
         root = ET.fromstring(response.content)
         items = root.findall(".//item")
         for item in items[:max_results]:
-            title = item.findtext("title", "").replace("&amp;", "&").replace("&#39;", "'").replace("&quot;", '"')
+            title = (
+                item.findtext("title", "")
+                .replace("&amp;", "&")
+                .replace("&#39;", "'")
+                .replace("&quot;", '"')
+            )
             if len(title) > 10:
-                all_news.append({
-                    "title": title,
-                    "url": item.findtext("link", ""),
-                    "source": "Google Haberler",
-                    "published_at": item.findtext("pubDate", "")[:16],
-                })
+                all_news.append(
+                    {
+                        "title": title,
+                        "url": item.findtext("link", ""),
+                        "source": "Google Haberler",
+                        "published_at": item.findtext("pubDate", "")[:16],
+                    }
+                )
     except Exception:
         pass
     return all_news[:max_results]
@@ -81,7 +90,7 @@ def get_market_summary(signals, all_data):
     sector_data = {}
     rsi_values = []
     vol_ratios = []
-    for ticker, df in all_data.items():
+    for _ticker, df in all_data.items():
         try:
             df_ind = ti.add_all(df.copy())
             last = df_ind.iloc[-1]
@@ -145,7 +154,11 @@ def fetch_index_data(cache_version: str = INDEX_DATA_CACHE_VERSION):
 def filter_signals(base_signals, all_data):
     """Apply UI-level signal filters using session-state thresholds."""
     filtered = [s for s in base_signals if s.score >= st.session_state.min_score_filter]
-    if st.session_state.rsi_min_filter <= 0 and st.session_state.rsi_max_filter >= 100 and st.session_state.vol_ratio_filter <= 0:
+    if (
+        st.session_state.rsi_min_filter <= 0
+        and st.session_state.rsi_max_filter >= 100
+        and st.session_state.vol_ratio_filter <= 0
+    ):
         return filtered
     ti = TechnicalIndicators()
     result = []
@@ -157,7 +170,10 @@ def filter_signals(base_signals, all_data):
             last = ti.add_all(df.copy()).iloc[-1]
             rsi = last.get("rsi", 50)
             volume_ratio = last.get("volume_ratio", 1.0)
-            if st.session_state.rsi_min_filter <= rsi <= st.session_state.rsi_max_filter and volume_ratio >= st.session_state.vol_ratio_filter:
+            if (
+                st.session_state.rsi_min_filter <= rsi <= st.session_state.rsi_max_filter
+                and volume_ratio >= st.session_state.vol_ratio_filter
+            ):
                 result.append(signal)
         except Exception:
             pass
