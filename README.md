@@ -22,6 +22,14 @@ BIST hisselerini teknik indikatörlerle tarayan, sinyal üreten, Telegram'a bild
 - 🔴 SAT       : Skor ≤ -20
 - 🚨 GÜÇLÜ SAT : Skor ≤ -48
 
+### Sinyal Yaşam Döngüsü
+
+- Sinyallerin bir TTL (Time-To-Live) süresi vardır, `SIGNAL_TTL_MINUTES` ile kontrol edilir.
+- Varsayılan TTL 60 dakikadır.
+- Süresi dolmuş sinyaller geçmişte kalır ancak `is_expired=true` olarak işaretlenir.
+- Telegram bildirimleri süresi dolmuş sinyalleri göndermez.
+- `TELEGRAM_MIN_SCORE` varsayılanı `STRONG_BUY_THRESHOLD` ile eşlenmiştir (48).
+
 ## Mimari
 
 - `main.py` bot runtime'ını başlatır; tarayıcıyı, scheduler'ı ve isteğe bağlı dashboard'u ayağa kaldırır.

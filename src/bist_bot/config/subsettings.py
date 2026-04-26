@@ -354,3 +354,6 @@ class NotificationSettings:
     )
     NOTIFICATION_MAX_RETRIES: int = _get_int_env("NOTIFICATION_MAX_RETRIES", 3)
     NOTIFICATION_RETRY_DELAY: int = _get_int_env("NOTIFICATION_RETRY_DELAY", 5)
+    # How long a generated signal remains fresh/actionable (minutes).
+    # Signals older than this are marked expired and skipped for notifications.
+    SIGNAL_TTL_MINUTES: int = _get_int_env("SIGNAL_TTL_MINUTES", 60)
