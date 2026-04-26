@@ -2,23 +2,30 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Callable, Optional
 
-from bist_bot.config.settings import settings
 from bist_bot.backtest import Backtester
-from bist_bot.data.fetcher import BISTDataFetcher, BorsaIstanbulQuoteProvider, DataProviderRouter, MarketDataProvider, OfficialProviderStub, YFinanceProvider
+from bist_bot.config.settings import settings
+from bist_bot.data.fetcher import (
+    BISTDataFetcher,
+    BorsaIstanbulQuoteProvider,
+    DataProviderRouter,
+    MarketDataProvider,
+    OfficialProviderStub,
+    YFinanceProvider,
+)
 from bist_bot.data.providers import build_official_provider, resolve_official_endpoints
 from bist_bot.db import DataAccess
 from bist_bot.execution.algolab_broker import AlgoLabBroker, AlgoLabCredentials
 from bist_bot.execution.base import BaseExecutionProvider
 from bist_bot.execution.paper_broker import PaperBroker
-from bist_bot.scanner import ScanService
 from bist_bot.notifier import TelegramNotifier
 from bist_bot.risk import RiskManager
-from bist_bot.strategy import StrategyEngine
 from bist_bot.risk.circuit_breaker import CircuitBreaker
+from bist_bot.scanner import ScanService
+from bist_bot.strategy import StrategyEngine
 
 
 @dataclass(frozen=True)
@@ -34,24 +41,27 @@ class AppContainer:
 
 
 def build_app_container(
-    fetcher: Optional[BISTDataFetcher] = None,
-    engine: Optional[StrategyEngine] = None,
-    notifier: Optional[TelegramNotifier] = None,
-    db: Optional[DataAccess] = None,
-    broker: Optional[BaseExecutionProvider] = None,
-    paper_trade_fetcher: Optional[BISTDataFetcher] = None,
-    backtester_factory: Optional[Callable[[], Backtester]] = None,
-    circuit_breaker: Optional[CircuitBreaker] = None,
+    fetcher: BISTDataFetcher | None = None,
+    engine: StrategyEngine | None = None,
+    notifier: TelegramNotifier | None = None,
+    db: DataAccess | None = None,
+    broker: BaseExecutionProvider | None = None,
+    paper_trade_fetcher: BISTDataFetcher | None = None,
+    backtester_factory: Callable[[], Backtester] | None = None,
+    circuit_breaker: CircuitBreaker | None = None,
 ) -> AppContainer:
     validation_errors = settings.validate_all()
     if validation_errors:
         from bist_bot.app_logging import get_logger
+
         get_logger(__name__, component="dependencies").warning(
             "config_validation_errors", errors=validation_errors
         )
     data_provider = _build_data_provider()
     quote_provider = BorsaIstanbulQuoteProvider(rate_limiter=_build_rate_limiter())
-    runtime_fetcher = fetcher or BISTDataFetcher(provider=data_provider, quote_provider=quote_provider)
+    runtime_fetcher = fetcher or BISTDataFetcher(
+        provider=data_provider, quote_provider=quote_provider
+    )
     runtime_notifier = notifier or TelegramNotifier()
     runtime_db = db or DataAccess()
     runtime_engine = engine or StrategyEngine(
@@ -110,7 +120,11 @@ def _build_rate_limiter():
 
 def _build_data_provider() -> MarketDataProvider:
     provider_name = getattr(settings, "DATA_PROVIDER", "yfinance")
-    fallback_order = [s.strip() for s in getattr(settings, "DATA_PROVIDER_FALLBACK_ORDER", "").split(",") if s.strip()]
+    fallback_order = [
+        s.strip()
+        for s in getattr(settings, "DATA_PROVIDER_FALLBACK_ORDER", "").split(",")
+        if s.strip()
+    ]
     if provider_name == "official":
         settings.validate_data_provider_config()
         primary = build_official_provider(
@@ -153,7 +167,7 @@ def _build_provider_by_name(name: str) -> MarketDataProvider:
     return OfficialProviderStub()
 
 
-def build_scan_service(container: Optional[AppContainer] = None) -> ScanService:
+def build_scan_service(container: AppContainer | None = None) -> ScanService:
     runtime_container = container or get_default_container()
     return ScanService(
         runtime_container.fetcher,

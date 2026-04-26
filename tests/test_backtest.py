@@ -32,9 +32,7 @@ class ScriptedBacktester(Backtester):
         )
         self.scripted_signals = scripted_signals
 
-    def _build_signal_context(
-        self, ticker: str, history: pd.DataFrame
-    ) -> dict[str, float | bool]:
+    def _build_signal_context(self, ticker: str, history: pd.DataFrame) -> dict[str, float | bool]:
         return self.scripted_signals.get(
             len(history),
             {
@@ -245,7 +243,5 @@ def test_vectorized_backtest_shifts_signals_to_next_bar_open():
 
     assert result is not None
     assert result.trades
-    assert (
-        result.trades[0].entry_date == pd.Timestamp(df.index[entry_idx]).to_pydatetime()
-    )
+    assert result.trades[0].entry_date == pd.Timestamp(df.index[entry_idx]).to_pydatetime()
     assert result.trades[0].entry_price == 17.5

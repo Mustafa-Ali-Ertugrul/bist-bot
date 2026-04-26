@@ -14,15 +14,14 @@ except ImportError:
     log_loss = None
     roc_auc_score = None
 
+
 class IntrabarExit(TypedDict):
     reason: str
     reference_price: float
 
 
 class SignalBuilder(Protocol):
-    def __call__(
-        self, ticker: str, history: pd.DataFrame
-    ) -> dict[str, float | bool]: ...
+    def __call__(self, ticker: str, history: pd.DataFrame) -> dict[str, float | bool]: ...
 
 
 @dataclass
@@ -315,9 +314,7 @@ class WalkForwardResult:
 
 def _to_float(value: Any, default: float = 0.0) -> float:
     try:
-        if isinstance(
-            value, (pd.Series, pd.DataFrame, np.ndarray, list, tuple, pd.Index)
-        ):
+        if isinstance(value, (pd.Series, pd.DataFrame, np.ndarray, list, tuple, pd.Index)):
             return default
         if pd.isna(value):
             return default
@@ -343,9 +340,7 @@ def _annualized_ratios(returns: np.ndarray) -> tuple[float, float]:
 
     downside = returns[returns < 0]
     downside_std = float(np.std(downside)) if downside.size > 0 else 0.0
-    sortino = (
-        float(mean_return / downside_std * np.sqrt(252)) if downside_std > 0 else 0.0
-    )
+    sortino = float(mean_return / downside_std * np.sqrt(252)) if downside_std > 0 else 0.0
     return sharpe, sortino
 
 
@@ -377,9 +372,7 @@ def _longest_loss_streak(trades: list[BacktestTrade]) -> int:
 
 
 def _probability_diagnostics(trades: list[BacktestTrade]) -> dict[str, Any]:
-    probability_trades = [
-        trade for trade in trades if trade.signal_probability is not None
-    ]
+    probability_trades = [trade for trade in trades if trade.signal_probability is not None]
     if not probability_trades:
         return {}
 
@@ -391,17 +384,13 @@ def _probability_diagnostics(trades: list[BacktestTrade]) -> dict[str, Any]:
         1e-6,
         1.0 - 1e-6,
     )
-    labels = np.array(
-        [1 if trade.profit_pct > 0 else 0 for trade in probability_trades], dtype=int
-    )
+    labels = np.array([1 if trade.profit_pct > 0 else 0 for trade in probability_trades], dtype=int)
     diagnostics: dict[str, Any] = {
-        "count": int(len(probability_trades)),
+        "count": len(probability_trades),
         "brier_score": round(float(np.mean((probabilities - labels) ** 2)), 4),
     }
     if log_loss is not None:
-        diagnostics["log_loss"] = round(
-            float(log_loss(labels, probabilities, labels=[0, 1])), 4
-        )
+        diagnostics["log_loss"] = round(float(log_loss(labels, probabilities, labels=[0, 1])), 4)
     if roc_auc_score is not None and len(np.unique(labels)) > 1:
         diagnostics["roc_auc"] = round(float(roc_auc_score(labels, probabilities)), 4)
 
@@ -438,11 +427,7 @@ def _probability_diagnostics(trades: list[BacktestTrade]) -> dict[str, Any]:
             )
             continue
         bucket_trade_returns = np.array(
-            [
-                trade.profit_pct
-                for idx, trade in enumerate(probability_trades)
-                if mask[idx]
-            ],
+            [trade.profit_pct for idx, trade in enumerate(probability_trades) if mask[idx]],
             dtype=float,
         )
         bucket_rows.append(
@@ -497,9 +482,7 @@ def _summarize_trades_and_equity(
     equity_history: list[float],
 ) -> dict[str, Any]:
     total_return_pct = (
-        (final_capital - initial_capital) / initial_capital * 100
-        if initial_capital
-        else 0.0
+        (final_capital - initial_capital) / initial_capital * 100 if initial_capital else 0.0
     )
     winning = [trade for trade in trades if trade.profit_pct > 0]
     losing = [trade for trade in trades if trade.profit_pct <= 0]
@@ -538,9 +521,7 @@ def _summarize_trades_and_equity(
         "winning_trades": len(winning),
         "losing_trades": len(losing),
         "win_rate": round(len(winning) / len(trades) * 100, 1) if trades else 0.0,
-        "avg_profit_pct": round(
-            float(np.mean([trade.profit_pct for trade in winning])), 2
-        )
+        "avg_profit_pct": round(float(np.mean([trade.profit_pct for trade in winning])), 2)
         if winning
         else 0.0,
         "avg_loss_pct": round(float(np.mean([trade.profit_pct for trade in losing])), 2)
@@ -560,4 +541,3 @@ def _summarize_trades_and_equity(
         "probability_diagnostics": probability_diagnostics,
         "cost_breakdown": _build_cost_breakdown(initial_capital, final_capital, trades),
     }
-

@@ -5,20 +5,21 @@ from typing import cast
 
 from bist_bot.app_logging import get_logger
 from bist_bot.app_metrics import inc_counter, set_gauge
-from bist_bot.config.settings import Settings, settings as default_settings
+from bist_bot.config.settings import Settings
+from bist_bot.config.settings import settings as default_settings
 from bist_bot.contracts import (
     DataFetcherProtocol,
+    ExecutionProviderProtocol,
     NotifierProtocol,
     SignalRepositoryProtocol,
     StrategyEngineProtocol,
 )
-from bist_bot.contracts import ExecutionProviderProtocol
+from bist_bot.risk.circuit_breaker import CircuitBreaker
 from bist_bot.services.execution_service import ExecutionService
 from bist_bot.services.notification_service import NotificationDispatchService
 from bist_bot.services.paper_trade_service import PaperTradeService
 from bist_bot.services.signal_change_service import SignalChangeService
 from bist_bot.strategy.signal_models import Signal, SignalType
-from bist_bot.risk.circuit_breaker import CircuitBreaker
 
 logger = get_logger(__name__, component="scanner")
 
@@ -59,9 +60,7 @@ class ScanService:
         self.db = db
         self.broker = broker
         self.settings = settings or default_settings
-        self.signal_change_service = signal_change_service or SignalChangeService(
-            db, notifier
-        )
+        self.signal_change_service = signal_change_service or SignalChangeService(db, notifier)
         self.execution_service = execution_service or ExecutionService(
             db, broker=broker, settings=self.settings
         )
@@ -147,9 +146,7 @@ class ScanService:
             self._auto_execute_signals(actionable)
             self.paper_trade_service.queue_actionable_signals(actionable)
             self.db.save_scan_log(len(all_data), len(actionable), len(buys), len(sells))
-            self.notification_service.notify_scan_results(
-                signals, actionable, len(all_data)
-            )
+            self.notification_service.notify_scan_results(signals, actionable, len(all_data))
 
             if getattr(self.settings, "PAPER_MODE", False):
                 self.update_paper_trades()

@@ -35,9 +35,7 @@ class MarketScheduler:
             if is_bist_holiday(now.date()):
                 logger.info("scheduler_holiday_idle")
                 next_session = next_bist_session(now)
-                wait_seconds = max(
-                    60, min((next_session - now).total_seconds(), 3600)
-                )
+                wait_seconds = max(60, min((next_session - now).total_seconds(), 3600))
                 sleep(wait_seconds)
                 continue
 
@@ -57,9 +55,7 @@ class MarketScheduler:
                 logger.info("scheduler_market_closed")
                 self.scanner.scan_once()
                 next_session = next_bist_session(now)
-                wait_seconds = max(
-                    60, min((next_session - now).total_seconds(), 3600 * 14)
-                )
+                wait_seconds = max(60, min((next_session - now).total_seconds(), 3600 * 14))
                 sleep(wait_seconds)
                 continue
 
@@ -94,9 +90,7 @@ class MarketScheduler:
                     sleep(backoff)
                     try:
                         self.scanner.scan_once()
-                        logger.info(
-                            "scheduler_scan_retry_succeeded", attempt=attempt
-                        )
+                        logger.info("scheduler_scan_retry_succeeded", attempt=attempt)
                         break
                     except Exception as retry_exc:
                         logger.error(

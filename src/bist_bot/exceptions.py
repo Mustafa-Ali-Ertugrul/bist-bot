@@ -44,6 +44,4 @@ class OrderExecutionError(Exception):
         self.order_data = order_data
         self.broker_code = broker_code
         self.details = details
-        super().__init__(
-            f"{message} (broker={broker_code}, details={details})"
-        )
+        super().__init__(f"{message} (broker={broker_code}, details={details})")

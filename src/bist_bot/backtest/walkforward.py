@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Optional, cast
+from typing import Any, cast
 
 import pandas as pd
 
+from bist_bot import strategy as strategy_module
 from bist_bot.app_logging import get_logger
 from bist_bot.config.settings import settings
-from bist_bot import strategy as strategy_module
 
 from .models import (
     BacktestTrade,
@@ -30,7 +30,7 @@ class WalkForwardValidator:
         step: int = 3,
         mode: str = WindowMode.ROLLING.value,
         optimizer_iterations: int = 20,
-        param_grid: Optional[dict[str, list[Any]]] = None,
+        param_grid: dict[str, list[Any]] | None = None,
         optimizer_factory: Any | None = None,
         backtester_factory: Any | None = None,
     ) -> None:
@@ -48,9 +48,7 @@ class WalkForwardValidator:
         self.optimizer_factory = optimizer_factory
         self.backtester_factory = backtester_factory
 
-    def _build_windows(
-        self, df: pd.DataFrame
-    ) -> list[tuple[pd.DataFrame, pd.DataFrame]]:
+    def _build_windows(self, df: pd.DataFrame) -> list[tuple[pd.DataFrame, pd.DataFrame]]:
         windows: list[tuple[pd.DataFrame, pd.DataFrame]] = []
         if df.empty:
             return windows
@@ -67,40 +65,30 @@ class WalkForwardValidator:
             if test_end > end_date:
                 break
 
-            train_df = df.loc[
-                (df.index >= current_train_start) & (df.index < train_end)
-            ]
+            train_df = df.loc[(df.index >= current_train_start) & (df.index < train_end)]
             test_df = df.loc[(df.index >= train_end) & (df.index < test_end)]
             if not train_df.empty and not test_df.empty:
                 windows.append((train_df, test_df))
 
             if self.mode is WindowMode.ROLLING:
-                current_train_start = current_train_start + pd.DateOffset(
-                    months=self.step
-                )
+                current_train_start = current_train_start + pd.DateOffset(months=self.step)
             else:
                 current_train_start = pd.Timestamp(start_date)
                 current_train_months += self.step
 
         return windows
 
-    def _optimizer(
-        self, ticker: str, train_df: pd.DataFrame, initial_capital: float
-    ) -> Any:
+    def _optimizer(self, ticker: str, train_df: pd.DataFrame, initial_capital: float) -> Any:
         if self.optimizer_factory is not None:
             return self.optimizer_factory(ticker, train_df, initial_capital)
 
         from bist_bot.optimizer import StrategyOptimizer
 
-        return StrategyOptimizer(
-            ticker=ticker, df=train_df, initial_capital=initial_capital
-        )
+        return StrategyOptimizer(ticker=ticker, df=train_df, initial_capital=initial_capital)
 
     def _backtester(self, initial_capital: float, params: Any) -> StrategyBacktester:
         if self.backtester_factory is not None:
-            return cast(
-                StrategyBacktester, self.backtester_factory(initial_capital, params)
-            )
+            return cast(StrategyBacktester, self.backtester_factory(initial_capital, params))
 
         engine = strategy_module.StrategyEngine(params=params)
         return StrategyBacktester(initial_capital=initial_capital, engine=engine)
@@ -109,10 +97,10 @@ class WalkForwardValidator:
         self,
         ticker: str,
         df: pd.DataFrame,
-        initial_capital: Optional[float] = None,
+        initial_capital: float | None = None,
         output_path: str | Path | None = None,
         universe_as_of: str | None = None,
-    ) -> Optional[WalkForwardResult]:
+    ) -> WalkForwardResult | None:
         if df is None or df.empty:
             return None
 
@@ -157,9 +145,7 @@ class WalkForwardValidator:
                     train_rows=len(train_df),
                     test_rows=len(test_df),
                     params={
-                        key: value
-                        for key, value in params_dict.items()
-                        if key in self.param_grid
+                        key: value for key, value in params_dict.items() if key in self.param_grid
                     },
                     metrics=test_result.to_dict(),
                 )
@@ -206,4 +192,3 @@ class WalkForwardValidator:
         if output_path is not None:
             result.to_json(output_path)
         return result
-

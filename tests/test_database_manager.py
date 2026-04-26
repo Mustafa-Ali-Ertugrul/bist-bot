@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import os
 import sys
-import pytest
 from datetime import datetime
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:
@@ -57,13 +58,9 @@ def test_database_manager_uses_database_url_for_non_sqlite_backends():
     with patch(
         "bist_bot.db.database.create_engine", return_value=mock_engine
     ) as create_engine_mock:
-        with patch(
-            "bist_bot.db.database.scoped_session", return_value=mock_session_factory
-        ):
+        with patch("bist_bot.db.database.scoped_session", return_value=mock_session_factory):
             with patch.object(DatabaseManager, "initialize", return_value=None):
-                manager = DatabaseManager(
-                    database_url="postgresql+psycopg2://user:pass@host/db"
-                )
+                manager = DatabaseManager(database_url="postgresql+psycopg2://user:pass@host/db")
 
     assert manager.get_journal_mode() == "n/a"
     create_engine_mock.assert_called_once()
@@ -75,13 +72,13 @@ def test_database_manager_uses_database_url_for_non_sqlite_backends():
 
 
 @pytest.mark.parametrize(
-    'name,expected',
+    "name,expected",
     [
-        ('paper_trades', 'paper_trades'),
-        ('paper_trades_test', 'paper_trades_test'),
-        ('_paper_trades', '_paper_trades'),
-        ('signals', 'signals'),
-        ('my_table_123', 'my_table_123'),
+        ("paper_trades", "paper_trades"),
+        ("paper_trades_test", "paper_trades_test"),
+        ("_paper_trades", "_paper_trades"),
+        ("signals", "signals"),
+        ("my_table_123", "my_table_123"),
     ],
 )
 def test_validate_table_name_valid(name, expected):
@@ -89,17 +86,16 @@ def test_validate_table_name_valid(name, expected):
 
 
 @pytest.mark.parametrize(
-    'name',
+    "name",
     [
-        'paper_trades;DROP_TABLE',
-        'paper-trades',
-        '123paper_trades',
-        'paper trades',
-        'paper_trades\na',
-        'paper_trades--comment',
+        "paper_trades;DROP_TABLE",
+        "paper-trades",
+        "123paper_trades",
+        "paper trades",
+        "paper_trades\na",
+        "paper_trades--comment",
     ],
 )
 def test_validate_table_name_invalid(name):
     with pytest.raises(ValueError):
         _validate_table_name(name)
-

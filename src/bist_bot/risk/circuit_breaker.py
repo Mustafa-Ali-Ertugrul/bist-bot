@@ -108,9 +108,7 @@ class CircuitBreaker:
             self._maybe_transition()
             if self._state == CircuitState.CLOSED:
                 return True
-            if self._state == CircuitState.HALF_OPEN:
-                return True  # allow probe
-            return False
+            return self._state == CircuitState.HALF_OPEN  # allow probe
 
     def record_loss(self, amount: float) -> None:
         """Register a realised loss (positive number)."""

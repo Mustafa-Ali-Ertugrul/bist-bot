@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 class MarketCandle(BaseModel):
     """Pydantic model representing a single OHLCV candle for validation."""
+
     model_config = ConfigDict(frozen=True, extra="ignore")
 
     timestamp: datetime
@@ -39,7 +40,7 @@ class MarketCandle(BaseModel):
 
 def validate_dataframe(df: pd.DataFrame | None, validate: bool = True) -> pd.DataFrame | None:
     """Validate a dataframe against the MarketCandle schema.
-    
+
     If validate is True, it converts rows to MarketCandle objects briefly to ensure
     quality data, then back to a sanitized DataFrame.
     If False, it skips strict Pydantic checks and just drops NaNs.
@@ -56,12 +57,12 @@ def validate_dataframe(df: pd.DataFrame | None, validate: bool = True) -> pd.Dat
         return None
 
     df = cast(pd.DataFrame, df[required_cols])
-    
+
     # Check index for timestamps
     if df.index.name is None and not isinstance(df.index, pd.DatetimeIndex):
         if "timestamp" in df.columns:
             df.set_index("timestamp", inplace=True)
-            
+
     df.index = pd.DatetimeIndex(pd.to_datetime(df.index)).tz_localize(None)
 
     # Fast path: just drop NAs and negative values via Pandas
@@ -76,9 +77,9 @@ def validate_dataframe(df: pd.DataFrame | None, validate: bool = True) -> pd.Dat
         for r in dict_records:
             if "index" in r:
                 r["timestamp"] = r.pop("index")
-                
+
         valid_candles = [MarketCandle(**r) for r in dict_records]
-        
+
         # Convert back to dataframe
         valid_records = [c.model_dump() for c in valid_candles]
         clean_df = pd.DataFrame(valid_records)
@@ -86,6 +87,7 @@ def validate_dataframe(df: pd.DataFrame | None, validate: bool = True) -> pd.Dat
         return clean_df
     except Exception as e:
         from bist_bot.app_logging import get_logger
+
         get_logger(__name__, component="schemas").error(
             "validation_failed", error_type=type(e).__name__, details=str(e)
         )

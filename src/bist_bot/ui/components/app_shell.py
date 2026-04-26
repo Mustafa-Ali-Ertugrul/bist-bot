@@ -111,9 +111,7 @@ def render_page_hero(
 
 def render_section_title(title: str, caption: str = "") -> None:
     caption_html = (
-        f"<div class='bb-section-caption'>{html.escape(caption)}</div>"
-        if caption
-        else ""
+        f"<div class='bb-section-caption'>{html.escape(caption)}</div>" if caption else ""
     )
     st.markdown(
         (

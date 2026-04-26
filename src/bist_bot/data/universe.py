@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import json
-from bist_bot.app_logging import get_logger
 from datetime import date, datetime
 from pathlib import Path
 
+from bist_bot.app_logging import get_logger
 from bist_bot.data.bist100 import BIST100_TICKERS
 from bist_bot.data.helpers import clean_ticker_list
 
@@ -38,9 +38,7 @@ def get_universe_for_date(
     candidates: list[tuple[date, Path]] = []
     for snapshot_path in sorted(UNIVERSE_DIR.glob("bist100_*.json")):
         try:
-            snapshot_date = date.fromisoformat(
-                snapshot_path.stem.removeprefix("bist100_")
-            )
+            snapshot_date = date.fromisoformat(snapshot_path.stem.removeprefix("bist100_"))
         except ValueError:
             continue
         if snapshot_date <= target_date:

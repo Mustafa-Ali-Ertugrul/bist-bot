@@ -8,11 +8,10 @@ from datetime import datetime
 from pathlib import Path
 
 import bist_bot.config as config
-
 from bist_bot.app_logging import get_logger
 from bist_bot.backtest import (
-    BacktestResult,
     Backtester,
+    BacktestResult,
     WalkForwardResult,
     WalkForwardValidator,
 )
@@ -23,21 +22,15 @@ logger = get_logger(__name__, component="backtest_runner")
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run BIST Bot backtests")
-    parser.add_argument(
-        "--walk-forward", action="store_true", help="Run walk-forward validation"
-    )
+    parser.add_argument("--walk-forward", action="store_true", help="Run walk-forward validation")
     parser.add_argument(
         "--historical-universe-date",
         type=str,
         default=None,
         help="Resolve a point-in-time universe snapshot for YYYY-MM-DD",
     )
-    parser.add_argument(
-        "--train-window", type=int, default=12, help="Train window in months"
-    )
-    parser.add_argument(
-        "--test-window", type=int, default=3, help="Test window in months"
-    )
+    parser.add_argument("--train-window", type=int, default=12, help="Train window in months")
+    parser.add_argument("--test-window", type=int, default=3, help="Test window in months")
     parser.add_argument("--step", type=int, default=3, help="Step size in months")
     parser.add_argument(
         "--mode",
@@ -60,9 +53,7 @@ def run_backtest(fetcher, walk_forward: bool | None = None) -> None:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     universe_as_of = args.historical_universe_date
     universe = (
-        get_universe_for_date(
-            universe_as_of, current_universe=list(config.settings.WATCHLIST)
-        )
+        get_universe_for_date(universe_as_of, current_universe=list(config.settings.WATCHLIST))
         if universe_as_of
         else list(config.settings.WATCHLIST)
     )
@@ -86,9 +77,7 @@ def run_backtest(fetcher, walk_forward: bool | None = None) -> None:
                 step=args.step,
                 mode=args.mode,
             )
-            output_path = (
-                output_dir / f"walkforward_{ticker.replace('.', '_')}_{timestamp}.json"
-            )
+            output_path = output_dir / f"walkforward_{ticker.replace('.', '_')}_{timestamp}.json"
             walk_forward_result = validator.run(
                 ticker,
                 df,
@@ -110,9 +99,9 @@ def run_backtest(fetcher, walk_forward: bool | None = None) -> None:
         avg_return = sum(
             r.combined_metrics["total_return_pct"] for r in walk_forward_results
         ) / len(walk_forward_results)
-        avg_sharpe = sum(
-            r.combined_metrics["sharpe"] for r in walk_forward_results
-        ) / len(walk_forward_results)
+        avg_sharpe = sum(r.combined_metrics["sharpe"] for r in walk_forward_results) / len(
+            walk_forward_results
+        )
         total_windows = sum(len(r.windows) for r in walk_forward_results)
         print(f"\n{'═' * 55}")
         print("📊 GENEL WALK-FORWARD ÖZETİ")
@@ -130,9 +119,7 @@ def run_backtest(fetcher, walk_forward: bool | None = None) -> None:
         if df is None:
             continue
 
-        backtester = Backtester(
-            initial_capital=getattr(config.settings, "INITIAL_CAPITAL", 8500.0)
-        )
+        backtester = Backtester(initial_capital=getattr(config.settings, "INITIAL_CAPITAL", 8500.0))
         output_path = output_dir / f"backtest_{ticker.replace('.', '_')}.json"
         backtest_result = backtester.run(
             ticker,
@@ -148,9 +135,7 @@ def run_backtest(fetcher, walk_forward: bool | None = None) -> None:
     if not backtest_results:
         return
 
-    avg_return = sum(r.total_return_pct for r in backtest_results) / len(
-        backtest_results
-    )
+    avg_return = sum(r.total_return_pct for r in backtest_results) / len(backtest_results)
     avg_winrate = sum(r.win_rate for r in backtest_results) / len(backtest_results)
     total_trades = sum(r.total_trades for r in backtest_results)
 

@@ -1,6 +1,6 @@
 from bist_bot.contracts import NotifierProtocol
-from bist_bot.strategy.signal_models import Signal, SignalType
 from bist_bot.strategy import StrategyEngine
+from bist_bot.strategy.signal_models import Signal, SignalType
 
 
 def check_signals(ticker, df, engine: StrategyEngine | None = None):

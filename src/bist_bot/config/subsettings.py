@@ -175,9 +175,7 @@ class TradingSettings:
     SELL_THRESHOLD: int = _get_int_env("SELL_THRESHOLD", -20)
     STRONG_SELL_THRESHOLD: int = _get_int_env("STRONG_SELL_THRESHOLD", -48)
     SIDEWAYS_EXTRA_THRESHOLD: float = _get_float_env("SIDEWAYS_EXTRA_THRESHOLD", 5.0)
-    MOMENTUM_CONFIRMATION_THRESHOLD: float = _get_float_env(
-        "MOMENTUM_CONFIRMATION_THRESHOLD", 4.0
-    )
+    MOMENTUM_CONFIRMATION_THRESHOLD: float = _get_float_env("MOMENTUM_CONFIRMATION_THRESHOLD", 4.0)
     RSI_PERIOD: int = _get_int_env("RSI_PERIOD", 14)
     RSI_OVERSOLD: int = _get_int_env("RSI_OVERSOLD", 30)
     RSI_OVERBOUGHT: int = _get_int_env("RSI_OVERBOUGHT", 70)
@@ -252,9 +250,7 @@ class DataSettings:
     INTRADAY_FETCH_CACHE_TTL_SECONDS: float = _get_float_env(
         "INTRADAY_FETCH_CACHE_TTL_SECONDS", 120.0
     )
-    ANALYSIS_CACHE_TTL_SECONDS: float = _get_float_env(
-        "ANALYSIS_CACHE_TTL_SECONDS", 180.0
-    )
+    ANALYSIS_CACHE_TTL_SECONDS: float = _get_float_env("ANALYSIS_CACHE_TTL_SECONDS", 180.0)
     REALTIME_QUOTE_CACHE_TTL_SECONDS: float = _get_float_env(
         "REALTIME_QUOTE_CACHE_TTL_SECONDS", 30.0
     )
@@ -265,9 +261,7 @@ class DataSettings:
     OFFICIAL_PASSWORD: str = _get_str_env("OFFICIAL_PASSWORD")
     OFFICIAL_TIMEOUT: float = _get_float_env("OFFICIAL_TIMEOUT", 30.0)
     OFFICIAL_MAX_RETRIES: int = _get_int_env("OFFICIAL_MAX_RETRIES", 3)
-    OFFICIAL_RETRY_BACKOFF_SECONDS: float = _get_float_env(
-        "OFFICIAL_RETRY_BACKOFF_SECONDS", 1.0
-    )
+    OFFICIAL_RETRY_BACKOFF_SECONDS: float = _get_float_env("OFFICIAL_RETRY_BACKOFF_SECONDS", 1.0)
     OFFICIAL_AUTH_ENDPOINT: str = _get_str_env("OFFICIAL_AUTH_ENDPOINT")
     OFFICIAL_HISTORY_ENDPOINT: str = _get_str_env("OFFICIAL_HISTORY_ENDPOINT")
     OFFICIAL_BATCH_ENDPOINT: str = _get_str_env("OFFICIAL_BATCH_ENDPOINT")
@@ -294,9 +288,7 @@ class AuthSettings:
     ADMIN_BOOTSTRAP_EMAIL: str = _get_str_env("ADMIN_BOOTSTRAP_EMAIL")
     ADMIN_BOOTSTRAP_PASSWORD_HASH: str = _get_str_env("ADMIN_BOOTSTRAP_PASSWORD_HASH")
     ALLOW_PUBLIC_REGISTRATION: bool = _get_bool_env("ALLOW_PUBLIC_REGISTRATION", False)
-    CORS_ORIGINS: tuple[str, ...] = field(
-        default_factory=lambda: _get_csv_env("CORS_ORIGINS")
-    )
+    CORS_ORIGINS: tuple[str, ...] = field(default_factory=lambda: _get_csv_env("CORS_ORIGINS"))
 
 
 @dataclass(frozen=True)
@@ -305,15 +297,11 @@ class ServerSettings:
     FLASK_DEBUG: bool = _get_bool_env("FLASK_DEBUG", False)
     LOG_FORMAT: str = _get_str_env("LOG_FORMAT", "console")
     LOG_LEVEL: str = _get_str_env("LOG_LEVEL", "INFO")
-    API_BASE_URL: str = _get_str_env(
-        "API_BASE_URL", f"http://localhost:{DEFAULT_FLASK_PORT}"
-    )
+    API_BASE_URL: str = _get_str_env("API_BASE_URL", f"http://localhost:{DEFAULT_FLASK_PORT}")
     RATE_LIMIT_STORAGE_URI: str = _get_str_env("RATE_LIMIT_STORAGE_URI", "memory://")
     SENTRY_DSN: str | None = _get_str_env("SENTRY_DSN") or None
     ENVIRONMENT: str = _get_str_env("ENVIRONMENT", "production")
-    STREAMLIT_SCAN_COOLDOWN_SECONDS: float = _get_float_env(
-        "STREAMLIT_SCAN_COOLDOWN_SECONDS", 8.0
-    )
+    STREAMLIT_SCAN_COOLDOWN_SECONDS: float = _get_float_env("STREAMLIT_SCAN_COOLDOWN_SECONDS", 8.0)
     STREAMLIT_ANALYZE_COOLDOWN_SECONDS: float = _get_float_env(
         "STREAMLIT_ANALYZE_COOLDOWN_SECONDS", 4.0
     )
@@ -334,9 +322,7 @@ class BrokerSettings:
     ALGOLAB_DRY_RUN: bool = _get_bool_env("ALGOLAB_DRY_RUN", True)
     AUTO_EXECUTE: bool = _get_bool_env("AUTO_EXECUTE", False)
     CONFIRM_LIVE_TRADING: bool = _get_bool_env("CONFIRM_LIVE_TRADING", False)
-    AUTO_EXECUTE_WARN_MAX_QUANTITY: int = _get_int_env(
-        "AUTO_EXECUTE_WARN_MAX_QUANTITY", 100000
-    )
+    AUTO_EXECUTE_WARN_MAX_QUANTITY: int = _get_int_env("AUTO_EXECUTE_WARN_MAX_QUANTITY", 100000)
 
 
 @dataclass(frozen=True)

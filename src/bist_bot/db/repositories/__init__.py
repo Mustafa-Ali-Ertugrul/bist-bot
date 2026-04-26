@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Optional
 
 from bist_bot.db.database import DatabaseManager
 from bist_bot.db.repositories.config_repository import ConfigRepository
@@ -16,7 +15,7 @@ from bist_bot.strategy.signal_models import Signal
 class AppRepository:
     """Thin application-facing facade over signal, portfolio, and config repositories."""
 
-    def __init__(self, manager: Optional[DatabaseManager] = None) -> None:
+    def __init__(self, manager: DatabaseManager | None = None) -> None:
         self.manager = manager or DatabaseManager()
         self.signals = SignalsRepository(self.manager)
         self.portfolio = PortfolioRepository(self.manager)

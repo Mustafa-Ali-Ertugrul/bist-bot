@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import sys
-
 from unittest.mock import MagicMock
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -20,9 +19,11 @@ def test_execution_service_uses_signal_position_size_for_broker_order():
     db = MagicMock()
     broker = MagicMock()
     broker.authenticate.return_value = True
-    broker.place_order.return_value = MagicMock(state=MagicMock(value="SENT"), broker_order_id="BRK-1", order_id="ORD-1")
+    broker.place_order.return_value = MagicMock(
+        state=MagicMock(value="SENT"), broker_order_id="BRK-1", order_id="ORD-1"
+    )
     db.create_order.return_value = {"id": 11}
-    service = ExecutionService(db, broker=broker, settings=settings.replace( AUTO_EXECUTE=True))
+    service = ExecutionService(db, broker=broker, settings=settings.replace(AUTO_EXECUTE=True))
     signal = Signal(
         ticker="THYAO.IS",
         signal_type=SignalType.STRONG_BUY,
@@ -49,7 +50,7 @@ def test_execution_service_skips_when_position_size_is_zero():
     db = MagicMock()
     broker = MagicMock()
     broker.authenticate.return_value = True
-    service = ExecutionService(db, broker=broker, settings=settings.replace( AUTO_EXECUTE=True))
+    service = ExecutionService(db, broker=broker, settings=settings.replace(AUTO_EXECUTE=True))
     signal = Signal(
         ticker="THYAO.IS",
         signal_type=SignalType.STRONG_BUY,

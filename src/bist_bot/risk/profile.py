@@ -30,22 +30,40 @@ class RiskProfile(BaseModel):
     """Validated, immutable risk parameter set."""
 
     # Position sizing
-    max_risk_pct: float = Field(default=2.0, ge=0.0, le=100.0, description="Max capital risked per trade (%)")
-    max_position_cap_pct: float = Field(default=5.0, ge=0.0, le=100.0, description="Max single position as % of capital")
-    max_sector_cap_pct: float = Field(default=20.0, ge=0.0, le=100.0, description="Max exposure per sector (%)")
+    max_risk_pct: float = Field(
+        default=2.0, ge=0.0, le=100.0, description="Max capital risked per trade (%)"
+    )
+    max_position_cap_pct: float = Field(
+        default=5.0, ge=0.0, le=100.0, description="Max single position as % of capital"
+    )
+    max_sector_cap_pct: float = Field(
+        default=20.0, ge=0.0, le=100.0, description="Max exposure per sector (%)"
+    )
 
     # Stop-loss & targets
-    default_stop_loss_pct: float = Field(default=3.0, ge=0.0, description="Default stop-loss distance (%)")
-    default_target_ratio: float = Field(default=2.0, ge=0.0, description="Default risk-reward ratio (target/stop)")
-    atr_stop_multiplier: float = Field(default=2.0, ge=0.0, description="ATR multiplier for volatility stop")
+    default_stop_loss_pct: float = Field(
+        default=3.0, ge=0.0, description="Default stop-loss distance (%)"
+    )
+    default_target_ratio: float = Field(
+        default=2.0, ge=0.0, description="Default risk-reward ratio (target/stop)"
+    )
+    atr_stop_multiplier: float = Field(
+        default=2.0, ge=0.0, description="ATR multiplier for volatility stop"
+    )
 
     # Circuit-breaker
-    max_daily_loss_pct: float = Field(default=3.0, ge=0.0, le=100.0, description="Kill-switch: daily max loss (%)")
-    max_consecutive_losses: int = Field(default=3, ge=1, description="Kill-switch: consecutive loss count")
+    max_daily_loss_pct: float = Field(
+        default=3.0, ge=0.0, le=100.0, description="Kill-switch: daily max loss (%)"
+    )
+    max_consecutive_losses: int = Field(
+        default=3, ge=1, description="Kill-switch: consecutive loss count"
+    )
 
     # Slippage / costs
     slippage_pct: float = Field(default=0.1, ge=0.0, description="Expected slippage per trade (%)")
-    commission_pct: float = Field(default=0.1, ge=0.0, description="Brokerage commission per trade (%)")
+    commission_pct: float = Field(
+        default=0.1, ge=0.0, description="Brokerage commission per trade (%)"
+    )
 
     # BSMV (Turkish financial transaction tax)
     bsmv_pct: float = Field(default=0.1, ge=0.0, description="BSMV tax on gains (%)")

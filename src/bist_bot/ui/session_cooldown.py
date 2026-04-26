@@ -29,9 +29,7 @@ def consume_cooldown(
     now: float | None = None,
 ) -> tuple[bool, float]:
     current_time = time.time() if now is None else now
-    remaining = cooldown_remaining_seconds(
-        state, action, cooldown_seconds, now=current_time
-    )
+    remaining = cooldown_remaining_seconds(state, action, cooldown_seconds, now=current_time)
     if remaining > 0:
         return False, remaining
     state[_cooldown_key(action)] = current_time

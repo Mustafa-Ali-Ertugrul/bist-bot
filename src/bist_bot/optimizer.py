@@ -2,15 +2,15 @@
 
 import itertools
 import random
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Any
 
 import pandas as pd
 
 from bist_bot.app_logging import configure_logging, get_logger
-from bist_bot.strategy.params import StrategyParams
-from bist_bot.strategy import StrategyEngine
-from bist_bot.backtest import StrategyBacktester, BacktestResult
+from bist_bot.backtest import BacktestResult, StrategyBacktester
 from bist_bot.config.settings import settings
+from bist_bot.strategy import StrategyEngine
+from bist_bot.strategy.params import StrategyParams
 
 logger = get_logger(__name__, component="optimizer")
 
@@ -20,7 +20,7 @@ class StrategyOptimizer:
         self,
         ticker: str,
         df: pd.DataFrame,
-        initial_capital: Optional[float] = None,
+        initial_capital: float | None = None,
     ):
         """Initialize optimizer state for a single ticker dataset.
 
@@ -31,13 +31,11 @@ class StrategyOptimizer:
         """
         self.ticker = ticker
         self.df = df
-        self.initial_capital = initial_capital or getattr(
-            settings, "INITIAL_CAPITAL", 8500.0
-        )
-        self.best_params: Optional[StrategyParams] = None
-        self.best_result: Optional[BacktestResult] = None
+        self.initial_capital = initial_capital or getattr(settings, "INITIAL_CAPITAL", 8500.0)
+        self.best_params: StrategyParams | None = None
+        self.best_result: BacktestResult | None = None
         self.best_score: float = -float("inf")
-        self.optimization_history: List[Dict[str, Any]] = []
+        self.optimization_history: list[dict[str, Any]] = []
 
     def _fitness_function(self, result: BacktestResult) -> float:
         """Score a backtest result for optimizer ranking."""
@@ -48,7 +46,7 @@ class StrategyOptimizer:
         win_rate_multiplier = max(result.win_rate / 100, 0.1)
         return result.total_return_pct * sharpe_multiplier * win_rate_multiplier
 
-    def _evaluate_combination(self, param_dict: Dict[str, Any]) -> None:
+    def _evaluate_combination(self, param_dict: dict[str, Any]) -> None:
         """Test a single parameter combination and record its score."""
         params = StrategyParams(**param_dict)
         engine = StrategyEngine(params=params)
@@ -86,8 +84,8 @@ class StrategyOptimizer:
 
     def grid_search(
         self,
-        param_grid: Dict[str, List[Any]],
-    ) -> Tuple[Optional[StrategyParams], Optional[BacktestResult]]:
+        param_grid: dict[str, list[Any]],
+    ) -> tuple[StrategyParams | None, BacktestResult | None]:
         """Try every parameter combination in the provided grid."""
         keys = param_grid.keys()
         combinations = list(itertools.product(*(param_grid[key] for key in keys)))
@@ -104,7 +102,7 @@ class StrategyOptimizer:
                     progress_pct=round((i / total_combos) * 100, 1),
                 )
 
-            param_dict = dict(zip(keys, combo))
+            param_dict = dict(zip(keys, combo, strict=False))
             self._evaluate_combination(param_dict)
 
         logger.info("optimizer_grid_search_finished")
@@ -112,9 +110,9 @@ class StrategyOptimizer:
 
     def random_search(
         self,
-        param_grid: Dict[str, List[Any]],
+        param_grid: dict[str, list[Any]],
         n_iter: int = 50,
-    ) -> Tuple[Optional[StrategyParams], Optional[BacktestResult]]:
+    ) -> tuple[StrategyParams | None, BacktestResult | None]:
         """Try random parameter combinations from the provided search space."""
         logger.info("optimizer_random_search_started", iteration_count=n_iter)
 
@@ -127,9 +125,7 @@ class StrategyOptimizer:
                     progress_pct=round((i / n_iter) * 100, 1),
                 )
 
-            param_dict = {
-                key: random.choice(values) for key, values in param_grid.items()
-            }
+            param_dict = {key: random.choice(values) for key, values in param_grid.items()}
             self._evaluate_combination(param_dict)
 
         logger.info("optimizer_random_search_finished")
@@ -146,7 +142,7 @@ class StrategyOptimizer:
 
     def walk_forward_validation(
         self,
-        param_grid: Dict[str, List[Any]],
+        param_grid: dict[str, list[Any]],
         train_window_days: int = 180,
         test_window_days: int = 60,
         n_iter: int = 20,
@@ -172,9 +168,7 @@ class StrategyOptimizer:
         window_idx = 1
 
         while True:
-            current_train_end = current_train_start + pd.Timedelta(
-                days=train_window_days
-            )
+            current_train_end = current_train_start + pd.Timedelta(days=train_window_days)
             current_test_end = current_train_end + pd.Timedelta(days=test_window_days)
 
             if current_test_end > end_date:
@@ -195,9 +189,7 @@ class StrategyOptimizer:
                 test_end=test_end_str,
             )
 
-            train_optimizer = StrategyOptimizer(
-                self.ticker, train_df, self.initial_capital
-            )
+            train_optimizer = StrategyOptimizer(self.ticker, train_df, self.initial_capital)
             best_params, _ = train_optimizer.random_search(param_grid, n_iter=n_iter)
 
             if best_params is None:
@@ -224,9 +216,7 @@ class StrategyOptimizer:
                         "OOS_Sharpe": test_result.sharpe_ratio,
                         "OOS_Trades": test_result.total_trades,
                         "Params_Used": {
-                            k: v
-                            for k, v in best_params.__dict__.items()
-                            if k in param_grid.keys()
+                            k: v for k, v in best_params.__dict__.items() if k in param_grid
                         },
                     }
                 )

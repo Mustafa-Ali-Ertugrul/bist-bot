@@ -10,13 +10,19 @@ class StrategyParams:
     """Strateji motoru için dışarıdan yapılandırılabilir parametreler."""
 
     # Eşik değerlerinin tek kaynağı `config.settings` içindeki ayarlardır.
-    strong_buy_threshold: float = field(default_factory=lambda: float(settings.STRONG_BUY_THRESHOLD))
+    strong_buy_threshold: float = field(
+        default_factory=lambda: float(settings.STRONG_BUY_THRESHOLD)
+    )
     buy_threshold: float = field(default_factory=lambda: float(settings.BUY_THRESHOLD))
     weak_buy_threshold: float = field(default_factory=lambda: float(settings.WEAK_BUY_THRESHOLD))
     weak_sell_threshold: float = field(default_factory=lambda: float(settings.WEAK_SELL_THRESHOLD))
     sell_threshold: float = field(default_factory=lambda: float(settings.SELL_THRESHOLD))
-    strong_sell_threshold: float = field(default_factory=lambda: float(settings.STRONG_SELL_THRESHOLD))
-    sideways_extra_threshold: float = field(default_factory=lambda: float(settings.SIDEWAYS_EXTRA_THRESHOLD))
+    strong_sell_threshold: float = field(
+        default_factory=lambda: float(settings.STRONG_SELL_THRESHOLD)
+    )
+    sideways_extra_threshold: float = field(
+        default_factory=lambda: float(settings.SIDEWAYS_EXTRA_THRESHOLD)
+    )
     momentum_confirmation_threshold: float = field(
         default_factory=lambda: float(settings.MOMENTUM_CONFIRMATION_THRESHOLD)
     )

@@ -1,5 +1,5 @@
 import importlib
-from typing import Optional, cast
+from typing import cast
 
 import numpy as np
 import pandas as pd
@@ -55,7 +55,7 @@ if __name__ == "__main__":
                         )
 
 
-def calculate_metrics(trades, benchmark_return: Optional[float] = None) -> dict:
+def calculate_metrics(trades, benchmark_return: float | None = None) -> dict:
     if not trades:
         return {}
 
@@ -76,9 +76,7 @@ def calculate_metrics(trades, benchmark_return: Optional[float] = None) -> dict:
     }
 
 
-def generate_report(
-    result: BacktestResult, benchmark_return: Optional[float] = None
-) -> str:
+def generate_report(result: BacktestResult, benchmark_return: float | None = None) -> str:
     metrics = calculate_metrics(result.trades, benchmark_return)
 
     bot_return = result.total_return_pct
@@ -110,7 +108,7 @@ def generate_report(
     return report
 
 
-def compare_benchmark(ticker: str, df: pd.DataFrame) -> float:
+def compare_benchmark(_ticker: str, df: pd.DataFrame) -> float:
     try:
         if yf is None:
             return 0.0

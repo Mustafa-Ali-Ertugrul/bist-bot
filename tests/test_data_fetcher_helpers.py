@@ -37,13 +37,15 @@ def test_clean_ticker_list_preserves_order():
 
 def test_validate_data_accepts_valid_dataframe():
     """Validation passes for proper OHLCV dataframe."""
-    df = pd.DataFrame({
-        'open': [10, 11, 12, 13, 14],
-        'high': [12, 13, 14, 15, 16],
-        'low': [9, 10, 11, 12, 13],
-        'close': [11, 12, 13, 14, 15],
-        'volume': [1000, 1100, 1200, 1300, 1400]
-    })
+    df = pd.DataFrame(
+        {
+            "open": [10, 11, 12, 13, 14],
+            "high": [12, 13, 14, 15, 16],
+            "low": [9, 10, 11, 12, 13],
+            "close": [11, 12, 13, 14, 15],
+            "volume": [1000, 1100, 1200, 1300, 1400],
+        }
+    )
     assert validate_data(df) is True
 
 
@@ -60,25 +62,29 @@ def test_validate_data_rejects_empty():
 
 def test_validate_data_rejects_insufficient_rows():
     """Validation rejects dataframes with too few rows."""
-    df = pd.DataFrame({
-        'open': [10, 11],
-        'high': [12, 13],
-        'low': [9, 10],
-        'close': [11, 12],
-        'volume': [1000, 1100]
-    })
+    df = pd.DataFrame(
+        {
+            "open": [10, 11],
+            "high": [12, 13],
+            "low": [9, 10],
+            "close": [11, 12],
+            "volume": [1000, 1100],
+        }
+    )
     assert validate_data(df, min_rows=5) is False
 
 
 def test_validate_data_rejects_mostly_null_rows():
     """Validation rejects dataframes with too many null rows."""
-    df = pd.DataFrame({
-        'open': [10, None, None],
-        'high': [12, None, None],
-        'low': [9, None, None],
-        'close': [11, None, None],
-        'volume': [1000, None, None]
-    })
+    df = pd.DataFrame(
+        {
+            "open": [10, None, None],
+            "high": [12, None, None],
+            "low": [9, None, None],
+            "close": [11, None, None],
+            "volume": [1000, None, None],
+        }
+    )
     # 2/3 rows are all null (>20%), should be rejected
     assert validate_data(df) is False
 

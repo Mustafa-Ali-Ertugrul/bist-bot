@@ -11,6 +11,7 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
+from bist_bot.risk.models import RiskLevels  # noqa: E402
 from bist_bot.risk.stops import (  # noqa: E402
     calc_atr_levels,
     calc_fibonacci,
@@ -19,12 +20,11 @@ from bist_bot.risk.stops import (  # noqa: E402
     calc_swing_levels,
     determine_final_levels,
 )
-from bist_bot.risk.models import RiskLevels  # noqa: E402
 
 
 def _make_frame(prices: list[float], atr: float | None = None) -> pd.DataFrame:
     rows = []
-    for i, close in enumerate(prices):
+    for close in prices:
         rows.append(
             {
                 "open": close - 0.5,

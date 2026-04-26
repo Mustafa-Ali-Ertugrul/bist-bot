@@ -14,4 +14,6 @@ if __name__ == "__main__":
     app = create_default_dashboard_app()
     from bist_bot.config.settings import settings
 
-    app.run(host="0.0.0.0", port=settings.FLASK_PORT, debug=False, use_reloader=settings.FLASK_DEBUG)
+    app.run(
+        host="0.0.0.0", port=settings.FLASK_PORT, debug=False, use_reloader=settings.FLASK_DEBUG
+    )

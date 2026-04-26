@@ -4,7 +4,7 @@ from datetime import datetime
 
 import pandas as pd
 
-from bist_bot.backtest import BacktestMode, Backtester
+from bist_bot.backtest import Backtester, BacktestMode
 from bist_bot.ml.training import (
     LabelDefinition,
     SplitConfig,
@@ -97,9 +97,7 @@ def test_backtest_ablation_runs_all_three_modes() -> None:
         BacktestMode.META_FILTER_FIXED_SIZE.value,
         BacktestMode.META_FILTER_FRACTIONAL_KELLY.value,
     }
-    assert (
-        "sharpe_ratio" in result.comparisons[BacktestMode.META_FILTER_FIXED_SIZE.value]
-    )
+    assert "sharpe_ratio" in result.comparisons[BacktestMode.META_FILTER_FIXED_SIZE.value]
     assert (
         result.runs[BacktestMode.META_FILTER_FRACTIONAL_KELLY.value].mode
         == BacktestMode.META_FILTER_FRACTIONAL_KELLY.value

@@ -1,16 +1,15 @@
 """Signal scoring and classification orchestration for BIST trading ideas."""
 
 from contextlib import AbstractContextManager
-from typing import Any, Optional, cast
+from typing import Any, cast
 
 import pandas as pd
-
-from bist_bot.strategy.base import BaseStrategy
 
 from bist_bot.app_logging import get_logger
 from bist_bot.config.settings import settings
 from bist_bot.indicators import TechnicalIndicators
 from bist_bot.risk import RiskLevels, RiskManager
+from bist_bot.strategy.base import BaseStrategy
 from bist_bot.strategy.engine_core import extract_timeframes, prepare_analysis_frame
 from bist_bot.strategy.engine_filters import (
     calculate_score_and_reasons,
@@ -45,9 +44,9 @@ logger = get_logger(__name__, component="strategy")
 class StrategyEngine:
     def __init__(
         self,
-        indicators: Optional[TechnicalIndicators] = None,
-        risk_manager: Optional[RiskManager] = None,
-        params: Optional[StrategyParams] = None,
+        indicators: TechnicalIndicators | None = None,
+        risk_manager: RiskManager | None = None,
+        params: StrategyParams | None = None,
         meta_model: Any | None = None,
     ) -> None:
         """Initialize injectable indicator and risk-management dependencies."""
@@ -81,9 +80,7 @@ class StrategyEngine:
     ) -> bool:
         return apply_confluence(signal_type, trend_bias, reasons)
 
-    def _check_momentum_confirmation(
-        self, df: pd.DataFrame, threshold: float = 4.0
-    ) -> bool:
+    def _check_momentum_confirmation(self, df: pd.DataFrame, threshold: float = 4.0) -> bool:
         return check_momentum_confirmation(df, threshold)
 
     def _score_momentum(self, last: pd.Series, prev: pd.Series) -> tuple[float, list[str]]:
@@ -252,7 +249,7 @@ class StrategyEngine:
         ticker: str,
         df: pd.DataFrame | dict[str, pd.DataFrame],
         enforce_sector_limit: bool = False,
-    ) -> Optional[Signal]:
+    ) -> Signal | None:
         """Score a ticker and build a signal when thresholds are met."""
         trend_df, trigger_df, multi_timeframe = self._extract_timeframes(df)
         if not self._has_enough_trigger_data(ticker, trigger_df):

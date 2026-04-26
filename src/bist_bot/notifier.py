@@ -1,9 +1,10 @@
-import requests
-from bist_bot.app_logging import get_logger
 import time
-from datetime import datetime, timezone, timedelta
-from typing import Callable
+from collections.abc import Callable
+from datetime import datetime, timedelta, timezone
 
+import requests
+
+from bist_bot.app_logging import get_logger
 from bist_bot.config.settings import settings
 from bist_bot.strategy.signal_models import Signal, SignalType
 
@@ -186,9 +187,7 @@ class TelegramNotifier:
 """
         return self.send_message(message.strip())
 
-    def send_signal_change(
-        self, ticker: str, old_signal: Signal, new_signal: Signal
-    ) -> bool:
+    def send_signal_change(self, ticker: str, old_signal: Signal, new_signal: Signal) -> bool:
         name = settings.TICKER_NAMES.get(ticker, ticker)
 
         emoji_map = {
@@ -204,9 +203,7 @@ class TelegramNotifier:
         old_emoji = emoji_map.get(old_signal.signal_type, "📊")
         new_emoji = emoji_map.get(new_signal.signal_type, "📊")
 
-        direction = (
-            "⬆️ YÜKSELİYOR" if new_signal.score > old_signal.score else "⬇️ DÜŞÜYOR"
-        )
+        direction = "⬆️ YÜKSELİYOR" if new_signal.score > old_signal.score else "⬇️ DÜŞÜYOR"
 
         message = f"""
 🔔 <b>SİNYAL DEĞİŞİKLİĞİ!</b>

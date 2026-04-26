@@ -13,9 +13,7 @@ from bist_bot.ml.training import load_training_artifacts
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="Run backtest ablations with a saved meta-model"
-    )
+    parser = argparse.ArgumentParser(description="Run backtest ablations with a saved meta-model")
     parser.add_argument(
         "--artifact", required=True, help="Artifact directory containing model files"
     )
@@ -26,9 +24,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Tickers to backtest",
     )
     parser.add_argument("--period", default="1y", help="Historical period to fetch")
-    parser.add_argument(
-        "--output-dir", default="data", help="Directory for ablation JSON exports"
-    )
+    parser.add_argument("--output-dir", default="data", help="Directory for ablation JSON exports")
     return parser
 
 

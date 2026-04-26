@@ -100,13 +100,9 @@ def _print_comparison(rows: list[CompareRow]) -> None:
         avg_trade_change = np.mean([r.new_trades - r.old_trades for r in rows])
         avg_wr_change = np.mean([r.new_win_rate - r.old_win_rate for r in rows])
 
-        print(
-            f"\n  Özet: {improved}/{len(rows)} hissede yeni mantık daha iyi getiri sağladı"
-        )
+        print(f"\n  Özet: {improved}/{len(rows)} hissede yeni mantık daha iyi getiri sağladı")
         print(f"  Ort. getiri farkı  : {avg_delta:+.2f}%")
-        print(
-            f"  Ort. işlem farkı   : {avg_trade_change:+.1f} (negatif = daha az false positive)"
-        )
+        print(f"  Ort. işlem farkı   : {avg_trade_change:+.1f} (negatif = daha az false positive)")
         print(f"  Ort. win rate farkı: {avg_wr_change:+.1f}%")
 
     print("═" * W + "\n")
@@ -214,9 +210,7 @@ def run(tickers: list[str], period: str = "1y") -> list[CompareRow]:
 
 def main():
     configure_logging(level=_logging.WARNING, fmt="%(levelname)s | %(message)s")
-    parser = argparse.ArgumentParser(
-        description="Eski vs Yeni backtest karşılaştırması"
-    )
+    parser = argparse.ArgumentParser(description="Eski vs Yeni backtest karşılaştırması")
     parser.add_argument(
         "--tickers",
         nargs="+",

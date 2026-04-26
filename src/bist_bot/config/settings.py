@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from contextvars import ContextVar, Token
-from dataclasses import dataclass, field, replace as dataclass_replace
+from dataclasses import dataclass, field
+from dataclasses import replace as dataclass_replace
 from typing import Any
 
 try:
@@ -14,21 +15,20 @@ except ImportError:
     pass
 
 from bist_bot.config.subsettings import (
+    DEFAULT_BIST100_WATCHLIST,
+    SECTOR_MAP,
+    TICKER_NAMES,
     AuthSettings,
     BacktestSettings,
     BrokerSettings,
-    DataSettings,
     DatabaseSettings,
+    DataSettings,
     MLSettings,
     NotificationSettings,
     RiskSettings,
     ServerSettings,
     TradingSettings,
-    DEFAULT_BIST100_WATCHLIST,
-    SECTOR_MAP,
-    TICKER_NAMES,
 )
-
 
 _SETTINGS_MERGED_OVERRIDE: ContextVar[dict[str, Any] | None] = ContextVar(
     "settings_merged_override",
@@ -37,7 +37,7 @@ _SETTINGS_MERGED_OVERRIDE: ContextVar[dict[str, Any] | None] = ContextVar(
 
 
 class SettingsOverride:
-    def __init__(self, settings_obj: "Settings", **overrides: Any) -> None:
+    def __init__(self, settings_obj: Settings, **overrides: Any) -> None:
         valid_fields = settings_obj.__dataclass_fields__
         sub_field_names = set()
         for group_name in _SUB_SETTINGS_GROUPS:
@@ -51,7 +51,7 @@ class SettingsOverride:
         self._overrides = overrides
         self._merged_token: Token[dict[str, Any] | None] | None = None
 
-    def __enter__(self) -> "Settings":
+    def __enter__(self) -> Settings:
         current = _SETTINGS_MERGED_OVERRIDE.get()
         next_merged = dict(current) if current else {}
         next_merged.update(self._overrides)
@@ -83,9 +83,7 @@ class Settings:
     DEFAULT_BIST100_WATCHLIST: list[str] = field(
         default_factory=lambda: list(DEFAULT_BIST100_WATCHLIST)
     )
-    WATCHLIST: list[str] = field(
-        default_factory=lambda: list(DEFAULT_BIST100_WATCHLIST)
-    )
+    WATCHLIST: list[str] = field(default_factory=lambda: list(DEFAULT_BIST100_WATCHLIST))
     TICKER_NAMES: dict[str, str] = field(default_factory=lambda: dict(TICKER_NAMES))
     SECTOR_MAP: dict[str, str] = field(default_factory=lambda: dict(SECTOR_MAP))
 
@@ -105,7 +103,11 @@ class Settings:
             merged_overrides = _SETTINGS_MERGED_OVERRIDE.get()
             if merged_overrides is not None and name in merged_overrides:
                 return merged_overrides[name]
-        if not name.startswith("_") and name not in _SETTINGS_FIELD_NAMES and name not in _SUB_SETTINGS_GROUPS:
+        if (
+            not name.startswith("_")
+            and name not in _SETTINGS_FIELD_NAMES
+            and name not in _SUB_SETTINGS_GROUPS
+        ):
             for group_name in _SUB_SETTINGS_GROUPS:
                 group = object.__getattribute__(self, group_name)
                 if hasattr(group, name):
@@ -115,7 +117,7 @@ class Settings:
     def override(self, **overrides: Any) -> SettingsOverride:
         return SettingsOverride(self, **overrides)
 
-    def replace(self, **overrides: Any) -> "Settings":
+    def replace(self, **overrides: Any) -> Settings:
         direct_overrides: dict[str, Any] = {}
         sub_overrides: dict[str, dict[str, Any]] = {}
         for key, value in overrides.items():
@@ -149,18 +151,10 @@ class Settings:
             raise RuntimeError(f"Unsupported BROKER_PROVIDER: {self.BROKER_PROVIDER}")
         if self.BROKER_PROVIDER != "algolab":
             return
-        if (
-            not self.ALGOLAB_API_KEY
-            or not self.ALGOLAB_USERNAME
-            or not self.ALGOLAB_PASSWORD
-        ):
-            raise RuntimeError(
-                "Missing required AlgoLab credentials for BROKER_PROVIDER=algolab"
-            )
+        if not self.ALGOLAB_API_KEY or not self.ALGOLAB_USERNAME or not self.ALGOLAB_PASSWORD:
+            raise RuntimeError("Missing required AlgoLab credentials for BROKER_PROVIDER=algolab")
         if not self.ALGOLAB_DRY_RUN and not self.CONFIRM_LIVE_TRADING:
-            raise RuntimeError(
-                "CONFIRM_LIVE_TRADING=true is required when ALGOLAB_DRY_RUN=false"
-            )
+            raise RuntimeError("CONFIRM_LIVE_TRADING=true is required when ALGOLAB_DRY_RUN=false")
 
     def validate_data_provider_config(self) -> None:
         if self.DATA_PROVIDER == "official":

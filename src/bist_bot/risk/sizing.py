@@ -39,9 +39,7 @@ def apply_position_budget(
     max_loss_tl = capital * (max_risk_pct / 100) * budget_scale
     position_size = int(max_loss_tl / risk_per_share) if risk_per_share > 0 else 0
     max_affordable = int(capital * 0.9 / price)
-    max_position_cap = (
-        int(capital * (max_position_cap_pct / 100.0) / price) if price > 0 else 0
-    )
+    max_position_cap = int(capital * (max_position_cap_pct / 100.0) / price) if price > 0 else 0
     position_size = min(position_size, max_affordable, max_position_cap)
 
     levels.position_size = max(0, position_size)
@@ -49,9 +47,7 @@ def apply_position_budget(
     levels.risk_budget_tl = round(max_loss_tl, 2)
 
 
-def calculate_kelly_fraction(
-    win_probability: float, reward_to_risk_ratio: float
-) -> float:
+def calculate_kelly_fraction(win_probability: float, reward_to_risk_ratio: float) -> float:
     if reward_to_risk_ratio <= 0:
         return 0.0
     probability = max(0.0, min(1.0, win_probability))

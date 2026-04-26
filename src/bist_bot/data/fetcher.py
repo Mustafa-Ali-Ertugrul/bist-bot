@@ -1,23 +1,23 @@
 """Market data fetching helpers for BIST symbols."""
 
 # Standard library imports
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-import time
 from typing import Any, cast
 
 # Third-party imports
 import pandas as pd
 
+from bist_bot.app_logging import get_logger
+
 # Local application imports
 from bist_bot.app_metrics import inc_counter, set_gauge
-from bist_bot.app_logging import get_logger
 from bist_bot.config.settings import settings
-from bist_bot.data.bist100 import BIST100_TICKERS
 from bist_bot.data import helpers as fetch_helpers
 from bist_bot.data import quotes as fetch_quotes
-from bist_bot.data.schemas import validate_dataframe
+from bist_bot.data.bist100 import BIST100_TICKERS
 from bist_bot.data.providers import (
     BorsaIstanbulQuoteProvider,
     DataProviderRouter,
@@ -27,6 +27,7 @@ from bist_bot.data.providers import (
     QuoteProvider,
     YFinanceProvider,
 )
+from bist_bot.data.schemas import validate_dataframe
 
 logger = get_logger(__name__, component="data_fetcher")
 
@@ -114,9 +115,7 @@ class BISTDataFetcher:
             watchlist: Optional explicit ticker list.
         """
         self.provider = provider or YFinanceProvider(_rate_limiter)
-        self.quote_provider = quote_provider or BorsaIstanbulQuoteProvider(
-            _rate_limiter
-        )
+        self.quote_provider = quote_provider or BorsaIstanbulQuoteProvider(_rate_limiter)
         if watchlist is None:
             tickers = _clean_ticker_list(self.provider.fetch_universe())
             if len(tickers) < 90:
@@ -139,9 +138,7 @@ class BISTDataFetcher:
         self._max_workers = min(8, max(2, len(self.watchlist)))
         logger.info("fetcher_initialized", watchlist_size=len(self.watchlist))
 
-    def _cache_key(
-        self, ticker: str, period: str, interval: str
-    ) -> tuple[str, str, str]:
+    def _cache_key(self, ticker: str, period: str, interval: str) -> tuple[str, str, str]:
         return (ticker, period, interval)
 
     def _now(self) -> datetime:
@@ -154,23 +151,15 @@ class BISTDataFetcher:
     def _history_ttl(self, interval: str) -> timedelta:
         if self._is_intraday_interval(interval):
             return timedelta(
-                seconds=float(
-                    getattr(settings, "INTRADAY_FETCH_CACHE_TTL_SECONDS", 120)
-                )
+                seconds=float(getattr(settings, "INTRADAY_FETCH_CACHE_TTL_SECONDS", 120))
             )
-        return timedelta(
-            seconds=float(getattr(settings, "FETCH_CACHE_TTL_SECONDS", 900))
-        )
+        return timedelta(seconds=float(getattr(settings, "FETCH_CACHE_TTL_SECONDS", 900)))
 
     def _analysis_ttl(self) -> timedelta:
-        return timedelta(
-            seconds=float(getattr(settings, "ANALYSIS_CACHE_TTL_SECONDS", 180))
-        )
+        return timedelta(seconds=float(getattr(settings, "ANALYSIS_CACHE_TTL_SECONDS", 180)))
 
     def _quote_ttl(self) -> timedelta:
-        return timedelta(
-            seconds=float(getattr(settings, "REALTIME_QUOTE_CACHE_TTL_SECONDS", 30))
-        )
+        return timedelta(seconds=float(getattr(settings, "REALTIME_QUOTE_CACHE_TTL_SECONDS", 30)))
 
     def _get_valid_cache_entry(
         self, cache: dict[Any, CacheEntry], cache_key: Any, ttl: timedelta
@@ -230,9 +219,7 @@ class BISTDataFetcher:
             return None
         return valid_df
 
-    def _store_cache(
-        self, ticker: str, period: str, interval: str, df: pd.DataFrame
-    ) -> None:
+    def _store_cache(self, ticker: str, period: str, interval: str, df: pd.DataFrame) -> None:
         """Store normalized price history in the in-memory cache.
 
         Args:
@@ -246,9 +233,7 @@ class BISTDataFetcher:
     def get_cached_analysis(self, cache_key: str, force: bool = False) -> Any | None:
         if force:
             return None
-        return self._get_valid_cache_entry(
-            self._analysis_cache, cache_key, self._analysis_ttl()
-        )
+        return self._get_valid_cache_entry(self._analysis_cache, cache_key, self._analysis_ttl())
 
     def store_analysis(self, cache_key: str, value: Any) -> None:
         self._analysis_cache[cache_key] = CacheEntry(value=value, cached_at=self._now())
@@ -256,17 +241,13 @@ class BISTDataFetcher:
     def get_cached_quote(self, ticker: str, force: bool = False) -> float | None:
         if force:
             return None
-        cached = self._get_valid_cache_entry(
-            self._quote_cache, ticker, self._quote_ttl()
-        )
+        cached = self._get_valid_cache_entry(self._quote_cache, ticker, self._quote_ttl())
         if cached is None:
             return None
         return float(cached)
 
     def _store_quote(self, ticker: str, price: float) -> None:
-        self._quote_cache[ticker] = CacheEntry(
-            value=float(price), cached_at=self._now()
-        )
+        self._quote_cache[ticker] = CacheEntry(value=float(price), cached_at=self._now())
 
     def fetch_single(
         self,
@@ -449,9 +430,7 @@ class BISTDataFetcher:
                             if df is not None:
                                 results[ticker] = df
                                 outcomes[ticker] = "fallback_success"
-                                logger.info(
-                                    "provider_fallback_succeeded", ticker=ticker
-                                )
+                                logger.info("provider_fallback_succeeded", ticker=ticker)
                             else:
                                 outcomes[ticker] = "failed"
                         except Exception as e:
@@ -582,10 +561,7 @@ class BISTDataFetcher:
                 if (normalized_ticker is None or history_key[0] == normalized_ticker)
                 and (period is None or history_key[1] == period)
                 and (interval is None or history_key[2] == interval)
-                and (
-                    scope != "intraday_fetch"
-                    or self._is_intraday_interval(history_key[2])
-                )
+                and (scope != "intraday_fetch" or self._is_intraday_interval(history_key[2]))
             ]
             for history_key in history_keys:
                 self._history_cache.pop(history_key, None)
@@ -594,8 +570,7 @@ class BISTDataFetcher:
             analysis_keys: list[str] = [
                 analysis_key
                 for analysis_key in list(self._analysis_cache)
-                if normalized_ticker is None
-                or analysis_key.startswith(f"{normalized_ticker}|")
+                if normalized_ticker is None or analysis_key.startswith(f"{normalized_ticker}|")
             ]
             for analysis_key in analysis_keys:
                 self._analysis_cache.pop(analysis_key, None)
@@ -619,12 +594,8 @@ class BISTDataFetcher:
     ) -> dict[str, dict[str, pd.DataFrame]]:
         trend_period = trend_period or getattr(settings, "MTF_TREND_PERIOD", "6mo")
         trend_interval = trend_interval or getattr(settings, "MTF_TREND_INTERVAL", "1d")
-        trigger_period = trigger_period or getattr(
-            settings, "MTF_TRIGGER_PERIOD", "1mo"
-        )
-        trigger_interval = trigger_interval or getattr(
-            settings, "MTF_TRIGGER_INTERVAL", "15m"
-        )
+        trigger_period = trigger_period or getattr(settings, "MTF_TRIGGER_PERIOD", "1mo")
+        trigger_interval = trigger_interval or getattr(settings, "MTF_TRIGGER_INTERVAL", "15m")
 
         trend_data = self.fetch_all(
             period=trend_period, interval=trend_interval, force=force_refresh, validate=validate

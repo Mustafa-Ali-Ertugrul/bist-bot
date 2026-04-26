@@ -1,6 +1,6 @@
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional, cast
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
@@ -8,9 +8,8 @@ import pandas as pd
 from bist_bot.app_logging import get_logger
 from bist_bot.config.settings import settings
 from bist_bot.indicators import TechnicalIndicators
-from bist_bot.risk.sizing import calculate_kelly_fraction
 from bist_bot.ml.features import build_feature_payload
-
+from bist_bot.risk.sizing import calculate_kelly_fraction
 
 from .models import (
     AblationComparison,
@@ -34,15 +33,15 @@ logger = get_logger(__name__, component="backtest")
 class Backtester:
     def __init__(
         self,
-        initial_capital: Optional[float] = None,
-        commission_buy_pct: Optional[float] = None,
-        commission_sell_pct: Optional[float] = None,
-        buy_threshold: Optional[float] = None,
-        sell_threshold: Optional[float] = None,
-        slippage_pct: Optional[float] = None,
+        initial_capital: float | None = None,
+        commission_buy_pct: float | None = None,
+        commission_sell_pct: float | None = None,
+        buy_threshold: float | None = None,
+        sell_threshold: float | None = None,
+        slippage_pct: float | None = None,
         target_rr: float = 2.0,
-        indicators: Optional[TechnicalIndicators] = None,
-        cost_model: Optional[CostModel] = None,
+        indicators: TechnicalIndicators | None = None,
+        cost_model: CostModel | None = None,
         meta_model: Any | None = None,
         mode: BacktestMode | str = BacktestMode.BASE_FIXED_SIZE,
         min_probability: float | None = None,
@@ -87,7 +86,7 @@ class Backtester:
         self.target_rr = float(target_rr)
         self.indicators = indicators or TechnicalIndicators()
         self.avg_holding_days = 0.0
-        self.signal_builder: Optional[SignalBuilder] = None
+        self.signal_builder: SignalBuilder | None = None
         self.meta_model = meta_model
         self.mode = BacktestMode(mode)
         self.min_probability = float(
@@ -191,9 +190,7 @@ class Backtester:
 
         if "sma_cross" in df.columns:
             sma_cross = cast(pd.Series, df["sma_cross"]).astype(str).to_numpy()
-            score += np.where(
-                sma_cross == "GOLDEN_CROSS", p.score_sma_golden_cross, 0.0
-            )
+            score += np.where(sma_cross == "GOLDEN_CROSS", p.score_sma_golden_cross, 0.0)
             score -= np.where(sma_cross == "DEATH_CROSS", p.score_sma_golden_cross, 0.0)
         else:
             sma_fast_col = f"sma_{settings.SMA_FAST}"
@@ -203,9 +200,7 @@ class Backtester:
                 sma_slow = cast(pd.Series, df[sma_slow_col]).to_numpy(dtype=float)
                 valid = ~np.isnan(sma_fast) & ~np.isnan(sma_slow)
                 score += np.where(valid & (sma_fast > sma_slow), p.score_sma_trend, 0.0)
-                score -= np.where(
-                    valid & (sma_fast <= sma_slow), p.score_sma_trend, 0.0
-                )
+                score -= np.where(valid & (sma_fast <= sma_slow), p.score_sma_trend, 0.0)
 
         if "ema_cross" in df.columns:
             ema_cross = cast(pd.Series, df["ema_cross"]).astype(str).to_numpy()
@@ -286,12 +281,8 @@ class Backtester:
         # ── Structure ─────────────────────────────────────────────────
         if "bb_position" in df.columns:
             bb_position = cast(pd.Series, df["bb_position"]).astype(str).to_numpy()
-            score += np.where(
-                bb_position == "BELOW_LOWER", p.score_bollinger_extreme, 0.0
-            )
-            score -= np.where(
-                bb_position == "ABOVE_UPPER", p.score_bollinger_extreme, 0.0
-            )
+            score += np.where(bb_position == "BELOW_LOWER", p.score_bollinger_extreme, 0.0)
+            score -= np.where(bb_position == "ABOVE_UPPER", p.score_bollinger_extreme, 0.0)
         if "bb_percent" in df.columns:
             bb_pct = cast(pd.Series, df["bb_percent"]).to_numpy(dtype=float)
             score += np.where(
@@ -337,9 +328,7 @@ class Backtester:
         else:
             df["calculated_stop"] = df["close"] * 0.95
 
-        df["risk_per_share"] = np.maximum(
-            df["close"] - df["calculated_stop"], df["close"] * 0.01
-        )
+        df["risk_per_share"] = np.maximum(df["close"] - df["calculated_stop"], df["close"] * 0.01)
         df["target_price"] = np.maximum(
             df["close"] + (df["risk_per_share"] * self.target_rr), df["close"]
         )
@@ -354,12 +343,8 @@ class Backtester:
         close_series = cast(pd.Series, df["close"])
 
         df["score"] = score_series.shift(1, fill_value=0.0)
-        df["calculated_stop"] = stop_series.shift(
-            1, fill_value=float(close_series.iloc[0]) * 0.95
-        )
-        df["target_price"] = target_series.shift(
-            1, fill_value=float(close_series.iloc[0])
-        )
+        df["calculated_stop"] = stop_series.shift(1, fill_value=float(close_series.iloc[0]) * 0.95)
+        df["target_price"] = target_series.shift(1, fill_value=float(close_series.iloc[0]))
         df["enter_signal"] = enter_series.shift(1, fill_value=False).astype(bool)
         df["exit_signal"] = exit_series.shift(1, fill_value=False).astype(bool)
         if len(df) >= 2:
@@ -483,11 +468,9 @@ class Backtester:
         verbose: bool = True,
         output_path: str | Path | None = None,
         universe_as_of: str | None = None,
-    ) -> Optional[BacktestResult]:
+    ) -> BacktestResult | None:
         if df is None or len(df) < 50:
-            logger.warning(
-                "insufficient_data", row_count=len(df) if df is not None else 0
-            )
+            logger.warning("insufficient_data", row_count=len(df) if df is not None else 0)
             return None
 
         df = df.copy()
@@ -536,8 +519,7 @@ class Backtester:
                     metric: AblationComparison(
                         base_metric=float(getattr(base, metric)),
                         candidate_metric=float(getattr(result, metric)),
-                        delta=float(getattr(result, metric))
-                        - float(getattr(base, metric)),
+                        delta=float(getattr(result, metric)) - float(getattr(base, metric)),
                     )
                     for metric in (
                         "cagr",
@@ -557,21 +539,15 @@ class Backtester:
     def _clone_for_mode(self, mode: BacktestMode) -> "Backtester":
         clone = Backtester(
             initial_capital=self.initial_capital,
-            commission_buy_pct=self.commission_buy_pct
-            if self.cost_model is None
-            else None,
-            commission_sell_pct=self.commission_sell_pct
-            if self.cost_model is None
-            else None,
+            commission_buy_pct=self.commission_buy_pct if self.cost_model is None else None,
+            commission_sell_pct=self.commission_sell_pct if self.cost_model is None else None,
             buy_threshold=self.buy_threshold,
             sell_threshold=self.sell_threshold,
             slippage_pct=self.slippage_pct if self.cost_model is None else None,
             target_rr=self.target_rr,
             indicators=self.indicators,
             cost_model=self.cost_model,
-            meta_model=(
-                self.meta_model if mode is not BacktestMode.BASE_FIXED_SIZE else None
-            ),
+            meta_model=(self.meta_model if mode is not BacktestMode.BASE_FIXED_SIZE else None),
             mode=mode,
             min_probability=self.min_probability,
             fractional_kelly=self.fractional_kelly,
@@ -585,7 +561,7 @@ class Backtester:
         ticker: str,
         df: pd.DataFrame,
         verbose: bool,
-    ) -> Optional[BacktestResult]:
+    ) -> BacktestResult | None:
         df = self._precalculate_signals(df)
         vectors = self._build_vectorized_signals(df)
         entry_candidates = np.flatnonzero(vectors.enter_signals)
@@ -594,7 +570,7 @@ class Backtester:
         trades: list[BacktestTrade] = []
         capital_history = np.empty(len(df) + 1, dtype=float)
         capital_history[0] = capital
-        last_buy_date: Optional[datetime] = None
+        last_buy_date: datetime | None = None
         cursor = 0
 
         while cursor < len(df):
@@ -627,9 +603,7 @@ class Backtester:
             entry_fill_price = self._calculate_fill_price(
                 open_price, row, is_buy=True, shares=estimated_shares
             )
-            position = self._open_position(
-                signal, entry_fill_price, open_price, date, capital
-            )
+            position = self._open_position(signal, entry_fill_price, open_price, date, capital)
 
             if position is None:
                 capital_history[entry_idx + 1] = capital
@@ -674,9 +648,7 @@ class Backtester:
             exit_idx, exit_reason, reference_price = self._find_exit_index(
                 vectors, entry_idx, position
             )
-            held_equity = (
-                capital + float(position["shares"]) * vectors.closes[entry_idx:]
-            )
+            held_equity = capital + float(position["shares"]) * vectors.closes[entry_idx:]
 
             if exit_idx is None or exit_reason is None or reference_price is None:
                 capital_history[entry_idx + 1 :] = held_equity
@@ -704,9 +676,7 @@ class Backtester:
                 cursor = len(df)
                 break
 
-            capital_history[entry_idx + 1 : exit_idx + 1] = held_equity[
-                : exit_idx - entry_idx
-            ]
+            capital_history[entry_idx + 1 : exit_idx + 1] = held_equity[: exit_idx - entry_idx]
             exit_row = df.iloc[exit_idx]
             exit_date = _to_datetime(vectors.dates[exit_idx])
             capital = self._close_position(
@@ -735,12 +705,12 @@ class Backtester:
         ticker: str,
         df: pd.DataFrame,
         verbose: bool,
-    ) -> Optional[BacktestResult]:
+    ) -> BacktestResult | None:
         capital = self.initial_capital
-        position: Optional[dict[str, Any]] = None
+        position: dict[str, Any] | None = None
         trades: list[BacktestTrade] = []
         capital_history: list[float] = [capital]
-        last_buy_date: Optional[datetime] = None
+        last_buy_date: datetime | None = None
 
         for i in range(1, len(df)):
             history = df.iloc[:i]
@@ -824,11 +794,7 @@ class Backtester:
                     )
                     position = None
 
-            equity = (
-                capital
-                if position is None
-                else capital + position["shares"] * close_price
-            )
+            equity = capital if position is None else capital + position["shares"] * close_price
             capital_history.append(equity)
 
         if position is not None:
@@ -855,9 +821,7 @@ class Backtester:
 
         return self._build_result(ticker, df, capital, trades, capital_history)
 
-    def _build_signal_context(
-        self, ticker: str, history: pd.DataFrame
-    ) -> dict[str, float | bool]:
+    def _build_signal_context(self, ticker: str, history: pd.DataFrame) -> dict[str, float | bool]:
         if self.signal_builder is not None:
             return self.signal_builder(ticker, history)
         score = self._calculate_score(history)
@@ -890,9 +854,7 @@ class Backtester:
             return {}
         risk_per_share = max(last_close - stop_loss, last_close * 0.01)
         reward_per_share = max(target_price - last_close, 0.0)
-        reward_to_risk = (
-            reward_per_share / risk_per_share if risk_per_share > 0 else 0.0
-        )
+        reward_to_risk = reward_per_share / risk_per_share if risk_per_share > 0 else 0.0
         probability = float(
             self.meta_model.predict_probability(
                 build_feature_payload(
@@ -981,9 +943,7 @@ class Backtester:
             if atr_value <= 0 or price <= 0:
                 return model.fixed_slippage_bps
             atr_ratio = atr_value / price
-            return min(
-                atr_ratio * model.atr_slippage_ratio * 10_000, model.max_slippage_bps
-            )
+            return min(atr_ratio * model.atr_slippage_ratio * 10_000, model.max_slippage_bps)
 
         return model.fixed_slippage_bps
 
@@ -995,17 +955,13 @@ class Backtester:
         deployable_capital = capital * max(0.0, min(1.0, position_fraction))
         return max(int(deployable_capital / price), 1) if deployable_capital > 0 else 0
 
-    def _calculate_fill_price(
-        self, price: float, row: Any, is_buy: bool, shares: int
-    ) -> float:
+    def _calculate_fill_price(self, price: float, row: Any, is_buy: bool, shares: int) -> float:
         if self.cost_model is not None:
             slippage_pct = self._calculate_slippage_bps(price, row, shares) / 10_000
             return price * (1 + slippage_pct if is_buy else 1 - slippage_pct)
         return self._calculate_dynamic_slippage(price, row, is_buy=is_buy)
 
-    def _calculate_dynamic_slippage(
-        self, price: float, row: Any, is_buy: bool
-    ) -> float:
+    def _calculate_dynamic_slippage(self, price: float, row: Any, is_buy: bool) -> float:
         """Calculate volatility-aware slippage using ATR when available."""
         base_slippage = float(getattr(settings, "SLIPPAGE_PCT", 0.001))
         penalty_ratio = float(getattr(settings, "SLIPPAGE_PENALTY_RATIO", 0.15))
@@ -1037,11 +993,9 @@ class Backtester:
         reference_price: float,
         entry_date: datetime,
         capital: float,
-    ) -> Optional[dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         entry_price = fill_price
-        position_fraction = max(
-            0.0, min(1.0, _to_float(signal.get("position_fraction"), 1.0))
-        )
+        position_fraction = max(0.0, min(1.0, _to_float(signal.get("position_fraction"), 1.0)))
         capital_to_deploy = capital * position_fraction
         if self.cost_model is None:
             unit_cost = entry_price * (1 + self.commission_buy_pct)
@@ -1067,12 +1021,7 @@ class Backtester:
         if self.cost_model is None:
             cost = shares * unit_cost
         else:
-            cost = (
-                shares * entry_price
-                + entry_fee_tl
-                + entry_bsmv_tl
-                + entry_exchange_fee_tl
-            )
+            cost = shares * entry_price + entry_fee_tl + entry_bsmv_tl + entry_exchange_fee_tl
         entry_slippage_tl = shares * max(entry_price - reference_price, 0.0)
         return {
             "entry_date": entry_date,
@@ -1099,7 +1048,7 @@ class Backtester:
         high_price: float,
         low_price: float,
         close_price: float,
-    ) -> Optional[IntrabarExit]:
+    ) -> IntrabarExit | None:
         stop_loss = _to_float(position.get("stop_loss"), 0.0)
         target_price = _to_float(position.get("target_price"), 0.0)
         if stop_loss <= 0 and target_price <= 0:
@@ -1168,19 +1117,14 @@ class Backtester:
         profit_tl = revenue - position["cost"]
         profit_pct = (profit_tl / position["cost"]) * 100 if position["cost"] else 0.0
         holding_days = max((exit_date - position["entry_date"]).days, 0)
-        gross_profit_tl = position["shares"] * (
-            reference_price - position["reference_entry_price"]
-        )
+        gross_profit_tl = position["shares"] * (reference_price - position["reference_entry_price"])
         exit_slippage_tl = position["shares"] * max(reference_price - fill_price, 0.0)
         total_commission_tl = position["entry_fee_tl"] + exit_fee_tl
         total_bsmv_tl = position["entry_bsmv_tl"] + exit_bsmv_tl
         total_exchange_fee_tl = position["entry_exchange_fee_tl"] + exit_exchange_fee_tl
         total_slippage_tl = position["entry_slippage_tl"] + exit_slippage_tl
         total_cost_tl = (
-            total_commission_tl
-            + total_bsmv_tl
-            + total_exchange_fee_tl
-            + total_slippage_tl
+            total_commission_tl + total_bsmv_tl + total_exchange_fee_tl + total_slippage_tl
         )
 
         trades.append(
@@ -1196,9 +1140,7 @@ class Backtester:
                 holding_days=holding_days,
                 exit_reason=reason,
                 gross_profit_tl=round(gross_profit_tl, 2),
-                entry_notional_tl=round(
-                    float(position.get("entry_notional_tl", 0.0)), 2
-                ),
+                entry_notional_tl=round(float(position.get("entry_notional_tl", 0.0)), 2),
                 total_cost_tl=round(total_cost_tl, 2),
                 commission_tl=round(total_commission_tl, 2),
                 bsmv_tl=round(total_bsmv_tl, 2),
@@ -1209,9 +1151,7 @@ class Backtester:
                     if position.get("signal_probability") is not None
                     else None
                 ),
-                position_fraction=round(
-                    float(position.get("position_fraction", 1.0)), 4
-                ),
+                position_fraction=round(float(position.get("position_fraction", 1.0)), 4),
             )
         )
 
@@ -1240,14 +1180,10 @@ class Backtester:
             avg_holding = round(float(np.mean(holding_days)), 1)
             total_days = (_to_datetime(df.index[-1]) - _to_datetime(df.index[0])).days
             if total_days > 0:
-                idle_ratio = round(
-                    (total_days - sum(holding_days)) / total_days * 100, 1
-                )
+                idle_ratio = round((total_days - sum(holding_days)) / total_days * 100, 1)
 
         self.avg_holding_days = avg_holding
-        logger.info(
-            "avg_holding_stats", avg_holding_days=avg_holding, idle_pct=idle_ratio
-        )
+        logger.info("avg_holding_stats", avg_holding_days=avg_holding, idle_pct=idle_ratio)
 
         summary = _summarize_trades_and_equity(
             ticker=ticker,
@@ -1292,9 +1228,9 @@ class Backtester:
         from bist_bot.strategy.params import StrategyParams
         from bist_bot.strategy.scoring import (
             score_momentum,
+            score_structure,
             score_trend,
             score_volume,
-            score_structure,
         )
 
         if len(df) < 2:
@@ -1310,4 +1246,3 @@ class Backtester:
         s4, _ = score_structure(p, last)
 
         return max(-100.0, min(100.0, s1 + s2 + s3 + s4))
-
