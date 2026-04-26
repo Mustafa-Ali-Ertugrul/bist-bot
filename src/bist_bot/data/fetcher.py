@@ -20,6 +20,7 @@ from bist_bot.data import quotes as fetch_quotes
 from bist_bot.data.schemas import validate_dataframe
 from bist_bot.data.providers import (
     BorsaIstanbulQuoteProvider,
+    DataProviderRouter,
     MarketDataProvider,
     OfficialProvider,
     OfficialProviderStub,
@@ -656,6 +657,7 @@ if __name__ == "__main__":
 __all__ = [
     "BISTDataFetcher",
     "BorsaIstanbulQuoteProvider",
+    "DataProviderRouter",
     "MarketDataProvider",
     "OfficialProvider",
     "OfficialProviderStub",

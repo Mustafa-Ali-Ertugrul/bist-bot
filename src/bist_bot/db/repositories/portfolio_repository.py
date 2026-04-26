@@ -61,7 +61,7 @@ class PortfolioRepository:
 
         self.manager.run_session(_write)
 
-    def update_paper_close(self, ticker: str, close_price: float) -> None:
+    def update_paper_close(self, ticker: str, close_price: float, actual_profit_pct: Optional[float] = None) -> None:
         def _write(session):
             trade = session.scalar(
                 select(PaperTradeRecord)
@@ -76,9 +76,12 @@ class PortfolioRepository:
                 return
             trade.close_price = close_price
             trade.outcome = "CLOSED"
-            trade.actual_profit_pct = (
-                (close_price - trade.signal_price) / trade.signal_price * 100
-            )
+            if actual_profit_pct is not None:
+                trade.actual_profit_pct = actual_profit_pct
+            else:
+                trade.actual_profit_pct = (
+                    (close_price - trade.signal_price) / trade.signal_price * 100
+                )
             return None
 
         self.manager.run_session(_write)
