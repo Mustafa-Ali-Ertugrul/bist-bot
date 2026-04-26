@@ -326,7 +326,7 @@ text(
 
     @staticmethod
     def _normalize_timestamp_columns_static(self, conn) -> None:
-        paper_trades_table = _validate_table_name(settings.PAPER_TRADS_TABLE)
+        paper_trades_table = _validate_table_name(settings.PAPER_TRADES_TABLE)
         migrations = {
             'signals': ['timestamp', 'created_at', 'outcome_date'],
             paper_trades_table: ['signal_time', 'exit_date', 'close_time'],
