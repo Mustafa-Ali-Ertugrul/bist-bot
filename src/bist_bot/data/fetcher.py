@@ -518,12 +518,12 @@ class BISTDataFetcher:
 
         if scope in {"all", "analysis"}:
             analysis_keys = [
-                key
-                for key in list(self._analysis_cache)
-                if normalized_ticker is None or key.startswith(f"{normalized_ticker}|")
+                akey
+                for akey in list(self._analysis_cache)
+                if normalized_ticker is None or akey.startswith(f"{normalized_ticker}|")
             ]
-            for key in analysis_keys:
-                self._analysis_cache.pop(key, None)
+            for akey in analysis_keys:
+                self._analysis_cache.pop(akey, None)
 
         if scope in {"all", "quote_fallback"}:
             if normalized_ticker is None:
