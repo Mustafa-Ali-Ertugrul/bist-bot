@@ -9,6 +9,7 @@ from typing import Any, cast
 import pandas as pd
 
 from bist_bot.app_logging import get_logger
+from bist_bot.app_metrics import inc_counter, set_gauge
 from bist_bot.config.settings import settings
 from bist_bot.data import helpers as fetch_helpers
 from bist_bot.data import quotes as fetch_quotes
@@ -110,9 +111,10 @@ class BISTDataFetcher:
         self.provider = provider or YFinanceProvider(_rate_limiter)
         self.quote_provider = quote_provider or BorsaIstanbulQuoteProvider(_rate_limiter)
         if watchlist is None:
-            tickers = self.provider.fetch_universe()
+            tickers = _clean_ticker_list(self.provider.fetch_universe())
             if len(tickers) < 90:
                 logger.warning(f"⚠️ Watchlist yetersiz ({len(tickers)}), fallback kullaniliyor")
+            if not tickers:
                 tickers = _clean_ticker_list(BIST100_TICKERS)
             self.watchlist = tickers
         else:
@@ -323,6 +325,7 @@ class BISTDataFetcher:
         interval = interval or settings.DATA_INTERVAL
 
         results = {}
+        outcomes: dict[str, str] = {}
         total = len(self.watchlist)
         batch_start = time.perf_counter()
 
@@ -335,6 +338,7 @@ class BISTDataFetcher:
             cached = self._get_cached_data(ticker, period, interval, force=force)
             if cached is not None:
                 results[ticker] = cached
+                outcomes[ticker] = "skipped"
             else:
                 missing_tickers.append(ticker)
 
@@ -365,6 +369,7 @@ class BISTDataFetcher:
 
                         self._store_cache(ticker, period, interval, df)
                         results[ticker] = df
+                        outcomes[ticker] = "success"
                         logger.info(
                             f"  ✅ {ticker}: {len(df)} mum, "
                             f"Son kapanış: ₺{float(df['close'].iloc[-1]):.2f}"
@@ -395,15 +400,23 @@ class BISTDataFetcher:
                             df = future.result()
                             if df is not None:
                                 results[ticker] = df
+                                outcomes[ticker] = "fallback_success"
                         except Exception as e:
+                            outcomes[ticker] = "failed"
                             logger.error(f"❌ {ticker} fallback hatası: {e}")
 
                 logger.info(
                     f"⏱️  Fallback fetch süresi: {time.perf_counter() - fallback_start:.2f}s"
                 )
 
+        for ticker in self.watchlist:
+            outcomes.setdefault(ticker, "failed")
         success = len(results)
         fail = total - success
+        coverage_pct = (success / total * 100) if total else 0.0
+        for outcome in outcomes.values():
+            inc_counter(f"bist_provider_fetch_outcome_{outcome}_total")
+        set_gauge("bist_provider_fetch_coverage_pct", coverage_pct)
         logger.info(f"{'=' * 50}")
         logger.info(f"📊 Sonuç: {success} başarılı, {fail} başarısız")
         logger.info(f"⏱️  Toplam fetch_all süresi: {time.perf_counter() - batch_start:.2f}s")

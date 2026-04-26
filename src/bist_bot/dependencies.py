@@ -8,8 +8,8 @@ from typing import Callable, Optional
 
 from bist_bot.config.settings import settings
 from bist_bot.backtest import Backtester
-from bist_bot.data.fetcher import BISTDataFetcher, BorsaIstanbulQuoteProvider, DataProviderRouter, MarketDataProvider, OfficialProviderStub, YFinanceProvider
-from bist_bot.data.providers import build_official_provider, resolve_official_endpoints
+from bist_bot.data.fetcher import BISTDataFetcher, BorsaIstanbulQuoteProvider, MarketDataProvider, OfficialProviderStub, YFinanceProvider
+from bist_bot.data.providers import DataProviderRouter, build_official_provider, resolve_official_endpoints
 from bist_bot.db import DataAccess
 from bist_bot.execution.algolab_broker import AlgoLabBroker, AlgoLabCredentials
 from bist_bot.execution.base import BaseExecutionProvider
