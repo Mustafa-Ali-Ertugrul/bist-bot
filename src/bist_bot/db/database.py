@@ -19,7 +19,7 @@ from sqlalchemy import (
     event,
     text,
 )
-from sqlalchemy.exc import IntegrityError, OperationalError
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import (
     DeclarativeBase,
     Mapped,
@@ -326,7 +326,7 @@ text(
 
     @staticmethod
     def _normalize_timestamp_columns_static(self, conn) -> None:
-        paper_trades_table = _validate_table_name(settings.PAPER_TRADS_TABLE)
+        paper_trades_table = _validate_table_name(settings.PAPER_TRADES_TABLE)
         migrations = {
             'signals': ['timestamp', 'created_at', 'outcome_date'],
             paper_trades_table: ['signal_time', 'exit_date', 'close_time'],
@@ -412,28 +412,21 @@ text(
 
         now = self.now_utc()
         with self.engine.begin() as conn:
-            has_users = conn.execute(
-                text("SELECT id FROM users LIMIT 1")
-            ).scalar_one_or_none()
-            if has_users is not None:
-                return
-            try:
-                conn.execute(
-                    text(
-                        """
-                        INSERT OR IGNORE INTO users (email, password_hash, role, created_at, updated_at)
-                        VALUES (:email, :password_hash, 'admin', :created_at, :updated_at)
-                        """
-                    ),
-                    {
-                        "email": settings.ADMIN_BOOTSTRAP_EMAIL,
-                        "password_hash": settings.ADMIN_BOOTSTRAP_PASSWORD_HASH,
-                        "created_at": now,
-                        "updated_at": now,
-                    },
-                )
-            except IntegrityError:
-                return
+            conn.execute(
+                text(
+                    """
+                    INSERT OR IGNORE INTO users (email, password_hash, role, created_at, updated_at)
+                    SELECT :email, :password_hash, 'admin', :created_at, :updated_at
+                    WHERE NOT EXISTS (SELECT 1 FROM users)
+                    """
+                ),
+                {
+                    "email": settings.ADMIN_BOOTSTRAP_EMAIL,
+                    "password_hash": settings.ADMIN_BOOTSTRAP_PASSWORD_HASH,
+                    "created_at": now,
+                    "updated_at": now,
+                },
+            )
 
     @contextmanager
     def session_scope(self, *, read_only: bool = False) -> Iterator[Session]:
