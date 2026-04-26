@@ -12,10 +12,28 @@ logger = get_logger(__name__, component="paper_trade")
 
 
 class PaperTradeService:
-    def __init__(self, fetcher, db, settings: Any | None = None) -> None:
+    def __init__(self, fetcher, db, settings: Any | None = None, costs: Any | None = None) -> None:
         self.fetcher = fetcher
         self.db = db
         self.settings = settings or default_settings
+        self.costs = costs
+
+    @staticmethod
+    def net_profit_pct(
+        entry_price: float,
+        exit_price: float,
+        costs: Any | None = None,
+    ) -> float:
+        from bist_bot.risk.costs import DEFAULT_COSTS, TradingCosts
+        trading_costs: TradingCosts = costs if isinstance(costs, TradingCosts) else DEFAULT_COSTS
+        if entry_price <= 0:
+            return 0.0
+        buy_notional = entry_price
+        sell_notional = exit_price
+        total_fees = trading_costs.round_trip_cost(buy_notional, sell_notional)
+        gross_pct = (exit_price - entry_price) / entry_price * 100
+        fee_pct = total_fees / entry_price * 100
+        return round(gross_pct - fee_pct, 4)
 
     def queue_actionable_signals(self, signals) -> None:
         if not getattr(self.settings, "PAPER_MODE", False):

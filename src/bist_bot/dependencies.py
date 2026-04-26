@@ -8,7 +8,7 @@ from typing import Callable, Optional
 
 from bist_bot.config.settings import settings
 from bist_bot.backtest import Backtester
-from bist_bot.data.fetcher import BISTDataFetcher, BorsaIstanbulQuoteProvider, MarketDataProvider, OfficialProviderStub, YFinanceProvider
+from bist_bot.data.fetcher import BISTDataFetcher, BorsaIstanbulQuoteProvider, DataProviderRouter, MarketDataProvider, OfficialProviderStub, YFinanceProvider
 from bist_bot.data.providers import build_official_provider, resolve_official_endpoints
 from bist_bot.db import DataAccess
 from bist_bot.execution.algolab_broker import AlgoLabBroker, AlgoLabCredentials
@@ -110,9 +110,10 @@ def _build_rate_limiter():
 
 def _build_data_provider() -> MarketDataProvider:
     provider_name = getattr(settings, "DATA_PROVIDER", "yfinance")
+    fallback_order = [s.strip() for s in getattr(settings, "DATA_PROVIDER_FALLBACK_ORDER", "").split(",") if s.strip()]
     if provider_name == "official":
         settings.validate_data_provider_config()
-        return build_official_provider(
+        primary = build_official_provider(
             vendor=getattr(settings, "OFFICIAL_VENDOR", "generic"),
             base_url=settings.OFFICIAL_API_BASE_URL,
             api_key=settings.OFFICIAL_API_KEY,
@@ -131,9 +132,25 @@ def _build_data_provider() -> MarketDataProvider:
                 universe=getattr(settings, "OFFICIAL_UNIVERSE_ENDPOINT", "") or None,
             ),
         )
+        if fallback_order:
+            providers = [primary] + [_build_provider_by_name(n) for n in fallback_order]
+            return DataProviderRouter(
+                providers,
+                failure_threshold=getattr(settings, "FAILOVER_FAILURE_THRESHOLD", 3),
+                cooldown_seconds=getattr(settings, "FAILOVER_COOLDOWN_SECONDS", 60.0),
+            )
+        return primary
     if provider_name == "official_stub":
         return OfficialProviderStub()
     return YFinanceProvider(rate_limiter=_build_rate_limiter())
+
+
+def _build_provider_by_name(name: str) -> MarketDataProvider:
+    if name == "yfinance":
+        return YFinanceProvider(rate_limiter=_build_rate_limiter())
+    if name == "official_stub":
+        return OfficialProviderStub()
+    return OfficialProviderStub()
 
 
 def build_scan_service(container: Optional[AppContainer] = None) -> ScanService:
