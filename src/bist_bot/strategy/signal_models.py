@@ -1,9 +1,9 @@
-"""Shared signal models used across strategy, storage, and notification layers."""
+"""Shared signal models used across strategy, scanner, storage, and notification layers."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 
 from bist_bot.config.settings import settings
@@ -50,6 +50,13 @@ class SignalType(Enum):
         raise ValueError(f"Unknown signal type: {value}")
 
 
+def _make_expires_at(timestamp: datetime) -> datetime:
+    ttl = getattr(settings, "SIGNAL_TTL_MINUTES", 60)
+    if timestamp.tzinfo is None:
+        return timestamp + timedelta(minutes=ttl)
+    return timestamp + timedelta(minutes=ttl)
+
+
 @dataclass
 class Signal:
     ticker: str
@@ -64,6 +71,23 @@ class Signal:
     kelly_fraction: float | None = None
     timestamp: datetime = field(default_factory=datetime.now)
     confidence: str = "confidence.low"
+    expires_at: datetime | None = field(default=None)
+
+    def __post_init__(self) -> None:
+        if self.expires_at is None:
+            self.expires_at = _make_expires_at(self.timestamp)
+
+    def is_expired(self, now: datetime | None = None) -> bool:
+        if self.expires_at is None:
+            return False
+        if now is None:
+            now = datetime.now(timezone.utc)
+        expires = self.expires_at
+        if expires.tzinfo is None and now.tzinfo is not None:
+            expires = expires.replace(tzinfo=timezone.utc)
+        elif expires.tzinfo is not None and now.tzinfo is None:
+            now = now.replace(tzinfo=timezone.utc)
+        return now >= expires
 
     @property
     def confidence_key(self) -> str:
@@ -87,6 +111,7 @@ class Signal:
             kelly_fraction=self.kelly_fraction,
             timestamp=self.timestamp,
             confidence=self.confidence,
+            expires_at=self.expires_at,
         )
 
     def __str__(self) -> str:
