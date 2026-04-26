@@ -314,7 +314,7 @@ class WalkForwardResult:
 
 def _to_float(value: Any, default: float = 0.0) -> float:
     try:
-        if isinstance(value, (pd.Series, pd.DataFrame, np.ndarray, list, tuple, pd.Index)):  # noqa: UP038
+        if isinstance(value, (pd.Series, pd.DataFrame, np.ndarray, list, tuple, pd.Index)):
             return default
         if pd.isna(value):
             return default
