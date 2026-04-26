@@ -28,14 +28,47 @@ st.set_page_config(
 
 
 def _response_message(response, default: str) -> str:
+    """Extract a user-friendly error message from an HTTP response."""
+    code = response.status_code
     try:
         payload = response.json()
     except ValueError:
         text = response.text.strip()
-        return text or default
+        snippet = text[:120] if text else ""
+        if code == 429:
+            return "Cok fazla giris denemesi. Lutfen biraz bekleyip tekrar deneyin."
+        if code == 401:
+            return "Giris basarisiz. Email veya sifre hatali."
+        if code >= 500:
+            return f"API tarafinda hata olustu (HTTP {code}). Lutfen daha sonra tekrar deneyin."
+        if snippet:
+            return f"HTTP {code}: {snippet}"
+        return default
     if isinstance(payload, dict):
-        return str(payload.get("message", default))
-    return default
+        msg = payload.get("message", "")
+        if msg:
+            return str(msg)
+    if code == 429:
+        return "Cok fazla giris denemesi. Lutfen biraz bekleyip tekrar deneyin."
+    if code == 401:
+        return "Giris basarisiz. Email veya sifre hatali."
+    if code >= 500:
+        return f"API tarafinda hata olustu (HTTP {code}). Lutfen daha sonra tekrar deneyin."
+    return default or f"HTTP {code}: bilinmeyen hata"
+
+
+def _extract_token(response) -> str | None:
+    """Safely extract access_token from a login/register response."""
+    try:
+        payload = response.json()
+    except ValueError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    token = payload.get("access_token")
+    if not token or not isinstance(token, str) or not token.strip():
+        return None
+    return token.strip()
 
 
 def _handle_query_actions() -> None:
@@ -101,8 +134,11 @@ def _login_form() -> bool:
                 st.error(f"API erisimi basarisiz: {exc}")
                 return False
             if response.ok:
-                payload = response.json()
-                _complete_auth(str(email), payload["access_token"])
+                token = _extract_token(response)
+                if token:
+                    _complete_auth(str(email), token)
+                else:
+                    st.error("Giris yaniti token icermiyor. Lutfen tekrar deneyin.")
             else:
                 st.error(_response_message(response, "Giris basarisiz. Email veya sifre hatali."))
 
@@ -135,8 +171,11 @@ def _login_form() -> bool:
                 st.error(f"API erisimi basarisiz: {exc}")
                 return False
             if response.ok:
-                payload = response.json()
-                _complete_auth(str(register_email), payload["access_token"])
+                token = _extract_token(response)
+                if token:
+                    _complete_auth(str(register_email), token)
+                else:
+                    st.error("Kayit yaniti token icermiyor. Lutfen tekrar deneyin.")
             else:
                 st.error(_response_message(response, "Kayit basarisiz."))
     return False
