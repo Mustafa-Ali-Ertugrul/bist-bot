@@ -255,16 +255,38 @@ def test_login_uses_existing_db_user_without_env_admin(tmp_path):
     assert response.status_code == 200
 
 
-def test_existing_db_users_prevent_env_bootstrap_override(tmp_path):
-    client, manager = build_db_user_client(tmp_path)
+def test_existing_db_users_do_not_block_admin_seed(tmp_path):
+    """Other users in the DB should not prevent admin bootstrap from creating the configured admin."""
+    import sqlite3
+
+    db_path = str(tmp_path / "auth_other_users.db")
+
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        """CREATE TABLE users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'admin',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )"""
+    )
+    conn.execute(
+        "INSERT INTO users (email, password_hash, role, created_at, updated_at) VALUES (?, ?, 'admin', datetime('now'), datetime('now'))",
+        ("dbadmin@bistbot.local", hash_password("db-password")),
+    )
+    conn.commit()
+    conn.close()
 
     with settings.override(
-        DB_PATH=str(tmp_path / "auth_db_only.db"),
+        DB_PATH=db_path,
         JWT_SECRET_KEY="test_secret_key_12345678901234567890",
         CORS_ORIGINS=("http://localhost:8501",),
         ADMIN_BOOTSTRAP_EMAIL="bootstrap@bistbot.local",
         ADMIN_BOOTSTRAP_PASSWORD_HASH=hash_password("bootstrap-password"),
     ):
+        manager = DatabaseManager(sqlite_path=db_path)
         db = DataAccess(manager)
         app = create_dashboard_app(cast(Any, DummyFetcher()), cast(Any, DummyEngine()), db)
         app.config["TESTING"] = True
@@ -274,7 +296,46 @@ def test_existing_db_users_prevent_env_bootstrap_override(tmp_path):
         "/api/auth/login",
         json={"email": "bootstrap@bistbot.local", "password": "bootstrap-password"},
     )
-    assert response.status_code == 401
+    assert response.status_code == 200
+
+    with manager.engine.begin() as conn:
+        count = conn.execute(text("SELECT COUNT(*) FROM users")).scalar_one()
+    assert count == 2
+
+
+def test_existing_admin_email_blocks_duplicate_seed(tmp_path):
+    """If the configured admin email already exists, bootstrap should skip."""
+    import sqlite3
+
+    admin_email = "bootstrap@bistbot.local"
+    db_path = str(tmp_path / "auth_admin_exists.db")
+
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        """CREATE TABLE users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'admin',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )"""
+    )
+    conn.execute(
+        "INSERT INTO users (email, password_hash, role, created_at, updated_at) VALUES (?, ?, 'admin', datetime('now'), datetime('now'))",
+        (admin_email, hash_password("original-password")),
+    )
+    conn.commit()
+    conn.close()
+
+    with settings.override(
+        DB_PATH=db_path,
+        JWT_SECRET_KEY="test_secret_key_12345678901234567890",
+        CORS_ORIGINS=("http://localhost:8501",),
+        ADMIN_BOOTSTRAP_EMAIL=admin_email,
+        ADMIN_BOOTSTRAP_PASSWORD_HASH=hash_password("original-password"),
+    ):
+        manager = DatabaseManager(sqlite_path=db_path)
 
     with manager.engine.begin() as conn:
         count = conn.execute(text("SELECT COUNT(*) FROM users")).scalar_one()
