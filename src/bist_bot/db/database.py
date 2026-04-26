@@ -405,11 +405,31 @@ class DatabaseManager:
                 {"email": settings.ADMIN_BOOTSTRAP_EMAIL},
             ).scalar_one_or_none()
             if admin_exists is not None:
-                logger.info(
-                    "admin_bootstrap_skipped",
-                    reason="admin_exists",
-                    email=settings.ADMIN_BOOTSTRAP_EMAIL,
-                )
+                if settings.ADMIN_BOOTSTRAP_UPDATE_EXISTING:
+                    logger.info(
+                        "admin_bootstrap_existing_admin_found",
+                        email=settings.ADMIN_BOOTSTRAP_EMAIL,
+                    )
+                    conn.execute(
+                        text(
+                            "UPDATE users SET password_hash = :password_hash, updated_at = :updated_at WHERE email = :email"
+                        ),
+                        {
+                            "email": settings.ADMIN_BOOTSTRAP_EMAIL,
+                            "password_hash": settings.ADMIN_BOOTSTRAP_PASSWORD_HASH,
+                            "updated_at": now,
+                        },
+                    )
+                    logger.info(
+                        "admin_bootstrap_existing_admin_updated",
+                        email=settings.ADMIN_BOOTSTRAP_EMAIL,
+                    )
+                else:
+                    logger.info(
+                        "admin_bootstrap_existing_admin_update_skipped",
+                        reason="admin_exists",
+                        email=settings.ADMIN_BOOTSTRAP_EMAIL,
+                    )
                 return
             try:
                 conn.execute(
