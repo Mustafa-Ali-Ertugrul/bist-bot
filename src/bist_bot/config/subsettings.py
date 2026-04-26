@@ -275,6 +275,11 @@ class DataSettings:
     OFFICIAL_UNIVERSE_ENDPOINT: str = _get_str_env("OFFICIAL_UNIVERSE_ENDPOINT")
     BENCHMARK_TICKER: str = _get_str_env("BENCHMARK_TICKER", "^XU100")
     BENCHMARK_TICKER_ALT: str = _get_str_env("BENCHMARK_TICKER_ALT", "XRXIST.IS")
+    DATA_PROVIDER_FALLBACK_ORDER: str = _get_str_env("DATA_PROVIDER_FALLBACK_ORDER", "")
+    FAILOVER_FAILURE_THRESHOLD: int = _get_int_env("FAILOVER_FAILURE_THRESHOLD", 3)
+    FAILOVER_COOLDOWN_SECONDS: float = _get_float_env("FAILOVER_COOLDOWN_SECONDS", 60.0)
+    STAMP_TAX: float = _get_float_env("STAMP_TAX", 0.00093)
+    EXCHANGE_FEE: float = _get_float_env("EXCHANGE_FEE", 0.0005)
 
 
 @dataclass(frozen=True)

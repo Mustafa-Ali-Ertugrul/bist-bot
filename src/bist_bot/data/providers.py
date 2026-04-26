@@ -604,3 +604,93 @@ def build_official_provider(
     if endpoints is not None:
         provider.endpoints = endpoints
     return provider
+
+
+@dataclass
+class _ProviderHealth:
+    consecutive_failures: int = 0
+    last_failure_time: float = 0.0
+
+
+class DataProviderRouter:
+    """Failover router that tries providers in order with circuit-breaker logic."""
+
+    def __init__(
+        self,
+        providers: list[MarketDataProvider],
+        failure_threshold: int = 3,
+        cooldown_seconds: float = 60.0,
+    ) -> None:
+        if not providers:
+            raise ValueError("At least one provider required")
+        self._providers = providers
+        self._failure_threshold = failure_threshold
+        self._cooldown_seconds = cooldown_seconds
+        self._health: dict[int, _ProviderHealth] = {
+            i: _ProviderHealth() for i in range(len(providers))
+        }
+
+    def _is_available(self, idx: int) -> bool:
+        h = self._health[idx]
+        if h.consecutive_failures < self._failure_threshold:
+            return True
+        elapsed = time.monotonic() - h.last_failure_time
+        return elapsed >= self._cooldown_seconds
+
+    def _record_success(self, idx: int) -> None:
+        self._health[idx].consecutive_failures = 0
+
+    def _record_failure(self, idx: int) -> None:
+        h = self._health[idx]
+        h.consecutive_failures += 1
+        h.last_failure_time = time.monotonic()
+
+    def fetch_history(self, ticker: str, period: str, interval: str) -> pd.DataFrame | None:
+        for idx, provider in enumerate(self._providers):
+            if not self._is_available(idx):
+                continue
+            try:
+                result = provider.fetch_history(ticker, period, interval)
+                self._record_success(idx)
+                return result
+            except Exception:
+                self._record_failure(idx)
+                logger.warning("provider_failover", provider_index=idx, ticker=ticker)
+        return self._providers[-1].fetch_history(ticker, period, interval)
+
+    def fetch_batch(self, tickers: list[str], period: str, interval: str) -> dict[str, pd.DataFrame | None]:
+        for idx, provider in enumerate(self._providers):
+            if not self._is_available(idx):
+                continue
+            try:
+                result = provider.fetch_batch(tickers, period, interval)
+                self._record_success(idx)
+                return result
+            except Exception:
+                self._record_failure(idx)
+                logger.warning("provider_failover_batch", provider_index=idx)
+        return self._providers[-1].fetch_batch(tickers, period, interval)
+
+    def fetch_quote(self, ticker: str) -> float | None:
+        for idx, provider in enumerate(self._providers):
+            if not self._is_available(idx):
+                continue
+            try:
+                result = provider.fetch_quote(ticker)
+                self._record_success(idx)
+                return result
+            except Exception:
+                self._record_failure(idx)
+        return self._providers[-1].fetch_quote(ticker)
+
+    def fetch_universe(self, force_refresh: bool = False) -> list[str]:
+        for idx, provider in enumerate(self._providers):
+            if not self._is_available(idx):
+                continue
+            try:
+                result = provider.fetch_universe(force_refresh=force_refresh)
+                self._record_success(idx)
+                return result
+            except Exception:
+                self._record_failure(idx)
+        return self._providers[-1].fetch_universe(force_refresh=force_refresh)

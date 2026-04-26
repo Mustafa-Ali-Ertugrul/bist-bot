@@ -4,6 +4,7 @@ from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 import random
+import re
 import threading
 import time
 from typing import Any, Callable, Iterator, Optional, TypeVar
@@ -34,6 +35,14 @@ from bist_bot.config.settings import settings
 
 class Base(DeclarativeBase):
     pass
+
+
+def _validate_table_name(name: str) -> str:
+    if not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', name):
+        raise ValueError(
+            f'Invalid SQL table name configured for PAPER_TRADES_TABLE: {name!r}'
+        )
+    return name
 
 
 class SignalRecord(Base):
@@ -195,6 +204,7 @@ class DatabaseManager:
                 bind=self.engine, autoflush=False, expire_on_commit=False, future=True
             )
         )
+        self._initialized = False
         self.initialize()
 
     def _ensure_sqlite_parent_dir(self) -> None:
@@ -217,6 +227,8 @@ class DatabaseManager:
 
     def initialize(self) -> None:
         with _INIT_LOCK:
+            if self._initialized:
+                return
             try:
                 Base.metadata.create_all(self.engine)
             except OperationalError as exc:
@@ -225,10 +237,12 @@ class DatabaseManager:
                 ) from exc
             self._migrate_legacy_schema()
             self._seed_admin_user()
+            self._initialized = True
 
     def _migrate_legacy_schema(self) -> None:
         if not self._is_sqlite:
             return
+        paper_table = _validate_table_name(settings.PAPER_TRADES_TABLE)
         with self.engine.begin() as conn:
             signal_columns = {
                 row[1]
@@ -253,44 +267,44 @@ class DatabaseManager:
 
             paper_columns = {
                 row[1]
-                for row in conn.execute(
-                    text(f"PRAGMA table_info({settings.PAPER_TRADES_TABLE})")
+for row in conn.execute(
+                    text(f'PRAGMA table_info({paper_table})')
                 ).fetchall()
             }
             if "stop_loss" not in paper_columns:
                 conn.execute(
-                    text(
-                        f"ALTER TABLE {settings.PAPER_TRADES_TABLE} ADD COLUMN stop_loss REAL"
+text(
+                        f'ALTER TABLE {paper_table} ADD COLUMN stop_loss REAL'
                     )
                 )
             if "target_price" not in paper_columns:
                 conn.execute(
-                    text(
-                        f"ALTER TABLE {settings.PAPER_TRADES_TABLE} ADD COLUMN target_price REAL"
+text(
+                        f'ALTER TABLE {paper_table} ADD COLUMN target_price REAL'
                     )
                 )
             if "exit_price" not in paper_columns:
                 conn.execute(
-                    text(
-                        f"ALTER TABLE {settings.PAPER_TRADES_TABLE} ADD COLUMN exit_price REAL"
+text(
+                        f'ALTER TABLE {paper_table} ADD COLUMN exit_price REAL'
                     )
                 )
             if "exit_date" not in paper_columns:
                 conn.execute(
-                    text(
-                        f"ALTER TABLE {settings.PAPER_TRADES_TABLE} ADD COLUMN exit_date TEXT"
+text(
+                        f'ALTER TABLE {paper_table} ADD COLUMN exit_date TEXT'
                     )
                 )
             if "close_reason" not in paper_columns:
                 conn.execute(
-                    text(
-                        f"ALTER TABLE {settings.PAPER_TRADES_TABLE} ADD COLUMN close_reason TEXT"
+text(
+                        f'ALTER TABLE {paper_table} ADD COLUMN close_reason TEXT'
                     )
                 )
             if "close_time" not in paper_columns:
                 conn.execute(
-                    text(
-                        f"ALTER TABLE {settings.PAPER_TRADES_TABLE} ADD COLUMN close_time TEXT"
+text(
+                        f'ALTER TABLE {paper_table} ADD COLUMN close_time TEXT'
                     )
                 )
 
@@ -311,7 +325,44 @@ class DatabaseManager:
             )
 
     @staticmethod
-    def _normalize_timestamp_columns(conn) -> None:
+    def _normalize_timestamp_columns_static(self, conn) -> None:
+        paper_trades_table = _validate_table_name(settings.PAPER_TRADS_TABLE)
+        migrations = {
+            'signals': ['timestamp', 'created_at', 'outcome_date'],
+            paper_trades_table: ['signal_time', 'exit_date', 'close_time'],
+            'scan_log': ['timestamp'],
+            'users': ['created_at', 'updated_at'],
+            'orders': ['created_at', 'updated_at'],
+            'app_settings': ['updated_at'],
+        }
+        for table, columns in migrations.items():
+            try:
+                col_info = {
+                    row[1]: row[2]
+                    for row in conn.execute(
+                        text(f'PRAGMA table_info({table})')
+                    ).fetchall()
+                }
+            except OperationalError:
+                continue
+            for col in columns:
+                if col not in col_info:
+                    continue
+                conn.execute(
+                    text(
+                        'UPDATE ' + table + ' SET ' + col + ' = '
+                        'CASE '
+                        '  WHEN ' + col + ' IS NULL OR ' + col + ' = ‘’ THEN NULL '
+                        '  WHEN ' + col + ' GLOB ‘*[a-zA-Z]*’ AND ' + col + ' NOT GLOB ‘*[0-9]*’ THEN NULL '
+                        '  WHEN substr(' + col + ', 11, 1) = ‘ ’ THEN '
+                        '    substr(' + col + ', 1, 10) || ‘T’ || substr(' + col + ', 12) '
+                        '  ELSE ' + col + ' '
+                        'END '
+                        'WHERE ' + col + ' IS NOT NULL AND ' + col + ' != ‘’'
+                    )
+                )
+
+    def _normalize_timestamp_columns(self, conn) -> None:
         """Convert legacy TEXT timestamps to ISO-8601 so SQLAlchemy DateTime can parse them.
 
         SQLite stores DateTime as TEXT in ISO format. Older rows may use
@@ -319,9 +370,10 @@ class DatabaseManager:
         (e.g. ``STOP_HIT`` mistakenly stored in ``exit_date``). This migration
         normalizes them in-place.
         """
+        paper_trades_table = _validate_table_name(settings.PAPER_TRADES_TABLE)
         migrations = {
             "signals": ["timestamp", "created_at", "outcome_date"],
-            settings.PAPER_TRADES_TABLE: ["signal_time", "exit_date", "close_time"],
+            paper_trades_table: ["signal_time", "exit_date", "close_time"],
             "scan_log": ["timestamp"],
             "users": ["created_at", "updated_at"],
             "orders": ["created_at", "updated_at"],
