@@ -26,7 +26,6 @@ from bist_bot.strategy.base import BaseStrategy
 from bist_bot.strategy.engine import StrategyEngine
 from bist_bot.strategy.signal_models import Signal, SignalType
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Step 1: Implement a custom strategy
 # ─────────────────────────────────────────────────────────────────────────────
