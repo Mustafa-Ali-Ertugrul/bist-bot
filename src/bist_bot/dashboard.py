@@ -115,6 +115,7 @@ def create_dashboard_app(
     def verify_admin(email: str, password: str) -> bool:
         manager = getattr(get_db(), "manager", None)
         if manager is None:
+            logger.warning("login_db_unavailable", email=email)
             return False
         with manager.engine.begin() as conn:
             row = (
@@ -126,9 +127,11 @@ def create_dashboard_app(
                 .first()
             )
         if row is None:
+            logger.info("login_user_not_found", email=email)
             return False
         verified, upgraded_hash = verify_and_rehash_password(password, str(row["password_hash"]))
         if not verified:
+            logger.info("login_password_invalid", email=email)
             return False
         if upgraded_hash is not None:
             with manager.engine.begin() as conn:
@@ -142,6 +145,7 @@ def create_dashboard_app(
                         "updated_at": datetime.now(TR),
                     },
                 )
+        logger.info("login_success", email=email)
         return True
 
     def create_user(email: str, password: str) -> tuple[bool, str]:
@@ -185,14 +189,19 @@ def create_dashboard_app(
     @app.route("/health")
     def health_check():
         circuit = app.config.get("circuit_breaker")
+        db_ok = False
+        try:
+            db_ok = get_db().ping()
+        except Exception:
+            db_ok = False
         health = {
             "status": "healthy",
-            "database": "ok" if get_db().ping() else "error",
+            "database": "ok" if db_ok else "error",
             "version": "1.0.0",
             "timestamp": datetime.now(TR).isoformat(),
             "circuit_state": str(circuit.state) if circuit else "UNKNOWN",
         }
-        if health["database"] != "ok":
+        if not db_ok:
             health["status"] = "degraded"
         status_code = 200 if health["status"] == "healthy" else 503
         return jsonify(health), status_code
@@ -398,20 +407,28 @@ def create_dashboard_app(
 
 def create_default_dashboard_app(container: AppContainer | None = None) -> Flask:
     """Build the Flask API app from the shared application container."""
+    logger.info("api_startup_begin")
     runtime_container = container or get_default_container()
-    return create_dashboard_app(
+    app = create_dashboard_app(
         fetcher=runtime_container.fetcher,
         engine=runtime_container.engine,
         db=runtime_container.db,
         broker=runtime_container.broker,
         circuit_breaker=runtime_container.circuit_breaker,
     )
+    logger.info("api_startup_complete")
+    return app
 
 
 def main() -> None:
     """Run the standalone Flask API process."""
     configure_logging()
     app = create_default_dashboard_app()
+    logger.info(
+        "api_listening",
+        host="0.0.0.0",
+        port=settings.FLASK_PORT,
+    )
     app.run(
         host="0.0.0.0",
         port=settings.FLASK_PORT,

@@ -112,11 +112,28 @@ class BISTDataFetcher:
         """Initialize the fetcher with a normalized watchlist.
 
         Args:
-            watchlist: Optional explicit ticker list.
+            watchlist: Optional explicit ticker list. If None, resolved lazily
+                on first use to avoid blocking network calls during startup.
         """
         self.provider = provider or YFinanceProvider(_rate_limiter)
         self.quote_provider = quote_provider or BorsaIstanbulQuoteProvider(_rate_limiter)
-        if watchlist is None:
+        self._history_cache: dict[tuple[str, str, str], CacheEntry] = {}
+        self._analysis_cache: dict[str, CacheEntry] = {}
+        self._quote_cache: dict[str, CacheEntry] = {}
+        self._max_workers = 8  # Will be updated when watchlist is resolved
+        if watchlist is not None:
+            self._watchlist: list[str] | None = _clean_ticker_list(watchlist)
+            self._max_workers = min(8, max(2, len(self._watchlist)))
+        else:
+            self._watchlist = None
+        logger.info(
+            "fetcher_initialized",
+            watchlist_size=len(self._watchlist) if self._watchlist is not None else 0,
+        )
+
+    @property
+    def watchlist(self) -> list[str]:
+        if self._watchlist is None:
             tickers = _clean_ticker_list(self.provider.fetch_universe())
             if len(tickers) < 90:
                 logger.warning(
@@ -129,14 +146,14 @@ class BISTDataFetcher:
                     "watchlist_static_fallback",
                     fallback_count=len(tickers),
                 )
-            self.watchlist = tickers
-        else:
-            self.watchlist = _clean_ticker_list(watchlist)
-        self._history_cache: dict[tuple[str, str, str], CacheEntry] = {}
-        self._analysis_cache: dict[str, CacheEntry] = {}
-        self._quote_cache: dict[str, CacheEntry] = {}
-        self._max_workers = min(8, max(2, len(self.watchlist)))
-        logger.info("fetcher_initialized", watchlist_size=len(self.watchlist))
+            self._watchlist = tickers
+            self._max_workers = min(8, max(2, len(self._watchlist)))
+        return self._watchlist
+
+    @watchlist.setter
+    def watchlist(self, value: list[str]) -> None:
+        self._watchlist = _clean_ticker_list(value)
+        self._max_workers = min(8, max(2, len(self._watchlist)))
 
     def _cache_key(self, ticker: str, period: str, interval: str) -> tuple[str, str, str]:
         return (ticker, period, interval)
