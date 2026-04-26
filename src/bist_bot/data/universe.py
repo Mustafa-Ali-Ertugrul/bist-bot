@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import json
-from bist_bot.app_logging import get_logger
+import logging
 from datetime import date, datetime
 from pathlib import Path
 
 from bist_bot.data.bist100 import BIST100_TICKERS
 from bist_bot.data.helpers import clean_ticker_list
 
-logger = get_logger(__name__, component="data_universe")
+logger = logging.getLogger(__name__)
 
 UNIVERSE_DIR = Path(__file__).resolve().parent / "universe"
 
@@ -38,9 +38,7 @@ def get_universe_for_date(
     candidates: list[tuple[date, Path]] = []
     for snapshot_path in sorted(UNIVERSE_DIR.glob("bist100_*.json")):
         try:
-            snapshot_date = date.fromisoformat(
-                snapshot_path.stem.removeprefix("bist100_")
-            )
+            snapshot_date = date.fromisoformat(snapshot_path.stem.removeprefix("bist100_"))
         except ValueError:
             continue
         if snapshot_date <= target_date:
@@ -48,19 +46,18 @@ def get_universe_for_date(
 
     if not candidates:
         logger.warning(
-            "universe_snapshot_missing",
-            target_date=target_date.isoformat(),
-            fallback="current_universe",
+            "Historical universe snapshot missing for %s; falling back to current universe",
+            target_date.isoformat(),
         )
         return fallback
 
     snapshot_date, snapshot_path = candidates[-1]
     members = _load_snapshot(snapshot_path)
     logger.info(
-        "universe_resolved",
-        target_date=target_date.isoformat(),
-        snapshot_date=snapshot_date.isoformat(),
-        ticker_count=len(members),
+        "Historical universe resolved for %s using snapshot %s (%s tickers)",
+        target_date.isoformat(),
+        snapshot_date.isoformat(),
+        len(members),
     )
     return members or fallback
 
