@@ -156,9 +156,7 @@ def check_scan_timeout() -> bool:
     scan_started_at = st.session_state.get("scan_started_at")
     if scan_started_at is None:
         return False
-    timeout_seconds = int(
-        getattr(settings, "STREAMLIT_BACKGROUND_SCAN_TIMEOUT_SECONDS", 90)
-    )
+    timeout_seconds = int(getattr(settings, "STREAMLIT_BACKGROUND_SCAN_TIMEOUT_SECONDS", 90))
     elapsed = (datetime.now(TR) - scan_started_at).total_seconds()
     if elapsed < timeout_seconds:
         return False
@@ -223,7 +221,10 @@ def start_background_scan(force_clear: bool = False, limited: bool = False) -> b
                 "ui_background_scan_completed",
                 session_key=session_key,
                 duration_seconds=round(
-                    (datetime.now(TR) - st.session_state.get("scan_started_at", datetime.now(TR))).total_seconds(), 1
+                    (
+                        datetime.now(TR) - st.session_state.get("scan_started_at", datetime.now(TR))
+                    ).total_seconds(),
+                    1,
                 ),
                 signal_count=len(result.get("signals", [])),
             )
