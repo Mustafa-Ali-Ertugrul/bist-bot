@@ -453,7 +453,14 @@ def create_dashboard_app(
     @jwt_required()
     def api_stats():
         stats = get_db().get_performance_stats()
-        return jsonify({"status": "ok", "stats": stats})
+        scan_service = get_scan_service()
+        latest_scan = {
+            "total_scanned": scan_service.last_scan_stats.get("scanned", 0),
+            "signals_generated": scan_service.last_scan_stats.get("signals", 0),
+            "buy_signals": scan_service.last_scan_stats.get("buys", 0),
+            "sell_signals": scan_service.last_scan_stats.get("sells", 0),
+        }
+        return jsonify({"status": "ok", "stats": stats, "latest_scan": latest_scan})
 
     return app
 
