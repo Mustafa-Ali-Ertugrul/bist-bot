@@ -229,3 +229,49 @@ def test_scan_endpoint_auto_executes_when_broker_is_available(tmp_path):
     pending_orders = db.get_pending_orders()
     assert len(pending_orders) == 1
     assert pending_orders[0]["state"] == "SENT"
+
+
+def test_scan_endpoint_returns_504_on_timeout(tmp_path):
+    import concurrent.futures
+    from unittest.mock import MagicMock, patch
+
+    client, _fetcher, _engine, token, _db = _build_authorized_client(tmp_path)
+
+    mock_future = MagicMock(spec=concurrent.futures.Future)
+    mock_future.result.side_effect = concurrent.futures.TimeoutError()
+
+    mock_executor = MagicMock()
+    mock_executor.__enter__ = MagicMock(return_value=mock_executor)
+    mock_executor.__exit__ = MagicMock(return_value=False)
+    mock_executor.submit.return_value = mock_future
+
+    with patch("concurrent.futures.ThreadPoolExecutor", return_value=mock_executor):
+        with settings.override(SCAN_TIMEOUT_SECONDS=1):
+            response = client.post(
+                "/api/scan",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+
+    assert response.status_code == 504
+    payload = response.get_json()
+    assert payload is not None
+    assert payload["status"] == "error"
+    assert "timed out" in payload["message"].lower()
+    assert "timeout_seconds" in payload
+
+
+def test_empty_scan_response_has_ok_status(tmp_path):
+    client, _fetcher, _engine, token, _db = _build_authorized_client(
+        tmp_path,
+        scan_signals=[],
+        scan_payload={},
+    )
+
+    response = client.post("/api/scan", headers={"Authorization": f"Bearer {token}"})
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload is not None
+    assert payload["status"] == "ok"
+    assert payload["signals"] == []
+    assert payload["scanned"] == 0
