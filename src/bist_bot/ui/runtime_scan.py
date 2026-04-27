@@ -1,5 +1,3 @@
-"""Scan orchestration helpers for the Streamlit runtime."""
-
 from __future__ import annotations
 
 import threading
@@ -18,12 +16,12 @@ TR = timezone(timedelta(hours=3))
 SCAN_LOCK = threading.Lock()
 PENDING_SCAN_RESULTS: dict[str, ScanResult] = {}
 ACTIVE_SCAN_SESSIONS: set[str] = set()
+SCAN_START_TIMES: dict[str, datetime] = {}
 
 
 def _should_clear_cache(
     scan_started_at: datetime, last_scan_time: datetime | None, force_clear: bool
 ) -> bool:
-    """Decide whether cached market data should be invalidated before scanning."""
     if force_clear:
         return True
     if last_scan_time is None:
@@ -32,8 +30,7 @@ def _should_clear_cache(
     return age > 900
 
 
-def _session_dependencies() -> tuple[Any, Any, Any, Any, datetime | None]:
-    """Read the current session-scoped runtime dependencies."""
+def _session_dependencies():
     return (
         st.session_state.data_fetcher,
         st.session_state.engine,
@@ -43,8 +40,7 @@ def _session_dependencies() -> tuple[Any, Any, Any, Any, datetime | None]:
     )
 
 
-def _empty_scan_result(last_scan_time: datetime | None, error: str) -> ScanResult:
-    """Build a consistent error payload for failed background scans."""
+def _empty_scan_result(last_scan_time, error):
     return {
         "all_data": {},
         "signals": [],
@@ -54,14 +50,8 @@ def _empty_scan_result(last_scan_time: datetime | None, error: str) -> ScanResul
 
 
 def collect_scan_result(
-    fetcher,
-    engine,
-    notifier,
-    db,
-    last_scan_time: datetime | None = None,
-    force_clear: bool = False,
-) -> ScanResult:
-    """Run one scan cycle and return the runtime payload."""
+    fetcher, engine, notifier, db, last_scan_time=None, force_clear=False
+):
     scan_started_at = datetime.now(TR)
     if _should_clear_cache(scan_started_at, last_scan_time, force_clear):
         fetcher.clear_cache(scope="intraday_fetch")
@@ -96,8 +86,7 @@ def collect_scan_result(
     }
 
 
-def apply_scan_result(scan_result: ScanResult) -> None:
-    """Write a completed scan result into Streamlit session state."""
+def apply_scan_result(scan_result):
     st.session_state.all_data = scan_result["all_data"]
     st.session_state.signals = scan_result["signals"]
     st.session_state.last_scan_time = scan_result["last_scan_time"]
@@ -105,8 +94,7 @@ def apply_scan_result(scan_result: ScanResult) -> None:
     st.session_state.scan_in_progress = False
 
 
-def run_scan(force_clear: bool = False) -> None:
-    """Execute a synchronous scan using the session-scoped dependencies."""
+def run_scan(force_clear=False):
     fetcher, engine, notifier, db, last_scan_time = _session_dependencies()
     result = collect_scan_result(
         fetcher=fetcher,
@@ -119,7 +107,7 @@ def run_scan(force_clear: bool = False) -> None:
     apply_scan_result(result)
 
 
-def request_scan(force_clear: bool = False) -> bool:
+def request_scan(force_clear=False):
     allowed, remaining = consume_cooldown(
         cast(MutableMapping[str, Any], st.session_state),
         action="scan",
@@ -136,8 +124,7 @@ def request_scan(force_clear: bool = False) -> bool:
     return True
 
 
-def start_background_scan(force_clear: bool = False) -> bool:
-    """Start a background scan for the current Streamlit session."""
+def start_background_scan(force_clear=False) -> bool:
     session_key = st.session_state.get("_scan_session_key")
     if not session_key:
         return False
@@ -149,6 +136,7 @@ def start_background_scan(force_clear: bool = False) -> bool:
     fetcher, engine, notifier, db, last_scan_time = _session_dependencies()
     st.session_state.scan_in_progress = True
     st.session_state.scan_error = None
+    SCAN_START_TIMES[session_key] = datetime.now(TR)
 
     def worker():
         try:
@@ -165,13 +153,35 @@ def start_background_scan(force_clear: bool = False) -> bool:
         with SCAN_LOCK:
             PENDING_SCAN_RESULTS[session_key] = result
             ACTIVE_SCAN_SESSIONS.discard(session_key)
+            SCAN_START_TIMES.pop(session_key, None)
 
     threading.Thread(target=worker, daemon=True).start()
     return True
 
 
-def apply_pending_scan_result() -> bool:
-    """Apply a finished background scan when available."""
+def check_scan_timeout():
+    timeout_seconds = float(
+        getattr(settings, "STREAMLIT_BACKGROUND_SCAN_TIMEOUT_SECONDS", 120)
+    )
+    session_key = st.session_state.get("_scan_session_key")
+    if not session_key:
+        return
+    with SCAN_LOCK:
+        is_active = session_key in ACTIVE_SCAN_SESSIONS
+    if is_active:
+        start_time = SCAN_START_TIMES.get(session_key)
+        if start_time:
+            elapsed = (datetime.now(TR) - start_time).total_seconds()
+            if elapsed > timeout_seconds:
+                with SCAN_LOCK:
+                    ACTIVE_SCAN_SESSIONS.discard(session_key)
+                    SCAN_START_TIMES.pop(session_key, None)
+                st.session_state.scan_in_progress = False
+                st.session_state.scan_error = "Tarama zaman asimi"
+
+
+def apply_pending_scan_result():
+    check_scan_timeout()
     session_key = st.session_state.get("_scan_session_key")
     if not session_key:
         return False
@@ -189,8 +199,7 @@ def apply_pending_scan_result() -> bool:
     return True
 
 
-def ensure_initial_data() -> None:
-    """Load cached signals or trigger the first scan for the UI session."""
+def ensure_initial_data():
     apply_pending_scan_result()
     if st.session_state.signals:
         return
@@ -203,6 +212,5 @@ def ensure_initial_data() -> None:
             start_background_scan(force_clear=False)
             return
         run_scan(force_clear=False)
-        st.rerun()
     except Exception as exc:
         st.error(f"Tarama hatasi: {exc}")

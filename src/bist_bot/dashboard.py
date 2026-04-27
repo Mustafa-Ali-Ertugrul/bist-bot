@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 
@@ -253,54 +254,78 @@ def create_dashboard_app(
     @limiter.limit("10 per minute")
     def api_scan():
         start_time = time.time()
+        payload = request.get_json(silent=True) or {}
+        force_refresh = _coerce_bool(
+            payload.get("force_refresh", request.args.get("force_refresh"))
+)
+        limit = request.args.get('limit', payload.get('limit'), type=int)
+        scan_service = get_scan_service()
+        timeout_seconds = int(getattr(settings, 'SCAN_TIMEOUT_SECONDS', 120))
+        paper_mode = getattr(settings, 'PAPER_MODE', False)
+        auto_execute = getattr(settings, 'AUTO_EXECUTE', False)
+        executor = ThreadPoolExecutor(max_workers=1)
+        timed_out = False
         try:
-            payload = request.get_json(silent=True) or {}
-            force_refresh = _coerce_bool(
-                payload.get("force_refresh", request.args.get("force_refresh"))
+            future = executor.submit(
+                scan_service.scan_once, force_refresh=force_refresh, limit=limit,
+                paper_mode=paper_mode, auto_execute=auto_execute
             )
-            scan_service = get_scan_service()
-            signals = scan_service.scan_once(force_refresh=force_refresh)
+            signals = future.result(timeout=timeout_seconds)
             scan_stats = scan_service.last_scan_stats
-
-            results = [
-                {
-                    "ticker": signal.ticker,
-                    "name": settings.TICKER_NAMES.get(signal.ticker, signal.ticker),
-                    "signal": signal.signal_type.value,
-                    "score": signal.score,
-                    "price": signal.price,
-                    "stop_loss": signal.stop_loss,
-                    "target": signal.target_price,
-                    "confidence": signal.confidence,
-                    "reasons": signal.reasons,
-                    "timestamp": signal.timestamp.isoformat(),
-                }
-                for signal in signals
-            ]
-
-            response_payload: dict[str, Any] = {
-                "status": "ok",
-                "scanned": scan_stats["scanned"],
-                "signals": results,
-                "force_refresh": force_refresh,
-                "timestamp": datetime.now(TR).isoformat(),
-                "duration_ms": round((time.time() - start_time) * 1000, 2),
-            }
-            logger.info(
-                "api_scan_completed",
-                duration_ms=response_payload["duration_ms"],
-                scanned_count=scan_stats["scanned"],
-                actionable_count=scan_stats["actionable"],
+        except FuturesTimeoutError:
+            logger.warning(
+                'api_scan_timeout',
+                timeout_seconds=timeout_seconds,
+                duration_ms=round((time.time() - start_time) * 1000, 2),
             )
-            return jsonify(response_payload)
+            future.cancel()
+            timed_out = True
+            return jsonify({'status': 'error', 'message': 'Scan timed out'}), 504
         except Exception as exc:
             logger.exception(
-                "api_scan_failed",
+                'api_scan_failed',
                 error=exc,
                 duration_ms=round((time.time() - start_time) * 1000, 2),
-                component="dashboard",
+                component='dashboard',
             )
-            return jsonify({"status": "error", "message": str(exc)}), 500
+            return jsonify({'status': 'error', 'message': str(exc)}), 500
+        finally:
+            if timed_out:
+                executor.shutdown(wait=False, cancel_futures=True)
+            else:
+                executor.shutdown(wait=True)
+
+        results = [
+            {
+                "ticker": signal.ticker,
+                "name": settings.TICKER_NAMES.get(signal.ticker, signal.ticker),
+                "signal": signal.signal_type.value,
+                "score": signal.score,
+                "price": signal.price,
+                "stop_loss": signal.stop_loss,
+                "target": signal.target_price,
+                "confidence": signal.confidence,
+                "reasons": signal.reasons,
+                "timestamp": signal.timestamp.isoformat(),
+            }
+            for signal in signals
+        ]
+
+        response_payload: dict[str, Any] = {
+            "status": "ok",
+            "scanned": scan_stats["scanned"],
+            "signals": results,
+            "force_refresh": force_refresh,
+            "timestamp": datetime.now(TR).isoformat(),
+            "duration_ms": round((time.time() - start_time) * 1000, 2),
+        }
+        logger.info(
+            "api_scan_completed",
+            duration_ms=response_payload["duration_ms"],
+            scanned_count=scan_stats["scanned"],
+            actionable_count=scan_stats["actionable"],
+        )
+        return jsonify(response_payload)
 
     @app.route("/api/analyze/<ticker>")
     @jwt_required()

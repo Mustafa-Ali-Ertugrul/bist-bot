@@ -17,8 +17,10 @@ class PaperTradeService:
         self.db = db
         self.settings = settings or default_settings
 
-    def queue_actionable_signals(self, signals) -> None:
-        if not getattr(self.settings, "PAPER_MODE", False):
+    def queue_actionable_signals(self, signals, paper_mode: bool | None = None) -> None:
+        if paper_mode is None:
+            paper_mode = getattr(self.settings, 'PAPER_MODE', False)
+        if not paper_mode:
             return
 
         for signal in signals:

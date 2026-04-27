@@ -65,8 +65,8 @@ def test_scan_once_orchestrates_side_effect_services():
 
     assert result == [signal]
     signal_change_service.check_signal_changes.assert_called_once_with([signal])
-    execution_service.auto_execute_signals.assert_called_once_with([signal])
-    paper_trade_service.queue_actionable_signals.assert_called_once_with([signal])
+    execution_service.auto_execute_signals.assert_called_once_with([signal], auto_execute=None)
+    paper_trade_service.queue_actionable_signals.assert_called_once_with([signal], paper_mode=None)
     paper_trade_service.update_open_trades.assert_called_once_with()
     notification_service.notify_scan_results.assert_called_once_with([signal], [signal], 1)
     db.save_signals.assert_called_once_with([signal])
@@ -96,7 +96,7 @@ def test_scan_once_skips_paper_trade_updates_when_disabled():
 
     service.scan_once()
 
-    paper_trade_service.queue_actionable_signals.assert_called_once_with([signal])
+    paper_trade_service.queue_actionable_signals.assert_called_once_with([signal], paper_mode=None)
     paper_trade_service.update_open_trades.assert_not_called()
 
 
@@ -116,15 +116,16 @@ def test_scan_service_backwards_compatible_wrappers_delegate():
         signal_change_service=signal_change_service,
         execution_service=execution_service,
         paper_trade_service=paper_trade_service,
+        settings=settings.replace(PAPER_MODE=True),
     )
-    signal = Signal(ticker="THYAO.IS", signal_type=SignalType.STRONG_BUY, score=80, price=100.0)
+    signal = Signal(ticker='THYAO.IS', signal_type=SignalType.STRONG_BUY, score=80, price=100.0)
 
     service._check_signal_changes([signal])
     service._auto_execute_signals([signal])
     service.update_paper_trades()
 
     signal_change_service.check_signal_changes.assert_called_once_with([signal])
-    execution_service.auto_execute_signals.assert_called_once_with([signal])
+    execution_service.auto_execute_signals.assert_called_once_with([signal], auto_execute=None)
     paper_trade_service.update_open_trades.assert_called_once_with()
 
 

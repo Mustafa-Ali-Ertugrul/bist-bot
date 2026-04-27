@@ -33,8 +33,10 @@ class ExecutionService:
             logger.warning("auto_execute_large_quantity", ticker=signal.ticker, actionable_count=quantity)
         return float(quantity)
 
-    def auto_execute_signals(self, signals: list[Signal]) -> None:
-        if not getattr(self.settings, "AUTO_EXECUTE", False) or self.broker is None:
+    def auto_execute_signals(self, signals: list[Signal], auto_execute: bool | None = None) -> None:
+        if auto_execute is None:
+            auto_execute = getattr(self.settings, 'AUTO_EXECUTE', False)
+        if not auto_execute or self.broker is None:
             return
 
         try:

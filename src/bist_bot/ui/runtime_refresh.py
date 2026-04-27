@@ -1,8 +1,5 @@
-"""Post-scan refresh helpers for the Streamlit runtime."""
-
 from __future__ import annotations
 
-import time
 from datetime import datetime, timedelta, timezone
 from typing import cast
 
@@ -12,20 +9,14 @@ TR = timezone(timedelta(hours=3))
 
 
 def sync_runtime_feedback(run_scan_callback) -> None:
-    """Handle refresh timers, pending background state, and user feedback."""
     if st.session_state.get("scan_error"):
         st.error(f"Arka plan taramasi hatasi: {st.session_state.scan_error}")
 
     if _should_auto_refresh():
         run_scan_callback()
-        st.rerun()
 
     if st.session_state.get("scan_in_progress"):
-        st.caption(
-            "Arka planda guncel tarama suruyor; sonuc hazir oldugunda ekran yenilenir."
-        )
-        time.sleep(1)
-        st.rerun()
+        st.info("Arka planda tarama suruyor...", icon="⏳")
 
 
 def _should_auto_refresh() -> bool:

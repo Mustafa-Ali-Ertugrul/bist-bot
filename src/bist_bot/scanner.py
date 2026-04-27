@@ -55,36 +55,41 @@ class ScanService:
             "sells": 0,
         }
 
-    def _auto_execute_signals(self, signals: list[Signal]) -> None:
-        self.execution_service.auto_execute_signals(signals)
+    def _auto_execute_signals(self, signals: list[Signal], auto_execute: bool | None = None) -> None:
+        self.execution_service.auto_execute_signals(signals, auto_execute=auto_execute)
 
     def _check_signal_changes(self, signals: list[Signal]) -> None:
         self.signal_change_service.check_signal_changes(signals)
 
-    def scan_once(self, force_refresh: bool = False) -> list:
+    def scan_once(self, force_refresh: bool = False, limit: int | None = None,
+                  paper_mode: bool | None = None, auto_execute: bool | None = None) -> list:
         started_at = time.perf_counter()
-        logger.info("scan_started", scanned_count=len(self.settings.WATCHLIST), component="scanner")
+        watchlist = self.settings.WATCHLIST
+        if limit is not None and limit > 0:
+            watchlist = watchlist[:limit]
+        logger.info('scan_started', scanned_count=len(watchlist), component='scanner')
 
         try:
             if force_refresh:
-                self.fetcher.clear_cache(scope="intraday_fetch")
-                self.fetcher.clear_cache(scope="analysis")
+                self.fetcher.clear_cache(scope='intraday_fetch')
+                self.fetcher.clear_cache(scope='analysis')
             all_data = self.fetcher.fetch_multi_timeframe_all(
-                trend_period=getattr(self.settings, "MTF_TREND_PERIOD", "6mo"),
-                trend_interval=getattr(self.settings, "MTF_TREND_INTERVAL", "1d"),
-                trigger_period=getattr(self.settings, "MTF_TRIGGER_PERIOD", "1mo"),
-                trigger_interval=getattr(self.settings, "MTF_TRIGGER_INTERVAL", "15m"),
+                trend_period=getattr(self.settings, 'MTF_TREND_PERIOD', '6mo'),
+                trend_interval=getattr(self.settings, 'MTF_TREND_INTERVAL', '1d'),
+                trigger_period=getattr(self.settings, 'MTF_TRIGGER_PERIOD', '1mo'),
+                trigger_interval=getattr(self.settings, 'MTF_TRIGGER_INTERVAL', '15m'),
                 force_refresh=force_refresh,
+                limit=limit,
             )
 
             if not all_data:
                 duration_ms = round((time.perf_counter() - started_at) * 1000, 2)
-                inc_counter("bist_scan_fail_total")
-                set_gauge("bist_last_scan_duration_ms", duration_ms)
-                set_gauge("bist_last_scan_scanned_count", 0)
+                inc_counter('bist_scan_fail_total')
+                set_gauge('bist_last_scan_duration_ms', duration_ms)
+                set_gauge('bist_last_scan_scanned_count', 0)
                 logger.error(
-                    "scan_failed",
-                    error_type="empty_fetch",
+                    'scan_failed',
+                    error_type='empty_fetch',
                     duration_ms=duration_ms,
                     scanned_count=0,
                 )
@@ -95,21 +100,20 @@ class ScanService:
             buys = [s for s in signals if s.score > 0]
             sells = [s for s in signals if s.score < 0]
             self.last_scan_stats = {
-                "scanned": len(all_data),
-                "actionable": len(actionable),
-                "buys": len(buys),
-                "sells": len(sells),
+                'scanned': len(all_data),
+                'actionable': len(actionable),
+                'buys': len(buys),
+                'sells': len(sells),
             }
 
             self._check_signal_changes(signals)
             self.db.save_signals(actionable)
-            self._auto_execute_signals(actionable)
-            self.paper_trade_service.queue_actionable_signals(actionable)
+            self._auto_execute_signals(actionable, auto_execute=auto_execute)
+            self.paper_trade_service.queue_actionable_signals(actionable, paper_mode=paper_mode)
             self.db.save_scan_log(len(all_data), len(actionable), len(buys), len(sells))
             self.notification_service.notify_scan_results(signals, actionable, len(all_data))
 
-            if getattr(self.settings, "PAPER_MODE", False):
-                self.update_paper_trades()
+            self.update_paper_trades(paper_mode=paper_mode)
 
             duration_ms = round((time.perf_counter() - started_at) * 1000, 2)
             inc_counter("bist_scan_total")
@@ -141,5 +145,9 @@ class ScanService:
             logger.exception("scan_failed", error=exc, duration_ms=duration_ms)
             raise
 
-    def update_paper_trades(self):
+    def update_paper_trades(self, paper_mode: bool | None = None):
+        if paper_mode is None:
+            paper_mode = getattr(self.settings, 'PAPER_MODE', False)
+        if not paper_mode:
+            return
         self.paper_trade_service.update_open_trades()

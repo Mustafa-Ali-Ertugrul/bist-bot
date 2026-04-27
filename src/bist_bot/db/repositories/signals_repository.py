@@ -33,16 +33,15 @@ class SignalsRepository:
         self.manager = manager or DatabaseManager()
 
     def save_signal(self, signal: Signal) -> None:
-        created_at = signal.timestamp
-        created_at_str = created_at.strftime("%Y-%m-%d %H:%M:%S") if isinstance(created_at, datetime) else str(created_at)
+        created_at = signal.timestamp if signal.timestamp else datetime.now(UTC)
 
         def _write(session):
             existing = session.scalar(
-                select(SignalRecord)
+                select(SignalRecord.id)
                 .where(
                     SignalRecord.ticker == signal.ticker,
                     SignalRecord.signal_type == signal.signal_type.value,
-                    SignalRecord.timestamp == created_at_str,
+                    SignalRecord.timestamp == created_at,
                 )
                 .limit(1)
             )
@@ -50,19 +49,23 @@ class SignalsRepository:
                 return
             session.add(
                 SignalRecord(
-                    timestamp=created_at_str,
-                    created_at=created_at_str,
+                    timestamp=created_at,
+                    created_at=created_at,
                     ticker=signal.ticker,
                     signal_type=signal.signal_type.value,
                     score=float(signal.score),
                     price=float(signal.price),
-                    stop_loss=float(signal.stop_loss),
-                    target_price=float(signal.target_price),
+                    stop_loss=float(signal.stop_loss)
+                    if signal.stop_loss is not None
+                    else None,
+                    target_price=float(signal.target_price)
+                    if signal.target_price is not None
+                    else None,
                     position_size=int(signal.position_size)
                     if signal.position_size is not None
                     else None,
                     confidence=signal.confidence,
-                    reasons=" | ".join(signal.reasons),
+                    reasons=" | ".join(signal.reasons) if signal.reasons else None,
                     conditions=_serialize_reasons(signal.reasons),
                 )
             )

@@ -32,13 +32,14 @@ class MetricsFetcher:
 
     def fetch_multi_timeframe_all(
         self,
-        trend_period: str = "6mo",
-        trend_interval: str = "1d",
-        trigger_period: str = "1mo",
-        trigger_interval: str = "15m",
+        trend_period: str = '6mo',
+        trend_interval: str = '1d',
+        trigger_period: str = '1mo',
+        trigger_interval: str = '15m',
         force_refresh: bool = False,
+        limit: int | None = None,
     ):
-        _ = trend_period, trend_interval, trigger_period, trigger_interval, force_refresh
+        _ = trend_period, trend_interval, trigger_period, trigger_interval, force_refresh, limit
         return {"THYAO.IS": {"trend": object(), "trigger": object()}}
 
     def fetch_single(self, ticker: str, period: str = "6mo", interval: str = "1d", force: bool = False):
