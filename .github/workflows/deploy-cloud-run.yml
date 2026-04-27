@@ -65,7 +65,7 @@ jobs:
         run: |
           IMAGE_URI="$GCP_REGION-docker.pkg.dev/$GCP_PROJECT_ID/$GCP_ARTIFACT_REGISTRY_REPOSITORY/$IMAGE_NAME:$IMAGE_TAG"
           echo "IMAGE_URI=$IMAGE_URI" >> "$GITHUB_ENV"
-          gcloud builds submit --project "$GCP_PROJECT_ID" --no-cache --tag "$IMAGE_URI" .
+          gcloud builds submit --project "$GCP_PROJECT_ID" --tag "$IMAGE_URI" .
 
       - name: Deploy API service
         run: |
