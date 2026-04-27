@@ -2,7 +2,7 @@ name: Deploy Cloud Run
 
 on:
   workflow_run:
-    workflows: ["CI"]
+    workflows: [&quot;CI&quot;]
     types: [completed]
   workflow_dispatch:
 
@@ -33,12 +33,12 @@ jobs:
     steps:
       - name: Check required configuration
         run: |
-          test -n "$GCP_PROJECT_ID"
-          test -n "$GCP_REGION"
-          test -n "$GCP_ARTIFACT_REGISTRY_REPOSITORY"
-          test -n "$GCP_JWT_SECRET_NAME"
-          test -n "${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}"
-          test -n "${{ secrets.GCP_SERVICE_ACCOUNT }}"
+          test -n &quot;$GCP_PROJECT_ID&quot;
+          test -n &quot;$GCP_REGION&quot;
+          test -n &quot;$GCP_ARTIFACT_REGISTRY_REPOSITORY&quot;
+          test -n &quot;$GCP_JWT_SECRET_NAME&quot;
+          test -n &quot;${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}&quot;
+          test -n &quot;${{ secrets.GCP_SERVICE_ACCOUNT }}&quot;
 
       - name: Check out repository
         uses: actions/checkout@v5
@@ -57,51 +57,35 @@ jobs:
           project_id: ${{ env.GCP_PROJECT_ID }}
 
       - name: Configure Docker auth for Artifact Registry
-        run: gcloud auth configure-docker "$GCP_REGION-docker.pkg.dev" --quiet
+        run: gcloud auth configure-docker &quot;$GCP_REGION-docker.pkg.dev&quot; --quiet
 
       - name: Build and push container image
         env:
           IMAGE_TAG: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
         run: |
-          IMAGE_URI="$GCP_REGION-docker.pkg.dev/$GCP_PROJECT_ID/$GCP_ARTIFACT_REGISTRY_REPOSITORY/$IMAGE_NAME:$IMAGE_TAG"
-          echo "IMAGE_URI=$IMAGE_URI" >> "$GITHUB_ENV"
-          gcloud builds submit --project "$GCP_PROJECT_ID" --tag "$IMAGE_URI" .
+          IMAGE_URI=&quot;$GCP_REGION-docker.pkg.dev/$GCP_PROJECT_ID/$GCP_ARTIFACT_REGISTRY_REPOSITORY/$IMAGE_NAME:$IMAGE_TAG&quot;
+          echo &quot;IMAGE_URI=$IMAGE_URI&quot; >> &quot;$GITHUB_ENV&quot;
+          gcloud builds submit --project &quot;$GCP_PROJECT_ID&quot; --no-cache --tag &quot;$IMAGE_URI&quot; .
 
       - name: Deploy API service
         run: |
-          gcloud run deploy "$API_SERVICE_NAME" \
-            --project "$GCP_PROJECT_ID" \
-            --region "$GCP_REGION" \
-            --image "$IMAGE_URI" \
-            --allow-unauthenticated \
-            --command python \
-            --args dashboard.py \
-            --set-env-vars PYTHONPATH=/app/src,DB_PATH=/tmp/bist_signals.db,RATE_LIMIT_STORAGE_URI=memory:// \
-            --set-secrets JWT_SECRET_KEY="${GCP_JWT_SECRET_NAME}:latest"
+          gcloud run deploy &quot;$API_SERVICE_NAME&quot; --project &quot;$GCP_PROJECT_ID&quot; --region &quot;$GCP_REGION&quot; --image &quot;$IMAGE_URI&quot; --allow-unauthenticated --command python --args dashboard.py --set-env-vars PYTHONPATH=/app/src,DB_PATH=/tmp/bist_signals.db,RATE_LIMIT_STORAGE_URI=memory:// --set-secrets JWT_SECRET_KEY=&quot;${GCP_JWT_SECRET_NAME}:latest&quot; --timeout=300 --no-cpu-throttling
 
-          API_URL="$(gcloud run services describe "$API_SERVICE_NAME" --project "$GCP_PROJECT_ID" --region "$GCP_REGION" --format 'value(status.url)')"
-          echo "API_URL=$API_URL" >> "$GITHUB_ENV"
+          API_URL=&quot;$(gcloud run services describe &quot;$API_SERVICE_NAME&quot; --project &quot;$GCP_PROJECT_ID&quot; --region &quot;$GCP_REGION&quot; --format 'value(status.url)')&quot;
+          echo &quot;API_URL=$API_URL&quot; >> &quot;$GITHUB_ENV&quot;
 
       - name: Deploy UI service
         run: |
-          gcloud run deploy "$UI_SERVICE_NAME" \
-            --project "$GCP_PROJECT_ID" \
-            --region "$GCP_REGION" \
-            --image "$IMAGE_URI" \
-            --allow-unauthenticated \
-            --set-env-vars PYTHONPATH=/app/src,DB_PATH=/tmp/bist_signals.db,API_BASE_URL="$API_URL"
+          gcloud run deploy &quot;$UI_SERVICE_NAME&quot; --project &quot;$GCP_PROJECT_ID&quot; --region &quot;$GCP_REGION&quot; --image &quot;$IMAGE_URI&quot; --allow-unauthenticated --set-env-vars PYTHONPATH=/app/src,DB_PATH=/tmp/bist_signals.db,API_BASE_URL=&quot;$API_URL&quot; --timeout=300 --no-cpu-throttling
 
-          UI_URL="$(gcloud run services describe "$UI_SERVICE_NAME" --project "$GCP_PROJECT_ID" --region "$GCP_REGION" --format 'value(status.url)')"
-          echo "UI_URL=$UI_URL" >> "$GITHUB_ENV"
+          UI_URL=&quot;$(gcloud run services describe &quot;$UI_SERVICE_NAME&quot; --project &quot;$GCP_PROJECT_ID&quot; --region &quot;$GCP_REGION&quot; --format 'value(status.url)')&quot;
+          echo &quot;UI_URL=$UI_URL&quot; >> &quot;$GITHUB_ENV&quot;
 
       - name: Update API CORS origin
         run: |
-          gcloud run services update "$API_SERVICE_NAME" \
-            --project "$GCP_PROJECT_ID" \
-            --region "$GCP_REGION" \
-            --update-env-vars CORS_ORIGINS="$UI_URL"
+          gcloud run services update &quot;$API_SERVICE_NAME&quot; --project &quot;$GCP_PROJECT_ID&quot; --region &quot;$GCP_REGION&quot; --update-env-vars CORS_ORIGINS=&quot;$UI_URL&quot;
 
       - name: Report deployed URLs
         run: |
-          echo "API_URL=$API_URL"
-          echo "UI_URL=$UI_URL"
+          echo &quot;API_URL=$API_URL&quot;
+          echo &quot;UI_URL=$UI_URL&quot;
