@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, cast
 
+import numpy as np
 import pandas as pd
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -38,6 +39,44 @@ class MarketCandle(BaseModel):
         return v
 
 
+_TIMESTAMP_KEYS = {"index", "date", "Date", "datetime", "Datetime", "timestamp", "Timestamp"}
+
+
+def _normalize_timestamp(df: pd.DataFrame) -> pd.DatetimeIndex:
+    """Extract and normalize a DatetimeIndex from df, handling various column names."""
+    # If index is already a DatetimeIndex, use it
+    if isinstance(df.index, pd.DatetimeIndex):
+        return df.index
+
+    # Check if any timestamp-like column exists
+    for key in _TIMESTAMP_KEYS:
+        if key in df.columns:
+            return pd.DatetimeIndex(pd.to_datetime(df[key]))
+
+    # Fallback: try to convert whatever the index is
+    return pd.DatetimeIndex(pd.to_datetime(df.index))
+
+
+def _clean_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
+    """Replace inf with NaN, then drop rows with invalid OHLCV values."""
+    df = df.copy()
+    df.replace([np.inf, -np.inf], np.nan, inplace=True)
+
+    # Drop rows where any required OHLCV field is NaN
+    ohlcv_cols = ["open", "high", "low", "close", "volume"]
+    df = df.dropna(subset=ohlcv_cols)
+
+    # Drop rows where open/high/low/close <= 0 or volume < 0
+    mask = (
+        (df["open"] > 0)
+        & (df["high"] > 0)
+        & (df["low"] > 0)
+        & (df["close"] > 0)
+        & (df["volume"] >= 0)
+    )
+    return df.loc[mask].copy()
+
+
 def validate_dataframe(df: pd.DataFrame | None, validate: bool = True) -> pd.DataFrame | None:
     """Validate a dataframe against the MarketCandle schema.
 
@@ -48,7 +87,6 @@ def validate_dataframe(df: pd.DataFrame | None, validate: bool = True) -> pd.Dat
     if df is None or df.empty:
         return None
 
-    # Force standard columns
     df = cast(pd.DataFrame, df.copy())
     df.columns = [str(col).lower() for col in df.columns]
 
@@ -56,31 +94,53 @@ def validate_dataframe(df: pd.DataFrame | None, validate: bool = True) -> pd.Dat
     if not all(c in df.columns for c in required_cols):
         return None
 
-    df = cast(pd.DataFrame, df[required_cols])
+    # Preserve timestamp column if it exists (e.g., "date" from reset_index)
+    ts_col = None
+    for key in _TIMESTAMP_KEYS:
+        if key.lower() in df.columns:
+            ts_col = key.lower()
+            break
 
-    # Check index for timestamps
-    if df.index.name is None and not isinstance(df.index, pd.DatetimeIndex):
-        if "timestamp" in df.columns:
-            df.set_index("timestamp", inplace=True)
+    # Keep timestamp column alongside OHLCV
+    keep_cols = list(required_cols)
+    if ts_col is not None:
+        keep_cols.append(ts_col)
 
-    df.index = pd.DatetimeIndex(pd.to_datetime(df.index)).tz_localize(None)
+    df = cast(pd.DataFrame, df[keep_cols])
 
-    # Fast path: just drop NAs and negative values via Pandas
+    # Normalize timestamp and set as index
+    dt_index = _normalize_timestamp(df)
+    df.index = dt_index.tz_localize(None)
+
+    # Drop the timestamp column if it was a column (not the original index)
+    if ts_col is not None and ts_col in df.columns:
+        df = df.drop(columns=[ts_col])
+
+    # Clean invalid rows before any validation
+    df = _clean_ohlcv(df)
+
+    if df.empty:
+        return None
+
+    # Fast path: just return cleaned data
     if not validate:
-        df = cast(pd.DataFrame, df.dropna())
-        return df[(df["open"] > 0) & (df["low"] > 0)].copy()
+        return df
 
-    # Strict boundary checks via Pydantic
+    # Strict path: validate via Pydantic
     try:
         dict_records = df.reset_index().to_dict(orient="records")
-        # Ensure the index column maps to timestamp
         for r in dict_records:
-            if "index" in r:
-                r["timestamp"] = r.pop("index")
+            # Map any index key to timestamp
+            for key in _TIMESTAMP_KEYS:
+                if key in r:
+                    r["timestamp"] = r.pop(key)
+                    break
 
         valid_candles = [MarketCandle(**r) for r in dict_records]
 
-        # Convert back to dataframe
+        if not valid_candles:
+            return None
+
         valid_records = [c.model_dump() for c in valid_candles]
         clean_df = pd.DataFrame(valid_records)
         clean_df.set_index("timestamp", inplace=True)
@@ -89,6 +149,6 @@ def validate_dataframe(df: pd.DataFrame | None, validate: bool = True) -> pd.Dat
         from bist_bot.app_logging import get_logger
 
         get_logger(__name__, component="schemas").error(
-            "validation_failed", error_type=type(e).__name__, details=str(e)
+            "invalid_data_schema", error_type=type(e).__name__, details=str(e)
         )
         return None
