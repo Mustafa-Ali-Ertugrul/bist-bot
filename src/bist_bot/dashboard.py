@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, cast
@@ -282,8 +283,35 @@ def create_dashboard_app(
                 payload.get("force_refresh", request.args.get("force_refresh"))
             )
             scan_service = get_scan_service()
-            signals = scan_service.scan_once(force_refresh=force_refresh)
+            logger.info("api_scan_started", force_refresh=force_refresh)
+            exec_svc = scan_service.execution_service
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(scan_service.scan_once, force_refresh=force_refresh)
+                try:
+                    signals = future.result(timeout=settings.SCAN_TIMEOUT_SECONDS)
+                except concurrent.futures.TimeoutError:
+                    logger.error(
+                        "api_scan_timed_out",
+                        timeout_seconds=settings.SCAN_TIMEOUT_SECONDS,
+                        force_refresh=force_refresh,
+                    )
+                    return jsonify(
+                        {
+                            "status": "error",
+                            "message": "Scan timed out",
+                            "timeout_seconds": settings.SCAN_TIMEOUT_SECONDS,
+                        }
+                    ), 504
             scan_stats = scan_service.last_scan_stats
+
+            if getattr(settings, "AUTO_EXECUTE", False):
+                exec_svc.auto_execute_signals(signals)
+
+            if getattr(settings, "PAPER_MODE", False):
+                scan_service.paper_trade_service.queue_actionable_signals(
+                    scan_service.engine.get_actionable_signals(signals)
+                )
+                scan_service.paper_trade_service.update_open_trades()
 
             results = [
                 {
@@ -314,6 +342,7 @@ def create_dashboard_app(
                 duration_ms=response_payload["duration_ms"],
                 scanned_count=scan_stats["scanned"],
                 actionable_count=scan_stats["actionable"],
+                signals_count=len(results),
             )
             return jsonify(response_payload)
         except Exception as exc:
