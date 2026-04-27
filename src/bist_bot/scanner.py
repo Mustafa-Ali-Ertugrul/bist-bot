@@ -136,13 +136,14 @@ class ScanService:
             sells = [s for s in signals if s.score < 0]
             self.last_scan_stats = {
                 "scanned": len(all_data),
+                "signals": len(signals),
                 "actionable": len(actionable),
                 "buys": len(buys),
                 "sells": len(sells),
             }
 
             self._check_signal_changes(signals)
-            self.db.save_signals(actionable)
+            self.db.save_signals(signals)
             self._auto_execute_signals(actionable)
             self.paper_trade_service.queue_actionable_signals(actionable)
             self.db.save_scan_log(len(all_data), len(actionable), len(buys), len(sells))
