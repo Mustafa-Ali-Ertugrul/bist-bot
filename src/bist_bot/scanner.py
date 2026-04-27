@@ -79,6 +79,13 @@ class ScanService:
         logger.info("scan_started", scanned_count=len(watchlist), component="scanner")
 
         try:
+            if (
+                self.circuit_breaker is not None
+                and not self.circuit_breaker.allow_request()
+            ):
+                logger.warning("scan_aborted_circuit_open", component="scanner")
+                return []
+
             if force_refresh:
                 self.fetcher.clear_cache(scope="intraday_fetch")
                 self.fetcher.clear_cache(scope="analysis")
@@ -150,8 +157,13 @@ class ScanService:
                         price=signal.price,
                     )
 
+            if self.circuit_breaker is not None:
+                self.circuit_breaker.record_success()
+
             return cast(list[Signal], signals)
         except Exception as exc:
+            if self.circuit_breaker is not None:
+                self.circuit_breaker.record_error()
             duration_ms = round((time.perf_counter() - started_at) * 1000, 2)
             inc_counter("bist_scan_fail_total")
             set_gauge("bist_last_scan_duration_ms", duration_ms)

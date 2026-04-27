@@ -33,8 +33,10 @@ class DummyFetcher:
         trend_interval: str = "1d",
         trigger_period: str = "1mo",
         trigger_interval: str = "15m",
+        force_refresh: bool = False,
+        limit: int | None = None,
     ):
-        _ = trend_period, trend_interval, trigger_period, trigger_interval
+        _ = trend_period, trend_interval, trigger_period, trigger_interval, limit
         return {}
 
     def fetch_single(

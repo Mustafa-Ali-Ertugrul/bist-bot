@@ -8,6 +8,8 @@ import sys
 from datetime import datetime
 from unittest.mock import MagicMock
 
+import pytest
+
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
@@ -303,3 +305,71 @@ def test_scan_once_scan_log_records_scanned_vs_actionable():
     assert service.last_scan_stats["actionable"] == 2
     assert service.last_scan_stats["buys"] == 1
     assert service.last_scan_stats["sells"] == 1
+
+
+def test_scan_once_blocks_when_circuit_breaker_open():
+    """When circuit breaker is open, scan returns [] without fetching data."""
+    fetcher = MagicMock()
+    engine = MagicMock()
+    notifier = MagicMock()
+    db = MagicMock()
+    circuit_breaker = MagicMock()
+    circuit_breaker.allow_request.return_value = False
+
+    service = ScanService(
+        fetcher, engine, notifier, db, circuit_breaker=circuit_breaker
+    )
+    result = service.scan_once()
+
+    assert result == []
+    fetcher.fetch_multi_timeframe_all.assert_not_called()
+    engine.scan_all.assert_not_called()
+    db.save_signals.assert_not_called()
+
+
+def test_scan_once_records_circuit_breaker_success():
+    """Successful scan calls circuit_breaker.record_success()."""
+    fetcher = MagicMock()
+    fetcher.fetch_multi_timeframe_all.return_value = {
+        "THYAO.IS": {"trigger": object(), "trend": object()}
+    }
+    engine = MagicMock()
+    notifier = MagicMock()
+    db = MagicMock()
+    db.get_latest_signal.return_value = None
+    circuit_breaker = MagicMock()
+    circuit_breaker.allow_request.return_value = True
+    signal = Signal(
+        ticker="THYAO.IS", signal_type=SignalType.BUY, score=25, price=100.0
+    )
+    engine.scan_all.return_value = [signal]
+    engine.get_actionable_signals.return_value = [signal]
+
+    service = ScanService(
+        fetcher, engine, notifier, db, circuit_breaker=circuit_breaker
+    )
+    service.scan_once()
+
+    circuit_breaker.record_success.assert_called_once()
+    circuit_breaker.record_error.assert_not_called()
+
+
+def test_scan_once_records_circuit_breaker_error():
+    """Failed scan calls circuit_breaker.record_error() before re-raising."""
+    fetcher = MagicMock()
+    fetcher.fetch_multi_timeframe_all.side_effect = RuntimeError("provider down")
+    engine = MagicMock()
+    notifier = MagicMock()
+    db = MagicMock()
+    circuit_breaker = MagicMock()
+    circuit_breaker.allow_request.return_value = True
+
+    service = ScanService(
+        fetcher, engine, notifier, db, circuit_breaker=circuit_breaker
+    )
+
+    with pytest.raises(RuntimeError, match="provider down"):
+        service.scan_once()
+
+    circuit_breaker.record_error.assert_called_once()
+    circuit_breaker.record_success.assert_not_called()
