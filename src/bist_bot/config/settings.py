@@ -190,6 +190,26 @@ class Settings:
             errors.append("FLASK_PORT must be between 1 and 65535")
         return errors
 
+    SCAN_TIMEOUT_SECONDS: int = field(
+        default_factory=lambda: int(
+            getattr(__import__("os").environ, "get", lambda _k, d: d)("SCAN_TIMEOUT_SECONDS", "30")
+        )
+    )
+    STREAMLIT_INITIAL_SCAN_LIMIT: int = field(
+        default_factory=lambda: int(
+            getattr(__import__("os").environ, "get", lambda _k, d: d)(
+                "STREAMLIT_INITIAL_SCAN_LIMIT", "10"
+            )
+        )
+    )
+    STREAMLIT_BACKGROUND_SCAN_TIMEOUT_SECONDS: int = field(
+        default_factory=lambda: int(
+            getattr(__import__("os").environ, "get", lambda _k, d: d)(
+                "STREAMLIT_BACKGROUND_SCAN_TIMEOUT_SECONDS", "45"
+            )
+        )
+    )
+
 
 settings = Settings()
 _SETTINGS_FIELD_NAMES = frozenset(Settings.__dataclass_fields__)

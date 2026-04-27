@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from datetime import datetime, timedelta, timezone
@@ -285,11 +286,11 @@ def create_dashboard_app(
             scan_service = get_scan_service()
             logger.info("api_scan_started", force_refresh=force_refresh)
             exec_svc = scan_service.execution_service
-            with ThreadPoolExecutor(max_workers=1) as executor:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(scan_service.scan_once, force_refresh=force_refresh)
                 try:
                     signals = future.result(timeout=settings.SCAN_TIMEOUT_SECONDS)
-                except TimeoutError:
+                except concurrent.futures.TimeoutError:
                     logger.error(
                         "api_scan_timed_out",
                         timeout_seconds=settings.SCAN_TIMEOUT_SECONDS,
