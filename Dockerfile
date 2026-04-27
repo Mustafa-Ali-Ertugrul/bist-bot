@@ -1,6 +1,7 @@
 FROM python:3.11-slim as builder
 
 ARG CACHE_BUST
+RUN echo "cache-bust=${CACHE_BUST}"
 
 WORKDIR /app
 ENV VIRTUAL_ENV=/opt/venv
