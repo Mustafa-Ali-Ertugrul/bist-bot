@@ -44,11 +44,15 @@ def render_overview_page() -> None:
     )
     index_data = fetch_index_data()
 
-    latest_scan = stats.get("latest_scan", {})
+    # Read latest_scan from both locations for backward compatibility
+    raw_latest = stats.get("latest_scan") or stats_response.json().get("latest_scan")
+    latest_scan = raw_latest if isinstance(raw_latest, dict) else {}
     scanned_assets = int(
         latest_scan.get("total_scanned", summary.get("total_analyzed", 0)) or 0
     )
-    actionable_signals = int(latest_scan.get("signals_generated", 0) or 0)
+    actionable_signals = int(
+        latest_scan.get("actionable", latest_scan.get("signals_generated", 0)) or 0
+    )
     profitable = int(stats.get("profitable", 0) or 0)
     win_rate = float(stats.get("win_rate", 0.0) or 0.0)
     avg_profit = float(stats.get("avg_profit_pct", 0.0) or 0.0)
@@ -164,6 +168,22 @@ def render_overview_page() -> None:
         )
 
     render_section_title("Recent flow", "Last 10 recorded signals")
+
+    # Fallback: if API history is empty but session has signals, use session data
+    if not recent_signals and signals:
+        recent_signals = [
+            {
+                "ticker": s.ticker,
+                "signal_type": s.signal_type.value,
+                "score": s.score,
+                "price": s.price,
+                "position_size": s.position_size,
+                "outcome": "PENDING",
+                "timestamp": s.timestamp.isoformat() if s.timestamp else "",
+            }
+            for s in signals[:10]
+        ]
+
     if not recent_signals:
         if scanned_assets > 0:
             st.info(

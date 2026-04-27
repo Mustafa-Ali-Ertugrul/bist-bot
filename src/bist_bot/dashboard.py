@@ -436,9 +436,18 @@ def create_dashboard_app(
     def api_stats():
         stats = get_db().get_performance_stats()
         scan_log = get_db().get_latest_scan_log()
+        latest_scan = None
         if scan_log:
-            stats["latest_scan"] = scan_log
-        return jsonify({"status": "ok", "stats": stats})
+            latest_scan = {
+                "total_scanned": scan_log.get("total_scanned", 0),
+                "signals_generated": scan_log.get("signals_generated", 0),
+                "buy_signals": scan_log.get("buy_signals", 0),
+                "sell_signals": scan_log.get("sell_signals", 0),
+                "actionable": scan_log.get("signals_generated", 0),
+                "timestamp": scan_log.get("timestamp"),
+            }
+            stats["latest_scan"] = latest_scan
+        return jsonify({"status": "ok", "stats": stats, "latest_scan": latest_scan})
 
     return app
 

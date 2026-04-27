@@ -216,9 +216,13 @@ def test_stats_endpoint_includes_latest_scan_log(tmp_path):
     payload = response.get_json()
     assert payload["status"] == "ok"
     stats = payload["stats"]
+    # latest_scan is available both inside stats and top-level
     assert "latest_scan" in stats
+    assert "latest_scan" in payload
     assert stats["latest_scan"]["total_scanned"] == 20
     assert stats["latest_scan"]["signals_generated"] == 0
+    assert stats["latest_scan"]["actionable"] == 0
+    assert "timestamp" in stats["latest_scan"]
 
 
 def test_stats_endpoint_without_scan_log(tmp_path):
@@ -249,5 +253,6 @@ def test_stats_endpoint_without_scan_log(tmp_path):
     payload = response.get_json()
     assert payload["status"] == "ok"
     stats = payload["stats"]
-    # latest_scan should be absent when no scan has run
-    assert "latest_scan" not in stats or stats.get("latest_scan") is None
+    # latest_scan should be None when no scan has run
+    assert stats.get("latest_scan") is None
+    assert payload.get("latest_scan") is None
