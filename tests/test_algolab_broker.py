@@ -12,7 +12,11 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
-from bist_bot.execution.algolab_broker import AlgoLabBroker, AlgoLabCredentials, AlgoLabEndpoints  # noqa: E402
+from bist_bot.execution.algolab_broker import (  # noqa: E402
+    AlgoLabBroker,
+    AlgoLabCredentials,
+    AlgoLabEndpoints,
+)
 from bist_bot.execution.base import OrderSide, OrderType  # noqa: E402
 
 
@@ -29,9 +33,13 @@ class FakeResponse:
             raise requests.HTTPError(f"status={self.status_code}")
 
 
-def build_broker(session: requests.Session | None = None, dry_run: bool = True) -> AlgoLabBroker:
+def build_broker(
+    session: requests.Session | None = None, dry_run: bool = True
+) -> AlgoLabBroker:
     return AlgoLabBroker(
-        AlgoLabCredentials(api_key="api", username="user", password="pass", otp_code="123456"),
+        AlgoLabCredentials(
+            api_key="api", username="user", password="pass", otp_code="123456"
+        ),
         endpoints=AlgoLabEndpoints(
             login="https://example.test/login",
             verify_otp="https://example.test/otp",
@@ -72,12 +80,19 @@ def test_place_order_dry_run_does_not_call_http() -> None:
 
 def test_request_retries_on_timeout_then_succeeds(monkeypatch) -> None:
     session = MagicMock(spec=requests.Session)
-    session.request.side_effect = [requests.Timeout("timeout"), requests.Timeout("timeout"), FakeResponse({"equity": 1, "cash_balance": 1, "buying_power": 1})]
+    session.request.side_effect = [
+        requests.Timeout("timeout"),
+        requests.Timeout("timeout"),
+        FakeResponse({"equity": 1, "cash_balance": 1, "buying_power": 1}),
+    ]
     broker = build_broker(session=session, dry_run=False)
     broker._session_token = "token"
     broker._last_request_at = -1.0
     sleeps: list[float] = []
-    monkeypatch.setattr("bist_bot.execution.algolab_broker.time.sleep", lambda value: sleeps.append(value))
+    monkeypatch.setattr(
+        "bist_bot.execution.algolab_broker.time.sleep",
+        lambda value: sleeps.append(value),
+    )
 
     account = broker.get_account_info()
 
@@ -89,14 +104,21 @@ def test_request_retries_on_timeout_then_succeeds(monkeypatch) -> None:
 
 def test_rate_limit_waits_between_requests(monkeypatch) -> None:
     session = MagicMock(spec=requests.Session)
-    session.request.return_value = FakeResponse({"equity": 1, "cash_balance": 1, "buying_power": 1})
+    session.request.return_value = FakeResponse(
+        {"equity": 1, "cash_balance": 1, "buying_power": 1}
+    )
     broker = build_broker(session=session, dry_run=False)
     broker._session_token = "token"
     broker._last_request_at = -1.0
     timeline = iter([0.0, 0.0, 0.1, 0.1])
     sleeps: list[float] = []
-    monkeypatch.setattr("bist_bot.execution.algolab_broker.time.monotonic", lambda: next(timeline))
-    monkeypatch.setattr("bist_bot.execution.algolab_broker.time.sleep", lambda value: sleeps.append(round(value, 2)))
+    monkeypatch.setattr(
+        "bist_bot.execution.algolab_broker.time.monotonic", lambda: next(timeline)
+    )
+    monkeypatch.setattr(
+        "bist_bot.execution.algolab_broker.time.sleep",
+        lambda value: sleeps.append(round(value, 2)),
+    )
 
     broker.get_account_info()
     broker.get_account_info()
