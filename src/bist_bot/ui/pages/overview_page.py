@@ -44,12 +44,14 @@ def render_overview_page() -> None:
     )
     index_data = fetch_index_data()
 
-    total_signals = int(stats.get("total_signals", len(signals)) or 0)
-    completed = int(stats.get("completed", 0) or 0)
+    latest_scan = stats.get("latest_scan", {})
+    scanned_assets = int(
+        latest_scan.get("total_scanned", summary.get("total_analyzed", 0)) or 0
+    )
+    actionable_signals = int(latest_scan.get("signals_generated", 0) or 0)
     profitable = int(stats.get("profitable", 0) or 0)
     win_rate = float(stats.get("win_rate", 0.0) or 0.0)
     avg_profit = float(stats.get("avg_profit_pct", 0.0) or 0.0)
-    positive_flow = len([s for s in signals if s.score >= 10])
     strong = sorted(
         [s for s in signals if s.score >= 40], key=lambda s: s.score, reverse=True
     )
@@ -64,9 +66,9 @@ def render_overview_page() -> None:
         "Premium BIST control center for live execution flow",
         "Dashboard ekranini mobil-first bir command deck yapisina tasidim. Canli performans, radar firsatlari ve son sinyal hareketleri tek koyu tema yuzeyde toplandi.",
         badges=[
-            f"{positive_flow} positive signals",
+            f"{scanned_assets} assets scanned",
+            f"{actionable_signals} actionable signals",
             f"Win rate %{win_rate:.1f}",
-            f"Avg profit %{avg_profit:.1f}",
         ],
         accent="secondary",
     )
@@ -74,11 +76,11 @@ def render_overview_page() -> None:
     k1, k2, k3, k4 = st.columns(4)
     with k1:
         render_metric_block(
-            "Signal volume", str(total_signals), "Captured by the scan engine"
+            "Scanned assets", str(scanned_assets), "Assets analyzed in last scan"
         )
     with k2:
         render_metric_block(
-            "Completed trades", str(completed), "Closed trade count in history"
+            "Actionable signals", str(actionable_signals), "BUY/SELL signals generated"
         )
     with k3:
         render_metric_block(
@@ -163,7 +165,13 @@ def render_overview_page() -> None:
 
     render_section_title("Recent flow", "Last 10 recorded signals")
     if not recent_signals:
-        st.info(get_message("ui.no_signals_yet"))
+        if scanned_assets > 0:
+            st.info(
+                f"{scanned_assets} assets scanned, {actionable_signals} actionable signals. "
+                f"All assets currently HOLD/BEKLE — no BUY/SELL signals generated."
+            )
+        else:
+            st.info(get_message("ui.no_signals_yet"))
         return
 
     headers = [

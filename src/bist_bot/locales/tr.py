@@ -23,7 +23,7 @@ tr = {
     "ui.win_rate": "Win Rate",
     "ui.avg_profit": "Ort. kar",
     "ui.recent_signals": "Son Sinyaller",
-    "ui.no_signals_yet": "Henuz sinyal kaydedilmemis.",
+    "ui.no_signals_yet": "Henuz sinyal kaydedilmemis. Varliklari analiz etmek icin bir tarama baslatin.",
     "ui.ticker": "Ticker",
     "ui.type": "Tip",
     "ui.status": "Durum",

@@ -257,38 +257,41 @@ def create_dashboard_app(
         payload = request.get_json(silent=True) or {}
         force_refresh = _coerce_bool(
             payload.get("force_refresh", request.args.get("force_refresh"))
-)
-        limit = request.args.get('limit', payload.get('limit'), type=int)
+        )
+        limit = request.args.get("limit", payload.get("limit"), type=int)
         scan_service = get_scan_service()
-        timeout_seconds = int(getattr(settings, 'SCAN_TIMEOUT_SECONDS', 120))
-        paper_mode = getattr(settings, 'PAPER_MODE', False)
-        auto_execute = getattr(settings, 'AUTO_EXECUTE', False)
+        timeout_seconds = int(getattr(settings, "SCAN_TIMEOUT_SECONDS", 120))
+        paper_mode = getattr(settings, "PAPER_MODE", False)
+        auto_execute = getattr(settings, "AUTO_EXECUTE", False)
         executor = ThreadPoolExecutor(max_workers=1)
         timed_out = False
         try:
             future = executor.submit(
-                scan_service.scan_once, force_refresh=force_refresh, limit=limit,
-                paper_mode=paper_mode, auto_execute=auto_execute
+                scan_service.scan_once,
+                force_refresh=force_refresh,
+                limit=limit,
+                paper_mode=paper_mode,
+                auto_execute=auto_execute,
             )
             signals = future.result(timeout=timeout_seconds)
             scan_stats = scan_service.last_scan_stats
         except FuturesTimeoutError:
             logger.warning(
-                'api_scan_timeout',
+                "api_scan_timeout",
                 timeout_seconds=timeout_seconds,
                 duration_ms=round((time.time() - start_time) * 1000, 2),
             )
             future.cancel()
             timed_out = True
-            return jsonify({'status': 'error', 'message': 'Scan timed out'}), 504
+            return jsonify({"status": "error", "message": "Scan timed out"}), 504
         except Exception as exc:
             logger.exception(
-                'api_scan_failed',
+                "api_scan_failed",
                 error=exc,
                 duration_ms=round((time.time() - start_time) * 1000, 2),
-                component='dashboard',
+                component="dashboard",
             )
-            return jsonify({'status': 'error', 'message': str(exc)}), 500
+            return jsonify({"status": "error", "message": str(exc)}), 500
         finally:
             if timed_out:
                 executor.shutdown(wait=False, cancel_futures=True)
@@ -432,6 +435,9 @@ def create_dashboard_app(
     @jwt_required()
     def api_stats():
         stats = get_db().get_performance_stats()
+        scan_log = get_db().get_latest_scan_log()
+        if scan_log:
+            stats["latest_scan"] = scan_log
         return jsonify({"status": "ok", "stats": stats})
 
     return app

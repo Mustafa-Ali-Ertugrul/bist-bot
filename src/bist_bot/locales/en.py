@@ -23,7 +23,7 @@ en = {
     "ui.win_rate": "Win Rate",
     "ui.avg_profit": "Avg profit",
     "ui.recent_signals": "Recent Signals",
-    "ui.no_signals_yet": "No signals recorded yet.",
+    "ui.no_signals_yet": "No signals recorded yet. Run a scan to analyze assets.",
     "ui.ticker": "Ticker",
     "ui.type": "Type",
     "ui.status": "Status",
