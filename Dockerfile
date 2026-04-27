@@ -1,5 +1,6 @@
 FROM python:3.11-slim as builder
 
+# Force rebuild 20260427142314
 ARG CACHE_BUST
 RUN echo "cache-bust=${CACHE_BUST}"
 
