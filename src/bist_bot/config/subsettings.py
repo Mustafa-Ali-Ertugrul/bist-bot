@@ -306,11 +306,17 @@ class ServerSettings:
     RATE_LIMIT_STORAGE_URI: str = _get_str_env("RATE_LIMIT_STORAGE_URI", "memory://")
     SENTRY_DSN: str | None = _get_str_env("SENTRY_DSN") or None
     ENVIRONMENT: str = _get_str_env("ENVIRONMENT", "production")
+    SCAN_TIMEOUT_SECONDS: int = _get_int_env("SCAN_TIMEOUT_SECONDS", 120)
+    SCAN_API_TIMEOUT_SECONDS: int = _get_int_env("SCAN_API_TIMEOUT_SECONDS", 60)
     STREAMLIT_SCAN_COOLDOWN_SECONDS: float = _get_float_env(
         "STREAMLIT_SCAN_COOLDOWN_SECONDS", 8.0
     )
     STREAMLIT_ANALYZE_COOLDOWN_SECONDS: float = _get_float_env(
         "STREAMLIT_ANALYZE_COOLDOWN_SECONDS", 4.0
+    )
+    STREAMLIT_INITIAL_SCAN_LIMIT: int = _get_int_env("STREAMLIT_INITIAL_SCAN_LIMIT", 20)
+    STREAMLIT_BACKGROUND_SCAN_TIMEOUT_SECONDS: int = _get_int_env(
+        "STREAMLIT_BACKGROUND_SCAN_TIMEOUT_SECONDS", 120
     )
     SCAN_INTERVAL_MINUTES: int = _get_int_env("SCAN_INTERVAL_MINUTES", 15)
     MARKET_OPEN_HOUR: int = _get_int_env("MARKET_OPEN_HOUR", 9)

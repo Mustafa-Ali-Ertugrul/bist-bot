@@ -396,7 +396,9 @@ class BISTDataFetcher:
                     for ticker in missing_tickers:
                         ticker_frame = raw_batch.get(ticker)
 
-                        df = self._normalize_history(ticker, ticker_frame, validate=validate)
+                        df = self._normalize_history(
+                            ticker, ticker_frame, validate=validate
+                        )
                         if df is None:
                             unresolved.append(ticker)
                             continue
@@ -615,6 +617,7 @@ class BISTDataFetcher:
         trigger_interval: str | None = None,
         force_refresh: bool = False,
         validate: bool = True,
+        limit: int | None = None,
     ) -> dict[str, dict[str, pd.DataFrame]]:
         trend_period = trend_period or getattr(settings, "MTF_TREND_PERIOD", "6mo")
         trend_interval = trend_interval or getattr(settings, "MTF_TREND_INTERVAL", "1d")
@@ -625,15 +628,25 @@ class BISTDataFetcher:
             settings, "MTF_TRIGGER_INTERVAL", "15m"
         )
 
+        watchlist = self.watchlist
+        if limit is not None and limit > 0:
+            watchlist = watchlist[:limit]
+
         trend_data = self.fetch_all(
-            period=trend_period, interval=trend_interval, force=force_refresh, validate=validate
+            period=trend_period,
+            interval=trend_interval,
+            force=force_refresh,
+            validate=validate,
         )
         trigger_data = self.fetch_all(
-            period=trigger_period, interval=trigger_interval, force=force_refresh, validate=validate
+            period=trigger_period,
+            interval=trigger_interval,
+            force=force_refresh,
+            validate=validate,
         )
 
         combined: dict[str, dict[str, pd.DataFrame]] = {}
-        for ticker in self.watchlist:
+        for ticker in watchlist:
             trend_df = trend_data.get(ticker)
             trigger_df = trigger_data.get(ticker)
             if trend_df is None or trigger_df is None:
@@ -641,16 +654,50 @@ class BISTDataFetcher:
             combined[ticker] = {"trend": trend_df, "trigger": trigger_df}
         return combined
 
+    def fetch_multi_timeframe(
+        self,
+        tickers: list[str],
+        trend_period: str | None = None,
+        trend_interval: str | None = None,
+        trigger_period: str | None = None,
+        trigger_interval: str | None = None,
+        force_refresh: bool = False,
+        validate: bool = True,
+    ) -> dict[str, dict[str, pd.DataFrame]]:
+        trend_period = trend_period or getattr(settings, "MTF_TREND_PERIOD", "6mo")
+        trend_interval = trend_interval or getattr(settings, "MTF_TREND_INTERVAL", "1d")
+        trigger_period = trigger_period or getattr(
+            settings, "MTF_TRIGGER_PERIOD", "1mo"
+        )
+        trigger_interval = trigger_interval or getattr(
+            settings, "MTF_TRIGGER_INTERVAL", "15m"
+        )
 
-if __name__ == "__main__":
-    fetcher = BISTDataFetcher()
+        normalized_tickers = [_clean_ticker_list([t])[0] for t in tickers]
+        combined: dict[str, dict[str, pd.DataFrame]] = {}
 
-    df = fetcher.fetch_single("ASELS.IS")
-    if df is not None:
-        print("\n📈 ASELSAN Son 5 Gün:")
-        print(df.tail())
-        print(f"\nSon Fiyat: ₺{df['close'].iloc[-1]:.2f}")
-        print(f"Toplam Veri: {len(df)} mum")
+        for ticker in normalized_tickers:
+            trend_df = self.fetch_single(
+                ticker,
+                trend_period,
+                trend_interval,
+                force=force_refresh,
+                validate=validate,
+            )
+            if trend_df is None:
+                continue
+            trigger_df = self.fetch_single(
+                ticker,
+                trigger_period,
+                trigger_interval,
+                force=force_refresh,
+                validate=validate,
+            )
+            if trigger_df is None:
+                continue
+            combined[ticker] = {"trend": trend_df, "trigger": trigger_df}
+
+        return combined
 
 
 __all__ = [

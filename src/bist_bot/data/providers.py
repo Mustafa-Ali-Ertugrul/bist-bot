@@ -45,9 +45,21 @@ class YFinanceProvider:
     ) -> pd.DataFrame | None:
         import yfinance as yf
 
-        self.rate_limiter.wait_if_needed("yahoo.finance")
-        stock = yf.Ticker(ticker)
-        return stock.history(period=period, interval=interval)
+        try:
+            self.rate_limiter.wait_if_needed("yahoo.finance")
+            stock = yf.Ticker(ticker)
+            df = stock.history(period=period, interval=interval)
+            if df is None or df.empty:
+                logger.warning("yfinance_empty_response", ticker=ticker)
+                return None
+            return df
+        except Exception as exc:
+            logger.warning(
+                "yfinance_fetch_history_failed",
+                ticker=ticker,
+                error_type=type(exc).__name__,
+            )
+            return None
 
     def fetch_batch(
         self, tickers: list[str], period: str, interval: str
@@ -82,8 +94,26 @@ class YFinanceProvider:
         return results
 
     def fetch_quote(self, ticker: str) -> float | None:
-        _ = ticker
-        return None
+        import yfinance as yf
+
+        try:
+            self.rate_limiter.wait_if_needed("yahoo.finance")
+            stock = yf.Ticker(ticker)
+            info = stock.info
+            price = info.get("currentPrice") or info.get("regularMarketPrice")
+            if price is not None:
+                return float(price)
+            hist = stock.history(period="5d", interval="1d")
+            if hist is not None and not hist.empty and "Close" in hist.columns:
+                return float(hist["Close"].iloc[-1])
+            return None
+        except Exception as exc:
+            logger.warning(
+                "yfinance_fetch_quote_failed",
+                ticker=ticker,
+                error_type=type(exc).__name__,
+            )
+            return None
 
     def fetch_universe(self, force_refresh: bool = False) -> list[str]:
         return quote_helpers.get_bist100_tickers(

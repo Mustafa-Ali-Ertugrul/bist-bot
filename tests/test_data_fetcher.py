@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
+from datetime import datetime, timedelta
 
 import pytest
 import pandas as pd
@@ -11,6 +12,9 @@ import pandas as pd
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
+
+_FRESH_TS = pd.Timestamp(datetime.now() - timedelta(days=1))
+_FRESH_RANGE = pd.date_range(_FRESH_TS, periods=5)
 
 
 def test_parse_tr_number():
@@ -85,7 +89,7 @@ def test_fetcher_uses_injected_provider_for_history_and_batch():
                     "close": [1.5, 1.5, 1.5, 1.5, 1.5],
                     "volume": [100, 100, 100, 100, 100],
                 },
-                index=pd.date_range("2025-01-01", periods=5),
+                index=_FRESH_RANGE,
             )
 
         def fetch_batch(self, tickers: list[str], period: str, interval: str):
@@ -97,7 +101,7 @@ def test_fetcher_uses_injected_provider_for_history_and_batch():
                     "close": [1.5, 1.5, 1.5, 1.5, 1.5],
                     "volume": [100, 100, 100, 100, 100],
                 },
-                index=pd.date_range("2025-01-01", periods=5),
+                index=_FRESH_RANGE,
             )
             return {ticker: frame for ticker in tickers}
 
@@ -238,7 +242,7 @@ def test_fetch_single_uses_cache_until_ttl_expires(monkeypatch):
                     "close": [1.5, 1.5, 1.5, 1.5, 1.5],
                     "volume": [100, 100, 100, 100, 100],
                 },
-                index=pd.date_range("2025-01-01", periods=5),
+                index=_FRESH_RANGE,
             )
 
         def fetch_batch(self, tickers: list[str], period: str, interval: str):
@@ -255,13 +259,13 @@ def test_fetch_single_uses_cache_until_ttl_expires(monkeypatch):
 
     provider = CountingProvider()
     fetcher = BISTDataFetcher(watchlist=["THYAO.IS"], provider=provider)
-    current_time = [pd.Timestamp("2025-01-01 10:00:00").to_pydatetime()]
+    current_time = [_FRESH_TS.to_pydatetime()]
     monkeypatch.setattr(fetcher, "_now", lambda: current_time[0])
 
     first = fetcher.fetch_single("THYAO.IS", period="1mo", interval="15m")
-    current_time[0] = pd.Timestamp("2025-01-01 10:01:00").to_pydatetime()
+    current_time[0] = _FRESH_TS + pd.Timedelta(minutes=1)
     second = fetcher.fetch_single("THYAO.IS", period="1mo", interval="15m")
-    current_time[0] = pd.Timestamp("2025-01-01 10:03:00").to_pydatetime()
+    current_time[0] = _FRESH_TS + pd.Timedelta(minutes=3)
     third = fetcher.fetch_single("THYAO.IS", period="1mo", interval="15m")
 
     assert first is not None
@@ -287,7 +291,7 @@ def test_fetch_single_force_refresh_bypasses_cache(monkeypatch):
                     "close": [1.5, 1.5, 1.5, 1.5, 1.5],
                     "volume": [100, 100, 100, 100, 100],
                 },
-                index=pd.date_range("2025-01-01", periods=5),
+                index=_FRESH_RANGE,
             )
 
         def fetch_batch(self, tickers: list[str], period: str, interval: str):
@@ -305,7 +309,7 @@ def test_fetch_single_force_refresh_bypasses_cache(monkeypatch):
     provider = CountingProvider()
     fetcher = BISTDataFetcher(watchlist=["THYAO.IS"], provider=provider)
     monkeypatch.setattr(
-        fetcher, "_now", lambda: pd.Timestamp("2025-01-01 10:00:00").to_pydatetime()
+        fetcher, "_now", lambda: _FRESH_TS.to_pydatetime()
     )
 
     fetcher.fetch_single("THYAO.IS", period="1mo", interval="15m")
@@ -328,7 +332,7 @@ def test_fetch_all_recovers_partial_batch_failures_with_fallback():
             "close": [1.5, 1.5, 1.5, 1.5, 1.5],
             "volume": [100, 100, 100, 100, 100],
         },
-        index=pd.date_range("2025-01-01", periods=5),
+        index=_FRESH_RANGE,
     )
 
     class PartialBatchProvider:

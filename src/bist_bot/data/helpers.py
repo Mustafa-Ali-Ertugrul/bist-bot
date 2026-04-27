@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
 from typing import Protocol
 
 import pandas as pd
@@ -40,9 +41,25 @@ def validate_data(df: pd.DataFrame | None, min_rows: int = 5) -> bool:
         return False
     if len(df) < min_rows:
         return False
+    required_cols = {"open", "high", "low", "close", "volume"}
+    actual_cols = {str(col).lower() for col in df.columns}
+    if not required_cols.issubset(actual_cols):
+        return False
     if df.isnull().all(axis=1).mean() > 0.20:
         return False
-    return True
+    return False if _is_stale(df) else True
+
+
+def _is_stale(df: pd.DataFrame, max_age_days: int = 5) -> bool:
+    """Check if the most recent data point is too old."""
+    if df is None or df.empty:
+        return True
+    try:
+        last_date = pd.to_datetime(df.index[-1]).tz_localize(None)
+        age = datetime.now() - last_date
+        return age > timedelta(days=max_age_days)
+    except Exception:
+        return True
 
 
 def fetch_history_with_provider(provider: HistoryProviderProtocol, ticker: str, period: str, interval: str) -> pd.DataFrame | None:

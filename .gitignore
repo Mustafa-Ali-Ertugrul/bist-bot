@@ -56,3 +56,4 @@ models/*.pkl
 tmp/
 cache/
 test.txt
+coverage.xml

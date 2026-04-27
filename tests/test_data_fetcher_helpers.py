@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
+
 import pandas as pd
 
 from bist_bot.data.helpers import (
@@ -9,6 +11,8 @@ from bist_bot.data.helpers import (
     normalize_ticker,
     validate_data,
 )
+
+_FRESH_DATE = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
 
 
 def test_normalize_ticker_various_formats():
@@ -43,7 +47,7 @@ def test_validate_data_accepts_valid_dataframe():
         'low': [9, 10, 11, 12, 13],
         'close': [11, 12, 13, 14, 15],
         'volume': [1000, 1100, 1200, 1300, 1400]
-    })
+    }, index=pd.date_range(_FRESH_DATE, periods=5))
     assert validate_data(df) is True
 
 

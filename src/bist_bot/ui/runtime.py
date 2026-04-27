@@ -33,11 +33,15 @@ def api_headers() -> dict[str, str]:
 def api_request(method: str, path: str, **kwargs: Any) -> requests.Response:
     headers = kwargs.pop("headers", {})
     merged_headers = {**api_headers(), **headers}
+    if path.startswith("/api/scan"):
+        default_timeout = int(getattr(settings, "SCAN_API_TIMEOUT_SECONDS", 60))
+    else:
+        default_timeout = 10
     return requests.request(
         method=method,
         url=f"{settings.API_BASE_URL}{path}",
         headers=merged_headers,
-        timeout=kwargs.pop("timeout", 10),
+        timeout=kwargs.pop("timeout", default_timeout),
         **kwargs,
     )
 
