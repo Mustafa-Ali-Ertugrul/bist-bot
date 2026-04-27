@@ -313,9 +313,11 @@ def test_background_scan_worker_failure_clears_active_session():
         patch.object(runtime_scan, "threading") as mock_threading,
         patch.object(runtime_scan, "logger"),
         patch.object(runtime_scan, "settings") as mock_settings,
-        patch.object(runtime_scan, "_session_dependencies", return_value=(
-            mock_fetcher, MagicMock(), MagicMock(), MagicMock(), None
-        )),
+        patch.object(
+            runtime_scan,
+            "_session_dependencies",
+            return_value=(mock_fetcher, MagicMock(), MagicMock(), MagicMock(), None),
+        ),
     ):
         mock_settings.WATCHLIST = []
         mock_threading.Thread = MagicMock()
