@@ -48,7 +48,7 @@ def api_request(method: str, path: str, **kwargs: Any) -> requests.Response:
         method=method,
         url=f"{settings.API_BASE_URL}{path}",
         headers=merged_headers,
-        timeout=kwargs.pop("timeout", 10),
+        timeout=kwargs.pop("timeout", 30),
         **kwargs,
     )
 
