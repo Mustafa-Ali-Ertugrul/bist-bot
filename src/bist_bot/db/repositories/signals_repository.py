@@ -182,13 +182,10 @@ class SignalsRepository:
             "avg_profit_pct": round(float(avg_profit), 2) if avg_profit is not None else 0,
         }
 
-
     def get_latest_scan_log(self) -> dict[str, Any] | None:
         row = self.manager.run_session(
             lambda session: session.scalar(
-                select(ScanLogRecord)
-                .order_by(ScanLogRecord.timestamp.desc())
-                .limit(1)
+                select(ScanLogRecord).order_by(ScanLogRecord.timestamp.desc()).limit(1)
             ),
             read_only=True,
         )
@@ -196,11 +193,11 @@ class SignalsRepository:
 
     def _scan_log_to_dict(self, row: ScanLogRecord) -> dict[str, Any]:
         return {
-            &quot;total_scanned&quot;: row.total_scanned or 0,
-            &quot;signals_generated&quot;: row.signals_generated or 0,
-            &quot;buy_signals&quot;: row.buy_signals or 0,
-            &quot;sell_signals&quot;: row.sell_signals or 0,
-            &quot;timestamp&quot;: row.timestamp.isoformat()
+            "total_scanned": row.total_scanned or 0,
+            "signals_generated": row.signals_generated or 0,
+            "buy_signals": row.buy_signals or 0,
+            "sell_signals": row.sell_signals or 0,
+            "timestamp": row.timestamp.isoformat()
             if isinstance(row.timestamp, datetime)
             else row.timestamp,
         }
