@@ -36,13 +36,11 @@ def render_overview_page() -> None:
         st.warning(f"{get_message('ui.api_data_failed')}: {exc}")
         return
 
-    response_payload = stats_response.json() if stats_response.ok else {}
-    stats = response_payload.get("stats", {})
-    latest_scan = stats.get("latest_scan") or response_payload.get("latest_scan") or {}
+    stats = stats_response.json().get("stats", {}) if stats_response.ok else {}
     recent_signals = signals_response.json().get("signals", []) if signals_response.ok else []
     index_data = fetch_index_data()
 
-    # total signals from DB: int(stats.get("total_signals", len(signals)) or 0)
+    total_signals = int(stats.get("total_signals", len(signals)) or 0)
     profitable = int(stats.get("profitable", 0) or 0)
     win_rate = float(stats.get("win_rate", 0.0) or 0.0)
     avg_profit = float(stats.get("avg_profit_pct", 0.0) or 0.0)
@@ -66,14 +64,12 @@ def render_overview_page() -> None:
 
     k1, k2, k3, k4 = st.columns(4)
     with k1:
-        scanned = latest_scan.get("total_scanned", summary.get("total_analyzed", 0))
+        scanned = int(stats.get("latest_scan", {}).get("total_scanned", 0) or 0) or summary.get(
+            "total_analyzed", 0
+        )
         render_metric_block("Scanned assets", str(scanned), "Total assets analyzed")
     with k2:
-        actionable = latest_scan.get(
-            "actionable",
-            int(latest_scan.get("buy_signals", 0) or 0)
-            + int(latest_scan.get("sell_signals", 0) or 0),
-        )
+        actionable = stats.get("latest_scan", {}).get("actionable", total_signals)
         render_metric_block("Actionable signals", str(actionable), "Signals requiring attention")
     with k3:
         render_metric_block(
@@ -153,6 +149,21 @@ def render_overview_page() -> None:
         )
 
     render_section_title("Recent flow", "Last 10 recorded signals")
+    if not recent_signals:
+        session_signals = st.session_state.get("signals", [])
+        if session_signals:
+            recent_signals = [
+                {
+                    "ticker": s.ticker,
+                    "signal_type": s.signal_type.display,
+                    "price": s.price,
+                    "position_size": getattr(s, "position_size", "-"),
+                    "score": s.score,
+                    "outcome": get_message("ui.pending"),
+                    "timestamp": getattr(s, "timestamp", ""),
+                }
+                for s in session_signals
+            ]
     if not recent_signals:
         st.info(get_message("ui.no_signals_yet"))
         return
