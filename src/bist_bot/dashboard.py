@@ -453,13 +453,28 @@ def create_dashboard_app(
     @jwt_required()
     def api_stats():
         stats = get_db().get_performance_stats()
-        scan_service = get_scan_service()
-        latest_scan = {
-            "total_scanned": scan_service.last_scan_stats.get("scanned", 0),
-            "signals_generated": scan_service.last_scan_stats.get("signals", 0),
-            "buy_signals": scan_service.last_scan_stats.get("buys", 0),
-            "sell_signals": scan_service.last_scan_stats.get("sells", 0),
-        }
+        latest_scan_record = get_db().get_latest_scan_log()
+        if latest_scan_record is None:
+            latest_scan = {
+                "total_scanned": 0,
+                "signals_generated": 0,
+                "buy_signals": 0,
+                "sell_signals": 0,
+                "actionable": 0,
+                "timestamp": None,
+            }
+        else:
+            buy = int(latest_scan_record.get("buy_signals", 0) or 0)
+            sell = int(latest_scan_record.get("sell_signals", 0) or 0)
+            latest_scan = {
+                "total_scanned": int(latest_scan_record.get("total_scanned", 0) or 0),
+                "signals_generated": int(latest_scan_record.get("signals_generated", 0) or 0),
+                "buy_signals": buy,
+                "sell_signals": sell,
+                "actionable": latest_scan_record.get("actionable", buy + sell),
+                "timestamp": latest_scan_record.get("timestamp"),
+            }
+        stats["latest_scan"] = latest_scan
         return jsonify({"status": "ok", "stats": stats, "latest_scan": latest_scan})
 
     return app

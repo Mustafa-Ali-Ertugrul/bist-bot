@@ -146,7 +146,7 @@ class ScanService:
             self.db.save_signals(signals)
             self._auto_execute_signals(actionable)
             self.paper_trade_service.queue_actionable_signals(actionable)
-            self.db.save_scan_log(len(all_data), len(actionable), len(buys), len(sells))
+            self.db.save_scan_log(len(all_data), len(signals), len(buys), len(sells))
             self.notification_service.notify_scan_results(signals, actionable, len(all_data))
 
             if getattr(self.settings, "PAPER_MODE", False):
