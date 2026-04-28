@@ -36,11 +36,13 @@ def render_overview_page() -> None:
         st.warning(f"{get_message('ui.api_data_failed')}: {exc}")
         return
 
-    stats = stats_response.json().get("stats", {}) if stats_response.ok else {}
+    response_payload = stats_response.json() if stats_response.ok else {}
+    stats = response_payload.get("stats", {})
+    latest_scan = stats.get("latest_scan") or response_payload.get("latest_scan") or {}
     recent_signals = signals_response.json().get("signals", []) if signals_response.ok else []
     index_data = fetch_index_data()
 
-    total_signals = int(stats.get("total_signals", len(signals)) or 0)
+    # total signals from DB: int(stats.get("total_signals", len(signals)) or 0)
     profitable = int(stats.get("profitable", 0) or 0)
     win_rate = float(stats.get("win_rate", 0.0) or 0.0)
     avg_profit = float(stats.get("avg_profit_pct", 0.0) or 0.0)
@@ -64,10 +66,14 @@ def render_overview_page() -> None:
 
     k1, k2, k3, k4 = st.columns(4)
     with k1:
-        scanned = stats.get("latest_scan", {}).get("total_scanned", 0)
+        scanned = latest_scan.get("total_scanned", summary.get("total_analyzed", 0))
         render_metric_block("Scanned assets", str(scanned), "Total assets analyzed")
     with k2:
-        actionable = stats.get("latest_scan", {}).get("actionable", total_signals)
+        actionable = latest_scan.get(
+            "actionable",
+            int(latest_scan.get("buy_signals", 0) or 0)
+            + int(latest_scan.get("sell_signals", 0) or 0),
+        )
         render_metric_block("Actionable signals", str(actionable), "Signals requiring attention")
     with k3:
         render_metric_block(

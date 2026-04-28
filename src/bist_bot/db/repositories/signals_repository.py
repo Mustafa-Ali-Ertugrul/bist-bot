@@ -192,11 +192,14 @@ class SignalsRepository:
         return self._scan_log_to_dict(row) if row else None
 
     def _scan_log_to_dict(self, row: ScanLogRecord) -> dict[str, Any]:
+        buy_signals = int(row.buy_signals or 0)
+        sell_signals = int(row.sell_signals or 0)
         return {
-            "total_scanned": row.total_scanned or 0,
-            "signals_generated": row.signals_generated or 0,
-            "buy_signals": row.buy_signals or 0,
-            "sell_signals": row.sell_signals or 0,
+            "total_scanned": int(row.total_scanned or 0),
+            "signals_generated": int(row.signals_generated or 0),
+            "buy_signals": buy_signals,
+            "sell_signals": sell_signals,
+            "actionable": buy_signals + sell_signals,
             "timestamp": row.timestamp.isoformat()
             if isinstance(row.timestamp, datetime)
             else row.timestamp,
