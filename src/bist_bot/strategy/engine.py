@@ -12,8 +12,10 @@ from bist_bot.risk import RiskLevels, RiskManager
 from bist_bot.strategy.base import BaseStrategy
 from bist_bot.strategy.engine_core import extract_timeframes, prepare_analysis_frame
 from bist_bot.strategy.engine_filters import (
+    apply_low_adx_penalty,
     calculate_score_and_reasons,
     classify_signal,
+    get_valid_adx,
     is_buy_signal,
     passes_adx_filter,
     passes_multi_timeframe_confluence,
@@ -262,10 +264,15 @@ class StrategyEngine:
         )
         if not self._passes_adx_filter(ticker, last):
             return None
+        adx = get_valid_adx(self.params, ticker, last)
         scored = self._calculate_score_and_reasons(ticker, df, last=last, prev=prev)
         if scored is None:
             return None
         score, reasons = scored
+        if adx is not None and adx < self.params.adx_threshold:
+            score, reasons = apply_low_adx_penalty(self.params, adx, score, reasons)
+            if score == 0:
+                return None
         signal_type, confidence = self._classify_signal(score)
         risk_levels = self.risk_manager.calculate(df)
         adjusted_risk_levels = self._apply_buy_side_risk(

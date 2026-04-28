@@ -52,23 +52,46 @@ def classify_signal(params: StrategyParams, score: float) -> tuple[SignalType, s
     return SignalType.HOLD, "confidence.low"
 
 
-def passes_adx_filter(params: StrategyParams, ticker: str, last: pd.Series) -> bool:
-    """Reject rows where ADX is missing or below the configured threshold."""
+def get_valid_adx(params: StrategyParams, ticker: str, last: pd.Series) -> float | None:
+    """Extract a valid ADX value from the last row, or None if missing/non-numeric/NaN."""
+    _ = params  # kept for API consistency with passes_adx_filter
     adx_raw = last.get("adx")
     try:
         adx = float(adx_raw)
     except (TypeError, ValueError):
         logger.debug("strategy_adx_missing_type", ticker=ticker)
-        return False
-
+        return None
     if not pd.notna(adx):
         logger.debug("strategy_adx_missing_nan", ticker=ticker)
-        return False
+        return None
+    return adx
 
+
+def passes_adx_filter(params: StrategyParams, ticker: str, last: pd.Series) -> bool:
+    """Reject rows where ADX is missing or NaN.
+
+    Valid ADX below threshold is no longer rejected here;
+    a soft penalty is applied later in the scoring pipeline.
+    """
+    return get_valid_adx(params, ticker, last) is not None
+
+
+def apply_low_adx_penalty(
+    params: StrategyParams, adx: float, score: float, reasons: list[str]
+) -> tuple[float, list[str]]:
+    """Apply a soft penalty when ADX is below the trend threshold.
+
+    The penalty moves the score toward zero rather than rejecting the ticker.
+    """
     if adx >= params.adx_threshold:
-        return True
-    logger.debug("strategy_adx_filtered", ticker=ticker, adx=round(float(adx), 2))
-    return False
+        return score, reasons
+    penalty = params.adx_low_trend_penalty
+    if score > 0:
+        score -= penalty
+    elif score < 0:
+        score += penalty
+    reasons.append(f"ADX düşük ({adx:.1f}) → trend zayıf, skor cezası")
+    return score, reasons
 
 
 def calculate_score_and_reasons(
