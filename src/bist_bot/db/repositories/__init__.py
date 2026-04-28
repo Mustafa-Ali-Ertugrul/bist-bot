@@ -53,6 +53,9 @@ class AppRepository:
     def get_performance_stats(self):
         return self.signals.get_performance_stats()
 
+    def get_latest_scan_log(self):
+        return self.signals.get_latest_scan_log()
+
     def add_paper_trade(self, *args, **kwargs):
         return self.portfolio.add_paper_trade(*args, **kwargs)
 
