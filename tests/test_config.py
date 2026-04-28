@@ -131,3 +131,18 @@ def test_secret_settings_can_be_loaded_from_file(monkeypatch, tmp_path):
     reloaded = importlib.reload(config_settings)
 
     assert reloaded.settings.JWT_SECRET_KEY == "file-based-secret"
+
+
+def test_scan_runtime_settings_can_be_overridden():
+    from bist_bot.config.settings import settings
+
+    with settings.override(
+        SCAN_TIMEOUT_SECONDS=2,
+        SCAN_API_TIMEOUT_SECONDS=3.0,
+        STREAMLIT_BACKGROUND_SCAN_TIMEOUT_SECONDS=4,
+        STREAMLIT_INITIAL_SCAN_LIMIT=5,
+    ):
+        assert settings.SCAN_TIMEOUT_SECONDS == 2
+        assert settings.SCAN_API_TIMEOUT_SECONDS == 3.0
+        assert settings.STREAMLIT_BACKGROUND_SCAN_TIMEOUT_SECONDS == 4
+        assert settings.STREAMLIT_INITIAL_SCAN_LIMIT == 5
