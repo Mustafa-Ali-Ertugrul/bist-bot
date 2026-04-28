@@ -215,7 +215,10 @@ def test_engine_uses_configurable_adx_threshold():
     engine.params.adx_threshold = 35.0
     trigger_df = build_signal_frame()
 
-    assert engine.analyze("TEST.IS", trigger_df) is None
+    signal = engine.analyze("TEST.IS", trigger_df)
+
+    assert signal is not None
+    assert any("ADX düşük" in r for r in signal.reasons)
 
 
 def test_engine_filters_when_adx_is_missing():
