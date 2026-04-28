@@ -36,7 +36,9 @@ def render_overview_page() -> None:
         st.warning(f"{get_message('ui.api_data_failed')}: {exc}")
         return
 
-    stats = stats_response.json().get("stats", {}) if stats_response.ok else {}
+    response_payload = stats_response.json() if stats_response.ok else {}
+    stats = response_payload.get("stats", {})
+    latest_scan = stats.get("latest_scan") or response_payload.get("latest_scan") or {}
     recent_signals = signals_response.json().get("signals", []) if signals_response.ok else []
     index_data = fetch_index_data()
 
@@ -64,12 +66,10 @@ def render_overview_page() -> None:
 
     k1, k2, k3, k4 = st.columns(4)
     with k1:
-        scanned = int(stats.get("latest_scan", {}).get("total_scanned", 0) or 0) or summary.get(
-            "total_analyzed", 0
-        )
+        scanned = int(latest_scan.get("total_scanned", 0) or 0) or summary.get("total_analyzed", 0)
         render_metric_block("Scanned assets", str(scanned), "Total assets analyzed")
     with k2:
-        actionable = stats.get("latest_scan", {}).get("actionable", total_signals)
+        actionable = latest_scan.get("actionable", total_signals)
         render_metric_block("Actionable signals", str(actionable), "Signals requiring attention")
     with k3:
         render_metric_block(
