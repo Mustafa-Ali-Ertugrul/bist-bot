@@ -464,12 +464,14 @@ def create_dashboard_app(
                 "timestamp": None,
             }
         else:
+            buy = int(latest_scan_record.get("buy_signals", 0) or 0)
+            sell = int(latest_scan_record.get("sell_signals", 0) or 0)
             latest_scan = {
-                "total_scanned": latest_scan_record.get("total_scanned", 0),
-                "signals_generated": latest_scan_record.get("signals_generated", 0),
-                "buy_signals": latest_scan_record.get("buy_signals", 0),
-                "sell_signals": latest_scan_record.get("sell_signals", 0),
-                "actionable": latest_scan_record.get("signals_generated", 0),
+                "total_scanned": int(latest_scan_record.get("total_scanned", 0) or 0),
+                "signals_generated": int(latest_scan_record.get("signals_generated", 0) or 0),
+                "buy_signals": buy,
+                "sell_signals": sell,
+                "actionable": latest_scan_record.get("actionable", buy + sell),
                 "timestamp": latest_scan_record.get("timestamp"),
             }
         stats["latest_scan"] = latest_scan
