@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import concurrent.futures
 import time
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 
@@ -285,11 +285,11 @@ def create_dashboard_app(
             scan_service = get_scan_service()
             logger.info("api_scan_started", force_refresh=force_refresh)
             exec_svc = scan_service.execution_service
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            with ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(scan_service.scan_once, force_refresh=force_refresh)
                 try:
                     signals = future.result(timeout=settings.SCAN_TIMEOUT_SECONDS)
-                except concurrent.futures.TimeoutError:
+                except TimeoutError:
                     logger.error(
                         "api_scan_timed_out",
                         timeout_seconds=settings.SCAN_TIMEOUT_SECONDS,
@@ -453,7 +453,14 @@ def create_dashboard_app(
     @jwt_required()
     def api_stats():
         stats = get_db().get_performance_stats()
-        return jsonify({"status": "ok", "stats": stats})
+        scan_service = get_scan_service()
+        latest_scan = {
+            "total_scanned": scan_service.last_scan_stats.get("scanned", 0),
+            "signals_generated": scan_service.last_scan_stats.get("signals", 0),
+            "buy_signals": scan_service.last_scan_stats.get("buys", 0),
+            "sell_signals": scan_service.last_scan_stats.get("sells", 0),
+        }
+        return jsonify({"status": "ok", "stats": stats, "latest_scan": latest_scan})
 
     return app
 

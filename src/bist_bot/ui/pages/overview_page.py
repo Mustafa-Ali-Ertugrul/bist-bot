@@ -41,7 +41,6 @@ def render_overview_page() -> None:
     index_data = fetch_index_data()
 
     total_signals = int(stats.get("total_signals", len(signals)) or 0)
-    completed = int(stats.get("completed", 0) or 0)
     profitable = int(stats.get("profitable", 0) or 0)
     win_rate = float(stats.get("win_rate", 0.0) or 0.0)
     avg_profit = float(stats.get("avg_profit_pct", 0.0) or 0.0)
@@ -65,9 +64,11 @@ def render_overview_page() -> None:
 
     k1, k2, k3, k4 = st.columns(4)
     with k1:
-        render_metric_block("Signal volume", str(total_signals), "Captured by the scan engine")
+        scanned = stats.get("latest_scan", {}).get("total_scanned", 0)
+        render_metric_block("Scanned assets", str(scanned), "Total assets analyzed")
     with k2:
-        render_metric_block("Completed trades", str(completed), "Closed trade count in history")
+        actionable = stats.get("latest_scan", {}).get("actionable", total_signals)
+        render_metric_block("Actionable signals", str(actionable), "Signals requiring attention")
     with k3:
         render_metric_block(
             "Profitable closes",
