@@ -118,7 +118,9 @@ class SignalsRepository:
 
         return cast(bool, self.manager.run_session(_read, read_only=True))
 
-    def save_scan_log(self, total: int, generated: int, buys: int, sells: int) -> None:
+    def save_scan_log(
+        self, total: int, generated: int, buys: int, sells: int, actionable: int = 0
+    ) -> None:
         def _write(session):
             session.add(
                 ScanLogRecord(
@@ -127,6 +129,7 @@ class SignalsRepository:
                     signals_generated=generated,
                     buy_signals=buys,
                     sell_signals=sells,
+                    actionable=actionable,
                 )
             )
             return None
@@ -199,7 +202,9 @@ class SignalsRepository:
             "signals_generated": int(row.signals_generated or 0),
             "buy_signals": buy_signals,
             "sell_signals": sell_signals,
-            "actionable": buy_signals + sell_signals,
+            "actionable": int(row.actionable)
+            if row.actionable is not None
+            else buy_signals + sell_signals,
             "timestamp": row.timestamp.isoformat()
             if isinstance(row.timestamp, datetime)
             else row.timestamp,
