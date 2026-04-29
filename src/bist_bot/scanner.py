@@ -132,8 +132,16 @@ class ScanService:
 
             signals = self.engine.scan_all(all_data)
             actionable = self.engine.get_actionable_signals(signals)
-            buys = [s for s in signals if s.score > 0]
-            sells = [s for s in signals if s.score < 0]
+            buys = [
+                s
+                for s in actionable
+                if s.signal_type in (SignalType.BUY, SignalType.STRONG_BUY, SignalType.WEAK_BUY)
+            ]
+            sells = [
+                s
+                for s in actionable
+                if s.signal_type in (SignalType.SELL, SignalType.STRONG_SELL, SignalType.WEAK_SELL)
+            ]
             self.last_scan_stats = {
                 "scanned": len(all_data),
                 "signals": len(signals),
@@ -143,10 +151,12 @@ class ScanService:
             }
 
             self._check_signal_changes(signals)
-            self.db.save_signals(signals)
+            self.db.save_signals([s for s in signals if s.signal_type != SignalType.HOLD])
             self._auto_execute_signals(actionable)
             self.paper_trade_service.queue_actionable_signals(actionable)
-            self.db.save_scan_log(len(all_data), len(signals), len(buys), len(sells))
+            self.db.save_scan_log(
+                len(all_data), len(signals), len(buys), len(sells), len(actionable)
+            )
             self.notification_service.notify_scan_results(signals, actionable, len(all_data))
 
             if getattr(self.settings, "PAPER_MODE", False):
