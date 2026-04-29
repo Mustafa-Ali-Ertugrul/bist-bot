@@ -31,10 +31,10 @@ tr = {
     "ui.pending": "PENDING",
     "ui.strong_buy_tab": "Strong Buy",
     "ui.buy_tab": "Buy",
-    "ui.sell_neutral_tab": "Sell / Neutral",
-    "ui.no_strong_buy": "Guclu alim sinyali yok.",
-    "ui.no_buy": "Alim sinyali yok.",
-    "ui.no_sell": "Satis sinyali yok.",
+    "ui.sell_neutral_tab": "Sell / Neutral",  # unused: tab renamed to Watch / Hold
+    "ui.no_strong_buy": "Guclu alim sinyali yok.",  # unused
+    "ui.no_buy": "Alim sinyali yok.",  # unused
+    "ui.no_sell": "Satis sinyali yok.",  # unused
     "ui.min_score": "Min skor",
     "ui.rsi_min": "RSI min",
     "ui.rsi_max": "RSI max",

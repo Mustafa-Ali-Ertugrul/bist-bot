@@ -12,6 +12,7 @@ import streamlit as st
 from bist_bot.app_logging import get_logger
 from bist_bot.config.settings import settings
 from bist_bot.streamlit_utils import check_signals, send_signal_notification
+from bist_bot.strategy.signal_models import SignalType
 from bist_bot.ui.runtime_types import ScanResult
 from bist_bot.ui.session_cooldown import consume_cooldown
 
@@ -53,6 +54,7 @@ def _empty_scan_result(last_scan_time: datetime | None, error: str) -> ScanResul
         "signals": [],
         "last_scan_time": last_scan_time,
         "error": error,
+        "scan_stats": {"generated": 0, "actionable": 0, "hold": 0},
     }
 
 
@@ -102,11 +104,19 @@ def collect_scan_result(
         if signal is not None:
             send_signal_notification(signal, notifier)
 
+    hold_count = sum(1 for s in signals if s.signal_type == SignalType.HOLD)
+    scan_stats = {
+        "generated": len(signals),
+        "actionable": len(signals) - hold_count,
+        "hold": hold_count,
+    }
+
     return {
         "all_data": all_data,
         "signals": signals,
         "last_scan_time": scan_started_at,
         "error": None,
+        "scan_stats": scan_stats,
     }
 
 
@@ -116,6 +126,7 @@ def apply_scan_result(scan_result: ScanResult) -> None:
     st.session_state.signals = scan_result["signals"]
     st.session_state.last_scan_time = scan_result["last_scan_time"]
     st.session_state.scan_error = scan_result.get("error")
+    st.session_state.scan_stats = scan_result.get("scan_stats")
     st.session_state.scan_in_progress = False
 
 
@@ -207,6 +218,7 @@ def start_background_scan(force_clear: bool = False, limited: bool = False) -> b
     )
 
     def worker():
+        result = _empty_scan_result(last_scan_time, "scan did not complete")
         try:
             result = collect_scan_result(
                 fetcher,

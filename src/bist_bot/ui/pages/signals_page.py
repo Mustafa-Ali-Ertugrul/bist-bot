@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import streamlit as st
 
+from bist_bot.config import settings
 from bist_bot.locales import get_message
 from bist_bot.ui.components.app_shell import (
     render_html_panel,
@@ -27,9 +28,15 @@ def render_signals_page() -> None:
     base_signals = st.session_state.get("signals", [])
     signals = filter_signals(base_signals, all_data)
 
-    strong = sorted([s for s in signals if s.score >= 40], key=lambda s: s.score, reverse=True)
-    buy = sorted([s for s in signals if 10 <= s.score < 40], key=lambda s: s.score, reverse=True)
-    watch = sorted([s for s in signals if s.score < 10], key=lambda s: s.score)
+    strong = sorted(
+        [s for s in signals if s.score >= settings.STRONG_BUY_THRESHOLD],
+        key=lambda s: s.score, reverse=True,
+    )
+    buy = sorted(
+        [s for s in signals if settings.BUY_THRESHOLD <= s.score < settings.STRONG_BUY_THRESHOLD],
+        key=lambda s: s.score, reverse=True,
+    )
+    watch = sorted([s for s in signals if s.score < settings.BUY_THRESHOLD], key=lambda s: s.score)
 
     scanned_count = len(all_data)
     generated_count = len(base_signals)
@@ -46,7 +53,7 @@ def render_signals_page() -> None:
             f"Visible {visible_count}",
             f"Strong buy {len(strong)}",
             f"Buy {len(buy)}",
-            f"Watch / Sell {len(watch)}",
+            f"Watch / Hold {len(watch)}",
         ],
         accent="secondary",
     )
@@ -86,7 +93,7 @@ def render_signals_page() -> None:
         [
             get_message("ui.strong_buy_tab"),
             get_message("ui.buy_tab"),
-            "Watch / Sell",
+            "Watch / Hold",
         ]
     )
     with strong_tab:

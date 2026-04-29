@@ -4,14 +4,15 @@ import html
 
 import streamlit as st
 
+from bist_bot.config import settings
 from bist_bot.indicators import TechnicalIndicators
 from bist_bot.ui.components.chart_widget import render_chart
 
 
 def _accent(score: float) -> tuple[str, str, str]:
-    if score >= 40:
+    if score >= settings.STRONG_BUY_THRESHOLD:
         return ("bb-badge bb-badge-positive", "#4de2bf", "positive")
-    if score >= 10:
+    if score >= settings.BUY_THRESHOLD:
         return ("bb-badge", "#8ab4ff", "primary")
     return ("bb-badge bb-badge-danger", "#ff8f8f", "danger")
 

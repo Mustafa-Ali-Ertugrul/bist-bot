@@ -3,6 +3,7 @@ from __future__ import annotations
 import streamlit as st
 
 from bist_bot.config.settings import settings
+from bist_bot.strategy.signal_models import SignalType
 from bist_bot.ui.components.metric_block import render_metric_block
 from bist_bot.ui.runtime import fetch_index_data, filter_signals, get_market_summary
 
@@ -12,9 +13,13 @@ def render_portfolio_page() -> None:
     signals = filter_signals(st.session_state.get("signals", []), all_data)
     summary = get_market_summary(signals, all_data)
 
-    strong = [s for s in signals if s.score >= 40]
-    buy = [s for s in signals if 10 <= s.score < 40]
-    sell = [s for s in signals if s.score < 0]
+    strong = [s for s in signals if s.score >= settings.STRONG_BUY_THRESHOLD]
+    buy = [
+        s
+        for s in signals
+        if settings.BUY_THRESHOLD <= s.score < settings.STRONG_BUY_THRESHOLD
+    ]
+    sell = [s for s in signals if s.signal_type in (SignalType.SELL, SignalType.STRONG_SELL, SignalType.WEAK_SELL)]
     total = len(signals)
     pos_rate = round(len(strong + buy) / len(signals) * 100) if signals else 0
 
@@ -36,7 +41,10 @@ def render_portfolio_page() -> None:
     left, right = st.columns([1.6, 1], gap="large")
     with left:
         st.subheader("Portfolio Pulse")
-        top = strong[:5] if strong else sorted(signals, key=lambda x: x.score, reverse=True)[:5]
+        top = strong[:5] if strong else sorted(
+            [s for s in signals if s.signal_type != SignalType.HOLD],
+            key=lambda x: x.score, reverse=True,
+        )[:5]
         if not top:
             st.info("Dashboard verisi icin once tarama yapin.")
         else:
