@@ -48,7 +48,11 @@ def render_overview_page() -> None:
     win_rate = float(stats.get("win_rate", 0.0) or 0.0)
     avg_profit = float(stats.get("avg_profit_pct", 0.0) or 0.0)
     positive_flow = len([s for s in signals if s.score >= settings.BUY_THRESHOLD])
-    strong = sorted([s for s in signals if s.score >= settings.STRONG_BUY_THRESHOLD], key=lambda s: s.score, reverse=True)
+    strong = sorted(
+        [s for s in signals if s.score >= settings.STRONG_BUY_THRESHOLD],
+        key=lambda s: s.score,
+        reverse=True,
+    )
     active_watch = (
         strong[:4] if strong else sorted(signals, key=lambda s: s.score, reverse=True)[:4]
     )
