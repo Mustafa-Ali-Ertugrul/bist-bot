@@ -31,10 +31,10 @@ en = {
     "ui.pending": "PENDING",
     "ui.strong_buy_tab": "Strong Buy",
     "ui.buy_tab": "Buy",
-    "ui.sell_neutral_tab": "Sell / Neutral",
-    "ui.no_strong_buy": "No strong buy signals.",
-    "ui.no_buy": "No buy signals.",
-    "ui.no_sell": "No sell signals.",
+    "ui.sell_neutral_tab": "Sell / Neutral",  # unused: tab renamed to Watch / Hold
+    "ui.no_strong_buy": "No strong buy signals.",  # unused
+    "ui.no_buy": "No buy signals.",  # unused
+    "ui.no_sell": "No sell signals.",  # unused
     "ui.min_score": "Min score",
     "ui.rsi_min": "RSI min",
     "ui.rsi_max": "RSI max",

@@ -4,7 +4,9 @@ import html
 
 import streamlit as st
 
+from bist_bot.config.settings import settings
 from bist_bot.locales import get_message
+from bist_bot.strategy.signal_models import SignalType
 from bist_bot.ui.components.app_shell import (
     render_html_panel,
     render_page_hero,
@@ -17,6 +19,18 @@ from bist_bot.ui.runtime import (
     filter_signals,
     get_market_summary,
 )
+
+_HOLD_DISPLAY_VALUES = {"HOLD", "BEKLE", "⚪ BEKLE", "⚪ HOLD"}
+
+
+def _is_actionable_hist(sig: dict) -> bool:
+    stype = str(sig.get("signal_type", ""))
+    if stype in _HOLD_DISPLAY_VALUES:
+        return False
+    try:
+        return SignalType.from_value(stype) != SignalType.HOLD
+    except (ValueError, KeyError):
+        return True
 
 
 def _badge(label: str, positive: bool = True) -> str:
@@ -46,10 +60,11 @@ def render_overview_page() -> None:
     profitable = int(stats.get("profitable", 0) or 0)
     win_rate = float(stats.get("win_rate", 0.0) or 0.0)
     avg_profit = float(stats.get("avg_profit_pct", 0.0) or 0.0)
-    positive_flow = len([s for s in signals if s.score >= 10])
-    strong = sorted([s for s in signals if s.score >= 40], key=lambda s: s.score, reverse=True)
+    positive_flow = len([s for s in signals if s.score >= settings.BUY_THRESHOLD])
+    strong = sorted([s for s in signals if s.score >= settings.STRONG_BUY_THRESHOLD], key=lambda s: s.score, reverse=True)
+    actionable = [s for s in signals if s.signal_type != SignalType.HOLD]
     active_watch = (
-        strong[:4] if strong else sorted(signals, key=lambda s: s.score, reverse=True)[:4]
+        strong[:4] if strong else sorted(actionable, key=lambda s: s.score, reverse=True)[:4]
     )
 
     render_page_hero(
@@ -64,13 +79,15 @@ def render_overview_page() -> None:
         accent="secondary",
     )
 
+    scan_stats = st.session_state.get("scan_stats")
+
     k1, k2, k3, k4 = st.columns(4)
     with k1:
         scanned = int(latest_scan.get("total_scanned", 0) or 0) or summary.get("total_analyzed", 0)
         render_metric_block("Scanned assets", str(scanned), "Total assets analyzed")
     with k2:
-        actionable = latest_scan.get("actionable", total_signals)
-        render_metric_block("Actionable signals", str(actionable), "Signals requiring attention")
+        actionable_count = latest_scan.get("actionable", total_signals)
+        render_metric_block("Actionable signals", str(actionable_count), "Signals requiring attention")
     with k3:
         render_metric_block(
             "Profitable closes",
@@ -86,9 +103,18 @@ def render_overview_page() -> None:
             accent="positive" if win_rate >= 50 else "danger",
         )
 
+    if scan_stats is not None:
+        s1, s2, s3 = st.columns(3)
+        with s1:
+            render_metric_block("Generated", str(scan_stats.get("generated", 0)), "Total signals produced")
+        with s2:
+            render_metric_block("Actionable", str(scan_stats.get("actionable", 0)), "Non-hold signals")
+        with s3:
+            render_metric_block("Hold / Watch", str(scan_stats.get("hold", 0)), "Non-actionable signals")
+
     left, right = st.columns([1.35, 1], gap="large")
     with left:
-        render_section_title("Market pulse", "Top conviction ideas")
+        render_section_title("Market pulse", "Top conviction ideas (actionable only)")
         radar_rows = []
         for signal in active_watch:
             radar_rows.append(
@@ -168,6 +194,11 @@ def render_overview_page() -> None:
         st.info(get_message("ui.no_signals_yet"))
         return
 
+    actionable_hist = [s for s in recent_signals if _is_actionable_hist(s)]
+    watch_hist = [s for s in recent_signals if not _is_actionable_hist(s)]
+
+    act_tab, watch_tab = st.tabs(["Actionable", "Watch / Hold"])
+
     headers = [
         get_message("ui.ticker"),
         get_message("ui.type"),
@@ -177,26 +208,36 @@ def render_overview_page() -> None:
         get_message("ui.status"),
         get_message("ui.date"),
     ]
-    rows: list[str] = []
-    for sig in recent_signals[:10]:
-        score = float(sig.get("score", 0) or 0)
-        outcome = html.escape(str(sig.get("outcome", get_message("ui.pending"))))
-        rows.append(
-            "<tr>"
-            f"<td><code>{html.escape(str(sig.get('ticker', '')).replace('.IS', ''))}</code></td>"
-            f"<td>{html.escape(str(sig.get('signal_type', '')))}</td>"
-            f"<td>TL{float(sig.get('price', 0) or 0):.2f}</td>"
-            f"<td>{html.escape(str(sig.get('position_size', '-')))}</td>"
-            f"<td class='{'bb-text-positive' if score >= 0 else 'bb-text-danger'}'>{score:+.0f}</td>"
-            f"<td>{outcome}</td>"
-            f"<td>{html.escape(str(sig.get('timestamp', ''))[:10])}</td>"
-            "</tr>"
+
+    def _render_signal_table(sig_list: list[dict]) -> None:
+        rows: list[str] = []
+        for sig in sig_list[:10]:
+            score = float(sig.get("score", 0) or 0)
+            outcome = html.escape(str(sig.get("outcome", get_message("ui.pending"))))
+            rows.append(
+                "<tr>"
+                f"<td><code>{html.escape(str(sig.get('ticker', '')).replace('.IS', ''))}</code></td>"
+                f"<td>{html.escape(str(sig.get('signal_type', '')))}</td>"
+                f"<td>TL{float(sig.get('price', 0) or 0):.2f}</td>"
+                f"<td>{html.escape(str(sig.get('position_size', '-')))}</td>"
+                f"<td class='{'bb-text-positive' if score >= 0 else 'bb-text-danger'}'>{score:+.0f}</td>"
+                f"<td>{outcome}</td>"
+                f"<td>{html.escape(str(sig.get('timestamp', ''))[:10])}</td>"
+                "</tr>"
+            )
+        if not rows:
+            st.info("No signals in this category.")
+            return
+        st.markdown(
+            "<table class='bb-table'><thead><tr>"
+            + "".join(f"<th>{html.escape(header)}</th>" for header in headers)
+            + "</tr></thead><tbody>"
+            + "".join(rows)
+            + "</tbody></table>",
+            unsafe_allow_html=True,
         )
-    st.markdown(
-        "<table class='bb-table'><thead><tr>"
-        + "".join(f"<th>{html.escape(header)}</th>" for header in headers)
-        + "</tr></thead><tbody>"
-        + "".join(rows)
-        + "</tbody></table>",
-        unsafe_allow_html=True,
-    )
+
+    with act_tab:
+        _render_signal_table(actionable_hist)
+    with watch_tab:
+        _render_signal_table(watch_hist)
