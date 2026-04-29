@@ -4,6 +4,7 @@ import html
 
 import streamlit as st
 
+from bist_bot.config.settings import settings
 from bist_bot.locales import get_message
 from bist_bot.ui.components.app_shell import (
     render_html_panel,
@@ -46,8 +47,8 @@ def render_overview_page() -> None:
     profitable = int(stats.get("profitable", 0) or 0)
     win_rate = float(stats.get("win_rate", 0.0) or 0.0)
     avg_profit = float(stats.get("avg_profit_pct", 0.0) or 0.0)
-    positive_flow = len([s for s in signals if s.score >= 10])
-    strong = sorted([s for s in signals if s.score >= 40], key=lambda s: s.score, reverse=True)
+    positive_flow = len([s for s in signals if s.score >= settings.BUY_THRESHOLD])
+    strong = sorted([s for s in signals if s.score >= settings.STRONG_BUY_THRESHOLD], key=lambda s: s.score, reverse=True)
     active_watch = (
         strong[:4] if strong else sorted(signals, key=lambda s: s.score, reverse=True)[:4]
     )

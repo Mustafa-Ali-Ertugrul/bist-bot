@@ -12,8 +12,8 @@ def render_portfolio_page() -> None:
     signals = filter_signals(st.session_state.get("signals", []), all_data)
     summary = get_market_summary(signals, all_data)
 
-    strong = [s for s in signals if s.score >= 40]
-    buy = [s for s in signals if 10 <= s.score < 40]
+    strong = [s for s in signals if s.score >= settings.STRONG_BUY_THRESHOLD]
+    buy = [s for s in signals if settings.BUY_THRESHOLD <= s.score < settings.STRONG_BUY_THRESHOLD]
     sell = [s for s in signals if s.score < 0]
     total = len(signals)
     pos_rate = round(len(strong + buy) / len(signals) * 100) if signals else 0
