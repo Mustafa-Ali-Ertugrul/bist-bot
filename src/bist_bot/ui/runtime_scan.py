@@ -50,6 +50,11 @@ def _empty_scan_result(last_scan_time: datetime | None, error: str) -> ScanResul
         "signals": [],
         "last_scan_time": last_scan_time,
         "error": error,
+        "scan_stats": {
+            "scanned_count": 0,
+            "generated_count": 0,
+            "actionable_count": 0,
+        },
     }
 
 
@@ -75,6 +80,7 @@ def collect_scan_result(
         force_refresh=force_clear,
     )
     signals = engine.scan_all(timeframe_data)
+    actionable = engine.get_actionable_signals(signals)
     all_data = {
         ticker: data["trigger"]
         for ticker, data in timeframe_data.items()
@@ -93,6 +99,11 @@ def collect_scan_result(
         "signals": signals,
         "last_scan_time": scan_started_at,
         "error": None,
+        "scan_stats": {
+            "scanned_count": len(all_data),
+            "generated_count": len(signals),
+            "actionable_count": len(actionable),
+        },
     }
 
 
@@ -102,6 +113,7 @@ def apply_scan_result(scan_result: ScanResult) -> None:
     st.session_state.signals = scan_result["signals"]
     st.session_state.last_scan_time = scan_result["last_scan_time"]
     st.session_state.scan_error = scan_result.get("error")
+    st.session_state.scan_stats = scan_result.get("scan_stats", {})
     st.session_state.scan_in_progress = False
 
 

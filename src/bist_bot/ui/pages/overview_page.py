@@ -4,7 +4,9 @@ import html
 
 import streamlit as st
 
+from bist_bot.config import settings
 from bist_bot.locales import get_message
+from bist_bot.strategy.signal_models import SignalType
 from bist_bot.ui.components.app_shell import (
     render_html_panel,
     render_page_hero,
@@ -22,6 +24,15 @@ from bist_bot.ui.runtime import (
 def _badge(label: str, positive: bool = True) -> str:
     cls = "bb-badge bb-badge-positive" if positive else "bb-badge"
     return f"<span class='{cls}'>{html.escape(label)}</span>"
+
+
+def _is_actionable_hist(sig: dict) -> bool:
+    raw = str(sig.get("signal_type", ""))
+    try:
+        stype = SignalType.from_value(raw)
+        return stype != SignalType.HOLD
+    except (ValueError, KeyError):
+        return raw.upper() not in {"HOLD", "BEKLE", "⚪ BEKLE", "⚪ HOLD"}
 
 
 def render_overview_page() -> None:
@@ -49,15 +60,16 @@ def render_overview_page() -> None:
     profitable = int(stats.get("profitable", 0) or 0)
     win_rate = float(stats.get("win_rate", 0.0) or 0.0)
     avg_profit = float(stats.get("avg_profit_pct", 0.0) or 0.0)
-    positive_flow = len([s for s in signals if s.score >= 10])
+    positive_flow = len([s for s in signals if s.score >= settings.BUY_THRESHOLD])
     strong = sorted(
-        [s for s in signals if s.score >= 40], key=lambda s: s.score, reverse=True
+        [s for s in signals if s.score >= settings.STRONG_BUY_THRESHOLD],
+        key=lambda s: s.score,
+        reverse=True,
     )
-    active_watch = (
-        strong[:4]
-        if strong
-        else sorted(signals, key=lambda s: s.score, reverse=True)[:4]
-    )
+    actionable = [s for s in signals if s.signal_type != SignalType.HOLD]
+    active_watch = strong[:4] if strong else sorted(
+        actionable, key=lambda s: s.score, reverse=True,
+    )[:4]
 
     render_page_hero(
         "Trading Dashboard",
@@ -95,9 +107,41 @@ def render_overview_page() -> None:
             accent="positive" if win_rate >= 50 else "danger",
         )
 
+    scan_stats = st.session_state.get("scan_stats")
+    if scan_stats:
+        s1, s2, s3 = st.columns(3)
+        with s1:
+            render_metric_block(
+                "Generated",
+                str(scan_stats.get("generated_count", 0)),
+                "Signals from last scan",
+            )
+        with s2:
+            render_metric_block(
+                "Actionable",
+                str(scan_stats.get("actionable_count", 0)),
+                "Requiring attention",
+                accent="positive" if scan_stats.get("actionable_count", 0) > 0 else "",
+            )
+        with s3:
+            hold_count = (
+                scan_stats.get("generated_count", 0)
+                - scan_stats.get("actionable_count", 0)
+            )
+            render_metric_block(
+                "Hold / Watch",
+                str(hold_count),
+                "Monitored — no action needed",
+                accent="danger" if hold_count > 0 else "",
+            )
+
     left, right = st.columns([1.35, 1], gap="large")
     with left:
-        render_section_title("Market pulse", "Top conviction ideas")
+        conviction_subtitle = (
+            "Top conviction ideas" if active_watch
+            else "No actionable signals right now"
+        )
+        render_section_title("Market pulse", conviction_subtitle)
         radar_rows = []
         for signal in active_watch:
             radar_rows.append(
@@ -175,11 +219,21 @@ def render_overview_page() -> None:
         get_message("ui.status"),
         get_message("ui.date"),
     ]
-    rows: list[str] = []
-    for sig in recent_signals[:10]:
+
+    def _render_signal_table(rows: list[str]) -> None:
+        st.markdown(
+            "<table class='bb-table'><thead><tr>"
+            + "".join(f"<th>{html.escape(header)}</th>" for header in headers)
+            + "</tr></thead><tbody>"
+            + "".join(rows)
+            + "</tbody></table>",
+            unsafe_allow_html=True,
+        )
+
+    def _build_row(sig: dict) -> str:
         score = float(sig.get("score", 0) or 0)
         outcome = html.escape(str(sig.get("outcome", get_message("ui.pending"))))
-        rows.append(
+        return (
             "<tr>"
             f"<td><code>{html.escape(str(sig.get('ticker', '')).replace('.IS', ''))}</code></td>"
             f"<td>{html.escape(str(sig.get('signal_type', '')))}</td>"
@@ -190,11 +244,18 @@ def render_overview_page() -> None:
             f"<td>{html.escape(str(sig.get('timestamp', ''))[:10])}</td>"
             "</tr>"
         )
-    st.markdown(
-        "<table class='bb-table'><thead><tr>"
-        + "".join(f"<th>{html.escape(header)}</th>" for header in headers)
-        + "</tr></thead><tbody>"
-        + "".join(rows)
-        + "</tbody></table>",
-        unsafe_allow_html=True,
-    )
+
+    actionable_rows = []
+    hold_rows = []
+    for sig in recent_signals[:10]:
+        if _is_actionable_hist(sig):
+            actionable_rows.append(_build_row(sig))
+        else:
+            hold_rows.append(_build_row(sig))
+
+    if actionable_rows:
+        render_section_title("Actionable", "Signals requiring attention")
+        _render_signal_table(actionable_rows)
+    if hold_rows:
+        render_section_title("Hold / Watch", "Monitored — no action needed")
+        _render_signal_table(hold_rows)

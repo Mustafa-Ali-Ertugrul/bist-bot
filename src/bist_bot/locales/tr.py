@@ -15,6 +15,7 @@ tr = {
     "ui.target": "Hedef",
     "ui.lot": "Lot",
     "ui.total_signals": "Toplam Sinyal",
+    # -- unused: defined but never referenced via get_message() --
     "ui.signals_over_time": "Tarih boyunca",
     "ui.trades_completed": "Islem Tamamlandi",
     "ui.trade_result_known": "Sonuc belli",
@@ -22,6 +23,7 @@ tr = {
     "ui.profit_made": "Kar elde eden",
     "ui.win_rate": "Win Rate",
     "ui.avg_profit": "Ort. kar",
+    # -- end unused --
     "ui.recent_signals": "Son Sinyaller",
     "ui.no_signals_yet": "Henuz sinyal kaydedilmemis.",
     "ui.ticker": "Ticker",
@@ -31,16 +33,22 @@ tr = {
     "ui.pending": "PENDING",
     "ui.strong_buy_tab": "Strong Buy",
     "ui.buy_tab": "Buy",
+    # -- unused: signals_page uses hardcoded "Watch / Hold" --
     "ui.sell_neutral_tab": "Sell / Neutral",
+    # -- unused: _render_signal_group uses hardcoded empty-state text --
     "ui.no_strong_buy": "Guclu alim sinyali yok.",
     "ui.no_buy": "Alim sinyali yok.",
     "ui.no_sell": "Satis sinyali yok.",
+    # -- end unused --
     "ui.min_score": "Min skor",
     "ui.rsi_min": "RSI min",
     "ui.rsi_max": "RSI max",
+    # -- unused: pages use hardcoded titles --
     "ui.overview_title": "Genel Bakis",
     "ui.signals_title": "Sinyaller",
+    # -- end unused --
     "ui.api_data_failed": "API verileri alinamadi",
+    # -- unused: legacy console-log keys, structured logging used instead --
     "log.scan_starting": "BIST BOT — TARAMA BAŞLIYOR",
     "log.scanning_stocks": "Watchlist: {count} hisse",
     "log.scan_time": "Saat: {time}",
@@ -51,6 +59,7 @@ tr = {
     "log.buy_signal": "Alım sinyali",
     "log.sell_signal": "Satış sinyali",
     "log.actionable": "Aksiyon gerekli",
+    # -- end unused --
     "api.invalid_credentials": "Gecersiz kimlik bilgileri",
     "api.invalid_email": "Gecersiz email adresi",
     "api.password_too_short": "Sifre en az 8 karakter olmali",
@@ -60,5 +69,7 @@ tr = {
     "api.data_not_found": "Veri bulunamadi",
     "api.scan_error": "Tarama hatasi",
     "api.analyze_error": "Analiz hatasi",
+    # -- unused: only in tr.py, not en.py, never referenced via get_message() --
     "signal.change": "Sinyal değişikliği: {ticker} {old} → {new}",
+    # -- end unused --
 }

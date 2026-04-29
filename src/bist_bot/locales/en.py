@@ -15,6 +15,7 @@ en = {
     "ui.target": "Target",
     "ui.lot": "Lot",
     "ui.total_signals": "Total Signals",
+    # -- unused: defined but never referenced via get_message() --
     "ui.signals_over_time": "All Time",
     "ui.trades_completed": "Trades Completed",
     "ui.trade_result_known": "Result Known",
@@ -22,6 +23,7 @@ en = {
     "ui.profit_made": "Profit Made",
     "ui.win_rate": "Win Rate",
     "ui.avg_profit": "Avg profit",
+    # -- end unused --
     "ui.recent_signals": "Recent Signals",
     "ui.no_signals_yet": "No signals recorded yet.",
     "ui.ticker": "Ticker",
@@ -31,16 +33,22 @@ en = {
     "ui.pending": "PENDING",
     "ui.strong_buy_tab": "Strong Buy",
     "ui.buy_tab": "Buy",
+    # -- unused: signals_page uses hardcoded "Watch / Hold" --
     "ui.sell_neutral_tab": "Sell / Neutral",
+    # -- unused: _render_signal_group uses hardcoded empty-state text --
     "ui.no_strong_buy": "No strong buy signals.",
     "ui.no_buy": "No buy signals.",
     "ui.no_sell": "No sell signals.",
+    # -- end unused --
     "ui.min_score": "Min score",
     "ui.rsi_min": "RSI min",
     "ui.rsi_max": "RSI max",
+    # -- unused: pages use hardcoded titles --
     "ui.overview_title": "Overview",
     "ui.signals_title": "Signals",
+    # -- end unused --
     "ui.api_data_failed": "Failed to fetch API data",
+    # -- unused: legacy console-log keys, structured logging used instead --
     "log.scan_starting": "BIST BOT — SCAN STARTING",
     "log.scanning_stocks": "Watchlist: {count} stocks",
     "log.data_fetch_failed": "Failed to fetch any data!",
@@ -50,6 +58,7 @@ en = {
     "log.buy_signal": "Buy signal",
     "log.sell_signal": "Sell signal",
     "log.actionable": "Actionable",
+    # -- end unused --
     "api.invalid_credentials": "Invalid credentials",
     "api.invalid_email": "Invalid email address",
     "api.password_too_short": "Password must be at least 8 characters",
