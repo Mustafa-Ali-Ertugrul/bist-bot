@@ -306,6 +306,7 @@ class BISTDataFetcher:
                 ticker=normalized_ticker,
                 period=period,
                 interval=interval,
+                provider=type(self.provider).__name__,
             )
 
             raw_df = fetch_helpers.fetch_history_with_provider(
@@ -314,7 +315,41 @@ class BISTDataFetcher:
                 period=period,
                 interval=interval,
             )
+            fetch_source = "single"
             df = self._normalize_history(normalized_ticker, raw_df, validate=validate)
+            if df is None:
+                logger.warning(
+                    "history_fetch_single_empty",
+                    ticker=normalized_ticker,
+                    period=period,
+                    interval=interval,
+                    provider=type(self.provider).__name__,
+                )
+                raw_batch = self.provider.fetch_batch(
+                    [normalized_ticker],
+                    period=period,
+                    interval=interval,
+                )
+                raw_df = raw_batch.get(normalized_ticker) if raw_batch else None
+                df = self._normalize_history(normalized_ticker, raw_df, validate=validate)
+                if df is None:
+                    logger.warning(
+                        "history_fetch_batch_fallback_empty",
+                        ticker=normalized_ticker,
+                        period=period,
+                        interval=interval,
+                        provider=type(self.provider).__name__,
+                    )
+                    return None
+                fetch_source = "batch_fallback"
+                logger.info(
+                    "history_fetch_batch_fallback_succeeded",
+                    ticker=normalized_ticker,
+                    period=period,
+                    interval=interval,
+                    provider=type(self.provider).__name__,
+                    candle_count=len(df),
+                )
             if df is None:
                 return None
 
@@ -325,6 +360,7 @@ class BISTDataFetcher:
                 ticker=normalized_ticker,
                 candle_count=len(df),
                 last_close=round(float(df["close"].iloc[-1]), 2),
+                source=fetch_source,
             )
             return df
 
