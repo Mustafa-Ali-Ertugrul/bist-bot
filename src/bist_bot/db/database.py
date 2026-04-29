@@ -109,6 +109,7 @@ class ScanLogRecord(Base):
     signals_generated: Mapped[int | None] = mapped_column(Integer, nullable=True)
     buy_signals: Mapped[int | None] = mapped_column(Integer, nullable=True)
     sell_signals: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    actionable: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class ConfigRecord(Base):

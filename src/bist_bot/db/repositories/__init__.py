@@ -44,8 +44,8 @@ class AppRepository:
     def get_latest_signal(self, ticker: str):
         return self.signals.get_latest_signal(ticker)
 
-    def save_scan_log(self, total: int, generated: int, buys: int, sells: int):
-        return self.signals.save_scan_log(total, generated, buys, sells)
+    def save_scan_log(self, total: int, generated: int, buys: int, sells: int, actionable: int = 0):
+        return self.signals.save_scan_log(total, generated, buys, sells, actionable)
 
     def update_outcome(self, signal_id: int, outcome: str, outcome_price: float):
         return self.signals.update_outcome(signal_id, outcome, outcome_price)
