@@ -221,7 +221,7 @@ def test_signal_exists_returns_true_when_matches(signals_repo, sample_signal):
 
 def test_save_scan_log(signals_repo):
     """Test saving scan log entry."""
-    signals_repo.save_scan_log(total=100, generated=10, buys=7, sells=3)
+    signals_repo.save_scan_log(total=100, generated=10, buys=7, sells=3, actionable=7)
 
     # We can't easily retrieve scan logs from the repository,
     # but we can at least verify it doesn't crash

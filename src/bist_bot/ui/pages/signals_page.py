@@ -28,14 +28,17 @@ def render_signals_page() -> None:
     base_signals = st.session_state.get("signals", [])
     signals = filter_signals(base_signals, all_data)
 
-    strong = sorted([s for s in signals if s.score >= settings.STRONG_BUY_THRESHOLD], key=lambda s: s.score, reverse=True)
-    buy = sorted([s for s in signals if settings.BUY_THRESHOLD <= s.score < settings.STRONG_BUY_THRESHOLD], key=lambda s: s.score, reverse=True)
+    strong = sorted(
+        [s for s in signals if s.score >= settings.STRONG_BUY_THRESHOLD],
+        key=lambda s: s.score,
+        reverse=True,
+    )
+    buy = sorted(
+        [s for s in signals if settings.BUY_THRESHOLD <= s.score < settings.STRONG_BUY_THRESHOLD],
+        key=lambda s: s.score,
+        reverse=True,
+    )
     watch = sorted([s for s in signals if s.score < settings.BUY_THRESHOLD], key=lambda s: s.score)
-
-    scanned_count = len(all_data)
-    generated_count = len(base_signals)
-    visible_count = len(signals)
-    filtered_out_count = max(generated_count - visible_count, 0)
 
     scanned_count = len(all_data)
     generated_count = len(base_signals)
