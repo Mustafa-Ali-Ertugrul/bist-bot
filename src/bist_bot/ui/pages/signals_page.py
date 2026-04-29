@@ -37,11 +37,6 @@ def render_signals_page() -> None:
     visible_count = len(signals)
     filtered_out_count = max(generated_count - visible_count, 0)
 
-    scanned_count = len(all_data)
-    generated_count = len(base_signals)
-    visible_count = len(signals)
-    filtered_out_count = max(generated_count - visible_count, 0)
-
     render_page_hero(
         "Signals",
         "Algorithmic signal flow with explicit scan, generation and visibility counts",
