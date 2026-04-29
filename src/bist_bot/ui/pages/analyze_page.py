@@ -89,7 +89,7 @@ def render_analyze_page() -> None:
     signal_type = str(signal.get("type", "N/A"))
     trend = str(snapshot.get("trend", "N/A"))
     verdict_badge = (
-        "bb-badge bb-badge-positive" if signal_score >= 10 else "bb-badge bb-badge-danger"
+        "bb-badge bb-badge-positive" if signal_score >= settings.BUY_THRESHOLD else "bb-badge bb-badge-danger"
     )
 
     headline_html = (
@@ -101,7 +101,7 @@ def render_analyze_page() -> None:
         f"<span class='{verdict_badge}'>{html.escape(signal_type)}</span>"
         "</div>"
     )
-    render_html_panel(headline_html, accent="positive" if signal_score >= 10 else "danger")
+    render_html_panel(headline_html, accent="positive" if signal_score >= settings.BUY_THRESHOLD else "danger")
 
     m1, m2, m3, m4 = st.columns(4)
     with m1:
@@ -123,7 +123,7 @@ def render_analyze_page() -> None:
             "Signal score",
             f"{signal_score:+.0f}",
             signal_type,
-            accent="positive" if signal_score >= 10 else "danger",
+            accent="positive" if signal_score >= settings.BUY_THRESHOLD else "danger",
         )
 
     if price_data:
@@ -157,7 +157,7 @@ def render_analyze_page() -> None:
                 f"<div class='bb-list-row'><div><div class='bb-label'>Position size</div><div class='bb-note-strong'>{html.escape(str(signal.get('position_size', '-')))}</div></div></div>"
                 "</div>"
             ),
-            accent="positive" if signal_score >= 10 else "danger",
+            accent="positive" if signal_score >= settings.BUY_THRESHOLD else "danger",
         )
     with p2:
         reasons = signal.get("reasons", [])

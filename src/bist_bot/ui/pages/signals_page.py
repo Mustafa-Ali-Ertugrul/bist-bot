@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import streamlit as st
 
+from bist_bot.config.settings import settings
 from bist_bot.locales import get_message
 from bist_bot.ui.components.app_shell import (
     render_html_panel,
@@ -27,9 +28,14 @@ def render_signals_page() -> None:
     base_signals = st.session_state.get("signals", [])
     signals = filter_signals(base_signals, all_data)
 
-    strong = sorted([s for s in signals if s.score >= 40], key=lambda s: s.score, reverse=True)
-    buy = sorted([s for s in signals if 10 <= s.score < 40], key=lambda s: s.score, reverse=True)
-    watch = sorted([s for s in signals if s.score < 10], key=lambda s: s.score)
+    strong = sorted([s for s in signals if s.score >= settings.STRONG_BUY_THRESHOLD], key=lambda s: s.score, reverse=True)
+    buy = sorted([s for s in signals if settings.BUY_THRESHOLD <= s.score < settings.STRONG_BUY_THRESHOLD], key=lambda s: s.score, reverse=True)
+    watch = sorted([s for s in signals if s.score < settings.BUY_THRESHOLD], key=lambda s: s.score)
+
+    scanned_count = len(all_data)
+    generated_count = len(base_signals)
+    visible_count = len(signals)
+    filtered_out_count = max(generated_count - visible_count, 0)
 
     scanned_count = len(all_data)
     generated_count = len(base_signals)
