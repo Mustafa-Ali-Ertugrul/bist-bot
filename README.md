@@ -189,7 +189,7 @@ gcloud run deploy bist-bot-ui \
   --image REGION-docker.pkg.dev/PROJECT_ID/REPOSITORY/bist-bot:latest \
   --region YOUR_REGION \
   --allow-unauthenticated \
-  --set-env-vars PYTHONPATH=/app/src,DB_PATH=/tmp/bist_signals.db,API_BASE_URL=https://YOUR_API_URL
+  --set-env-vars PYTHONPATH=/app/src,DB_PATH=/tmp/bist_signals.db,API_BASE_URL=https://YOUR_API_URL,STREAMLIT_BACKGROUND_SCAN_TIMEOUT_SECONDS=180,API_REQUEST_TIMEOUT_SECONDS=45
 
 gcloud run services update bist-bot-api \
   --region YOUR_REGION \
