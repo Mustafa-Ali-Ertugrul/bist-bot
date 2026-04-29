@@ -99,7 +99,7 @@ def score_trend(params, last, prev) -> tuple[float, list[str]]:
             reasons.append(f"Fiyat EMA{settings.EMA_LONG}'i kesti (aşağı)")
         elif not above_ema:
             if pd.notna(adx) and adx >= params.adx_threshold:
-                score -= params.score_ema_cross
+                score -= params.score_ema_cross / 2
                 reasons.append(f"düşüş trendi (EMA{settings.EMA_LONG} altında)")
 
     sma_cross = last.get("sma_cross", "NONE")
