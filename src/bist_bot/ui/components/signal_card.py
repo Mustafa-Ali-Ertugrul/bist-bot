@@ -4,16 +4,21 @@ import html
 
 import streamlit as st
 
+from bist_bot.config.settings import settings
 from bist_bot.indicators import TechnicalIndicators
 from bist_bot.ui.components.chart_widget import render_chart
 
 
 def _accent(score: float) -> tuple[str, str, str]:
-    if score >= 40:
+    if score >= settings.STRONG_BUY_THRESHOLD:
         return ("bb-badge bb-badge-positive", "#4de2bf", "positive")
-    if score >= 10:
+    if score >= settings.BUY_THRESHOLD:
         return ("bb-badge", "#8ab4ff", "primary")
-    return ("bb-badge bb-badge-danger", "#ff8f8f", "danger")
+    if score <= settings.STRONG_SELL_THRESHOLD:
+        return ("bb-badge bb-badge-danger", "#ff4444", "danger")
+    if score <= settings.SELL_THRESHOLD:
+        return ("bb-badge bb-badge-danger", "#ff8f8f", "danger")
+    return ("bb-badge", "#a0a0a0", "neutral")
 
 
 def render_signal_card(signal, df_data=None, chart_factory=None) -> None:
@@ -26,6 +31,8 @@ def render_signal_card(signal, df_data=None, chart_factory=None) -> None:
         f"<div class='bb-list-row'><div class='bb-list-row-subtitle'>{reason}</div></div>"
         for reason in reasons
     )
+    position_size = getattr(signal, "position_size", None)
+    position_size_label = "-" if position_size is None else str(position_size)
 
     content = f"""
     <div style='display:grid;gap:16px;'>
@@ -39,7 +46,7 @@ def render_signal_card(signal, df_data=None, chart_factory=None) -> None:
       </div>
       <div style='display:flex;flex-wrap:wrap;gap:8px;'>
         <span class='bb-chip'>Confidence {html.escape(confidence.upper())}</span>
-        <span class='bb-chip bb-chip-secondary'>Position {html.escape(str(signal.position_size if signal.position_size is not None else "-"))}</span>
+        <span class='bb-chip bb-chip-secondary'>Position size {html.escape(position_size_label)}</span>
       </div>
       <div style='display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;'>
         <div class='bb-list-row'><div><div class='bb-label'>Price</div><div class='bb-note-strong'>TL{signal.price:.2f}</div></div></div>

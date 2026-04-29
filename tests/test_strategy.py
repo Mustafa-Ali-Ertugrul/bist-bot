@@ -96,13 +96,13 @@ def classify(score: int | float, engine: StrategyEngine) -> str:
         return "STRONG_BUY"
     if score >= engine.BUY_THRESHOLD:
         return "BUY"
-    if score > max(0, engine.WEAK_BUY_THRESHOLD):
+    if score >= engine.WEAK_BUY_THRESHOLD:
         return "WEAK_BUY"
     if score <= engine.STRONG_SELL_THRESHOLD:
         return "STRONG_SELL"
     if score <= engine.SELL_THRESHOLD:
         return "SELL"
-    if score < min(0, engine.WEAK_SELL_THRESHOLD):
+    if score <= engine.WEAK_SELL_THRESHOLD:
         return "WEAK_SELL"
     return "HOLD"
 
@@ -240,11 +240,11 @@ def test_score_classification_full_range():
         (20, "BUY"),
         (19, "WEAK_BUY"),
         (8.1, "WEAK_BUY"),
-        (8, "HOLD"),
+        (8, "WEAK_BUY"),
         (7, "HOLD"),
         (0, "HOLD"),
         (-7, "HOLD"),
-        (-8, "HOLD"),
+        (-8, "WEAK_SELL"),
         (-8.1, "WEAK_SELL"),
         (-19, "WEAK_SELL"),
         (-20, "SELL"),

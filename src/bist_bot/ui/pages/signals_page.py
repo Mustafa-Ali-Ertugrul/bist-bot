@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import streamlit as st
 
+from bist_bot.config.settings import settings
 from bist_bot.locales import get_message
 from bist_bot.ui.components.app_shell import (
     render_html_panel,
@@ -14,7 +15,7 @@ from bist_bot.ui.runtime import filter_signals
 
 
 def _render_signal_group(title: str, items, all_data) -> None:
-    render_section_title(title, f"{len(items)} assets")
+    render_section_title(title, f"{len(items)} visible signals")
     if not items:
         st.info(f"{title} icin uygun sinyal yok.")
         return
@@ -24,20 +25,29 @@ def _render_signal_group(title: str, items, all_data) -> None:
 
 def render_signals_page() -> None:
     all_data = st.session_state.get("all_data", {})
-    signals = filter_signals(st.session_state.get("signals", []), all_data)
+    base_signals = st.session_state.get("signals", [])
+    signals = filter_signals(base_signals, all_data)
 
-    strong = sorted([s for s in signals if s.score >= 40], key=lambda s: s.score, reverse=True)
-    buy = sorted([s for s in signals if 10 <= s.score < 40], key=lambda s: s.score, reverse=True)
-    watch = sorted([s for s in signals if s.score < 10], key=lambda s: s.score)
+    strong = sorted([s for s in signals if s.score >= settings.STRONG_BUY_THRESHOLD], key=lambda s: s.score, reverse=True)
+    buy = sorted([s for s in signals if settings.BUY_THRESHOLD <= s.score < settings.STRONG_BUY_THRESHOLD], key=lambda s: s.score, reverse=True)
+    watch = sorted([s for s in signals if s.score < settings.BUY_THRESHOLD], key=lambda s: s.score)
+
+    scanned_count = len(all_data)
+    generated_count = len(base_signals)
+    visible_count = len(signals)
+    filtered_out_count = max(generated_count - visible_count, 0)
 
     render_page_hero(
         "Signals",
-        "Algorithmic signal flow with premium card-driven scanning",
-        "Signal ekranini feed odakli modern bir trading surface haline getirdim. Filtreler daha tutarli, kartlar daha zengin ve mobilde tek kolon akisa oturuyor.",
+        "Algorithmic signal flow with explicit scan, generation and visibility counts",
+        f"{scanned_count} asset tarandi, {generated_count} sinyal uretildi ve "
+        f"{visible_count} tanesi aktif UI filtrelerinden sonra gorunur kaldi.",
         badges=[
+            f"Scanned {scanned_count}",
+            f"Visible {visible_count}",
             f"Strong buy {len(strong)}",
             f"Buy {len(buy)}",
-            f"Watchlist {len(watch)}",
+            f"Watch / Sell {len(watch)}",
         ],
         accent="secondary",
     )
@@ -45,7 +55,10 @@ def render_signals_page() -> None:
     render_section_title("Signal filters", "Refine the live feed")
     with st.container():
         render_html_panel(
-            "<div class='bb-note'>Use score, RSI and liquidity thresholds to narrow the feed.</div>"
+            "<div class='bb-note'>"
+            f"Backend {generated_count} sinyal urettigi halde sadece {visible_count} tanesi mevcut UI filtrelerinden geciyor. "
+            f"Filtre disinda kalan sinyal sayisi: {filtered_out_count}."
+            "</div>"
         )
         f1, f2 = st.columns(2)
         with f1:
