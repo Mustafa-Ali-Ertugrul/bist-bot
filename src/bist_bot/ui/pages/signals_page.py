@@ -39,10 +39,8 @@ def render_signals_page() -> None:
     render_page_hero(
         "Signals",
         "Algorithmic signal flow with explicit scan, generation and visibility counts",
-        (
-            f"{scanned_count} asset tarandi, {generated_count} sinyal uretildi ve "
-            f"{visible_count} tanesi aktif UI filtrelerinden sonra gorunur kaldi."
-        ),
+        f"{scanned_count} asset tarandi, {generated_count} sinyal uretildi ve "
+        f"{visible_count} tanesi aktif UI filtrelerinden sonra gorunur kaldi.",
         badges=[
             f"Scanned {scanned_count}",
             f"Visible {visible_count}",
@@ -56,12 +54,10 @@ def render_signals_page() -> None:
     render_section_title("Signal filters", "Refine the live feed")
     with st.container():
         render_html_panel(
-            (
-                "<div class='bb-note'>"
-                f"Backend {generated_count} sinyal urettigi halde sadece {visible_count} tanesi mevcut UI filtrelerinden geciyor. "
-                f"Filtre disinda kalan sinyal sayisi: {filtered_out_count}."
-                "</div>"
-            )
+            "<div class='bb-note'>"
+            f"Backend {generated_count} sinyal urettigi halde sadece {visible_count} tanesi mevcut UI filtrelerinden geciyor. "
+            f"Filtre disinda kalan sinyal sayisi: {filtered_out_count}."
+            "</div>"
         )
         f1, f2 = st.columns(2)
         with f1:
