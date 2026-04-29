@@ -308,6 +308,53 @@ def test_fetch_single_force_refresh_bypasses_cache(monkeypatch):
     assert provider.history_calls == 2
 
 
+def test_fetch_single_falls_back_to_batch_when_single_history_empty():
+    from bist_bot.data.fetcher import BISTDataFetcher
+
+    frame = pd.DataFrame(
+        {
+            "open": [1, 1, 1, 1, 1],
+            "high": [2, 2, 2, 2, 2],
+            "low": [0.5, 0.5, 0.5, 0.5, 0.5],
+            "close": [1.5, 1.5, 1.5, 1.5, 1.5],
+            "volume": [100, 100, 100, 100, 100],
+        },
+        index=pd.date_range("2025-01-01", periods=5),
+    )
+
+    class FallbackProvider:
+        def __init__(self):
+            self.history_calls = 0
+            self.batch_calls = 0
+
+        def fetch_history(self, ticker: str, period: str, interval: str):
+            _ = ticker, period, interval
+            self.history_calls += 1
+            return None
+
+        def fetch_batch(self, tickers: list[str], period: str, interval: str):
+            _ = period, interval
+            self.batch_calls += 1
+            return {tickers[0]: frame.copy()}
+
+        def fetch_quote(self, ticker: str):
+            _ = ticker
+            return None
+
+        def fetch_universe(self, force_refresh: bool = False):
+            _ = force_refresh
+            return ["THYAO.IS"]
+
+    provider = FallbackProvider()
+    fetcher = BISTDataFetcher(watchlist=["THYAO.IS"], provider=provider)
+
+    result = fetcher.fetch_single("THYAO.IS", period="1mo", interval="1d", force=True)
+
+    assert result is not None
+    assert provider.history_calls == 1
+    assert provider.batch_calls == 1
+
+
 def test_fetch_all_recovers_partial_batch_failures_with_fallback():
     from bist_bot.app_metrics import render_metrics, reset_metrics
     from bist_bot.data.fetcher import BISTDataFetcher
