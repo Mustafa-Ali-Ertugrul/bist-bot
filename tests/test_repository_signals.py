@@ -220,8 +220,8 @@ def test_signal_exists_returns_true_when_matches(signals_repo, sample_signal):
 
 
 def test_save_scan_log(signals_repo):
+    signals_repo.save_scan_log(total=100, generated=10, buys=7, sells=3, actionable=7)
     """Test saving and retrieving scan log entry."""
-    signals_repo.save_scan_log(total=100, generated=10, buys=7, sells=3)
 
     latest = signals_repo.get_latest_scan_log()
     assert latest is not None
@@ -229,6 +229,7 @@ def test_save_scan_log(signals_repo):
     assert latest["signals_generated"] == 10
     assert latest["buy_signals"] == 7
     assert latest["sell_signals"] == 3
+    assert latest["actionable"] == 7
 
 
 def test_get_latest_scan_log_returns_none_when_empty(signals_repo):
