@@ -76,6 +76,7 @@ class ScanService:
             "buys": 0,
             "sells": 0,
         }
+        self.last_side_effects: dict[str, bool] = {"paper_trades_queued": False}
         self.circuit_breaker = circuit_breaker
 
     def _auto_execute_signals(self, signals: list[Signal]) -> None:
@@ -106,6 +107,7 @@ class ScanService:
             return []
 
         try:
+            self.last_side_effects["paper_trades_queued"] = False
             if force_refresh:
                 self.fetcher.clear_cache(scope="intraday_fetch")
                 self.fetcher.clear_cache(scope="analysis")
@@ -145,7 +147,10 @@ class ScanService:
             self._check_signal_changes(signals)
             self.db.save_signals(signals)
             self._auto_execute_signals(actionable)
-            self.paper_trade_service.queue_actionable_signals(actionable)
+            if getattr(self.settings, "PAPER_MODE", False):
+                self.last_side_effects["paper_trades_queued"] = bool(
+                    self.paper_trade_service.queue_actionable_signals(actionable)
+                )
             self.db.save_scan_log(len(all_data), len(actionable), len(buys), len(sells))
             self.notification_service.notify_scan_results(signals, actionable, len(all_data))
 

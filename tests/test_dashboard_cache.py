@@ -204,6 +204,31 @@ def test_scan_endpoint_reuses_scan_service_side_effects(tmp_path):
     assert trade_count == 1
 
 
+def test_scan_endpoint_queues_paper_trades_once(tmp_path, monkeypatch):
+    from bist_bot.services.paper_trade_service import PaperTradeService
+
+    signal = Signal(ticker="THYAO.IS", signal_type=SignalType.BUY, score=25, price=5.2)
+    client, _fetcher, _engine, token, _db = _build_authorized_client(
+        tmp_path,
+        scan_signals=[signal],
+        scan_payload={"THYAO.IS": {"trend": object(), "trigger": object()}},
+    )
+    queue_calls: list[list[str]] = []
+    original_queue = PaperTradeService.queue_actionable_signals
+
+    def spy_queue(self, signals):
+        queue_calls.append([item.ticker for item in signals])
+        return original_queue(self, signals)
+
+    monkeypatch.setattr(PaperTradeService, "queue_actionable_signals", spy_queue)
+
+    with settings.override(PAPER_MODE=True):
+        response = client.post("/api/scan", headers={"Authorization": f"Bearer {token}"})
+
+    assert response.status_code == 200
+    assert queue_calls == [["THYAO.IS"]]
+
+
 def test_scan_endpoint_auto_executes_when_broker_is_available(tmp_path):
     signal = Signal(
         ticker="THYAO.IS",

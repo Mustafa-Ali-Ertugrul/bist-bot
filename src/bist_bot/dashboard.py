@@ -109,7 +109,7 @@ def create_dashboard_app(
             SilentNotifier(),
             get_db(),
             broker=get_broker(),
-            settings=settings,
+            settings=settings.replace(),
             circuit_breaker=app.config.get("circuit_breaker"),
         )
 
@@ -308,9 +308,10 @@ def create_dashboard_app(
                 exec_svc.auto_execute_signals(signals)
 
             if getattr(settings, "PAPER_MODE", False):
-                scan_service.paper_trade_service.queue_actionable_signals(
-                    scan_service.engine.get_actionable_signals(signals)
-                )
+                if not scan_service.last_side_effects.get("paper_trades_queued", False):
+                    scan_service.paper_trade_service.queue_actionable_signals(
+                        scan_service.engine.get_actionable_signals(signals)
+                    )
                 scan_service.paper_trade_service.update_open_trades()
 
             results = [
@@ -332,6 +333,9 @@ def create_dashboard_app(
             response_payload: dict[str, Any] = {
                 "status": "ok",
                 "scanned": scan_stats["scanned"],
+                "scanned_count": scan_stats["scanned"],
+                "generated_signals_count": scan_stats.get("signals", len(results)),
+                "actionable_count": scan_stats.get("actionable", 0),
                 "signals": results,
                 "force_refresh": force_refresh,
                 "timestamp": datetime.now(TR).isoformat(),
@@ -374,6 +378,7 @@ def create_dashboard_app(
                 logger.info(
                     "api_analyze_completed",
                     ticker=normalized_ticker,
+                    fetch_source="cache",
                     duration_ms=payload["duration_ms"],
                 )
                 return jsonify(payload)
@@ -382,7 +387,21 @@ def create_dashboard_app(
                 runtime_fetcher.clear_cache(scope="analysis", ticker=normalized_ticker)
 
             df = runtime_fetcher.fetch_single(normalized_ticker, period="6mo", force=force_refresh)
+            fetch_meta_getter = getattr(runtime_fetcher, "get_last_history_fetch_meta", None)
+            fetch_meta_raw = (
+                fetch_meta_getter(normalized_ticker, "6mo", settings.DATA_INTERVAL)
+                if callable(fetch_meta_getter)
+                else None
+            )
+            fetch_meta = fetch_meta_raw if isinstance(fetch_meta_raw, dict) else {}
             if df is None:
+                logger.warning(
+                    "api_analyze_data_unavailable",
+                    ticker=normalized_ticker,
+                    fetch_source=fetch_meta.get("source", "unknown"),
+                    fetch_status=fetch_meta.get("status", "unknown"),
+                    fetch_reason=fetch_meta.get("reason"),
+                )
                 return jsonify(
                     {"status": "error", "message": get_message("api.data_not_found")}
                 ), 404
@@ -428,6 +447,8 @@ def create_dashboard_app(
             logger.info(
                 "api_analyze_completed",
                 ticker=normalized_ticker,
+                fetch_source=fetch_meta.get("source", "unknown"),
+                fetch_status=fetch_meta.get("status", "unknown"),
                 signal_type=signal.signal_type.value if signal else None,
                 duration_ms=response_payload["duration_ms"],
             )
@@ -453,13 +474,18 @@ def create_dashboard_app(
     @jwt_required()
     def api_stats():
         stats = get_db().get_performance_stats()
-        scan_service = get_scan_service()
-        latest_scan = {
-            "total_scanned": scan_service.last_scan_stats.get("scanned", 0),
-            "signals_generated": scan_service.last_scan_stats.get("signals", 0),
-            "buy_signals": scan_service.last_scan_stats.get("buys", 0),
-            "sell_signals": scan_service.last_scan_stats.get("sells", 0),
-        }
+        scan_log = get_db().get_latest_scan_log()
+        latest_scan = None
+        if scan_log:
+            latest_scan = {
+                "total_scanned": scan_log.get("total_scanned", 0),
+                "signals_generated": scan_log.get("signals_generated", 0),
+                "buy_signals": scan_log.get("buy_signals", 0),
+                "sell_signals": scan_log.get("sell_signals", 0),
+                "actionable": scan_log.get("signals_generated", 0),
+                "timestamp": scan_log.get("timestamp"),
+            }
+            stats["latest_scan"] = latest_scan
         return jsonify({"status": "ok", "stats": stats, "latest_scan": latest_scan})
 
     return app

@@ -146,6 +146,11 @@ def inject_styles() -> None:
                 background:rgba(255,143,143,.12);
                 color:var(--bb-danger);
             }
+            .bb-badge-neutral {
+                border-color:rgba(176,176,176,.18);
+                background:rgba(176,176,176,.10);
+                color:#b0b0b0;
+            }
             .bb-chip {
                 border:1px solid rgba(138,180,255,.16);
                 background:rgba(138,180,255,.10);
@@ -270,6 +275,9 @@ def inject_styles() -> None:
             }
             .bb-panel-danger {
                 border-color:rgba(255,143,143,.16);
+            }
+            .bb-panel-neutral {
+                border-color:rgba(176,176,176,.12);
             }
             .bb-metric-card {
                 min-height:140px;
