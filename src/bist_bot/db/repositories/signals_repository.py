@@ -136,27 +136,6 @@ class SignalsRepository:
 
         self.manager.run_session(_write)
 
-    def get_latest_scan_log(self) -> dict[str, Any] | None:
-        def _read(session):
-            return session.scalar(
-                select(ScanLogRecord)
-                .order_by(ScanLogRecord.timestamp.desc(), ScanLogRecord.id.desc())
-                .limit(1)
-            )
-
-        row = self.manager.run_session(_read, read_only=True)
-        if row is None:
-            return None
-        return {
-            "timestamp": row.timestamp.isoformat()
-            if isinstance(row.timestamp, datetime)
-            else str(row.timestamp),
-            "total_scanned": row.total_scanned,
-            "signals_generated": row.signals_generated,
-            "buy_signals": row.buy_signals,
-            "sell_signals": row.sell_signals,
-        }
-
     def update_outcome(self, signal_id: int, outcome: str, outcome_price: float) -> None:
         def _write(session):
             row = session.get(SignalRecord, signal_id)
