@@ -11,6 +11,7 @@ from flask_jwt_extended import create_access_token
 from sqlalchemy import text
 
 from bist_bot.config.settings import settings
+from bist_bot.data.fetcher import BISTDataFetcher
 from bist_bot.db import DataAccess, DatabaseManager
 from bist_bot.execution.base import OrderResult, OrderState
 from bist_bot.scanner import ScanService
@@ -229,6 +230,64 @@ def test_api_analyze_returns_signal_payload(tmp_path) -> None:
     assert payload["ticker"] == "THYAO.IS"
     assert payload["signal"]["type"] == SignalType.BUY.value
     assert len(payload["price_data"]) == 60
+
+
+def test_api_analyze_uses_batch_fallback_when_single_fetch_fails(tmp_path) -> None:
+    signal = Signal(
+        ticker="THYAO.IS",
+        signal_type=SignalType.BUY,
+        score=28.0,
+        price=80.0,
+        stop_loss=75.0,
+        target_price=92.0,
+        reasons=["Trend"],
+        timestamp=datetime(2025, 1, 1, 10, 0, 0),
+    )
+
+    class ProviderStub:
+        def __init__(self) -> None:
+            self.history_calls: list[str] = []
+            self.batch_calls: list[list[str]] = []
+
+        def fetch_history(self, ticker: str, period: str, interval: str):
+            _ = period, interval
+            self.history_calls.append(ticker)
+            raise RuntimeError("single fetch failed")
+
+        def fetch_batch(self, tickers: list[str], period: str, interval: str):
+            _ = period, interval
+            self.batch_calls.append(list(tickers))
+            return {tickers[0]: _history_frame()}
+
+        def fetch_quote(self, ticker: str):
+            _ = ticker
+            return None
+
+        def fetch_universe(self, force_refresh: bool = False):
+            _ = force_refresh
+            return ["THYAO.IS", "ASELS.IS", "EREGL.IS"]
+
+    fetcher = BISTDataFetcher(
+        watchlist=["THYAO.IS", "ASELS.IS", "EREGL.IS"], provider=ProviderStub()
+    )
+    client, _db, _manager, token = _build_client(
+        tmp_path, fetcher, ApiEngineStub(analyze_signal=signal)
+    )
+
+    response = client.get("/api/analyze/THYAO", headers={"Authorization": f"Bearer {token}"})
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload is not None
+    assert payload["ticker"] == "THYAO.IS"
+    assert payload["signal"]["type"] == SignalType.BUY.value
+    assert fetcher.provider.history_calls == ["THYAO.IS"]
+    assert fetcher.provider.batch_calls == [["THYAO.IS"]]
+    assert fetcher.get_last_history_fetch_meta("THYAO.IS", "6mo", "1d") == {
+        "source": "batch_fallback",
+        "status": "success",
+        "reason": "single_exception",
+    }
 
 
 def test_api_analyze_returns_500_when_engine_fails(tmp_path) -> None:

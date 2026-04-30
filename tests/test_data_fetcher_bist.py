@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from unittest.mock import patch
 
 import pandas as pd
@@ -10,7 +11,7 @@ import pytest
 from bist_bot.data.fetcher import BISTDataFetcher
 
 
-def test_get_current_price_realtime_success():
+def test_get_current_price_realtime_success(caplog):
     """Test get_current_price when realtime scraping succeeds."""
     provider = MockProvider()
     quote_provider = MockQuoteProvider(price=123.45)
@@ -18,13 +19,19 @@ def test_get_current_price_realtime_success():
         watchlist=["THYAO.IS"], provider=provider, quote_provider=quote_provider
     )
 
-    with patch("bist_bot.data.fetcher.settings") as mock_settings:
+    with patch("bist_bot.data.fetcher.settings") as mock_settings, caplog.at_level(logging.INFO):
         mock_settings.ENABLE_REALTIME_SCRAPING = True
 
         price = fetcher.get_current_price("THYAO.IS")
 
     assert price == 123.45
     assert quote_provider.calls == ["THYAO.IS"]
+    assert fetcher.get_last_quote_resolution_meta("THYAO.IS") == {
+        "source": "scrape",
+        "status": "success",
+    }
+    assert "quote_resolution_completed" in caplog.text
+    assert "quote_source=scrape" in caplog.text
 
 
 def test_get_current_price_realtime_failure_yahoo_fallback():
@@ -50,13 +57,23 @@ def test_get_current_price_realtime_failure_yahoo_fallback():
         mock_settings.ENABLE_REALTIME_SCRAPING = True
 
         with patch.object(fetcher, "fetch_single", return_value=mock_df) as mock_fetch:
-            price = fetcher.get_current_price("THYAO.IS")
+            with patch.object(
+                fetcher,
+                "get_last_history_fetch_meta",
+                return_value={"source": "single", "status": "success"},
+            ):
+                price = fetcher.get_current_price("THYAO.IS")
 
-            mock_fetch.assert_called_once_with("THYAO.IS", period="5d", interval="1d")
-            assert price == 102.0
+                mock_fetch.assert_called_once_with("THYAO.IS", period="5d", interval="1d")
+                assert price == 102.0
+                assert fetcher.get_last_quote_resolution_meta("THYAO.IS") == {
+                    "source": "history_fallback",
+                    "status": "success",
+                    "reason": "single",
+                }
 
 
-def test_get_current_price_both_fail():
+def test_get_current_price_both_fail(caplog):
     """Test get_current_price when both realtime scraping and Yahoo fallback fail."""
     provider = MockProvider()
     quote_provider = MockQuoteProvider(price=None)
@@ -64,14 +81,26 @@ def test_get_current_price_both_fail():
         watchlist=["THYAO.IS"], provider=provider, quote_provider=quote_provider
     )
 
-    with patch("bist_bot.data.fetcher.settings") as mock_settings:
+    with patch("bist_bot.data.fetcher.settings") as mock_settings, caplog.at_level(logging.INFO):
         mock_settings.ENABLE_REALTIME_SCRAPING = True
 
         with patch.object(fetcher, "fetch_single", return_value=None) as mock_fetch:
-            price = fetcher.get_current_price("THYAO.IS")
+            with patch.object(
+                fetcher,
+                "get_last_history_fetch_meta",
+                return_value={"source": "batch_fallback", "status": "failed"},
+            ):
+                price = fetcher.get_current_price("THYAO.IS")
 
-            mock_fetch.assert_called_once_with("THYAO.IS", period="5d", interval="1d")
-            assert price is None
+                mock_fetch.assert_called_once_with("THYAO.IS", period="5d", interval="1d")
+                assert price is None
+                assert fetcher.get_last_quote_resolution_meta("THYAO.IS") == {
+                    "source": "failed",
+                    "status": "failed",
+                    "reason": "batch_fallback",
+                }
+                assert "quote_resolution_terminal_failed" in caplog.text
+                assert "quote_source=failed" in caplog.text
 
 
 def test_get_current_price_realtime_disabled():
@@ -96,11 +125,21 @@ def test_get_current_price_realtime_disabled():
         mock_settings.ENABLE_REALTIME_SCRAPING = False
 
         with patch.object(fetcher, "fetch_single", return_value=mock_df) as mock_fetch:
-            price = fetcher.get_current_price("THYAO.IS")
+            with patch.object(
+                fetcher,
+                "get_last_history_fetch_meta",
+                return_value={"source": "single", "status": "success"},
+            ):
+                price = fetcher.get_current_price("THYAO.IS")
 
-            mock_fetch.assert_called_once_with("THYAO.IS", period="5d", interval="1d")
-            assert price == 102.0
-            assert quote_provider.calls == []
+                mock_fetch.assert_called_once_with("THYAO.IS", period="5d", interval="1d")
+                assert price == 102.0
+                assert quote_provider.calls == []
+                assert fetcher.get_last_quote_resolution_meta("THYAO.IS") == {
+                    "source": "history_fallback",
+                    "status": "success",
+                    "reason": "single",
+                }
 
 
 class MockProvider:
