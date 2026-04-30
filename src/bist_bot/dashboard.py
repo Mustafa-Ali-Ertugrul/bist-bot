@@ -336,6 +336,7 @@ def create_dashboard_app(
                 "scanned_count": scan_stats["scanned"],
                 "generated_signals_count": scan_stats.get("signals", len(results)),
                 "actionable_count": scan_stats.get("actionable", 0),
+                "rejection_breakdown": scan_service.last_rejection_breakdown,
                 "signals": results,
                 "force_refresh": force_refresh,
                 "timestamp": datetime.now(TR).isoformat(),
@@ -475,6 +476,7 @@ def create_dashboard_app(
     def api_stats():
         stats = get_db().get_performance_stats()
         latest_scan_record = get_db().get_latest_scan_log()
+        rejection_breakdown = get_db().get_latest_rejection_breakdown()
         if latest_scan_record is None:
             latest_scan = {
                 "total_scanned": 0,
@@ -496,7 +498,15 @@ def create_dashboard_app(
                 "timestamp": latest_scan_record.get("timestamp"),
             }
         stats["latest_scan"] = latest_scan
-        return jsonify({"status": "ok", "stats": stats, "latest_scan": latest_scan})
+        stats["rejection_breakdown"] = rejection_breakdown
+        return jsonify(
+            {
+                "status": "ok",
+                "stats": stats,
+                "latest_scan": latest_scan,
+                "rejection_breakdown": rejection_breakdown,
+            }
+        )
 
     return app
 

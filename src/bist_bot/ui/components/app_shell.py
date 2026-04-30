@@ -7,6 +7,7 @@ import streamlit as st
 
 PAGE_META = {
     "dashboard": {"label": "Dashboard", "icon": "dashboard"},
+    "scan": {"label": "Scan Detail", "icon": "monitoring"},
     "signals": {"label": "Signals", "icon": "query_stats"},
     "analysis": {"label": "Analysis", "icon": "analytics"},
     "settings": {"label": "Settings", "icon": "settings"},
@@ -69,7 +70,7 @@ def render_shell(active_page: str, email: str = "") -> str | None:
 
 def render_bottom_nav(active_page: str) -> str | None:
     st.markdown("<div class='bb-bottomnav-spacer'></div>", unsafe_allow_html=True)
-    nav_columns = st.columns([1, 1, 1, 1], gap="small")
+    nav_columns = st.columns(len(PAGE_META), gap="small")
     for (key, meta), column in zip(PAGE_META.items(), nav_columns, strict=False):
         with column:
             button_type: Literal["primary", "secondary", "tertiary"] = (

@@ -23,6 +23,13 @@ from bist_bot.strategy.signal_models import Signal, SignalType
 
 logger = get_logger(__name__, component="scanner")
 
+EMPTY_REJECTION_BREAKDOWN = {
+    "total_rejections": 0,
+    "by_reason": [],
+    "by_stage": [],
+    "scan_id": "",
+}
+
 
 class ScanService:
     """Coordinate one market scan from data fetch through side effects.
@@ -77,6 +84,7 @@ class ScanService:
             "sells": 0,
         }
         self.last_side_effects: dict[str, bool] = {"paper_trades_queued": False}
+        self.last_rejection_breakdown: dict[str, object] = dict(EMPTY_REJECTION_BREAKDOWN)
         self.circuit_breaker = circuit_breaker
 
     def _auto_execute_signals(self, signals: list[Signal]) -> None:
@@ -133,6 +141,10 @@ class ScanService:
                 return []
 
             signals = self.engine.scan_all(all_data)
+            breakdown = self.engine.get_last_rejection_breakdown()
+            self.last_rejection_breakdown = (
+                breakdown if isinstance(breakdown, dict) else dict(EMPTY_REJECTION_BREAKDOWN)
+            )
             actionable = self.engine.get_actionable_signals(signals)
             buys = [
                 s
@@ -154,6 +166,7 @@ class ScanService:
 
             self._check_signal_changes(signals)
             self.db.save_signals(signals)
+            self.db.save_latest_rejection_breakdown(self.last_rejection_breakdown)
             self._auto_execute_signals(actionable)
             if getattr(self.settings, "PAPER_MODE", False):
                 self.last_side_effects["paper_trades_queued"] = bool(
@@ -161,7 +174,7 @@ class ScanService:
                 )
             self.db.save_scan_log(
                 len(all_data),
-                len(actionable),
+                len(signals),
                 len(buys),
                 len(sells),
                 len(actionable),

@@ -1,6 +1,7 @@
 """Signal scoring and classification orchestration for BIST trading ideas."""
 
 from contextlib import AbstractContextManager
+from uuid import uuid4
 from typing import Any, cast
 
 import pandas as pd
@@ -43,6 +44,40 @@ from bist_bot.strategy.signal_models import Signal, SignalType
 logger = get_logger(__name__, component="strategy")
 
 
+def _empty_rejection_breakdown(scan_id: str = "") -> dict[str, object]:
+    return {
+        "total_rejections": 0,
+        "by_reason": [],
+        "by_stage": [],
+        "scan_id": scan_id,
+    }
+
+
+def _summary_entry(rows: object, key: str) -> tuple[str, int]:
+    if isinstance(rows, list) and rows and isinstance(rows[0], dict):
+        first = rows[0]
+        value = str(first.get(key, "") or "")
+        raw_count = first.get("count", 0)
+        count = int(raw_count) if isinstance(raw_count, (int, float, str)) else 0
+        return value, count
+    return "", 0
+
+
+def _coerce_int(value: object, default: int = 0) -> int:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return default
+    return default
+
+
 class StrategyEngine:
     def __init__(
         self,
@@ -68,6 +103,121 @@ class StrategyEngine:
         self.MOMENTUM_CONFIRMATION = self.params.momentum_confirmation_threshold
         # Plugin registry — external strategies can be added at runtime
         self._strategies: list[BaseStrategy] = []
+        self._current_scan_id: str | None = None
+        self._current_rejection_counts: dict[str, dict[str, int]] = {"reason": {}, "stage": {}}
+        self._last_rejection_breakdown: dict[str, object] = _empty_rejection_breakdown()
+
+    def _reset_rejection_aggregation(self) -> None:
+        self._current_rejection_counts = {"reason": {}, "stage": {}}
+
+    def _finalize_rejection_breakdown(self, scan_id: str) -> None:
+        by_reason = sorted(
+            (
+                {"reason_code": reason_code, "count": count}
+                for reason_code, count in self._current_rejection_counts["reason"].items()
+            ),
+            key=lambda item: (-int(item["count"]), str(item["reason_code"])),
+        )
+        by_stage = sorted(
+            (
+                {"stage": stage, "count": count}
+                for stage, count in self._current_rejection_counts["stage"].items()
+            ),
+            key=lambda item: (-int(item["count"]), str(item["stage"])),
+        )
+        total_rejections = sum(int(item["count"]) for item in by_reason)
+        self._last_rejection_breakdown = {
+            "total_rejections": total_rejections,
+            "by_reason": by_reason,
+            "by_stage": by_stage,
+            "scan_id": scan_id,
+        }
+        top_reason, top_reason_count = _summary_entry(by_reason, "reason_code")
+        top_stage, top_stage_count = _summary_entry(by_stage, "stage")
+        logger.info(
+            "scan_rejection_summary",
+            scan_id=scan_id,
+            total_rejections=total_rejections,
+            top_reason=top_reason,
+            top_reason_count=top_reason_count,
+            top_stage=top_stage,
+            top_stage_count=top_stage_count,
+        )
+
+    def get_last_rejection_breakdown(self) -> dict[str, object]:
+        by_reason = cast(
+            list[dict[str, object]], self._last_rejection_breakdown.get("by_reason", [])
+        )
+        by_stage = cast(list[dict[str, object]], self._last_rejection_breakdown.get("by_stage", []))
+        return {
+            "total_rejections": _coerce_int(
+                self._last_rejection_breakdown.get("total_rejections", 0)
+            ),
+            "by_reason": list(by_reason),
+            "by_stage": list(by_stage),
+            "scan_id": str(self._last_rejection_breakdown.get("scan_id", "") or ""),
+        }
+
+    def _resolve_scan_id(self) -> str:
+        return self._current_scan_id or f"manual-{uuid4().hex[:12]}"
+
+    def _timeframe_label(self, multi_timeframe: bool) -> str:
+        if multi_timeframe and getattr(settings, "MTF_ENABLED", True):
+            return f"trigger:{settings.MTF_TRIGGER_INTERVAL}|trend:{settings.MTF_TREND_INTERVAL}"
+        return str(getattr(settings, "DATA_INTERVAL", "1d"))
+
+    def _log_candidate_rejected(
+        self,
+        ticker: str,
+        *,
+        stage: str,
+        reason_code: str,
+        multi_timeframe: bool,
+        trigger_candle_count: int,
+        score: float | None = None,
+        signal_type: str | None = None,
+        trend_bias: str | None = None,
+        adx: float | None = None,
+        position_size: int | None = None,
+        blocked_by_correlation: bool | None = None,
+        liquidity_value: float | None = None,
+        signal_probability: float | None = None,
+        reason_detail: str | None = None,
+    ) -> None:
+        payload: dict[str, Any] = {
+            "ticker": ticker,
+            "stage": stage,
+            "reason_code": reason_code,
+            "scan_id": self._resolve_scan_id(),
+            "timeframe": self._timeframe_label(multi_timeframe),
+            "multi_timeframe": multi_timeframe,
+            "trigger_candle_count": trigger_candle_count,
+        }
+        if score is not None:
+            payload["score"] = round(float(score), 2)
+        if signal_type is not None:
+            payload["signal_type"] = signal_type
+        if trend_bias is not None:
+            payload["trend_bias"] = trend_bias
+        if adx is not None:
+            payload["adx"] = round(float(adx), 2)
+        if position_size is not None:
+            payload["position_size"] = int(position_size)
+        if blocked_by_correlation is not None:
+            payload["blocked_by_correlation"] = blocked_by_correlation
+        if liquidity_value is not None:
+            payload["liquidity_value"] = round(float(liquidity_value), 2)
+        if signal_probability is not None:
+            payload["signal_probability"] = round(float(signal_probability), 4)
+        if reason_detail is not None:
+            payload["reason_detail"] = reason_detail
+        self._current_rejection_counts["reason"][reason_code] = (
+            self._current_rejection_counts["reason"].get(reason_code, 0) + 1
+        )
+        self._current_rejection_counts["stage"][stage] = (
+            self._current_rejection_counts["stage"].get(stage, 0) + 1
+        )
+        logger.info("strategy_candidate_rejected", **payload)
 
     def _extract_timeframes(
         self, market_data: pd.DataFrame | dict[str, pd.DataFrame]
@@ -153,6 +303,7 @@ class StrategyEngine:
         *,
         last: pd.Series,
         prev: pd.Series,
+        multi_timeframe: bool,
     ) -> tuple[float, list[str]] | None:
         return calculate_score_and_reasons(
             self.params,
@@ -165,6 +316,12 @@ class StrategyEngine:
             volume_scorer=self._score_volume,
             structure_scorer=self._score_structure,
             momentum_checker=self._check_momentum_confirmation,
+            reject_logger=lambda **fields: self._log_candidate_rejected(
+                ticker,
+                multi_timeframe=multi_timeframe,
+                trigger_candle_count=len(df),
+                **fields,
+            ),
         )
 
     def _classify_signal(self, score: float) -> tuple[SignalType, str]:
@@ -184,6 +341,7 @@ class StrategyEngine:
         score: float,
         trend_bias: TrendBias,
         risk_levels: RiskLevels,
+        multi_timeframe: bool,
     ) -> RiskLevels | None:
         return apply_buy_side_risk(
             self.risk_manager,
@@ -196,6 +354,13 @@ class StrategyEngine:
             score=score,
             trend_bias=trend_bias,
             risk_levels=risk_levels,
+            reject_logger=lambda **fields: self._log_candidate_rejected(
+                ticker,
+                multi_timeframe=multi_timeframe,
+                trigger_candle_count=len(df),
+                trend_bias=trend_bias.value,
+                **fields,
+            ),
         )
 
     def _build_signal(
@@ -237,6 +402,7 @@ class StrategyEngine:
         signal: Signal,
         trend_bias: TrendBias,
         multi_timeframe: bool,
+        trigger_candle_count: int,
     ) -> bool:
         return passes_multi_timeframe_confluence(
             ticker,
@@ -244,6 +410,12 @@ class StrategyEngine:
             trend_bias=trend_bias,
             multi_timeframe=multi_timeframe,
             confluence_applier=self._apply_confluence,
+            reject_logger=lambda **fields: self._log_candidate_rejected(
+                ticker,
+                multi_timeframe=multi_timeframe,
+                trigger_candle_count=trigger_candle_count,
+                **fields,
+            ),
         )
 
     def analyze(
@@ -255,6 +427,14 @@ class StrategyEngine:
         """Score a ticker and build a signal when thresholds are met."""
         trend_df, trigger_df, multi_timeframe = self._extract_timeframes(df)
         if not self._has_enough_trigger_data(ticker, trigger_df):
+            self._log_candidate_rejected(
+                ticker,
+                stage="data",
+                reason_code="insufficient_history",
+                multi_timeframe=multi_timeframe,
+                trigger_candle_count=len(trigger_df),
+                reason_detail="trigger candle count below minimum requirement",
+            )
             return None
 
         df, trend_bias, last, prev = self._prepare_analysis_frame(
@@ -263,15 +443,39 @@ class StrategyEngine:
             multi_timeframe=multi_timeframe,
         )
         if not self._passes_adx_filter(ticker, last):
+            self._log_candidate_rejected(
+                ticker,
+                stage="indicators",
+                reason_code="adx_missing",
+                multi_timeframe=multi_timeframe,
+                trigger_candle_count=len(df),
+                reason_detail="adx missing or non-numeric on latest candle",
+            )
             return None
         adx = get_valid_adx(self.params, ticker, last)
-        scored = self._calculate_score_and_reasons(ticker, df, last=last, prev=prev)
+        scored = self._calculate_score_and_reasons(
+            ticker,
+            df,
+            last=last,
+            prev=prev,
+            multi_timeframe=multi_timeframe,
+        )
         if scored is None:
             return None
         score, reasons = scored
         if adx is not None and adx < self.params.adx_threshold:
             score, reasons = apply_low_adx_penalty(self.params, adx, score, reasons)
             if score == 0:
+                self._log_candidate_rejected(
+                    ticker,
+                    stage="scoring",
+                    reason_code="score_zero_after_penalty",
+                    multi_timeframe=multi_timeframe,
+                    trigger_candle_count=len(df),
+                    score=score,
+                    adx=adx,
+                    reason_detail="low adx penalty neutralized candidate score",
+                )
                 return None
         signal_type, confidence = self._classify_signal(score)
         risk_levels = self.risk_manager.calculate(df)
@@ -284,6 +488,7 @@ class StrategyEngine:
             score=score,
             trend_bias=trend_bias,
             risk_levels=risk_levels,
+            multi_timeframe=multi_timeframe,
         )
         if adjusted_risk_levels is None:
             return None
@@ -303,6 +508,7 @@ class StrategyEngine:
             signal=signal,
             trend_bias=trend_bias,
             multi_timeframe=multi_timeframe,
+            trigger_candle_count=len(df),
         ):
             return None
         if self._is_buy_signal(signal_type):
@@ -314,24 +520,30 @@ class StrategyEngine:
     ) -> list[Signal]:
         """Analyze all fetched ticker data and return sorted signals."""
         signals = []
-        self.risk_manager.reset_portfolio()
-        self.risk_manager.build_global_correlation_cache(data)
+        self._current_scan_id = f"scan-{uuid4().hex[:12]}"
+        self._reset_rejection_aggregation()
+        try:
+            self.risk_manager.reset_portfolio()
+            self.risk_manager.build_global_correlation_cache(data)
 
-        sector_scan = getattr(self.risk_manager, "sector_scan", None)
-        if callable(sector_scan):
-            with cast(AbstractContextManager[None], sector_scan()):
+            sector_scan = getattr(self.risk_manager, "sector_scan", None)
+            if callable(sector_scan):
+                with cast(AbstractContextManager[None], sector_scan()):
+                    for ticker, df in data.items():
+                        signal = self.analyze(ticker, df, enforce_sector_limit=True)
+                        if signal:
+                            signals.append(signal)
+            else:
+                self.risk_manager.reset_sectors()
                 for ticker, df in data.items():
                     signal = self.analyze(ticker, df, enforce_sector_limit=True)
                     if signal:
                         signals.append(signal)
-        else:
-            self.risk_manager.reset_sectors()
-            for ticker, df in data.items():
-                signal = self.analyze(ticker, df, enforce_sector_limit=True)
-                if signal:
-                    signals.append(signal)
 
-        signals.sort(key=lambda s: s.score, reverse=True)
+            signals.sort(key=lambda s: s.score, reverse=True)
+        finally:
+            self._finalize_rejection_breakdown(self._current_scan_id or "")
+            self._current_scan_id = None
         return signals
 
     def get_actionable_signals(self, signals: list[Signal]) -> list[Signal]:

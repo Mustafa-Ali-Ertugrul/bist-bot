@@ -50,6 +50,15 @@ class AppRepository:
     def get_latest_scan_log(self):
         return self.signals.get_latest_scan_log()
 
+    def save_latest_rejection_breakdown(self, payload: dict):
+        return self.config.save_config("latest_rejection_breakdown", payload)
+
+    def get_latest_rejection_breakdown(self):
+        value = self.config.get_config("latest_rejection_breakdown", default=None)
+        if isinstance(value, dict):
+            return value
+        return {"total_rejections": 0, "by_reason": [], "by_stage": [], "scan_id": ""}
+
     def update_outcome(self, signal_id: int, outcome: str, outcome_price: float):
         return self.signals.update_outcome(signal_id, outcome, outcome_price)
 

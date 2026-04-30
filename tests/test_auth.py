@@ -194,6 +194,82 @@ def test_register_returns_403_when_public_registration_disabled(tmp_path):
     assert stored_count == 0
 
 
+def test_stats_endpoint_returns_stable_rejection_breakdown_shape(tmp_path):
+    client, manager = build_db_user_client(tmp_path)
+
+    login_response = client.post(
+        "/api/auth/login",
+        json={"email": "dbadmin@bistbot.local", "password": "db-password"},
+    )
+    assert login_response.status_code == 200
+    payload = login_response.get_json()
+    assert payload is not None
+    token = payload["access_token"]
+
+    db = DataAccess(manager)
+    db.save_latest_rejection_breakdown(
+        {
+            "total_rejections": 3,
+            "by_reason": [
+                {"reason_code": "score_filtered_sideways", "count": 2},
+                {"reason_code": "insufficient_history", "count": 1},
+            ],
+            "by_stage": [
+                {"stage": "scoring", "count": 2},
+                {"stage": "data", "count": 1},
+            ],
+            "scan_id": "scan-api123",
+        }
+    )
+
+    response = client.get("/api/stats", headers={"Authorization": f"Bearer {token}"})
+
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data is not None
+    breakdown = data["rejection_breakdown"]
+    assert breakdown == {
+        "total_rejections": 3,
+        "by_reason": [
+            {"reason_code": "score_filtered_sideways", "count": 2},
+            {"reason_code": "insufficient_history", "count": 1},
+        ],
+        "by_stage": [
+            {"stage": "scoring", "count": 2},
+            {"stage": "data", "count": 1},
+        ],
+        "scan_id": "scan-api123",
+    }
+    assert data["stats"]["rejection_breakdown"] == breakdown
+
+
+def test_stats_endpoint_returns_empty_rejection_breakdown_when_missing(tmp_path):
+    client, _manager = build_db_user_client(tmp_path)
+
+    login_response = client.post(
+        "/api/auth/login",
+        json={"email": "dbadmin@bistbot.local", "password": "db-password"},
+    )
+    assert login_response.status_code == 200
+    payload = login_response.get_json()
+    assert payload is not None
+
+    response = client.get(
+        "/api/stats",
+        headers={"Authorization": f"Bearer {payload['access_token']}"},
+    )
+
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data is not None
+    assert data["rejection_breakdown"] == {
+        "total_rejections": 0,
+        "by_reason": [],
+        "by_stage": [],
+        "scan_id": "",
+    }
+
+
 def test_register_rejects_duplicate_email(tmp_path):
     client, _manager = build_db_user_client(tmp_path, allow_public_registration=True)
 
