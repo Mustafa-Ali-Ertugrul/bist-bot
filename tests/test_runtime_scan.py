@@ -398,3 +398,12 @@ def test_portfolio_page_uses_settings_thresholds_and_excludes_hold_fallback():
     assert "settings.STRONG_BUY_THRESHOLD" in source
     assert "settings.BUY_THRESHOLD" in source
     assert "SignalType.HOLD" in source
+
+
+def test_overview_page_uses_settings_strong_buy_threshold():
+    from bist_bot.ui.pages import overview_page
+
+    source = inspect.getsource(overview_page)
+
+    assert "settings.STRONG_BUY_THRESHOLD" in source
+    assert "s.score >= 40" not in source
