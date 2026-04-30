@@ -73,7 +73,7 @@ def test_scan_once_orchestrates_side_effect_services():
     paper_trade_service.update_open_trades.assert_called_once_with()
     notification_service.notify_scan_results.assert_called_once_with([signal], [signal], 1)
     db.save_signals.assert_called_once_with([signal])
-    db.save_scan_log.assert_called_once_with(1, 1, 1, 0)
+    db.save_scan_log.assert_called_once_with(1, 1, 1, 0, 1)
 
 
 def test_scan_once_skips_paper_trade_updates_when_disabled():

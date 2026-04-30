@@ -74,6 +74,8 @@ def score_momentum(params, last, _prev) -> tuple[float, list[str]]:
             score -= params.score_cci_normal
             reasons.append(f"CCI yüksek ({cci:.0f})")
 
+    MAX_MOMENTUM_SCORE = 25
+    score = max(-MAX_MOMENTUM_SCORE, min(MAX_MOMENTUM_SCORE, score))
     return score, reasons
 
 
@@ -90,11 +92,15 @@ def score_trend(params, last, prev) -> tuple[float, list[str]]:
         if above_ema and not last_above_ema:
             reasons.append(f"Fiyat EMA{settings.EMA_LONG}'i kesti (yukarı)")
         elif above_ema:
-            if pd.notna(adx) and adx >= getattr(settings, "ADX_THRESHOLD", 20):
+            if pd.notna(adx) and adx >= params.adx_threshold:
                 score += params.score_ema_cross
                 reasons.append(f"yükseliş trendi (EMA{settings.EMA_LONG} üzerinde)")
         elif not above_ema and last_above_ema:
             reasons.append(f"Fiyat EMA{settings.EMA_LONG}'i kesti (aşağı)")
+        elif not above_ema:
+            if pd.notna(adx) and adx >= params.adx_threshold:
+                score -= params.score_ema_cross / 2
+                reasons.append(f"düşüş trendi (EMA{settings.EMA_LONG} altında)")
 
     sma_cross = last.get("sma_cross", "NONE")
     if sma_cross == "GOLDEN_CROSS":
@@ -173,6 +179,8 @@ def score_trend(params, last, prev) -> tuple[float, list[str]]:
         score -= params.score_di_cross
         reasons.append("+DI/-DI Bearish Cross")
 
+    MAX_TREND_SCORE = 25
+    score = max(-MAX_TREND_SCORE, min(MAX_TREND_SCORE, score))
     return score, reasons
 
 
@@ -222,6 +230,8 @@ def score_volume(params, last) -> tuple[float, list[str]]:
         score -= params.score_obv_trend
         reasons.append("OBV düşüş trendi → Çıkış var")
 
+    MAX_VOLUME_SCORE = 15
+    score = max(-MAX_VOLUME_SCORE, min(MAX_VOLUME_SCORE, score))
     return score, reasons
 
 
@@ -276,4 +286,6 @@ def score_structure(params, last) -> tuple[float, list[str]]:
         score -= params.score_macd_divergence
         reasons.append("🔥 MACD Bearish Divergence → Güçlü dönüş sinyali")
 
+    MAX_STRUCTURE_SCORE = 20
+    score = max(-MAX_STRUCTURE_SCORE, min(MAX_STRUCTURE_SCORE, score))
     return score, reasons

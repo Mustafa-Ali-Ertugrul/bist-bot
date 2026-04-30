@@ -42,7 +42,9 @@ def render_overview_page() -> None:
         st.warning(f"{get_message('ui.api_data_failed')}: {exc}")
         return
 
-    stats = stats_response.json().get("stats", {}) if stats_response.ok else {}
+    response_payload = stats_response.json() if stats_response.ok else {}
+    stats = response_payload.get("stats", {})
+    latest_scan = stats.get("latest_scan") or response_payload.get("latest_scan") or {}
     recent_signals = signals_response.json().get("signals", []) if signals_response.ok else []
     index_data = fetch_index_data()
 

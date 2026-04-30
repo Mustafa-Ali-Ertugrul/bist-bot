@@ -115,6 +115,7 @@ class TechnicalIndicators:
 
         rs = avg_gain / avg_loss
         df["rsi"] = 100 - (100 / (1 + rs))
+        df["rsi"] = df["rsi"].replace([np.inf, -np.inf], np.nan).clip(0, 100)
 
         df["rsi_zone"] = "UNKNOWN"
         rsi = df["rsi"]

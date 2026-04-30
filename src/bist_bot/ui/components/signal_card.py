@@ -37,6 +37,8 @@ def render_signal_card(signal, df_data=None, chart_factory=None) -> None:
         f"<div class='bb-list-row'><div class='bb-list-row-subtitle'>{reason}</div></div>"
         for reason in reasons
     )
+    position_size = getattr(signal, "position_size", None)
+    position_size_label = "-" if position_size is None else str(position_size)
 
     content = f"""
     <div style='display:grid;gap:16px;'>

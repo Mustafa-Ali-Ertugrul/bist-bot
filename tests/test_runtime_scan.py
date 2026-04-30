@@ -11,7 +11,7 @@ TR = timezone(timedelta(hours=3))
 
 
 def test_ensure_initial_data_starts_background_scan_when_no_cache():
-    """When no cached signals exist, ensure_initial_data should start a limited background scan."""
+    """When no cached signals exist, ensure_initial_data should start a full background scan."""
     mock_db = MagicMock()
     mock_db.get_recent_signals.return_value = []
 
@@ -41,7 +41,7 @@ def test_ensure_initial_data_starts_background_scan_when_no_cache():
 
         ensure_initial_data()
 
-        mock_start.assert_called_once_with(force_clear=False, limited=True)
+        mock_start.assert_called_once_with(force_clear=False, limited=False)
         assert mock_session.scan_in_progress is True
 
 
@@ -407,3 +407,95 @@ def test_overview_page_uses_settings_strong_buy_threshold():
 
     assert "settings.STRONG_BUY_THRESHOLD" in source
     assert "s.score >= 40" not in source
+
+
+def test_start_background_scan_limited_respects_initial_scan_limit():
+    """start_background_scan(limited=True) should slice watchlist to STREAMLIT_INITIAL_SCAN_LIMIT."""
+    from bist_bot.ui import runtime_scan
+
+    class FakeSession:
+        def __init__(self):
+            self._scan_session_key = "limit-key"
+            self.scan_in_progress = False
+            self.scan_error = None
+            self.scan_started_at = None
+            self.data_fetcher = MagicMock()
+            self.engine = MagicMock()
+            self.notifier = MagicMock()
+            self.db = MagicMock()
+            self.last_scan_time = None
+
+        def get(self, key, default=None):
+            return getattr(self, key, default)
+
+    fake = FakeSession()
+    full_watchlist = [f"TICK{i}.IS" for i in range(100)]
+
+    captured_tickers = None
+
+    with (
+        patch.object(runtime_scan.st, "session_state", fake),
+        patch.object(runtime_scan, "threading") as mock_threading,
+        patch.object(runtime_scan, "logger"),
+        patch.object(runtime_scan, "settings") as mock_settings,
+        patch.object(runtime_scan, "collect_scan_result") as mock_collect,
+    ):
+        mock_settings.WATCHLIST = full_watchlist
+        mock_settings.STREAMLIT_INITIAL_SCAN_LIMIT = 20
+        mock_threading.Thread = MagicMock()
+
+        runtime_scan.start_background_scan(force_clear=False, limited=True)
+
+        worker_fn = mock_threading.Thread.call_args.kwargs["target"]
+        worker_fn()
+
+        call_args = mock_collect.call_args
+        captured_tickers = call_args.kwargs.get("limited_tickers")
+
+    assert captured_tickers is not None
+    assert len(captured_tickers) == 20
+    assert captured_tickers == full_watchlist[:20]
+
+
+def test_start_background_scan_unlimited_scans_all_tickers():
+    """start_background_scan(limited=False) should pass limited_tickers=None to scan all tickers."""
+    from bist_bot.ui import runtime_scan
+
+    class FakeSession:
+        def __init__(self):
+            self._scan_session_key = "unlimit-key"
+            self.scan_in_progress = False
+            self.scan_error = None
+            self.scan_started_at = None
+            self.data_fetcher = MagicMock()
+            self.engine = MagicMock()
+            self.notifier = MagicMock()
+            self.db = MagicMock()
+            self.last_scan_time = None
+
+        def get(self, key, default=None):
+            return getattr(self, key, default)
+
+    fake = FakeSession()
+    full_watchlist = [f"TICK{i}.IS" for i in range(100)]
+
+    with (
+        patch.object(runtime_scan.st, "session_state", fake),
+        patch.object(runtime_scan, "threading") as mock_threading,
+        patch.object(runtime_scan, "logger"),
+        patch.object(runtime_scan, "settings") as mock_settings,
+        patch.object(runtime_scan, "collect_scan_result") as mock_collect,
+    ):
+        mock_settings.WATCHLIST = full_watchlist
+        mock_settings.STREAMLIT_INITIAL_SCAN_LIMIT = 20
+        mock_threading.Thread = MagicMock()
+
+        runtime_scan.start_background_scan(force_clear=False, limited=False)
+
+        worker_fn = mock_threading.Thread.call_args.kwargs["target"]
+        worker_fn()
+
+        call_args = mock_collect.call_args
+        captured_tickers = call_args.kwargs.get("limited_tickers")
+
+    assert captured_tickers is None

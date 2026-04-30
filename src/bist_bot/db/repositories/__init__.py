@@ -44,8 +44,8 @@ class AppRepository:
     def get_latest_signal(self, ticker: str):
         return self.signals.get_latest_signal(ticker)
 
-    def save_scan_log(self, total: int, generated: int, buys: int, sells: int):
-        return self.signals.save_scan_log(total, generated, buys, sells)
+    def save_scan_log(self, total: int, generated: int, buys: int, sells: int, actionable: int = 0):
+        return self.signals.save_scan_log(total, generated, buys, sells, actionable)
 
     def get_latest_scan_log(self):
         return self.signals.get_latest_scan_log()
@@ -55,6 +55,9 @@ class AppRepository:
 
     def get_performance_stats(self):
         return self.signals.get_performance_stats()
+
+    def get_latest_scan_log(self):
+        return self.signals.get_latest_scan_log()
 
     def add_paper_trade(self, *args, **kwargs):
         return self.portfolio.add_paper_trade(*args, **kwargs)

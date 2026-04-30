@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import time
-from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 
@@ -285,11 +285,11 @@ def create_dashboard_app(
             scan_service = get_scan_service()
             logger.info("api_scan_started", force_refresh=force_refresh)
             exec_svc = scan_service.execution_service
-            with ThreadPoolExecutor(max_workers=1) as executor:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(scan_service.scan_once, force_refresh=force_refresh)
                 try:
                     signals = future.result(timeout=settings.SCAN_TIMEOUT_SECONDS)
-                except TimeoutError:
+                except concurrent.futures.TimeoutError:
                     logger.error(
                         "api_scan_timed_out",
                         timeout_seconds=settings.SCAN_TIMEOUT_SECONDS,
@@ -474,18 +474,28 @@ def create_dashboard_app(
     @jwt_required()
     def api_stats():
         stats = get_db().get_performance_stats()
-        scan_log = get_db().get_latest_scan_log()
-        latest_scan = None
-        if scan_log:
+        latest_scan_record = get_db().get_latest_scan_log()
+        if latest_scan_record is None:
             latest_scan = {
-                "total_scanned": scan_log.get("total_scanned", 0),
-                "signals_generated": scan_log.get("signals_generated", 0),
-                "buy_signals": scan_log.get("buy_signals", 0),
-                "sell_signals": scan_log.get("sell_signals", 0),
-                "actionable": scan_log.get("signals_generated", 0),
-                "timestamp": scan_log.get("timestamp"),
+                "total_scanned": 0,
+                "signals_generated": 0,
+                "buy_signals": 0,
+                "sell_signals": 0,
+                "actionable": 0,
+                "timestamp": None,
             }
-            stats["latest_scan"] = latest_scan
+        else:
+            buy = int(latest_scan_record.get("buy_signals", 0) or 0)
+            sell = int(latest_scan_record.get("sell_signals", 0) or 0)
+            latest_scan = {
+                "total_scanned": int(latest_scan_record.get("total_scanned", 0) or 0),
+                "signals_generated": int(latest_scan_record.get("signals_generated", 0) or 0),
+                "buy_signals": buy,
+                "sell_signals": sell,
+                "actionable": latest_scan_record.get("actionable", buy + sell),
+                "timestamp": latest_scan_record.get("timestamp"),
+            }
+        stats["latest_scan"] = latest_scan
         return jsonify({"status": "ok", "stats": stats, "latest_scan": latest_scan})
 
     return app
