@@ -104,7 +104,8 @@ def render_analyze_page() -> None:
         "</div>"
     )
     render_html_panel(
-        headline_html, accent="positive" if signal_score >= settings.BUY_THRESHOLD else "danger"
+        headline_html,
+        accent="positive" if signal_score >= settings.BUY_THRESHOLD else "danger",
     )
 
     m1, m2, m3, m4 = st.columns(4)

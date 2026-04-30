@@ -47,14 +47,14 @@ class AppRepository:
     def save_scan_log(self, total: int, generated: int, buys: int, sells: int, actionable: int = 0):
         return self.signals.save_scan_log(total, generated, buys, sells, actionable)
 
+    def get_latest_scan_log(self):
+        return self.signals.get_latest_scan_log()
+
     def update_outcome(self, signal_id: int, outcome: str, outcome_price: float):
         return self.signals.update_outcome(signal_id, outcome, outcome_price)
 
     def get_performance_stats(self):
         return self.signals.get_performance_stats()
-
-    def get_latest_scan_log(self):
-        return self.signals.get_latest_scan_log()
 
     def add_paper_trade(self, *args, **kwargs):
         return self.portfolio.add_paper_trade(*args, **kwargs)

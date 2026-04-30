@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import inspect
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 TR = timezone(timedelta(hours=3))
@@ -334,6 +336,77 @@ def test_background_scan_worker_failure_clears_active_session():
             pending = runtime_scan.PENDING_SCAN_RESULTS.pop("fail-key", None)
             assert pending is not None
             assert pending.get("error") is not None
+
+
+def test_collect_scan_result_returns_scan_stats():
+    from bist_bot.strategy.signal_models import SignalType
+    from bist_bot.ui import runtime_scan
+
+    fetcher = MagicMock()
+    fetcher.fetch_multi_timeframe_all.return_value = {
+        "THYAO.IS": {"trigger": object()},
+        "ASELS.IS": {"trigger": object()},
+    }
+    engine = MagicMock()
+    hold_signal = MagicMock(signal_type=SignalType.HOLD)
+    buy_signal = MagicMock(signal_type=SignalType.BUY)
+    engine.scan_all.return_value = [hold_signal, buy_signal]
+    notifier = MagicMock()
+    db = MagicMock()
+
+    with (
+        patch.object(runtime_scan, "check_signals", return_value=None),
+        patch.object(runtime_scan, "send_signal_notification"),
+    ):
+        result = runtime_scan.collect_scan_result(fetcher, engine, notifier, db)
+
+    assert result["scan_stats"] == {"generated": 2, "actionable": 1, "hold": 1}
+
+
+def test_apply_scan_result_persists_scan_stats():
+    from bist_bot.ui import runtime_scan
+
+    fake = SimpleNamespace()
+    scan_result = {
+        "all_data": {},
+        "signals": [],
+        "last_scan_time": None,
+        "error": None,
+        "scan_stats": {"generated": 3, "actionable": 2, "hold": 1},
+    }
+
+    with patch.object(runtime_scan.st, "session_state", fake):
+        runtime_scan.apply_scan_result(scan_result)
+
+    assert fake.scan_stats == {"generated": 3, "actionable": 2, "hold": 1}
+
+
+def test_analyze_page_uses_buy_threshold_instead_of_hardcoded_score():
+    from bist_bot.ui.pages import analyze_page
+
+    source = inspect.getsource(analyze_page)
+
+    assert "settings.BUY_THRESHOLD" in source
+    assert "signal_score >= 10" not in source
+
+
+def test_portfolio_page_uses_settings_thresholds_and_excludes_hold_fallback():
+    from bist_bot.ui.pages import portfolio_page
+
+    source = inspect.getsource(portfolio_page)
+
+    assert "settings.STRONG_BUY_THRESHOLD" in source
+    assert "settings.BUY_THRESHOLD" in source
+    assert "SignalType.HOLD" in source
+
+
+def test_overview_page_uses_settings_strong_buy_threshold():
+    from bist_bot.ui.pages import overview_page
+
+    source = inspect.getsource(overview_page)
+
+    assert "settings.STRONG_BUY_THRESHOLD" in source
+    assert "s.score >= 40" not in source
 
 
 def test_start_background_scan_limited_respects_initial_scan_limit():

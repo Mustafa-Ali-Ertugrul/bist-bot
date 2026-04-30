@@ -220,13 +220,35 @@ def test_signal_exists_returns_true_when_matches(signals_repo, sample_signal):
 
 
 def test_save_scan_log(signals_repo):
-    """Test saving scan log entry."""
     signals_repo.save_scan_log(total=100, generated=10, buys=7, sells=3, actionable=7)
+    """Test saving and retrieving scan log entry."""
 
-    # We can't easily retrieve scan logs from the repository,
-    # but we can at least verify it doesn't crash
-    # In a more complete test, we'd check the database directly
-    assert True  # If we got here without exception, it worked
+    latest = signals_repo.get_latest_scan_log()
+    assert latest is not None
+    assert latest["total_scanned"] == 100
+    assert latest["signals_generated"] == 10
+    assert latest["buy_signals"] == 7
+    assert latest["sell_signals"] == 3
+    assert latest["actionable"] == 7
+
+
+def test_get_latest_scan_log_returns_none_when_empty(signals_repo):
+    """Test get_latest_scan_log returns None when no scan logs exist."""
+    result = signals_repo.get_latest_scan_log()
+    assert result is None
+
+
+def test_get_latest_scan_log_returns_most_recent(signals_repo):
+    """Test get_latest_scan_log returns the most recent entry."""
+    signals_repo.save_scan_log(total=50, generated=5, buys=3, sells=2)
+    signals_repo.save_scan_log(total=100, generated=10, buys=7, sells=3)
+
+    latest = signals_repo.get_latest_scan_log()
+    assert latest is not None
+    assert latest["total_scanned"] == 100
+    assert latest["signals_generated"] == 10
+    assert latest["buy_signals"] == 7
+    assert latest["sell_signals"] == 3
 
 
 def test_update_outcome(signals_repo, sample_signal):
