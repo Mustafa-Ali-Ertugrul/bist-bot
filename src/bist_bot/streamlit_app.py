@@ -9,7 +9,6 @@ from bist_bot.state.session_state import init_session_state
 from bist_bot.ui.components.app_shell import (
     PAGE_META,
     get_active_page,
-    render_bottom_nav,
     render_shell,
     set_active_page,
 )
@@ -95,7 +94,7 @@ def _complete_auth(email: str, token: str) -> None:
     st.session_state.is_authenticated = True
     st.session_state.app_bootstrapped = False
     st.session_state.just_logged_in = True
-    set_active_page("dashboard")
+    st.query_params["page"] = "dashboard"
     st.rerun()
 
 
@@ -237,9 +236,6 @@ def main() -> None:
         render_analyze_page()
     else:
         render_settings_page()
-
-    nav_action = render_bottom_nav(page)
-    _handle_shell_action(nav_action)
 
 
 if __name__ == "__main__":

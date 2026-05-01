@@ -40,6 +40,15 @@ class DataFetcherProtocol(Protocol):
         trigger_interval: str = ...,
         force_refresh: bool = ...,
     ) -> dict[str, dict[str, pd.DataFrame]]: ...
+    def fetch_multi_timeframe(
+        self,
+        tickers: list[str],
+        trend_period: str = ...,
+        trend_interval: str = ...,
+        trigger_period: str = ...,
+        trigger_interval: str = ...,
+        force_refresh: bool = ...,
+    ) -> dict[str, dict[str, pd.DataFrame]]: ...
     def get_cached_analysis(self, cache_key: str, force: bool = ...) -> Any | None: ...
     def store_analysis(self, cache_key: str, value: Any) -> None: ...
 
