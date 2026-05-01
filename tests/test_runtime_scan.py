@@ -351,6 +351,12 @@ def test_collect_scan_result_returns_scan_stats():
     hold_signal = MagicMock(signal_type=SignalType.HOLD)
     buy_signal = MagicMock(signal_type=SignalType.BUY)
     engine.scan_all.return_value = [hold_signal, buy_signal]
+    engine.get_last_rejection_breakdown.return_value = {
+        "total_rejections": 3,
+        "by_reason": [{"reason_code": "score_filtered_sideways", "count": 3}],
+        "by_stage": [{"stage": "scoring", "count": 3}],
+        "scan_id": "scan-ui123",
+    }
     notifier = MagicMock()
     db = MagicMock()
 
@@ -361,6 +367,28 @@ def test_collect_scan_result_returns_scan_stats():
         result = runtime_scan.collect_scan_result(fetcher, engine, notifier, db)
 
     assert result["scan_stats"] == {"generated": 2, "actionable": 1, "hold": 1}
+    db.save_scan_log.assert_called_once_with(
+        2,
+        2,
+        1,
+        0,
+        1,
+        scan_id="scan-ui123",
+        rejection_breakdown={
+            "total_rejections": 3,
+            "by_reason": [{"reason_code": "score_filtered_sideways", "count": 3}],
+            "by_stage": [{"stage": "scoring", "count": 3}],
+            "scan_id": "scan-ui123",
+        },
+    )
+    db.save_latest_rejection_breakdown.assert_called_once_with(
+        {
+            "total_rejections": 3,
+            "by_reason": [{"reason_code": "score_filtered_sideways", "count": 3}],
+            "by_stage": [{"stage": "scoring", "count": 3}],
+            "scan_id": "scan-ui123",
+        }
+    )
 
 
 def test_apply_scan_result_persists_scan_stats():
@@ -407,6 +435,390 @@ def test_overview_page_uses_settings_strong_buy_threshold():
 
     assert "settings.STRONG_BUY_THRESHOLD" in source
     assert "s.score >= 40" not in source
+
+
+def test_overview_scan_metrics_prefer_session_scan_stats():
+    from bist_bot.ui.pages.overview_page import _resolve_scan_metrics
+
+    scanned_assets, actionable_signals = _resolve_scan_metrics(
+        session_scan_stats={"generated": 4, "actionable": 2},
+        latest_scan={"total_scanned": 108, "actionable": 0},
+        summary={"total_analyzed": 25},
+        signals=[object(), object()],
+    )
+
+    assert scanned_assets == 25
+    assert actionable_signals == 2
+
+
+def test_overview_scan_metrics_fall_back_to_latest_scan_when_session_empty():
+    from bist_bot.ui.pages.overview_page import _resolve_scan_metrics
+
+    scanned_assets, actionable_signals = _resolve_scan_metrics(
+        session_scan_stats={"generated": 0, "actionable": 0},
+        latest_scan={"total_scanned": 108, "actionable": 3},
+        summary={"total_analyzed": 0},
+        signals=[],
+    )
+
+    assert scanned_assets == 108
+    assert actionable_signals == 3
+
+
+def test_overview_rejection_breakdown_renders_top_three_sorted_rows():
+    from bist_bot.ui.pages.overview_page import _render_rejection_breakdown
+
+    html_output = _render_rejection_breakdown(
+        {
+            "total_rejections": 9,
+            "by_reason": [
+                {"reason_code": "score_filtered_sideways", "count": 4},
+                {"reason_code": "insufficient_history", "count": 3},
+                {"reason_code": "mtf_confluence_blocked", "count": 2},
+                {"reason_code": "adx_missing", "count": 1},
+            ],
+            "by_stage": [
+                {"stage": "scoring", "count": 5},
+                {"stage": "mtf", "count": 3},
+                {"stage": "risk", "count": 1},
+            ],
+            "scan_id": "scan-overview",
+        }
+    )
+
+    assert "En yaygın blokajlar" in html_output
+    assert "Aşama dağılımı" in html_output
+    assert "score_filtered_sideways" in html_output
+    assert "insufficient_history" in html_output
+    assert "mtf_confluence_blocked" in html_output
+    assert "adx_missing" not in html_output
+    assert "Skorlama 5" in html_output
+    assert "MTF 3" in html_output
+    assert "Risk 1" in html_output
+
+
+def test_overview_stage_summary_renders_top_three_and_falls_back_for_unknown_stage():
+    from bist_bot.ui.pages.overview_page import _render_rejection_stage_summary
+
+    html_output = _render_rejection_stage_summary(
+        {
+            "total_rejections": 7,
+            "by_reason": [],
+            "by_stage": [
+                {"stage": "scoring", "count": 3},
+                {"stage": "custom_gate", "count": 2},
+                {"stage": "risk", "count": 1},
+                {"stage": "mtf", "count": 1},
+            ],
+            "scan_id": "scan-stage",
+        }
+    )
+
+    assert "Aşama dağılımı" in html_output
+    assert "Skorlama 3" in html_output
+    assert "custom_gate 2" in html_output
+    assert "Risk 1" in html_output
+    assert "MTF 1" not in html_output
+
+
+def test_overview_stage_summary_skips_empty_rejection_state():
+    from bist_bot.ui.pages.overview_page import _render_rejection_stage_summary
+
+    assert (
+        _render_rejection_stage_summary(
+            {
+                "total_rejections": 0,
+                "by_reason": [],
+                "by_stage": [{"stage": "scoring", "count": 4}],
+                "scan_id": "scan-empty",
+            }
+        )
+        == ""
+    )
+
+
+def test_scan_detail_breakdown_list_renders_top_five_rows_with_fallback_label():
+    from bist_bot.ui.pages.scan_detail_page import _render_breakdown_list
+
+    html_output = _render_breakdown_list(
+        title="Top rejection stages",
+        subtitle="Pipeline dagilimi",
+        rows=[
+            {"stage": "scoring", "count": 5},
+            {"stage": "risk", "count": 4},
+            {"stage": "mtf", "count": 3},
+            {"stage": "custom_gate", "count": 2},
+            {"stage": "data", "count": 1},
+            {"stage": "indicators", "count": 1},
+        ],
+        key_name="stage",
+        label_fn=lambda stage: {
+            "scoring": "Skorlama",
+            "risk": "Risk",
+            "mtf": "MTF",
+            "data": "Veri",
+        }.get(stage, stage),
+        empty_message="Bos",
+    )
+
+    assert "Top rejection stages" in html_output
+    assert "Skorlama" in html_output
+    assert "custom_gate" in html_output
+    assert "Veri" in html_output
+    assert "indicators" not in html_output
+
+
+def test_scan_detail_breakdown_list_returns_empty_message_without_rows():
+    from bist_bot.ui.pages.scan_detail_page import _render_breakdown_list
+
+    html_output = _render_breakdown_list(
+        title="Top rejection reasons",
+        subtitle="Adaylar",
+        rows=[],
+        key_name="reason_code",
+        label_fn=lambda reason: reason,
+        empty_message="Veri yok",
+    )
+
+    assert "Veri yok" in html_output
+
+
+def test_scan_detail_summary_chips_use_top_reason_and_stage_from_sorted_payload():
+    from bist_bot.ui.pages.scan_detail_page import _render_scan_summary_chips
+
+    html_output = _render_scan_summary_chips(
+        rejection_breakdown={
+            "total_rejections": 7,
+            "by_reason": [
+                {"reason_code": "score_filtered_sideways", "count": 4},
+                {"reason_code": "insufficient_history", "count": 3},
+            ],
+            "by_stage": [
+                {"stage": "scoring", "count": 5},
+                {"stage": "mtf", "count": 2},
+            ],
+            "scan_id": "scan-chip",
+        },
+        total_scanned=20,
+    )
+
+    assert "Top blocker" in html_output
+    assert "Yatay piyasa filtresi" in html_output
+    assert "score_filtered_sideways" in html_output
+    assert "Top stage" in html_output
+    assert "Skorlama" in html_output
+    assert "scoring" in html_output
+    assert "Rejection rate" in html_output
+    assert "%35.0" in html_output
+
+
+def test_scan_detail_summary_chips_handle_zero_scans_and_unknown_keys_safely():
+    from bist_bot.ui.pages.scan_detail_page import _render_scan_summary_chips
+
+    html_output = _render_scan_summary_chips(
+        rejection_breakdown={
+            "total_rejections": 0,
+            "by_reason": [{"reason_code": "custom_gate", "count": 2}],
+            "by_stage": [{"stage": "custom_stage", "count": 1}],
+            "scan_id": "scan-zero",
+        },
+        total_scanned=0,
+    )
+
+    assert "custom_gate" in html_output
+    assert "custom_stage" in html_output
+    assert "%0.0" in html_output
+
+
+def test_scan_detail_rejection_rate_formats_safely():
+    from bist_bot.ui.pages.scan_detail_page import _format_rejection_rate
+
+    assert _format_rejection_rate(5, 20) == "%25.0"
+    assert _format_rejection_rate(0, 0) == "%0.0"
+
+
+def test_scan_detail_rejection_rate_history_renders_recent_rows():
+    from bist_bot.ui.pages.scan_detail_page import _render_rejection_rate_history
+
+    html_output = _render_rejection_rate_history(
+        [
+            {
+                "scan_id": "scan-002",
+                "timestamp": "2026-05-01T10:00:00+03:00",
+                "rejection_rate": 40.0,
+                "total_rejections": 8,
+                "total_scanned": 20,
+                "top_reason": {"reason_code": "score_filtered_sideways", "count": 5},
+            },
+            {
+                "scan_id": "scan-001",
+                "timestamp": "2026-04-30T10:00:00+03:00",
+                "rejection_rate": 10.0,
+                "total_rejections": 2,
+                "total_scanned": 20,
+                "top_reason": {"reason_code": "insufficient_history", "count": 2},
+            },
+        ]
+    )
+
+    assert "Recent rejection rates" in html_output
+    assert "scan-002" in html_output
+    assert "%40.0" in html_output
+    assert "score_filtered_sideways" in html_output
+
+
+def test_scan_detail_history_summary_chips_use_aggregated_history_payload():
+    from bist_bot.ui.pages.scan_detail_page import _render_history_summary_chips
+
+    html_output = _render_history_summary_chips(
+        {
+            "window_size": 20,
+            "returned_scans": 7,
+            "average_rejection_rate": 22.5,
+            "by_reason": [{"reason_code": "score_filtered_sideways", "count": 9}],
+            "by_stage": [{"stage": "scoring", "count": 11}],
+        }
+    )
+
+    assert "Last N scans" in html_output
+    assert "7/20" in html_output
+    assert "Most frequent blocker" in html_output
+    assert "Yatay piyasa filtresi" in html_output
+    assert "%22.5" in html_output
+
+
+def test_scan_detail_page_shows_empty_state_when_no_completed_scan():
+    from bist_bot.ui.pages import scan_detail_page
+
+    class DummyColumn:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    response = SimpleNamespace(
+        ok=True,
+        json=lambda: {
+            "stats": {
+                "latest_scan": {
+                    "total_scanned": 0,
+                    "signals_generated": 0,
+                    "actionable": 0,
+                    "timestamp": None,
+                },
+                "rejection_breakdown": {
+                    "total_rejections": 0,
+                    "by_reason": [],
+                    "by_stage": [],
+                    "scan_id": "",
+                },
+            }
+        },
+    )
+
+    with (
+        patch.object(scan_detail_page, "api_request", return_value=response),
+        patch.object(scan_detail_page, "render_page_hero"),
+        patch.object(scan_detail_page, "render_metric_block"),
+        patch.object(scan_detail_page, "render_section_title") as mock_section_title,
+        patch.object(scan_detail_page, "render_html_panel") as mock_render_html_panel,
+        patch.object(
+            scan_detail_page.st, "columns", return_value=tuple(DummyColumn() for _ in range(4))
+        ),
+    ):
+        scan_detail_page.render_scan_detail_page()
+
+    mock_section_title.assert_called_with("Scan durumu", "Bekleyen veri")
+    empty_panels = [call.args[0] for call in mock_render_html_panel.call_args_list]
+    assert any("Henuz tamamlanmis bir scan kaydi bulunmuyor" in panel for panel in empty_panels)
+
+
+def test_scan_detail_page_renders_historical_analytics_when_history_exists():
+    from bist_bot.ui.pages import scan_detail_page
+
+    class DummyColumn:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    stats_response = SimpleNamespace(
+        ok=True,
+        json=lambda: {
+            "stats": {
+                "latest_scan": {
+                    "total_scanned": 20,
+                    "signals_generated": 6,
+                    "actionable": 4,
+                    "timestamp": "2026-05-01T10:00:00+03:00",
+                },
+                "rejection_breakdown": {
+                    "total_rejections": 8,
+                    "by_reason": [{"reason_code": "score_filtered_sideways", "count": 5}],
+                    "by_stage": [{"stage": "scoring", "count": 5}],
+                    "scan_id": "scan-live",
+                },
+            }
+        },
+    )
+    history_response = SimpleNamespace(
+        ok=True,
+        json=lambda: {
+            "history": {
+                "window_size": 20,
+                "returned_scans": 2,
+                "average_rejection_rate": 25.0,
+                "by_reason": [{"reason_code": "score_filtered_sideways", "count": 7}],
+                "by_stage": [{"stage": "scoring", "count": 7}],
+                "scans": [
+                    {
+                        "scan_id": "scan-live",
+                        "timestamp": "2026-05-01T10:00:00+03:00",
+                        "rejection_rate": 40.0,
+                        "total_rejections": 8,
+                        "total_scanned": 20,
+                        "top_reason": {"reason_code": "score_filtered_sideways", "count": 5},
+                    },
+                    {
+                        "scan_id": "scan-prev",
+                        "timestamp": "2026-04-30T10:00:00+03:00",
+                        "rejection_rate": 10.0,
+                        "total_rejections": 2,
+                        "total_scanned": 20,
+                        "top_reason": {"reason_code": "insufficient_history", "count": 2},
+                    },
+                ],
+            }
+        },
+    )
+
+    with (
+        patch.object(
+            scan_detail_page, "api_request", side_effect=[stats_response, history_response]
+        ),
+        patch.object(scan_detail_page, "render_page_hero"),
+        patch.object(scan_detail_page, "render_metric_block"),
+        patch.object(scan_detail_page, "render_section_title") as mock_section_title,
+        patch.object(scan_detail_page, "render_html_panel") as mock_render_html_panel,
+        patch.object(
+            scan_detail_page.st,
+            "columns",
+            side_effect=[
+                tuple(DummyColumn() for _ in range(4)),
+                tuple(DummyColumn() for _ in range(2)),
+                tuple(DummyColumn() for _ in range(2)),
+            ],
+        ),
+    ):
+        scan_detail_page.render_scan_detail_page()
+
+    section_calls = [call.args for call in mock_section_title.call_args_list]
+    assert ("Historical Analytics", "Son 20 scan trendi") in section_calls
+    history_panels = [call.args[0] for call in mock_render_html_panel.call_args_list]
+    assert any("Most frequent blockers" in panel for panel in history_panels)
+    assert any("Recent rejection rates" in panel for panel in history_panels)
 
 
 def test_start_background_scan_limited_respects_initial_scan_limit():

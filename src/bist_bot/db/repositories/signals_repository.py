@@ -28,6 +28,72 @@ def _deserialize_reasons(raw: str | None) -> list[str]:
     return [str(value)]
 
 
+def _empty_rejection_breakdown(scan_id: str = "") -> dict[str, Any]:
+    return {
+        "total_rejections": 0,
+        "by_reason": [],
+        "by_stage": [],
+        "scan_id": scan_id,
+    }
+
+
+def _coerce_int(value: Any, default: int = 0) -> int:
+    if isinstance(value, bool):
+        return int(value)
+    try:
+        return default if value is None else int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _normalize_breakdown(payload: Any, *, scan_id: str = "") -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return _empty_rejection_breakdown(scan_id=scan_id)
+
+    resolved_scan_id = str(payload.get("scan_id", scan_id) or scan_id or "")
+
+    def _normalize_rows(rows: Any, key_name: str) -> list[dict[str, Any]]:
+        if not isinstance(rows, list):
+            return []
+        normalized: list[dict[str, Any]] = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            key = str(row.get(key_name, "") or "")
+            count = _coerce_int(row.get("count", 0))
+            if not key or count <= 0:
+                continue
+            normalized.append({key_name: key, "count": count})
+        return normalized
+
+    by_reason = _normalize_rows(payload.get("by_reason", []), "reason_code")
+    by_stage = _normalize_rows(payload.get("by_stage", []), "stage")
+    total_rejections = _coerce_int(payload.get("total_rejections", 0))
+    if total_rejections <= 0:
+        total_rejections = sum(int(item["count"]) for item in by_reason)
+
+    return {
+        "total_rejections": total_rejections,
+        "by_reason": by_reason,
+        "by_stage": by_stage,
+        "scan_id": resolved_scan_id,
+    }
+
+
+def _serialize_breakdown(payload: Any, *, scan_id: str = "") -> str:
+    return json.dumps(_normalize_breakdown(payload, scan_id=scan_id), ensure_ascii=False)
+
+
+def _deserialize_breakdown(raw: str | None, *, scan_id: str = "") -> dict[str, Any]:
+    if not raw:
+        return _empty_rejection_breakdown(scan_id=scan_id)
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return _empty_rejection_breakdown(scan_id=scan_id)
+    return _normalize_breakdown(payload, scan_id=scan_id)
+
+
 class SignalsRepository:
     def __init__(self, manager: DatabaseManager | None = None) -> None:
         self.manager = manager or DatabaseManager()
@@ -119,8 +185,18 @@ class SignalsRepository:
         return cast(bool, self.manager.run_session(_read, read_only=True))
 
     def save_scan_log(
-        self, total: int, generated: int, buys: int, sells: int, actionable: int = 0
+        self,
+        total: int,
+        generated: int,
+        buys: int,
+        sells: int,
+        actionable: int = 0,
+        *,
+        scan_id: str = "",
+        rejection_breakdown: dict[str, Any] | None = None,
     ) -> None:
+        normalized_breakdown = _normalize_breakdown(rejection_breakdown, scan_id=scan_id)
+
         def _write(session):
             session.add(
                 ScanLogRecord(
@@ -130,6 +206,11 @@ class SignalsRepository:
                     buy_signals=buys,
                     sell_signals=sells,
                     actionable=actionable,
+                    scan_id=str(scan_id or normalized_breakdown.get("scan_id", "") or "") or None,
+                    rejection_breakdown=_serialize_breakdown(
+                        normalized_breakdown,
+                        scan_id=str(scan_id or normalized_breakdown.get("scan_id", "") or ""),
+                    ),
                 )
             )
             return None
@@ -194,9 +275,22 @@ class SignalsRepository:
         )
         return self._scan_log_to_dict(row) if row else None
 
+    def get_recent_scan_logs(self, limit: int = 20) -> list[dict[str, Any]]:
+        def _read(session):
+            statement = (
+                select(ScanLogRecord)
+                .order_by(ScanLogRecord.timestamp.desc(), ScanLogRecord.id.desc())
+                .limit(limit)
+            )
+            return session.scalars(statement).all()
+
+        rows = self.manager.run_session(_read, read_only=True)
+        return [self._scan_log_to_dict(row) for row in rows]
+
     def _scan_log_to_dict(self, row: ScanLogRecord) -> dict[str, Any]:
         buy_signals = int(row.buy_signals or 0)
         sell_signals = int(row.sell_signals or 0)
+        scan_id = str(row.scan_id or "")
         return {
             "total_scanned": int(row.total_scanned or 0),
             "signals_generated": int(row.signals_generated or 0),
@@ -208,6 +302,11 @@ class SignalsRepository:
             "timestamp": row.timestamp.isoformat()
             if isinstance(row.timestamp, datetime)
             else row.timestamp,
+            "scan_id": scan_id,
+            "rejection_breakdown": _deserialize_breakdown(
+                row.rejection_breakdown,
+                scan_id=scan_id,
+            ),
         }
 
     def _signal_to_dict(self, row: SignalRecord) -> dict[str, Any]:
