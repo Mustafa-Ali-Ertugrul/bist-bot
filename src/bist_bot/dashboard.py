@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import concurrent.futures
 import time
+from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 
@@ -505,7 +506,20 @@ def create_dashboard_app(
             runtime_engine = get_engine()
             normalized_ticker = ticker if ticker.endswith(".IS") else f"{ticker}.IS"
             force_refresh = _coerce_bool(request.args.get("force_refresh"))
-            cache_key = f"{normalized_ticker}|analyze|6mo"
+            mtf_enabled = bool(getattr(settings, "MTF_ENABLED", True))
+            fetch_mtf = cast(
+                Callable[..., dict[str, dict[str, Any]]] | None,
+                getattr(runtime_fetcher, "fetch_multi_timeframe", None),
+            )
+            use_mtf_analysis = mtf_enabled and callable(fetch_mtf)
+            if use_mtf_analysis and fetch_mtf is not None:
+                cache_key = (
+                    f"{normalized_ticker}|analyze|mtf|"
+                    f"{settings.MTF_TREND_PERIOD}:{settings.MTF_TREND_INTERVAL}|"
+                    f"{settings.MTF_TRIGGER_PERIOD}:{settings.MTF_TRIGGER_INTERVAL}"
+                )
+            else:
+                cache_key = f"{normalized_ticker}|analyze|single|6mo:{settings.DATA_INTERVAL}"
 
             cached_response = runtime_fetcher.get_cached_analysis(cache_key, force=force_refresh)
             if cached_response is not None:
@@ -523,15 +537,39 @@ def create_dashboard_app(
             if force_refresh:
                 runtime_fetcher.clear_cache(scope="analysis", ticker=normalized_ticker)
 
-            df = runtime_fetcher.fetch_single(normalized_ticker, period="6mo", force=force_refresh)
             fetch_meta_getter = getattr(runtime_fetcher, "get_last_history_fetch_meta", None)
-            fetch_meta_raw = (
-                fetch_meta_getter(normalized_ticker, "6mo", settings.DATA_INTERVAL)
-                if callable(fetch_meta_getter)
-                else None
-            )
+            if use_mtf_analysis and fetch_mtf is not None:
+                mtf_data = fetch_mtf(
+                    tickers=[normalized_ticker],
+                    trend_period=settings.MTF_TREND_PERIOD,
+                    trend_interval=settings.MTF_TREND_INTERVAL,
+                    trigger_period=settings.MTF_TRIGGER_PERIOD,
+                    trigger_interval=settings.MTF_TRIGGER_INTERVAL,
+                    force_refresh=force_refresh,
+                )
+                analysis_input = mtf_data.get(normalized_ticker)
+                chart_df = analysis_input.get("trigger") if analysis_input else None
+                fetch_meta_raw = (
+                    fetch_meta_getter(
+                        normalized_ticker,
+                        settings.MTF_TRIGGER_PERIOD,
+                        settings.MTF_TRIGGER_INTERVAL,
+                    )
+                    if callable(fetch_meta_getter)
+                    else None
+                )
+            else:
+                chart_df = runtime_fetcher.fetch_single(
+                    normalized_ticker, period="6mo", force=force_refresh
+                )
+                analysis_input = chart_df
+                fetch_meta_raw = (
+                    fetch_meta_getter(normalized_ticker, "6mo", settings.DATA_INTERVAL)
+                    if callable(fetch_meta_getter)
+                    else None
+                )
             fetch_meta = fetch_meta_raw if isinstance(fetch_meta_raw, dict) else {}
-            if df is None:
+            if chart_df is None or analysis_input is None:
                 logger.warning(
                     "api_analyze_data_unavailable",
                     ticker=normalized_ticker,
@@ -544,9 +582,9 @@ def create_dashboard_app(
                 ), 404
 
             indicator_engine = TechnicalIndicators()
-            enriched = indicator_engine.add_all(df.copy())
+            enriched = indicator_engine.add_all(chart_df.copy())
             snapshot = indicator_engine.get_snapshot(enriched)
-            signal = runtime_engine.analyze(normalized_ticker, df)
+            signal = runtime_engine.analyze(normalized_ticker, analysis_input)
 
             price_data = [
                 {

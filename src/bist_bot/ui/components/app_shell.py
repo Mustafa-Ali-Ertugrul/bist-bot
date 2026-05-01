@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import html
-from typing import Literal
 
 import streamlit as st
 
@@ -12,10 +11,6 @@ PAGE_META = {
     "analysis": {"label": "Analysis", "icon": "analytics"},
     "settings": {"label": "Settings", "icon": "settings"},
 }
-
-
-def _nav_action(page_key: str) -> str:
-    return f"page:{page_key}"
 
 
 def set_active_page(page: str) -> None:
@@ -41,24 +36,27 @@ def get_active_page(default: str = "dashboard") -> str:
     return page
 
 
-def render_top_nav(active_page: str) -> str | None:
-    st.markdown("<div class='bb-topnav-shell desktop-only'>", unsafe_allow_html=True)
-    nav_columns = st.columns(len(PAGE_META), gap="small")
-    action: str | None = None
-    for (key, meta), column in zip(PAGE_META.items(), nav_columns, strict=False):
-        with column:
-            button_type: Literal["primary", "secondary", "tertiary"] = (
-                "primary" if key == active_page else "secondary"
-            )
-            if st.button(
-                meta["label"],
-                key=f"top_nav_{key}",
-                use_container_width=True,
-                type=button_type,
-            ):
-                action = _nav_action(key)
-    st.markdown("</div>", unsafe_allow_html=True)
-    return action
+def render_sidebar_nav(active_page: str) -> None:
+    links = []
+    for page, meta in PAGE_META.items():
+        active_class = " bb-sidebar-link-active" if page == active_page else ""
+        links.append(
+            f"<a class='bb-sidebar-link{active_class}' href='?page={page}'>"
+            f"<span class='bb-nav-icon'>{html.escape(meta['icon'])}</span>"
+            f"<span>{html.escape(meta['label'])}</span>"
+            "</a>"
+        )
+    st.markdown(
+        (
+            "<aside class='bb-sidebar-shell'>"
+            "<div class='bb-sidebar-kicker'>Navigation</div>"
+            "<nav class='bb-sidebar-nav'>"
+            f"{''.join(links)}"
+            "</nav>"
+            "</aside>"
+        ),
+        unsafe_allow_html=True,
+    )
 
 
 def render_shell(active_page: str, email: str = "") -> str | None:
@@ -78,44 +76,15 @@ def render_shell(active_page: str, email: str = "") -> str | None:
             "<div class='bb-topbar-actions'>"
             f"<span class='bb-badge bb-badge-positive'>{html.escape(active_label)}</span>"
             f"<span class='bb-session-pill'>{email_label}</span>"
+            "<a class='bb-logout-link' href='?action=logout'>Logout</a>"
             "</div>"
             "</header>"
         ),
         unsafe_allow_html=True,
     )
 
-    action: str | None = None
-    _, logout_col = st.columns([8.6, 1.4], gap="small")
-    with logout_col:
-        if st.button("Logout", key="top_logout", use_container_width=True):
-            action = "logout"
-
-    top_nav_action = render_top_nav(active_page)
-    if top_nav_action:
-        action = top_nav_action
-
-    return action
-
-
-def render_bottom_nav(active_page: str) -> str | None:
-    st.markdown("<div class='bb-bottomnav-spacer mobile-only'></div>", unsafe_allow_html=True)
-    st.markdown("<div class='bb-mobile-nav-shell mobile-only'>", unsafe_allow_html=True)
-    nav_columns = st.columns(len(PAGE_META), gap="small")
-    action: str | None = None
-    for (key, meta), column in zip(PAGE_META.items(), nav_columns, strict=False):
-        with column:
-            button_type: Literal["primary", "secondary", "tertiary"] = (
-                "primary" if key == active_page else "secondary"
-            )
-            if st.button(
-                meta["label"],
-                key=f"bottom_nav_{key}",
-                use_container_width=True,
-                type=button_type,
-            ):
-                action = _nav_action(key)
-    st.markdown("</div>", unsafe_allow_html=True)
-    return action
+    render_sidebar_nav(active_page)
+    return None
 
 
 def render_page_hero(

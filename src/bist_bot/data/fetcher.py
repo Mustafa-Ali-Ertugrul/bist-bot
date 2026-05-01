@@ -933,20 +933,25 @@ class BISTDataFetcher:
         trigger_period = trigger_period or getattr(settings, "MTF_TRIGGER_PERIOD", "1mo")
         trigger_interval = trigger_interval or getattr(settings, "MTF_TRIGGER_INTERVAL", "15m")
 
-        trend_data = self.fetch_all(
-            period=trend_period, interval=trend_interval, force=force_refresh, validate=validate
-        )
-        trigger_data = self.fetch_all(
-            period=trigger_period, interval=trigger_interval, force=force_refresh, validate=validate
-        )
-
         combined: dict[str, dict[str, pd.DataFrame]] = {}
         for ticker in tickers:
-            trend_df = trend_data.get(ticker)
-            trigger_df = trigger_data.get(ticker)
+            trend_df = self.fetch_single(
+                ticker,
+                period=trend_period,
+                interval=trend_interval,
+                force=force_refresh,
+                validate=validate,
+            )
+            trigger_df = self.fetch_single(
+                ticker,
+                period=trigger_period,
+                interval=trigger_interval,
+                force=force_refresh,
+                validate=validate,
+            )
             if trend_df is None or trigger_df is None:
                 continue
-            combined[ticker] = {"trend": trend_df, "trigger": trigger_df}
+            combined[normalize_ticker(ticker)] = {"trend": trend_df, "trigger": trigger_df}
         return combined
 
 

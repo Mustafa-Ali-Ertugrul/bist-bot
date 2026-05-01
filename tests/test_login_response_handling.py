@@ -5,7 +5,12 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from bist_bot.streamlit_app import _extract_token, _handle_shell_action, _response_message
+from bist_bot.streamlit_app import (
+    _complete_auth,
+    _extract_token,
+    _handle_shell_action,
+    _response_message,
+)
 
 # ── _response_message tests ────────────────────────────────────────────────
 
@@ -119,6 +124,32 @@ def test_extract_token_strips_whitespace():
     resp = MagicMock()
     resp.json.return_value = {"access_token": "  token123  "}
     assert _extract_token(resp) == "token123"
+
+
+def test_complete_auth_sets_session_and_routes_dashboard():
+    session_state = SimpleNamespace(
+        auth_token=None,
+        auth_email="",
+        is_authenticated=False,
+        app_bootstrapped=True,
+        just_logged_in=False,
+    )
+    query_params = {}
+
+    with (
+        patch("bist_bot.streamlit_app.st.session_state", session_state),
+        patch("bist_bot.streamlit_app.st.query_params", query_params),
+        patch("bist_bot.streamlit_app.st.rerun") as mock_rerun,
+    ):
+        _complete_auth("user@example.com", "token123")
+
+    assert session_state.auth_token == "token123"
+    assert session_state.auth_email == "user@example.com"
+    assert session_state.is_authenticated is True
+    assert session_state.app_bootstrapped is False
+    assert session_state.just_logged_in is True
+    assert query_params["page"] == "dashboard"
+    mock_rerun.assert_called_once_with()
 
 
 def test_handle_shell_action_logout_resets_auth_state():
