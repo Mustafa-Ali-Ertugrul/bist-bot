@@ -293,9 +293,7 @@ def test_volume_price_confirmation_scores_directionally():
 def test_rsi_reasons_call_out_extreme_zones_without_reversed_action_wording():
     params = StrategyParams()
 
-    oversold_score, oversold_reasons = score_momentum(
-        params, pd.Series({"rsi": 25.0}), pd.Series()
-    )
+    oversold_score, oversold_reasons = score_momentum(params, pd.Series({"rsi": 25.0}), pd.Series())
     overbought_score, overbought_reasons = score_momentum(
         params, pd.Series({"rsi": 75.0}), pd.Series()
     )

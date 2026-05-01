@@ -120,8 +120,7 @@ class StrategyEngine:
             key=lambda item: (-item[1], item[0]),
         )
         by_reason = [
-            {"reason_code": reason_code, "count": count}
-            for reason_code, count in by_reason_items
+            {"reason_code": reason_code, "count": count} for reason_code, count in by_reason_items
         ]
         by_stage = [{"stage": stage, "count": count} for stage, count in by_stage_items]
         total_rejections = sum(count for _, count in by_reason_items)
