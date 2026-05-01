@@ -373,24 +373,18 @@ def inject_styles() -> None:
                 color:var(--bb-text);
                 font-weight:700;
             }
-            .bb-topnav-shell {
-                margin:10px 0 18px;
-                padding:10px;
-                border-radius:24px;
-                background:linear-gradient(180deg, rgba(13,19,31,.88), rgba(10,15,22,.82));
-                border:1px solid rgba(255,255,255,.06);
-                box-shadow:0 18px 40px rgba(0,0,0,.18);
-                backdrop-filter:blur(18px);
-            }
             .bb-mobile-nav-shell {
                 position:fixed;
                 left:50%;
                 bottom:14px;
                 transform:translateX(-50%);
                 z-index:1000;
-                width:min(430px, calc(100vw - 16px));
+                width:min(760px, calc(100vw - 24px));
+                display:grid;
+                grid-template-columns:repeat(4, minmax(0, 1fr));
+                gap:8px;
                 padding:10px 12px;
-                border-radius:22px;
+                border-radius:24px;
                 background:rgba(12,18,31,.90);
                 border:1px solid rgba(255,255,255,.10);
                 box-shadow:0 16px 40px rgba(0,0,0,.34);
@@ -399,73 +393,46 @@ def inject_styles() -> None:
             .bb-bottomnav-spacer {
                 height:88px;
             }
-            .bb-topnav-shell div[data-testid="stButton"] > button,
-            .bb-mobile-nav-shell div[data-testid="stButton"] > button {
-                min-height:52px;
-                border-radius:18px;
-                border:1px solid rgba(138,180,255,.14);
-                background:linear-gradient(180deg, rgba(27,39,54,.95), rgba(18,26,36,.95));
-                color:var(--bb-text);
-                font-size:13px;
-                font-weight:800;
-                box-shadow:none;
-                transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease;
-            }
-            .bb-topnav-shell div[data-testid="stButton"] > button:hover,
-            .bb-mobile-nav-shell div[data-testid="stButton"] > button:hover {
-                transform:translateY(-1px);
-                border-color:rgba(138,180,255,.30);
-                box-shadow:0 10px 24px rgba(0,0,0,.22);
-            }
-            .bb-topnav-shell div[data-testid="stButton"] > button[kind="primary"],
-            .bb-mobile-nav-shell div[data-testid="stButton"] > button[kind="primary"] {
-                background:linear-gradient(135deg, var(--bb-primary), var(--bb-primary-strong));
-                color:#041627;
-                border-color:transparent;
-                box-shadow:0 12px 30px rgba(75,142,255,.30);
-            }
-            .bb-bottomnav {
-                position:fixed;
-                left:50%;
-                bottom:14px;
-                transform:translateX(-50%);
-                z-index:999;
-                width:min(560px, calc(100vw - 20px));
-                display:grid;
-                grid-template-columns:repeat(4, 1fr);
-                gap:8px;
-                padding:10px;
-                border-radius:28px;
-                background:rgba(8, 13, 21, .84);
-                border:1px solid rgba(255,255,255,.06);
-                box-shadow:0 24px 60px rgba(0,0,0,.42);
-                backdrop-filter:blur(20px);
-            }
-            .bb-nav-item {
+            .bb-nav-link {
                 display:flex;
                 flex-direction:column;
                 align-items:center;
                 justify-content:center;
                 gap:6px;
-                min-height:58px;
-                border-radius:20px;
-                color:var(--bb-faint);
-                font-family:'Space Grotesk',sans-serif;
-                font-size:10px;
-                font-weight:700;
-                letter-spacing:.14em;
-                text-transform:uppercase;
+                min-height:56px;
+                border-radius:18px;
+                border:1px solid rgba(138,180,255,.14);
+                background:linear-gradient(180deg, rgba(27,39,54,.95), rgba(18,26,36,.95));
+                color:var(--bb-text) !important;
+                font-size:13px;
+                font-weight:800;
+                box-shadow:none;
+                text-decoration:none;
+                transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease;
             }
-            .bb-nav-item-active {
-                color:var(--bb-secondary) !important;
-                background:linear-gradient(180deg, rgba(77,226,191,.14), rgba(77,226,191,.06));
-                border:1px solid rgba(77,226,191,.18);
+            .bb-nav-link:hover {
+                transform:translateY(-1px);
+                border-color:rgba(138,180,255,.30);
+                box-shadow:0 10px 24px rgba(0,0,0,.22);
+            }
+            .bb-nav-link-active {
+                background:linear-gradient(135deg, var(--bb-primary), var(--bb-primary-strong));
+                color:#041627 !important;
+                border-color:transparent;
+                box-shadow:0 12px 30px rgba(75,142,255,.30);
             }
             .bb-nav-icon {
                 font-family:'Material Symbols Outlined';
                 font-variation-settings:'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 24;
                 font-size:18px;
                 line-height:1;
+            }
+            .bb-nav-label {
+                font-family:'Space Grotesk',sans-serif;
+                font-size:10px;
+                font-weight:700;
+                letter-spacing:.14em;
+                text-transform:uppercase;
             }
             .stButton > button, .stDownloadButton > button {
                 min-height:48px;
@@ -481,12 +448,6 @@ def inject_styles() -> None:
                 background:linear-gradient(135deg, var(--bb-primary), var(--bb-primary-strong));
                 color:#041627;
                 border-color:transparent;
-            }
-            .desktop-only {
-                display:block;
-            }
-            .mobile-only {
-                display:none;
             }
             .stTextInput label, .stNumberInput label, .stSelectbox label,
             .stTextArea label, .stSlider label, .stToggle label, .stSelectSlider label {
@@ -561,12 +522,6 @@ def inject_styles() -> None:
                     padding-top:6rem;
                     padding-bottom:7rem;
                 }
-                .desktop-only {
-                    display:none !important;
-                }
-                .mobile-only {
-                    display:block !important;
-                }
                 .bb-topbar {
                     height:72px;
                     padding:0 14px;
@@ -612,6 +567,13 @@ def inject_styles() -> None:
                 }
                 .bb-bottomnav-spacer {
                     height:82px;
+                }
+                .bb-nav-link {
+                    min-height:54px;
+                }
+                .bb-nav-label {
+                    font-size:9px;
+                    letter-spacing:.1em;
                 }
             }
         </style>
