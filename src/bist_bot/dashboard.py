@@ -52,6 +52,142 @@ def _coerce_bool(value: Any) -> bool:
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _coerce_int(value: Any, default: int = 0) -> int:
+    if isinstance(value, bool):
+        return int(value)
+    try:
+        return default if value is None else int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _empty_rejection_breakdown(scan_id: str = "") -> dict[str, Any]:
+    return {
+        "total_rejections": 0,
+        "by_reason": [],
+        "by_stage": [],
+        "scan_id": scan_id,
+    }
+
+
+def _normalize_rejection_breakdown(payload: Any, *, scan_id: str = "") -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return _empty_rejection_breakdown(scan_id=scan_id)
+
+    resolved_scan_id = str(payload.get("scan_id", scan_id) or scan_id or "")
+
+    def _normalize_rows(rows: Any, key_name: str) -> list[dict[str, Any]]:
+        if not isinstance(rows, list):
+            return []
+        normalized: list[dict[str, Any]] = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            key = str(row.get(key_name, "") or "")
+            count = _coerce_int(row.get("count", 0))
+            if not key or count <= 0:
+                continue
+            normalized.append({key_name: key, "count": count})
+        return normalized
+
+    by_reason = _normalize_rows(payload.get("by_reason", []), "reason_code")
+    by_stage = _normalize_rows(payload.get("by_stage", []), "stage")
+    total_rejections = _coerce_int(payload.get("total_rejections", 0))
+    if total_rejections <= 0:
+        total_rejections = sum(int(item["count"]) for item in by_reason)
+
+    return {
+        "total_rejections": total_rejections,
+        "by_reason": by_reason,
+        "by_stage": by_stage,
+        "scan_id": resolved_scan_id,
+    }
+
+
+def _summary_entry(rows: list[dict[str, Any]], key_name: str) -> dict[str, Any]:
+    if not rows:
+        return {key_name: "", "count": 0}
+    first = rows[0]
+    return {
+        key_name: str(first.get(key_name, "") or ""),
+        "count": _coerce_int(first.get("count", 0)),
+    }
+
+
+def _build_scan_history_payload(scan_rows: list[dict[str, Any]], limit: int) -> dict[str, Any]:
+    reason_totals: dict[str, int] = {}
+    stage_totals: dict[str, int] = {}
+    normalized_scans: list[dict[str, Any]] = []
+    total_scanned = 0
+    total_rejections = 0
+
+    for row in scan_rows:
+        if not isinstance(row, dict):
+            continue
+        scan_id = str(row.get("scan_id", "") or "")
+        scanned = _coerce_int(row.get("total_scanned", 0))
+        generated = _coerce_int(row.get("signals_generated", 0))
+        actionable = _coerce_int(row.get("actionable", 0))
+        breakdown = _normalize_rejection_breakdown(
+            row.get("rejection_breakdown", {}), scan_id=scan_id
+        )
+        scan_rejections = _coerce_int(breakdown.get("total_rejections", 0))
+        total_scanned += max(scanned, 0)
+        total_rejections += max(scan_rejections, 0)
+
+        by_reason = list(breakdown.get("by_reason", []))
+        by_stage = list(breakdown.get("by_stage", []))
+        for item in by_reason:
+            reason_code = str(item.get("reason_code", "") or "")
+            count = _coerce_int(item.get("count", 0))
+            if reason_code and count > 0:
+                reason_totals[reason_code] = reason_totals.get(reason_code, 0) + count
+        for item in by_stage:
+            stage = str(item.get("stage", "") or "")
+            count = _coerce_int(item.get("count", 0))
+            if stage and count > 0:
+                stage_totals[stage] = stage_totals.get(stage, 0) + count
+
+        normalized_scans.append(
+            {
+                "scan_id": scan_id,
+                "timestamp": row.get("timestamp"),
+                "total_scanned": scanned,
+                "signals_generated": generated,
+                "actionable": actionable,
+                "total_rejections": scan_rejections,
+                "rejection_rate": round((scan_rejections / scanned) * 100, 1)
+                if scanned > 0
+                else 0.0,
+                "top_reason": _summary_entry(by_reason, "reason_code"),
+                "top_stage": _summary_entry(by_stage, "stage"),
+            }
+        )
+
+    by_reason = sorted(
+        (
+            {"reason_code": reason_code, "count": count}
+            for reason_code, count in reason_totals.items()
+        ),
+        key=lambda item: (-int(item["count"]), str(item["reason_code"])),
+    )
+    by_stage = sorted(
+        ({"stage": stage, "count": count} for stage, count in stage_totals.items()),
+        key=lambda item: (-int(item["count"]), str(item["stage"])),
+    )
+
+    return {
+        "window_size": limit,
+        "returned_scans": len(normalized_scans),
+        "average_rejection_rate": round((total_rejections / total_scanned) * 100, 1)
+        if total_scanned > 0
+        else 0.0,
+        "by_reason": by_reason,
+        "by_stage": by_stage,
+        "scans": normalized_scans,
+    }
+
+
 def _cors_origins() -> list[str]:
     return [origin for origin in settings.CORS_ORIGINS if origin and origin != "*"]
 
@@ -484,6 +620,7 @@ def create_dashboard_app(
                 "actionable": 0,
                 "timestamp": None,
             }
+            rejection_breakdown = _normalize_rejection_breakdown(rejection_breakdown)
         else:
             buy = int(latest_scan_record.get("buy_signals", 0) or 0)
             sell = int(latest_scan_record.get("sell_signals", 0) or 0)
@@ -495,8 +632,25 @@ def create_dashboard_app(
                 "actionable": latest_scan_record.get("actionable", buy + sell),
                 "timestamp": latest_scan_record.get("timestamp"),
             }
+            latest_breakdown = _normalize_rejection_breakdown(
+                latest_scan_record.get("rejection_breakdown", {}),
+                scan_id=str(latest_scan_record.get("scan_id", "") or ""),
+            )
+            rejection_breakdown = (
+                latest_breakdown
+                if latest_breakdown.get("scan_id") or latest_breakdown.get("total_rejections")
+                else _normalize_rejection_breakdown(rejection_breakdown)
+            )
         stats["latest_scan"] = latest_scan
         return jsonify({"status": "ok", "stats": stats, "latest_scan": latest_scan})
+
+    @app.route("/api/scans/history")
+    @jwt_required()
+    def api_scan_history():
+        limit = max(1, min(request.args.get("limit", 20, type=int) or 20, 100))
+        scan_rows = get_db().get_recent_scan_logs(limit=limit)
+        history = _build_scan_history_payload(scan_rows, limit)
+        return jsonify({"status": "ok", "history": history})
 
     return app
 

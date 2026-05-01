@@ -17,6 +17,12 @@ from bist_bot.ui.runtime_types import ScanResult, ScanStats
 from bist_bot.ui.session_cooldown import consume_cooldown
 
 TR = timezone(timedelta(hours=3))
+EMPTY_REJECTION_BREAKDOWN = {
+    "total_rejections": 0,
+    "by_reason": [],
+    "by_stage": [],
+    "scan_id": "",
+}
 SCAN_LOCK = threading.Lock()
 PENDING_SCAN_RESULTS: dict[str, ScanResult] = {}
 ACTIVE_SCAN_SESSIONS: set[str] = set()
@@ -92,6 +98,10 @@ def collect_scan_result(
             force_refresh=force_clear,
         )
     signals = engine.scan_all(timeframe_data)
+    breakdown_getter = getattr(engine, "get_last_rejection_breakdown", None)
+    rejection_breakdown = (
+        breakdown_getter() if callable(breakdown_getter) else dict(EMPTY_REJECTION_BREAKDOWN)
+    )
     all_data = {
         ticker: data["trigger"]
         for ticker, data in timeframe_data.items()
@@ -99,6 +109,24 @@ def collect_scan_result(
     }
 
     db.save_signals(signals)
+    save_breakdown = getattr(db, "save_latest_rejection_breakdown", None)
+    if callable(save_breakdown):
+        save_breakdown(
+            rejection_breakdown
+            if isinstance(rejection_breakdown, dict)
+            else EMPTY_REJECTION_BREAKDOWN
+        )
+
+    buy_count = sum(
+        1
+        for signal in signals
+        if signal.signal_type in {SignalType.BUY, SignalType.STRONG_BUY, SignalType.WEAK_BUY}
+    )
+    sell_count = sum(
+        1
+        for signal in signals
+        if signal.signal_type in {SignalType.SELL, SignalType.STRONG_SELL, SignalType.WEAK_SELL}
+    )
 
     for ticker, market_data in timeframe_data.items():
         signal = check_signals(ticker, market_data, engine=engine)
@@ -106,9 +134,23 @@ def collect_scan_result(
             send_signal_notification(signal, notifier)
 
     hold_count = sum(1 for signal in signals if signal.signal_type == SignalType.HOLD)
+    actionable_count = len(signals) - hold_count
+    db.save_scan_log(
+        len(timeframe_data),
+        len(signals),
+        buy_count,
+        sell_count,
+        actionable_count,
+        scan_id=str(rejection_breakdown.get("scan_id", "") or ""),
+        rejection_breakdown=(
+            rejection_breakdown
+            if isinstance(rejection_breakdown, dict)
+            else dict(EMPTY_REJECTION_BREAKDOWN)
+        ),
+    )
     scan_stats: ScanStats = {
         "generated": len(signals),
-        "actionable": len(signals) - hold_count,
+        "actionable": actionable_count,
         "hold": hold_count,
     }
 
