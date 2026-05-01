@@ -1,8 +1,8 @@
 """Signal scoring and classification orchestration for BIST trading ideas."""
 
 from contextlib import AbstractContextManager
-from uuid import uuid4
 from typing import Any, cast
+from uuid import uuid4
 
 import pandas as pd
 
@@ -58,7 +58,7 @@ def _summary_entry(rows: object, key: str) -> tuple[str, int]:
         first = rows[0]
         value = str(first.get(key, "") or "")
         raw_count = first.get("count", 0)
-        count = int(raw_count) if isinstance(raw_count, (int, float, str)) else 0
+        count = int(raw_count) if isinstance(raw_count, int | float | str) else 0
         return value, count
     return "", 0
 
