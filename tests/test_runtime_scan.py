@@ -419,6 +419,18 @@ def test_analyze_page_uses_buy_threshold_instead_of_hardcoded_score():
     assert "signal_score >= 10" not in source
 
 
+def test_sidebar_navigation_uses_streamlit_widget_not_page_reload_links():
+    from bist_bot.ui.components import app_shell
+
+    source = inspect.getsource(app_shell.render_sidebar_nav)
+
+    assert "st.radio" in source
+    assert "href='?page=" not in source
+    assert 'href="?page=' not in source
+    assert "_sidebar_active_page" in source
+    assert "page:" in source
+
+
 def test_portfolio_page_uses_settings_thresholds_and_excludes_hold_fallback():
     from bist_bot.ui.pages import portfolio_page
 

@@ -24,7 +24,7 @@ st.set_page_config(
     page_title="BIST Bot",
     page_icon="🤖",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
 
