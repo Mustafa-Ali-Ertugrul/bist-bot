@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import html
-from typing import Callable
+from collections.abc import Callable
 
 import streamlit as st
 
@@ -37,7 +37,7 @@ def _format_rejection_rate(total_rejections: int, total_scanned: int) -> str:
 def _to_float(value: object, default: float = 0.0) -> float:
     if isinstance(value, bool):
         return float(value)
-    if isinstance(value, (int, float, str)):
+    if isinstance(value, int | float | str):
         try:
             return float(value)
         except ValueError:

@@ -611,6 +611,7 @@ def create_dashboard_app(
     def api_stats():
         stats = get_db().get_performance_stats()
         latest_scan_record = get_db().get_latest_scan_log()
+        rejection_breakdown = get_db().get_latest_rejection_breakdown()
         if latest_scan_record is None:
             latest_scan = {
                 "total_scanned": 0,
@@ -642,7 +643,15 @@ def create_dashboard_app(
                 else _normalize_rejection_breakdown(rejection_breakdown)
             )
         stats["latest_scan"] = latest_scan
-        return jsonify({"status": "ok", "stats": stats, "latest_scan": latest_scan})
+        stats["rejection_breakdown"] = rejection_breakdown
+        return jsonify(
+            {
+                "status": "ok",
+                "stats": stats,
+                "latest_scan": latest_scan,
+                "rejection_breakdown": rejection_breakdown,
+            }
+        )
 
     @app.route("/api/scans/history")
     @jwt_required()
