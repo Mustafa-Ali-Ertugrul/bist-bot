@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import html
-from typing import Literal
 
 import streamlit as st
 
@@ -37,37 +36,29 @@ def get_active_page(default: str = "dashboard") -> str:
     return page
 
 
-def _nav_action(page: str) -> str:
-    return f"page:{page}"
-
-
-def render_sidebar_nav(active_page: str) -> str | None:
-    page_keys = list(PAGE_META)
-    active_index = page_keys.index(active_page) if active_page in PAGE_META else 0
-    active_label = PAGE_META[page_keys[active_index]]["label"]
-    if st.session_state.get("_sidebar_active_page") != active_page:
-        st.session_state["sidebar_page_radio"] = active_label
-        st.session_state["_sidebar_active_page"] = active_page
-
-    with st.sidebar:
-        st.markdown(
-            ("<div class='bb-sidebar-shell'><div class='bb-sidebar-kicker'>Navigation</div></div>"),
-            unsafe_allow_html=True,
+def render_sidebar_nav(active_page: str) -> None:
+    links = []
+    for page, meta in PAGE_META.items():
+        active_class = " bb-sidebar-link-active" if page == active_page else ""
+        links.append(
+            (
+                f"<a class='bb-sidebar-link{active_class}' href='?page={page}'>"
+                f"<span class='bb-nav-icon'>{html.escape(meta['icon'])}</span>"
+                f"<span>{html.escape(meta['label'])}</span>"
+                "</a>"
+            )
         )
-        selected_label = st.radio(
-            "Navigation",
-            [PAGE_META[page]["label"] for page in page_keys],
-            index=active_index,
-            key="sidebar_page_radio",
-            label_visibility="collapsed",
-        )
-
-    selected_page = page_keys[
-        [PAGE_META[page]["label"] for page in page_keys].index(selected_label)
-    ]
-    if selected_page != active_page:
-        return _nav_action(selected_page)
-    return None
+    st.markdown(
+        (
+            "<aside class='bb-sidebar-shell'>"
+            "<div class='bb-sidebar-kicker'>Navigation</div>"
+            "<nav class='bb-sidebar-nav'>"
+            f"{''.join(links)}"
+            "</nav>"
+            "</aside>"
+        ),
+        unsafe_allow_html=True,
+    )
 
 
 def render_shell(active_page: str, email: str = "") -> str | None:
@@ -87,19 +78,15 @@ def render_shell(active_page: str, email: str = "") -> str | None:
             "<div class='bb-topbar-actions'>"
             f"<span class='bb-badge bb-badge-positive'>{html.escape(active_label)}</span>"
             f"<span class='bb-session-pill'>{email_label}</span>"
+            "<a class='bb-logout-link' href='?action=logout'>Logout</a>"
             "</div>"
             "</header>"
         ),
         unsafe_allow_html=True,
     )
 
-    action: str | None = render_sidebar_nav(active_page)
-    _, logout_col = st.columns([8.6, 1.4], gap="small")
-    with logout_col:
-        button_type: Literal["primary", "secondary", "tertiary"] = "secondary"
-        if st.button("Logout", key="top_logout", use_container_width=True, type=button_type):
-            action = "logout"
-    return action
+    render_sidebar_nav(active_page)
+    return None
 
 
 def render_page_hero(
