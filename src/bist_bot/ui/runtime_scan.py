@@ -141,6 +141,12 @@ def collect_scan_result(
         buy_count,
         sell_count,
         actionable_count,
+        scan_id=str(rejection_breakdown.get("scan_id", "") or ""),
+        rejection_breakdown=(
+            rejection_breakdown
+            if isinstance(rejection_breakdown, dict)
+            else dict(EMPTY_REJECTION_BREAKDOWN)
+        ),
     )
     scan_stats: ScanStats = {
         "generated": len(signals),

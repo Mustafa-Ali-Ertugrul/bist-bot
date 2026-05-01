@@ -44,8 +44,26 @@ class AppRepository:
     def get_latest_signal(self, ticker: str):
         return self.signals.get_latest_signal(ticker)
 
-    def save_scan_log(self, total: int, generated: int, buys: int, sells: int, actionable: int = 0):
-        return self.signals.save_scan_log(total, generated, buys, sells, actionable)
+    def save_scan_log(
+        self,
+        total: int,
+        generated: int,
+        buys: int,
+        sells: int,
+        actionable: int = 0,
+        *,
+        scan_id: str = "",
+        rejection_breakdown: dict | None = None,
+    ):
+        return self.signals.save_scan_log(
+            total,
+            generated,
+            buys,
+            sells,
+            actionable,
+            scan_id=scan_id,
+            rejection_breakdown=rejection_breakdown,
+        )
 
     def get_latest_scan_log(self):
         return self.signals.get_latest_scan_log()
@@ -58,6 +76,9 @@ class AppRepository:
         if isinstance(value, dict):
             return value
         return {"total_rejections": 0, "by_reason": [], "by_stage": [], "scan_id": ""}
+
+    def get_recent_scan_logs(self, limit: int = 20):
+        return self.signals.get_recent_scan_logs(limit=limit)
 
     def update_outcome(self, signal_id: int, outcome: str, outcome_price: float):
         return self.signals.update_outcome(signal_id, outcome, outcome_price)

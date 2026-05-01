@@ -87,7 +87,20 @@ def test_scan_once_orchestrates_side_effect_services():
             "scan_id": "scan-test123",
         }
     )
-    db.save_scan_log.assert_called_once_with(1, 1, 1, 0, 1)
+    db.save_scan_log.assert_called_once_with(
+        1,
+        1,
+        1,
+        0,
+        1,
+        scan_id="scan-test123",
+        rejection_breakdown={
+            "total_rejections": 2,
+            "by_reason": [{"reason_code": "mtf_confluence_blocked", "count": 2}],
+            "by_stage": [{"stage": "mtf", "count": 2}],
+            "scan_id": "scan-test123",
+        },
+    )
 
 
 def test_scan_once_skips_paper_trade_updates_when_disabled():
