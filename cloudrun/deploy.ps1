@@ -39,7 +39,8 @@ gcloud run deploy $UiServiceName `
     --region $Region `
     --image $image `
     --allow-unauthenticated `
-    --set-env-vars PYTHONPATH=/app/src,DB_PATH=/tmp/bist_signals.db,API_BASE_URL=$apiUrl
+    --set-env-vars PYTHONPATH=/app/src,DB_PATH=/tmp/bist_signals.db,API_BASE_URL=$apiUrl `
+    --session-affinity
 
 $uiUrl = (gcloud run services describe $UiServiceName --project $ProjectId --region $Region --format "value(status.url)").Trim()
 

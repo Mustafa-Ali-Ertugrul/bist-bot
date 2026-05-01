@@ -22,6 +22,12 @@ from bist_bot.services.signal_change_service import SignalChangeService
 from bist_bot.strategy.signal_models import Signal, SignalType
 
 logger = get_logger(__name__, component="scanner")
+EMPTY_REJECTION_BREAKDOWN = {
+    "total_rejections": 0,
+    "by_reason": [],
+    "by_stage": [],
+    "scan_id": "",
+}
 
 EMPTY_REJECTION_BREAKDOWN = {
     "total_rejections": 0,

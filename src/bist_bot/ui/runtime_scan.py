@@ -135,18 +135,19 @@ def collect_scan_result(
 
     hold_count = sum(1 for signal in signals if signal.signal_type == SignalType.HOLD)
     actionable_count = len(signals) - hold_count
+    normalized_breakdown = (
+        rejection_breakdown
+        if isinstance(rejection_breakdown, dict)
+        else dict(EMPTY_REJECTION_BREAKDOWN)
+    )
     db.save_scan_log(
         len(timeframe_data),
         len(signals),
         buy_count,
         sell_count,
         actionable_count,
-        scan_id=str(rejection_breakdown.get("scan_id", "") or ""),
-        rejection_breakdown=(
-            rejection_breakdown
-            if isinstance(rejection_breakdown, dict)
-            else dict(EMPTY_REJECTION_BREAKDOWN)
-        ),
+        scan_id=str(normalized_breakdown.get("scan_id", "") or ""),
+        rejection_breakdown=normalized_breakdown,
     )
     scan_stats: ScanStats = {
         "generated": len(signals),
