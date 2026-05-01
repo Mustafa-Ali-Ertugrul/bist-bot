@@ -368,7 +368,20 @@ def test_collect_scan_result_returns_scan_stats():
         result = runtime_scan.collect_scan_result(fetcher, engine, notifier, db)
 
     assert result["scan_stats"] == {"generated": 2, "actionable": 1, "hold": 1}
-    db.save_scan_log.assert_called_once_with(2, 2, 1, 0, 1)
+    db.save_scan_log.assert_called_once_with(
+        2,
+        2,
+        1,
+        0,
+        1,
+        scan_id="scan-ui123",
+        rejection_breakdown={
+            "total_rejections": 3,
+            "by_reason": [{"reason_code": "score_filtered_sideways", "count": 3}],
+            "by_stage": [{"stage": "scoring", "count": 3}],
+            "scan_id": "scan-ui123",
+        },
+    )
     db.save_latest_rejection_breakdown.assert_called_once_with(
         {
             "total_rejections": 3,
@@ -625,6 +638,56 @@ def test_scan_detail_rejection_rate_formats_safely():
     assert _format_rejection_rate(0, 0) == "%0.0"
 
 
+def test_scan_detail_rejection_rate_history_renders_recent_rows():
+    from bist_bot.ui.pages.scan_detail_page import _render_rejection_rate_history
+
+    html_output = _render_rejection_rate_history(
+        [
+            {
+                "scan_id": "scan-002",
+                "timestamp": "2026-05-01T10:00:00+03:00",
+                "rejection_rate": 40.0,
+                "total_rejections": 8,
+                "total_scanned": 20,
+                "top_reason": {"reason_code": "score_filtered_sideways", "count": 5},
+            },
+            {
+                "scan_id": "scan-001",
+                "timestamp": "2026-04-30T10:00:00+03:00",
+                "rejection_rate": 10.0,
+                "total_rejections": 2,
+                "total_scanned": 20,
+                "top_reason": {"reason_code": "insufficient_history", "count": 2},
+            },
+        ]
+    )
+
+    assert "Recent rejection rates" in html_output
+    assert "scan-002" in html_output
+    assert "%40.0" in html_output
+    assert "score_filtered_sideways" in html_output
+
+
+def test_scan_detail_history_summary_chips_use_aggregated_history_payload():
+    from bist_bot.ui.pages.scan_detail_page import _render_history_summary_chips
+
+    html_output = _render_history_summary_chips(
+        {
+            "window_size": 20,
+            "returned_scans": 7,
+            "average_rejection_rate": 22.5,
+            "by_reason": [{"reason_code": "score_filtered_sideways", "count": 9}],
+            "by_stage": [{"stage": "scoring", "count": 11}],
+        }
+    )
+
+    assert "Last N scans" in html_output
+    assert "7/20" in html_output
+    assert "Most frequent blocker" in html_output
+    assert "Yatay piyasa filtresi" in html_output
+    assert "%22.5" in html_output
+
+
 def test_scan_detail_page_shows_empty_state_when_no_completed_scan():
     from bist_bot.ui.pages import scan_detail_page
 
@@ -670,6 +733,93 @@ def test_scan_detail_page_shows_empty_state_when_no_completed_scan():
     mock_section_title.assert_called_with("Scan durumu", "Bekleyen veri")
     empty_panels = [call.args[0] for call in mock_render_html_panel.call_args_list]
     assert any("Henuz tamamlanmis bir scan kaydi bulunmuyor" in panel for panel in empty_panels)
+
+
+def test_scan_detail_page_renders_historical_analytics_when_history_exists():
+    from bist_bot.ui.pages import scan_detail_page
+
+    class DummyColumn:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    stats_response = SimpleNamespace(
+        ok=True,
+        json=lambda: {
+            "stats": {
+                "latest_scan": {
+                    "total_scanned": 20,
+                    "signals_generated": 6,
+                    "actionable": 4,
+                    "timestamp": "2026-05-01T10:00:00+03:00",
+                },
+                "rejection_breakdown": {
+                    "total_rejections": 8,
+                    "by_reason": [{"reason_code": "score_filtered_sideways", "count": 5}],
+                    "by_stage": [{"stage": "scoring", "count": 5}],
+                    "scan_id": "scan-live",
+                },
+            }
+        },
+    )
+    history_response = SimpleNamespace(
+        ok=True,
+        json=lambda: {
+            "history": {
+                "window_size": 20,
+                "returned_scans": 2,
+                "average_rejection_rate": 25.0,
+                "by_reason": [{"reason_code": "score_filtered_sideways", "count": 7}],
+                "by_stage": [{"stage": "scoring", "count": 7}],
+                "scans": [
+                    {
+                        "scan_id": "scan-live",
+                        "timestamp": "2026-05-01T10:00:00+03:00",
+                        "rejection_rate": 40.0,
+                        "total_rejections": 8,
+                        "total_scanned": 20,
+                        "top_reason": {"reason_code": "score_filtered_sideways", "count": 5},
+                    },
+                    {
+                        "scan_id": "scan-prev",
+                        "timestamp": "2026-04-30T10:00:00+03:00",
+                        "rejection_rate": 10.0,
+                        "total_rejections": 2,
+                        "total_scanned": 20,
+                        "top_reason": {"reason_code": "insufficient_history", "count": 2},
+                    },
+                ],
+            }
+        },
+    )
+
+    with (
+        patch.object(
+            scan_detail_page, "api_request", side_effect=[stats_response, history_response]
+        ),
+        patch.object(scan_detail_page, "render_page_hero"),
+        patch.object(scan_detail_page, "render_metric_block"),
+        patch.object(scan_detail_page, "render_section_title") as mock_section_title,
+        patch.object(scan_detail_page, "render_html_panel") as mock_render_html_panel,
+        patch.object(
+            scan_detail_page.st,
+            "columns",
+            side_effect=[
+                tuple(DummyColumn() for _ in range(4)),
+                tuple(DummyColumn() for _ in range(2)),
+                tuple(DummyColumn() for _ in range(2)),
+            ],
+        ),
+    ):
+        scan_detail_page.render_scan_detail_page()
+
+    section_calls = [call.args for call in mock_section_title.call_args_list]
+    assert ("Historical Analytics", "Son 20 scan trendi") in section_calls
+    history_panels = [call.args[0] for call in mock_render_html_panel.call_args_list]
+    assert any("Most frequent blockers" in panel for panel in history_panels)
+    assert any("Recent rejection rates" in panel for panel in history_panels)
 
 
 def test_start_background_scan_limited_respects_initial_scan_limit():

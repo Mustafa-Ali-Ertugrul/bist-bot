@@ -141,7 +141,12 @@ class ScanService:
                 return []
 
             signals = self.engine.scan_all(all_data)
-            breakdown = self.engine.get_last_rejection_breakdown()
+            breakdown_getter = getattr(self.engine, "get_last_rejection_breakdown", None)
+            breakdown = (
+                breakdown_getter()
+                if callable(breakdown_getter)
+                else dict(EMPTY_REJECTION_BREAKDOWN)
+            )
             self.last_rejection_breakdown = (
                 breakdown if isinstance(breakdown, dict) else dict(EMPTY_REJECTION_BREAKDOWN)
             )
@@ -166,7 +171,9 @@ class ScanService:
 
             self._check_signal_changes(signals)
             self.db.save_signals(signals)
-            self.db.save_latest_rejection_breakdown(self.last_rejection_breakdown)
+            save_breakdown = getattr(self.db, "save_latest_rejection_breakdown", None)
+            if callable(save_breakdown):
+                save_breakdown(self.last_rejection_breakdown)
             self._auto_execute_signals(actionable)
             if getattr(self.settings, "PAPER_MODE", False):
                 self.last_side_effects["paper_trades_queued"] = bool(
@@ -178,6 +185,8 @@ class ScanService:
                 len(buys),
                 len(sells),
                 len(actionable),
+                scan_id=str(self.last_rejection_breakdown.get("scan_id", "") or ""),
+                rejection_breakdown=self.last_rejection_breakdown,
             )
             self.notification_service.notify_scan_results(signals, actionable, len(all_data))
 

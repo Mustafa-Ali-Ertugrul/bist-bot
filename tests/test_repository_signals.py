@@ -230,6 +230,13 @@ def test_save_scan_log(signals_repo):
     assert latest["buy_signals"] == 7
     assert latest["sell_signals"] == 3
     assert latest["actionable"] == 7
+    assert latest["scan_id"] == ""
+    assert latest["rejection_breakdown"] == {
+        "total_rejections": 0,
+        "by_reason": [],
+        "by_stage": [],
+        "scan_id": "",
+    }
 
 
 def test_get_latest_scan_log_returns_none_when_empty(signals_repo):
@@ -249,6 +256,34 @@ def test_get_latest_scan_log_returns_most_recent(signals_repo):
     assert latest["signals_generated"] == 10
     assert latest["buy_signals"] == 7
     assert latest["sell_signals"] == 3
+
+
+def test_get_recent_scan_logs_preserves_rejection_snapshot(signals_repo):
+    signals_repo.save_scan_log(
+        total=40,
+        generated=6,
+        buys=3,
+        sells=1,
+        actionable=4,
+        scan_id="scan-recent",
+        rejection_breakdown={
+            "total_rejections": 12,
+            "by_reason": [{"reason_code": "score_filtered_sideways", "count": 8}],
+            "by_stage": [{"stage": "scoring", "count": 8}],
+            "scan_id": "scan-recent",
+        },
+    )
+
+    rows = signals_repo.get_recent_scan_logs(limit=1)
+
+    assert len(rows) == 1
+    assert rows[0]["scan_id"] == "scan-recent"
+    assert rows[0]["rejection_breakdown"] == {
+        "total_rejections": 12,
+        "by_reason": [{"reason_code": "score_filtered_sideways", "count": 8}],
+        "by_stage": [{"stage": "scoring", "count": 8}],
+        "scan_id": "scan-recent",
+    }
 
 
 def test_update_outcome(signals_repo, sample_signal):
