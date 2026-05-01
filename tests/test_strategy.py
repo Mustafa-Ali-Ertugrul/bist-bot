@@ -15,11 +15,15 @@ import pandas as pd  # noqa: E402
 import pytest  # noqa: E402
 
 from bist_bot.config.settings import settings  # noqa: E402
+from bist_bot.risk import RiskLevels  # noqa: E402
 from bist_bot.strategy import (  # noqa: E402
     StrategyEngine,
     TrendBias,
 )
+from bist_bot.strategy.engine_meta import append_signal_reasons, apply_buy_side_risk  # noqa: E402
 from bist_bot.strategy.params import StrategyParams  # noqa: E402
+from bist_bot.strategy.scoring import score_momentum, score_volume  # noqa: E402
+from bist_bot.strategy.signal_models import Signal, SignalType  # noqa: E402
 
 
 class IdentityIndicators:
@@ -215,6 +219,89 @@ def test_engine_uses_configured_sideways_and_momentum_thresholds():
     assert engine.params.adx_threshold == settings.ADX_THRESHOLD
     assert engine.params.min_trigger_candles == 30
     assert engine.params.sideways_score_multiplier == 0.6
+
+
+def test_non_buy_signal_does_not_expose_long_trade_plan():
+    risk_levels = RiskLevels(
+        final_stop=95.0,
+        final_target=120.0,
+        position_size=10,
+        risk_reward_ratio=2.0,
+        method_used="Test long plan",
+    )
+
+    adjusted = apply_buy_side_risk(
+        cast(Any, FakeRiskManager()),
+        None,
+        "TEST.IS",
+        build_signal_frame(),
+        signal_type=SignalType.HOLD,
+        enforce_sector_limit=False,
+        last=pd.Series({"close": 100.0}),
+        score=0.0,
+        trend_bias=TrendBias.NEUTRAL,
+        risk_levels=risk_levels,
+    )
+
+    assert adjusted is not None
+    assert adjusted.final_stop == 0.0
+    assert adjusted.final_target == 0.0
+    assert adjusted.position_size == 0
+
+    signal = Signal(
+        ticker="TEST.IS",
+        signal_type=SignalType.HOLD,
+        score=0.0,
+        price=100.0,
+    )
+    append_signal_reasons(signal, adjusted)
+
+    assert signal.reasons == ["Long trade plan not generated: signal is not buy-side"]
+
+
+def test_volume_price_confirmation_scores_directionally():
+    params = StrategyParams()
+    base = {
+        "volume_sma_20": 1000.0,
+        "volume": 1000.0,
+        "volume_spike": False,
+        "volume_ratio": 1.0,
+        "volume_trend": "FLAT",
+        "obv_trend": "FLAT",
+        "close": 100.0,
+        "_prev_close_for_scoring": 99.0,
+    }
+
+    bullish_score, bullish_reasons = score_volume(
+        params, pd.Series({**base, "price_volume_direction": "BULLISH_CONFIRMATION"})
+    )
+    bearish_score, bearish_reasons = score_volume(
+        params, pd.Series({**base, "price_volume_direction": "BEARISH_CONFIRMATION"})
+    )
+    pullback_score, pullback_reasons = score_volume(
+        params, pd.Series({**base, "price_volume_direction": "LOW_VOLUME_PULLBACK"})
+    )
+
+    assert bullish_score == params.score_price_volume_confirm
+    assert bullish_reasons == ["Fiyat-Hacim yukselis onayi"]
+    assert bearish_score == -params.score_price_volume_confirm
+    assert bearish_reasons == ["Fiyat-Hacim dusus onayi"]
+    assert pullback_score == 0.0
+    assert pullback_reasons == ["Dusuk hacimli geri cekilme"]
+
+
+def test_rsi_reasons_call_out_extreme_zones_without_reversed_action_wording():
+    params = StrategyParams()
+
+    oversold_score, oversold_reasons = score_momentum(params, pd.Series({"rsi": 25.0}), pd.Series())
+    overbought_score, overbought_reasons = score_momentum(
+        params, pd.Series({"rsi": 75.0}), pd.Series()
+    )
+
+    assert oversold_score > 0
+    assert overbought_score < 0
+    assert "Asiri satim" in oversold_reasons[0]
+    assert "Asiri alim" in overbought_reasons[0]
 
 
 def test_engine_uses_configurable_trigger_candle_minimum():

@@ -111,21 +111,19 @@ class StrategyEngine:
         self._current_rejection_counts = {"reason": {}, "stage": {}}
 
     def _finalize_rejection_breakdown(self, scan_id: str) -> None:
-        by_reason = sorted(
-            (
-                {"reason_code": reason_code, "count": count}
-                for reason_code, count in self._current_rejection_counts["reason"].items()
-            ),
-            key=lambda item: (-int(item["count"]), str(item["reason_code"])),
+        by_reason_items = sorted(
+            self._current_rejection_counts["reason"].items(),
+            key=lambda item: (-item[1], item[0]),
         )
-        by_stage = sorted(
-            (
-                {"stage": stage, "count": count}
-                for stage, count in self._current_rejection_counts["stage"].items()
-            ),
-            key=lambda item: (-int(item["count"]), str(item["stage"])),
+        by_stage_items = sorted(
+            self._current_rejection_counts["stage"].items(),
+            key=lambda item: (-item[1], item[0]),
         )
-        total_rejections = sum(int(item["count"]) for item in by_reason)
+        by_reason = [
+            {"reason_code": reason_code, "count": count} for reason_code, count in by_reason_items
+        ]
+        by_stage = [{"stage": stage, "count": count} for stage, count in by_stage_items]
+        total_rejections = sum(count for _, count in by_reason_items)
         self._last_rejection_breakdown = {
             "total_rejections": total_rejections,
             "by_reason": by_reason,

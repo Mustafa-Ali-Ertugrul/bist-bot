@@ -48,8 +48,8 @@ def inject_styles() -> None:
                 color:var(--bb-text);
             }
             .block-container {
-                max-width:1280px;
-                padding:6.2rem 1rem 7.25rem;
+                max-width:1520px;
+                padding:6.2rem 1.25rem 4rem 18.5rem;
             }
             [data-testid="stVerticalBlock"] > [style*="flex-direction: column"] {
                 gap:1rem;
@@ -130,6 +130,26 @@ def inject_styles() -> None:
                 overflow:hidden;
                 text-overflow:ellipsis;
                 white-space:nowrap;
+            }
+            .bb-logout-link {
+                display:inline-flex;
+                align-items:center;
+                justify-content:center;
+                min-height:34px;
+                padding:0 13px;
+                border-radius:999px;
+                color:var(--bb-text) !important;
+                background:rgba(255,255,255,.05);
+                border:1px solid rgba(255,255,255,.08);
+                font-family:'Space Grotesk',sans-serif;
+                font-size:10px;
+                font-weight:700;
+                letter-spacing:.14em;
+                text-transform:uppercase;
+            }
+            .bb-logout-link:hover {
+                border-color:rgba(255,143,143,.24);
+                color:var(--bb-danger) !important;
             }
             .bb-badge {
                 border:1px solid rgba(138,180,255,.22);
@@ -373,90 +393,56 @@ def inject_styles() -> None:
                 color:var(--bb-text);
                 font-weight:700;
             }
-            .bb-topnav-shell {
-                margin:10px 0 18px;
-                padding:10px;
+            .bb-sidebar-shell {
+                position:fixed;
+                top:96px;
+                left:18px;
+                z-index:900;
+                width:238px;
+                padding:14px;
                 border-radius:24px;
-                background:linear-gradient(180deg, rgba(13,19,31,.88), rgba(10,15,22,.82));
+                background:linear-gradient(180deg, rgba(13,19,31,.90), rgba(10,15,22,.86));
                 border:1px solid rgba(255,255,255,.06);
-                box-shadow:0 18px 40px rgba(0,0,0,.18);
-                backdrop-filter:blur(18px);
-            }
-            .bb-mobile-nav-shell {
-                position:fixed;
-                left:50%;
-                bottom:14px;
-                transform:translateX(-50%);
-                z-index:1000;
-                width:min(430px, calc(100vw - 16px));
-                padding:10px 12px;
-                border-radius:22px;
-                background:rgba(12,18,31,.90);
-                border:1px solid rgba(255,255,255,.10);
-                box-shadow:0 16px 40px rgba(0,0,0,.34);
+                box-shadow:0 20px 52px rgba(0,0,0,.30);
                 backdrop-filter:blur(20px);
             }
-            .bb-bottomnav-spacer {
-                height:88px;
-            }
-            .bb-topnav-shell div[data-testid="stButton"] > button,
-            .bb-mobile-nav-shell div[data-testid="stButton"] > button {
-                min-height:52px;
-                border-radius:18px;
-                border:1px solid rgba(138,180,255,.14);
-                background:linear-gradient(180deg, rgba(27,39,54,.95), rgba(18,26,36,.95));
-                color:var(--bb-text);
-                font-size:13px;
-                font-weight:800;
-                box-shadow:none;
-                transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease;
-            }
-            .bb-topnav-shell div[data-testid="stButton"] > button:hover,
-            .bb-mobile-nav-shell div[data-testid="stButton"] > button:hover {
-                transform:translateY(-1px);
-                border-color:rgba(138,180,255,.30);
-                box-shadow:0 10px 24px rgba(0,0,0,.22);
-            }
-            .bb-topnav-shell div[data-testid="stButton"] > button[kind="primary"],
-            .bb-mobile-nav-shell div[data-testid="stButton"] > button[kind="primary"] {
-                background:linear-gradient(135deg, var(--bb-primary), var(--bb-primary-strong));
-                color:#041627;
-                border-color:transparent;
-                box-shadow:0 12px 30px rgba(75,142,255,.30);
-            }
-            .bb-bottomnav {
-                position:fixed;
-                left:50%;
-                bottom:14px;
-                transform:translateX(-50%);
-                z-index:999;
-                width:min(560px, calc(100vw - 20px));
-                display:grid;
-                grid-template-columns:repeat(4, 1fr);
-                gap:8px;
-                padding:10px;
-                border-radius:28px;
-                background:rgba(8, 13, 21, .84);
-                border:1px solid rgba(255,255,255,.06);
-                box-shadow:0 24px 60px rgba(0,0,0,.42);
-                backdrop-filter:blur(20px);
-            }
-            .bb-nav-item {
-                display:flex;
-                flex-direction:column;
-                align-items:center;
-                justify-content:center;
-                gap:6px;
-                min-height:58px;
-                border-radius:20px;
+            .bb-sidebar-kicker {
+                padding:4px 8px 12px;
                 color:var(--bb-faint);
                 font-family:'Space Grotesk',sans-serif;
                 font-size:10px;
                 font-weight:700;
-                letter-spacing:.14em;
+                letter-spacing:.24em;
                 text-transform:uppercase;
             }
-            .bb-nav-item-active {
+            .bb-sidebar-nav {
+                display:flex;
+                flex-direction:column;
+                gap:8px;
+            }
+            .bb-sidebar-link {
+                display:flex;
+                align-items:center;
+                gap:10px;
+                min-height:48px;
+                padding:0 12px;
+                border-radius:16px;
+                color:var(--bb-muted) !important;
+                background:rgba(255,255,255,.03);
+                border:1px solid rgba(255,255,255,.04);
+                font-family:'Space Grotesk',sans-serif;
+                font-size:12px;
+                font-weight:700;
+                letter-spacing:.12em;
+                text-transform:uppercase;
+                transition:transform .18s ease, border-color .18s ease, background .18s ease;
+            }
+            .bb-sidebar-link:hover {
+                transform:translateX(2px);
+                border-color:rgba(138,180,255,.22);
+                background:rgba(138,180,255,.08);
+            }
+            .bb-sidebar-link-active {
                 color:var(--bb-secondary) !important;
                 background:linear-gradient(180deg, rgba(77,226,191,.14), rgba(77,226,191,.06));
                 border:1px solid rgba(77,226,191,.18);
@@ -558,8 +544,7 @@ def inject_styles() -> None:
             }
             @media (max-width: 900px) {
                 .block-container {
-                    padding-top:6rem;
-                    padding-bottom:7rem;
+                    padding:5.8rem .9rem 3.5rem;
                 }
                 .desktop-only {
                     display:none !important;
@@ -577,6 +562,33 @@ def inject_styles() -> None:
                 .bb-session-pill {
                     display:none;
                 }
+                .bb-sidebar-shell {
+                    position:relative;
+                    top:auto;
+                    left:auto;
+                    width:100%;
+                    margin:0 0 1rem;
+                    padding:10px;
+                    border-radius:22px;
+                }
+                .bb-sidebar-kicker {
+                    display:none;
+                }
+                .bb-sidebar-nav {
+                    display:grid;
+                    grid-template-columns:repeat(4, minmax(0, 1fr));
+                    gap:8px;
+                }
+                .bb-sidebar-link {
+                    justify-content:center;
+                    min-height:46px;
+                    padding:0 8px;
+                    font-size:10px;
+                    letter-spacing:.08em;
+                }
+                .bb-sidebar-link .bb-nav-icon {
+                    display:none;
+                }
                 .bb-panel, .bb-metric-card, .bb-hero {
                     border-radius:24px;
                 }
@@ -589,29 +601,15 @@ def inject_styles() -> None:
                 .bb-title {
                     max-width:100%;
                 }
-                .bb-bottomnav {
-                    bottom:10px;
-                    width:calc(100vw - 14px);
-                    border-radius:24px;
-                    padding:8px;
-                }
-                .bb-nav-item {
-                    min-height:54px;
-                    font-size:9px;
-                    letter-spacing:.1em;
-                }
                 .bb-ghost-link {
                     padding:8px 10px;
                     font-size:11px;
                 }
-                .bb-mobile-nav-shell {
-                    bottom:10px;
-                    width:calc(100vw - 14px);
-                    border-radius:24px;
-                    padding:8px;
+                .bb-sidebar-nav {
+                    grid-template-columns:repeat(2, minmax(0, 1fr));
                 }
-                .bb-bottomnav-spacer {
-                    height:82px;
+                .bb-sidebar-link {
+                    min-height:44px;
                 }
             }
         </style>

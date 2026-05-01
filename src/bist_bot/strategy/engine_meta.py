@@ -52,7 +52,7 @@ def apply_buy_side_risk(
 ) -> RiskLevels | None:
     """Apply sector, portfolio, liquidity, and meta-model guards."""
     if not is_buy_signal(signal_type):
-        return risk_levels
+        return RiskLevels(method_used="Long trade plan not generated for non-buy signal")
     if enforce_sector_limit and not risk_manager.check_sector_limit(ticker):
         logger.debug("strategy_sector_filtered", ticker=ticker)
         if reject_logger is not None:
@@ -118,6 +118,9 @@ def apply_buy_side_risk(
 
 def append_signal_reasons(signal: Signal, risk_levels: RiskLevels) -> None:
     """Append risk sizing and meta-model details to a generated signal."""
+    if not is_buy_signal(signal.signal_type):
+        signal.reasons.append("Long trade plan not generated: signal is not buy-side")
+        return
     signal.reasons.append(f"R/R: 1:{risk_levels.risk_reward_ratio:.1f} | {risk_levels.method_used}")
     signal.reasons.append(
         f"Pozisyon: {risk_levels.position_size} lot | Risk Butcesi: TL{risk_levels.risk_budget_tl:.2f}"
