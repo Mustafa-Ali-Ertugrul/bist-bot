@@ -15,6 +15,7 @@ from bist_bot.ui.components.app_shell import (
 )
 from bist_bot.ui.pages.analyze_page import render_analyze_page
 from bist_bot.ui.pages.overview_page import render_overview_page
+from bist_bot.ui.pages.scan_detail_page import render_scan_detail_page
 from bist_bot.ui.pages.settings_page import render_settings_page
 from bist_bot.ui.pages.signals_page import render_signals_page
 from bist_bot.ui.runtime import api_request, prepare_streamlit_runtime
@@ -228,6 +229,8 @@ def main() -> None:
 
     if page == "dashboard":
         render_overview_page()
+    elif page == "scan":
+        render_scan_detail_page()
     elif page == "signals":
         render_signals_page()
     elif page == "analysis":

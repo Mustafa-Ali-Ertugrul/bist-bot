@@ -29,6 +29,13 @@ EMPTY_REJECTION_BREAKDOWN = {
     "scan_id": "",
 }
 
+EMPTY_REJECTION_BREAKDOWN = {
+    "total_rejections": 0,
+    "by_reason": [],
+    "by_stage": [],
+    "scan_id": "",
+}
+
 
 class ScanService:
     """Coordinate one market scan from data fetch through side effects.
@@ -180,7 +187,7 @@ class ScanService:
                 )
             self.db.save_scan_log(
                 len(all_data),
-                len(actionable),
+                len(signals),
                 len(buys),
                 len(sells),
                 len(actionable),

@@ -14,6 +14,7 @@ from bist_bot.strategy.regime import TrendBias
 from bist_bot.strategy.signal_models import Signal, SignalType
 
 logger = get_logger(__name__, component="strategy")
+RejectLogger = Any
 
 
 def build_meta_features(
@@ -47,18 +48,38 @@ def apply_buy_side_risk(
     score: float,
     trend_bias: TrendBias,
     risk_levels: RiskLevels,
+    reject_logger: RejectLogger | None = None,
 ) -> RiskLevels | None:
     """Apply sector, portfolio, liquidity, and meta-model guards."""
     if not is_buy_signal(signal_type):
         return risk_levels
     if enforce_sector_limit and not risk_manager.check_sector_limit(ticker):
         logger.debug("strategy_sector_filtered", ticker=ticker)
+        if reject_logger is not None:
+            reject_logger(
+                stage="risk",
+                reason_code="sector_limit_blocked",
+                score=round(float(score), 2),
+                signal_type=signal_type.name,
+                reason_detail="sector exposure limit reached",
+            )
         return None
 
     price = float(last["close"])
     risk_levels = risk_manager.apply_portfolio_risk(ticker, df, risk_levels)
     if risk_levels.blocked_by_correlation or risk_levels.position_size <= 0:
         logger.debug("strategy_portfolio_risk_filtered", ticker=ticker)
+        if reject_logger is not None:
+            reject_logger(
+                stage="risk",
+                reason_code="portfolio_risk_blocked",
+                score=round(float(score), 2),
+                signal_type=signal_type.name,
+                position_size=risk_levels.position_size,
+                blocked_by_correlation=risk_levels.blocked_by_correlation,
+                liquidity_value=round(float(risk_levels.liquidity_value), 2),
+                reason_detail="portfolio correlation or sizing constraints blocked candidate",
+            )
         return None
 
     if meta_model is not None and hasattr(meta_model, "predict_probability"):
@@ -80,6 +101,17 @@ def apply_buy_side_risk(
         )
         if risk_levels.position_size <= 0:
             logger.debug("strategy_meta_model_filtered", ticker=ticker)
+            if reject_logger is not None:
+                reject_logger(
+                    stage="risk",
+                    reason_code="meta_model_blocked",
+                    score=round(float(score), 2),
+                    signal_type=signal_type.name,
+                    position_size=risk_levels.position_size,
+                    signal_probability=risk_levels.signal_probability,
+                    liquidity_value=round(float(risk_levels.liquidity_value), 2),
+                    reason_detail="meta-model probability sizing reduced position to zero",
+                )
             return None
     return risk_levels
 

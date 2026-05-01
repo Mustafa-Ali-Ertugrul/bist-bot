@@ -472,6 +472,7 @@ def create_dashboard_app(
                 "scanned_count": scan_stats["scanned"],
                 "generated_signals_count": scan_stats.get("signals", len(results)),
                 "actionable_count": scan_stats.get("actionable", 0),
+                "rejection_breakdown": scan_service.last_rejection_breakdown,
                 "signals": results,
                 "force_refresh": force_refresh,
                 "timestamp": datetime.now(TR).isoformat(),

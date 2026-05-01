@@ -55,6 +55,7 @@ class StrategyEngineProtocol(Protocol):
         df: pd.DataFrame | dict[str, pd.DataFrame],
         enforce_sector_limit: bool = ...,
     ) -> Signal | None: ...
+    def get_last_rejection_breakdown(self) -> dict[str, Any]: ...
 
 
 class NotifierProtocol(Protocol):

@@ -24,6 +24,7 @@ ScoreTwoRows = Callable[[pd.Series, pd.Series], tuple[float, list[str]]]
 ScoreOneRow = Callable[[pd.Series], tuple[float, list[str]]]
 MomentumChecker = Callable[[pd.DataFrame, float], bool]
 ConfluenceApplier = Callable[[SignalType, TrendBias, list[str]], bool]
+RejectLogger = Callable[..., None]
 
 
 def is_buy_signal(signal_type: SignalType) -> bool:
@@ -106,6 +107,7 @@ def calculate_score_and_reasons(
     volume_scorer: ScoreOneRow,
     structure_scorer: ScoreOneRow,
     momentum_checker: MomentumChecker = check_momentum_confirmation,
+    reject_logger: RejectLogger | None = None,
 ) -> tuple[float, list[str]] | None:
     """Calculate the bounded strategy score and explanatory reason list."""
     reasons: list[str] = []
@@ -128,6 +130,13 @@ def calculate_score_and_reasons(
                 ticker=ticker,
                 score=round(float(score), 2),
             )
+            if reject_logger is not None:
+                reject_logger(
+                    stage="scoring",
+                    reason_code="score_filtered_sideways",
+                    score=round(float(score), 2),
+                    reason_detail="sideways regime score stayed below buy threshold",
+                )
             return None
 
     if score > 0 and not momentum_checker(df, params.momentum_confirmation_threshold):
@@ -137,10 +146,24 @@ def calculate_score_and_reasons(
                 ticker=ticker,
                 score=round(float(score), 2),
             )
+            if reject_logger is not None:
+                reject_logger(
+                    stage="scoring",
+                    reason_code="score_filtered_momentum",
+                    score=round(float(score), 2),
+                    reason_detail="momentum confirmation failed near buy threshold",
+                )
             return None
 
     score = max(-100, min(100, score))
     if score == 0:
+        if reject_logger is not None:
+            reject_logger(
+                stage="scoring",
+                reason_code="score_zero_after_penalty",
+                score=0.0,
+                reason_detail="combined component score resolved to zero",
+            )
         return None
     return score, reasons
 
@@ -152,6 +175,7 @@ def passes_multi_timeframe_confluence(
     trend_bias: TrendBias,
     multi_timeframe: bool,
     confluence_applier: ConfluenceApplier = apply_confluence,
+    reject_logger: RejectLogger | None = None,
 ) -> bool:
     """Apply trend/trigger confluence when multi-timeframe mode is active."""
     if not (multi_timeframe and getattr(settings, "MTF_ENABLED", True)):
@@ -159,4 +183,13 @@ def passes_multi_timeframe_confluence(
     if confluence_applier(signal.signal_type, trend_bias, signal.reasons):
         return True
     logger.debug("strategy_mtf_filtered", ticker=ticker)
+    if reject_logger is not None:
+        reject_logger(
+            stage="mtf",
+            reason_code="mtf_confluence_blocked",
+            score=round(float(signal.score), 2),
+            signal_type=signal.signal_type.name,
+            trend_bias=trend_bias.value,
+            reason_detail=f"trend_bias {trend_bias.value} vs signal {signal.signal_type.name}",
+        )
     return False
