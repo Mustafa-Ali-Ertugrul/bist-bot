@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import html
-from typing import Literal
 
 import streamlit as st
 
@@ -40,26 +39,6 @@ def get_active_page(default: str = "dashboard") -> str:
     return page
 
 
-def render_top_nav(active_page: str) -> str | None:
-    st.markdown("<div class='bb-topnav-shell desktop-only'>", unsafe_allow_html=True)
-    nav_columns = st.columns([1, 1, 1, 1], gap="small")
-    action: str | None = None
-    for (key, meta), column in zip(PAGE_META.items(), nav_columns, strict=False):
-        with column:
-            button_type: Literal["primary", "secondary", "tertiary"] = (
-                "primary" if key == active_page else "secondary"
-            )
-            if st.button(
-                meta["label"],
-                key=f"top_nav_{key}",
-                use_container_width=True,
-                type=button_type,
-            ):
-                action = _nav_action(key)
-    st.markdown("</div>", unsafe_allow_html=True)
-    return action
-
-
 def render_shell(active_page: str, email: str = "") -> str | None:
     active_label = PAGE_META[active_page]["label"]
     email_label = html.escape(email or "Guest Session")
@@ -89,32 +68,31 @@ def render_shell(active_page: str, email: str = "") -> str | None:
         if st.button("Logout", key="top_logout", use_container_width=True):
             action = "logout"
 
-    top_nav_action = render_top_nav(active_page)
-    if top_nav_action:
-        action = top_nav_action
-
     return action
 
 
 def render_bottom_nav(active_page: str) -> str | None:
-    st.markdown("<div class='bb-bottomnav-spacer mobile-only'></div>", unsafe_allow_html=True)
-    st.markdown("<div class='bb-mobile-nav-shell mobile-only'>", unsafe_allow_html=True)
-    nav_columns = st.columns([1, 1, 1, 1], gap="small")
-    action: str | None = None
-    for (key, meta), column in zip(PAGE_META.items(), nav_columns, strict=False):
-        with column:
-            button_type: Literal["primary", "secondary", "tertiary"] = (
-                "primary" if key == active_page else "secondary"
+    st.markdown("<div class='bb-bottomnav-spacer'></div>", unsafe_allow_html=True)
+    links = []
+    for key, meta in PAGE_META.items():
+        active_class = " bb-nav-link-active" if key == active_page else ""
+        links.append(
+            "<a class='bb-nav-link{active_class}' href='?page={page}'>"
+            "<span class='bb-nav-icon'>{icon}</span>"
+            "<span class='bb-nav-label'>{label}</span>"
+            "</a>".format(
+                active_class=active_class,
+                page=html.escape(key),
+                icon=html.escape(str(meta.get("icon", ""))),
+                label=html.escape(str(meta.get("label", key.title()))),
             )
-            if st.button(
-                meta["label"],
-                key=f"bottom_nav_{key}",
-                use_container_width=True,
-                type=button_type,
-            ):
-                action = _nav_action(key)
-    st.markdown("</div>", unsafe_allow_html=True)
-    return action
+        )
+
+    st.markdown(
+        f"<nav class='bb-mobile-nav-shell'>{''.join(links)}</nav>",
+        unsafe_allow_html=True,
+    )
+    return None
 
 
 def render_page_hero(
