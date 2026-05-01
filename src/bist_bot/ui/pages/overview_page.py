@@ -33,7 +33,7 @@ def _format_confidence_label(confidence: str) -> str:
 def _to_int(value: object, default: int = 0) -> int:
     if isinstance(value, bool):
         return int(value)
-    if isinstance(value, (int, float, str)):
+    if isinstance(value, int | float | str):
         try:
             return int(value)
         except ValueError:
