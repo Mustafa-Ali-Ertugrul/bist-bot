@@ -149,3 +149,10 @@ def test_handle_shell_action_page_routes_through_set_active_page():
         _handle_shell_action("page:signals")
 
     mock_set_active_page.assert_called_once_with("signals")
+
+
+def test_handle_shell_action_ignores_invalid_page_target():
+    with patch("bist_bot.streamlit_app.set_active_page") as mock_set_active_page:
+        _handle_shell_action("page:not-a-real-page")
+
+    mock_set_active_page.assert_not_called()
