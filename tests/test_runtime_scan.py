@@ -216,6 +216,7 @@ def test_scan_timeout_resets_stale_scan_in_progress():
 
         assert result is True
         assert fake.scan_in_progress is False
+        assert fake.scan_error is not None
         assert "tamamlanamadi" in fake.scan_error.lower()
         mock_logger.warning.assert_called_once()
 
