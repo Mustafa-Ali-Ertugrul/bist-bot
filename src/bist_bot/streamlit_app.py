@@ -7,6 +7,7 @@ import streamlit as st
 from bist_bot.config.settings import settings
 from bist_bot.state.session_state import init_session_state
 from bist_bot.ui.components.app_shell import (
+    PAGE_META,
     get_active_page,
     render_bottom_nav,
     render_shell,
@@ -182,6 +183,8 @@ def _login_form() -> bool:
 
 
 def _handle_shell_action(action: str | None) -> None:
+    if not action:
+        return
     if action == "logout":
         st.session_state.auth_token = None
         st.session_state.auth_email = ""
@@ -189,8 +192,11 @@ def _handle_shell_action(action: str | None) -> None:
         st.session_state.app_bootstrapped = False
         st.session_state.just_logged_in = False
         set_active_page("dashboard")
-    if action and action != "logout":
-        set_active_page(action)
+        return
+    if action.startswith("page:"):
+        target = action.split(":", 1)[1].strip().lower()
+        if target in PAGE_META:
+            set_active_page(target)
 
 
 def _bootstrap_authenticated_app() -> None:
