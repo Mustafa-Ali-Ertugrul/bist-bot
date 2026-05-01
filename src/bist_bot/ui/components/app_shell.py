@@ -14,6 +14,10 @@ PAGE_META = {
 }
 
 
+def _nav_action(page_key: str) -> str:
+    return f"page:{page_key}"
+
+
 def set_active_page(page: str) -> None:
     target = page if page in PAGE_META else "dashboard"
     st.query_params["page"] = target
@@ -35,6 +39,26 @@ def get_active_page(default: str = "dashboard") -> str:
         page = default
     st.query_params["page"] = page
     return page
+
+
+def render_top_nav(active_page: str) -> str | None:
+    st.markdown("<div class='bb-topnav-shell desktop-only'>", unsafe_allow_html=True)
+    nav_columns = st.columns(len(PAGE_META), gap="small")
+    action: str | None = None
+    for (key, meta), column in zip(PAGE_META.items(), nav_columns, strict=False):
+        with column:
+            button_type: Literal["primary", "secondary", "tertiary"] = (
+                "primary" if key == active_page else "secondary"
+            )
+            if st.button(
+                meta["label"],
+                key=f"top_nav_{key}",
+                use_container_width=True,
+                type=button_type,
+            ):
+                action = _nav_action(key)
+    st.markdown("</div>", unsafe_allow_html=True)
+    return action
 
 
 def render_shell(active_page: str, email: str = "") -> str | None:
@@ -60,17 +84,24 @@ def render_shell(active_page: str, email: str = "") -> str | None:
         unsafe_allow_html=True,
     )
 
+    action: str | None = None
     _, logout_col = st.columns([8.6, 1.4], gap="small")
     with logout_col:
         if st.button("Logout", key="top_logout", use_container_width=True):
-            return "logout"
+            action = "logout"
 
-    return None
+    top_nav_action = render_top_nav(active_page)
+    if top_nav_action:
+        action = top_nav_action
+
+    return action
 
 
 def render_bottom_nav(active_page: str) -> str | None:
-    st.markdown("<div class='bb-bottomnav-spacer'></div>", unsafe_allow_html=True)
+    st.markdown("<div class='bb-bottomnav-spacer mobile-only'></div>", unsafe_allow_html=True)
+    st.markdown("<div class='bb-mobile-nav-shell mobile-only'>", unsafe_allow_html=True)
     nav_columns = st.columns(len(PAGE_META), gap="small")
+    action: str | None = None
     for (key, meta), column in zip(PAGE_META.items(), nav_columns, strict=False):
         with column:
             button_type: Literal["primary", "secondary", "tertiary"] = (
@@ -78,12 +109,13 @@ def render_bottom_nav(active_page: str) -> str | None:
             )
             if st.button(
                 meta["label"],
-                key=f"nav_{key}",
+                key=f"bottom_nav_{key}",
                 use_container_width=True,
                 type=button_type,
             ):
-                return key
-    return None
+                action = _nav_action(key)
+    st.markdown("</div>", unsafe_allow_html=True)
+    return action
 
 
 def render_page_hero(

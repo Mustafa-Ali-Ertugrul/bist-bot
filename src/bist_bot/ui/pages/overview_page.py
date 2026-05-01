@@ -131,7 +131,7 @@ def _render_rejection_breakdown(breakdown: dict[str, object]) -> str:
     top_rows = rows[:3]
     if not top_rows:
         return ""
-    items = []
+    items: list[str] = []
     for row in top_rows:
         if not isinstance(row, dict):
             continue
