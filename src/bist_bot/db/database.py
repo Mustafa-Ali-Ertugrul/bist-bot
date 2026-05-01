@@ -110,6 +110,8 @@ class ScanLogRecord(Base):
     buy_signals: Mapped[int | None] = mapped_column(Integer, nullable=True)
     sell_signals: Mapped[int | None] = mapped_column(Integer, nullable=True)
     actionable: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    scan_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    rejection_breakdown: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class ConfigRecord(Base):
@@ -274,6 +276,14 @@ class DatabaseManager:
             if "expires_at" not in signal_columns:
                 conn.execute(text("ALTER TABLE signals ADD COLUMN expires_at TEXT"))
 
+            scan_log_columns = {
+                row[1] for row in conn.execute(text("PRAGMA table_info(scan_log)")).fetchall()
+            }
+            if "scan_id" not in scan_log_columns:
+                conn.execute(text("ALTER TABLE scan_log ADD COLUMN scan_id TEXT"))
+            if "rejection_breakdown" not in scan_log_columns:
+                conn.execute(text("ALTER TABLE scan_log ADD COLUMN rejection_breakdown TEXT"))
+
             paper_columns = {
                 row[1] for row in conn.execute(text(f"PRAGMA table_info({paper_table})")).fetchall()
             }
@@ -303,6 +313,9 @@ class DatabaseManager:
                 )
             )
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_orders_state ON orders(state)"))
+            conn.execute(
+                text("CREATE INDEX IF NOT EXISTS idx_scan_log_scan_id ON scan_log(scan_id)")
+            )
 
     @staticmethod
     def _normalize_timestamp_columns_static(conn) -> None:

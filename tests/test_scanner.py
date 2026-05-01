@@ -38,6 +38,12 @@ def test_scan_once_orchestrates_side_effect_services():
     notifier = MagicMock()
     db = MagicMock()
     db.get_latest_signal.return_value = None
+    engine.get_last_rejection_breakdown.return_value = {
+        "total_rejections": 2,
+        "by_reason": [{"reason_code": "mtf_confluence_blocked", "count": 2}],
+        "by_stage": [{"stage": "mtf", "count": 2}],
+        "scan_id": "scan-test123",
+    }
     signal_change_service = MagicMock()
     execution_service = MagicMock()
     paper_trade_service = MagicMock()
@@ -73,7 +79,28 @@ def test_scan_once_orchestrates_side_effect_services():
     paper_trade_service.update_open_trades.assert_called_once_with()
     notification_service.notify_scan_results.assert_called_once_with([signal], [signal], 1)
     db.save_signals.assert_called_once_with([signal])
-    db.save_scan_log.assert_called_once_with(1, 1, 1, 0, 1)
+    db.save_latest_rejection_breakdown.assert_called_once_with(
+        {
+            "total_rejections": 2,
+            "by_reason": [{"reason_code": "mtf_confluence_blocked", "count": 2}],
+            "by_stage": [{"stage": "mtf", "count": 2}],
+            "scan_id": "scan-test123",
+        }
+    )
+    db.save_scan_log.assert_called_once_with(
+        1,
+        1,
+        1,
+        0,
+        1,
+        scan_id="scan-test123",
+        rejection_breakdown={
+            "total_rejections": 2,
+            "by_reason": [{"reason_code": "mtf_confluence_blocked", "count": 2}],
+            "by_stage": [{"stage": "mtf", "count": 2}],
+            "scan_id": "scan-test123",
+        },
+    )
 
 
 def test_scan_once_skips_paper_trade_updates_when_disabled():
@@ -85,6 +112,12 @@ def test_scan_once_skips_paper_trade_updates_when_disabled():
     notifier = MagicMock()
     db = MagicMock()
     db.get_latest_signal.return_value = None
+    engine.get_last_rejection_breakdown.return_value = {
+        "total_rejections": 0,
+        "by_reason": [],
+        "by_stage": [],
+        "scan_id": "scan-empty",
+    }
     paper_trade_service = MagicMock()
     signal = Signal(ticker="THYAO.IS", signal_type=SignalType.BUY, score=25, price=100.0)
     engine.scan_all.return_value = [signal]
@@ -143,6 +176,12 @@ def test_scan_once_force_refresh_uses_selective_invalidation():
     notifier = MagicMock()
     db = MagicMock()
     db.get_latest_signal.return_value = None
+    engine.get_last_rejection_breakdown.return_value = {
+        "total_rejections": 0,
+        "by_reason": [],
+        "by_stage": [],
+        "scan_id": "scan-force",
+    }
     signal = Signal(ticker="THYAO.IS", signal_type=SignalType.BUY, score=25, price=100.0)
     engine.scan_all.return_value = [signal]
     engine.get_actionable_signals.return_value = [signal]
@@ -187,6 +226,12 @@ def test_scan_once_records_circuit_breaker_success():
     db.get_latest_signal.return_value = None
     circuit_breaker = MagicMock()
     circuit_breaker.allow_request.return_value = True
+    engine.get_last_rejection_breakdown.return_value = {
+        "total_rejections": 0,
+        "by_reason": [],
+        "by_stage": [],
+        "scan_id": "scan-success",
+    }
     signal = Signal(ticker="THYAO.IS", signal_type=SignalType.BUY, score=25, price=100.0)
     engine.scan_all.return_value = [signal]
     engine.get_actionable_signals.return_value = [signal]
@@ -228,6 +273,12 @@ def test_scan_once_persists_all_signals_including_hold():
     notifier = MagicMock()
     db = MagicMock()
     db.get_latest_signal.return_value = None
+    engine.get_last_rejection_breakdown.return_value = {
+        "total_rejections": 1,
+        "by_reason": [{"reason_code": "insufficient_history", "count": 1}],
+        "by_stage": [{"stage": "data", "count": 1}],
+        "scan_id": "scan-hold",
+    }
     signal_change_service = MagicMock()
     execution_service = MagicMock()
     paper_trade_service = MagicMock()
