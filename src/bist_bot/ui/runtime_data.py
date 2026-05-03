@@ -6,6 +6,7 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 from typing import cast
 
+import numpy as np
 import pandas as pd
 import requests
 import streamlit as st
@@ -90,12 +91,20 @@ def get_market_summary(signals, all_data):
     sector_data = {}
     rsi_values = []
     vol_ratios = []
+    total_analyzed = 0
     for _ticker, df in all_data.items():
         try:
+            if df is None or df.empty:
+                continue
             df_ind = ti.add_all(df.copy())
+            if df_ind is None or df_ind.empty:
+                continue
+            total_analyzed += 1
             last = df_ind.iloc[-1]
-            rsi = last.get("rsi", 50)
-            vol = last.get("volume_ratio", 1.0)
+            rsi_raw = last.get("rsi", 50)
+            vol_raw = last.get("volume_ratio", 1.0)
+            rsi = float(rsi_raw) if pd.notna(rsi_raw) and np.isfinite(rsi_raw) else 50.0
+            vol = float(vol_raw) if pd.notna(vol_raw) and np.isfinite(vol_raw) else 1.0
             rsi_values.append(rsi)
             vol_ratios.append(vol)
             if rsi < 30:
@@ -106,11 +115,15 @@ def get_market_summary(signals, all_data):
                 sector_data["Notr"] = sector_data.get("Notr", 0) + 1
         except Exception:
             pass
+    valid_rsi = [v for v in rsi_values if pd.notna(v) and np.isfinite(v)]
+    valid_vol = [v for v in vol_ratios if pd.notna(v) and np.isfinite(v)]
     return {
         "sector_dist": sector_data,
-        "avg_rsi": sum(rsi_values) / len(rsi_values) if rsi_values else 50,
-        "avg_vol_ratio": sum(vol_ratios) / len(vol_ratios) if vol_ratios else 1.0,
-        "total_analyzed": len(rsi_values),
+        "avg_rsi": sum(valid_rsi) / len(valid_rsi) if valid_rsi else 50.0,
+        "avg_vol_ratio": sum(valid_vol) / len(valid_vol) if valid_vol else 1.0,
+        "total_analyzed": total_analyzed,
+        "rsi_sample_count": len(valid_rsi),
+        "volume_sample_count": len(valid_vol),
     }
 
 

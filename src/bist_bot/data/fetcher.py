@@ -38,6 +38,20 @@ class CacheEntry:
     cached_at: datetime
 
 
+@dataclass
+class HistoryFetchMeta:
+    source: str
+    status: str
+    reason: str | None = None
+
+
+@dataclass
+class QuoteResolutionMeta:
+    source: str
+    status: str
+    reason: str | None = None
+
+
 class RateLimiter:
     """Basit rate limiter.
 
@@ -118,8 +132,10 @@ class BISTDataFetcher:
         self.provider = provider or YFinanceProvider(_rate_limiter)
         self.quote_provider = quote_provider or BorsaIstanbulQuoteProvider(_rate_limiter)
         self._history_cache: dict[tuple[str, str, str], CacheEntry] = {}
+        self._history_fetch_meta: dict[tuple[str, str, str], HistoryFetchMeta] = {}
         self._analysis_cache: dict[str, CacheEntry] = {}
         self._quote_cache: dict[str, CacheEntry] = {}
+        self._quote_resolution_meta: dict[str, QuoteResolutionMeta] = {}
         self._max_workers = 8  # Will be updated when watchlist is resolved
         if watchlist is not None:
             self._watchlist: list[str] | None = _clean_ticker_list(watchlist)
@@ -247,6 +263,38 @@ class BISTDataFetcher:
         self._history_cache[cache_key] = CacheEntry(value=df, cached_at=self._now())
         self.clear_cache(scope="analysis", ticker=ticker)
 
+    def _record_history_fetch_meta(
+        self,
+        ticker: str,
+        period: str,
+        interval: str,
+        *,
+        source: str,
+        status: str,
+        reason: str | None = None,
+    ) -> None:
+        cache_key = self._cache_key(ticker, period, interval)
+        self._history_fetch_meta[cache_key] = HistoryFetchMeta(
+            source=source,
+            status=status,
+            reason=reason,
+        )
+
+    def get_last_history_fetch_meta(
+        self,
+        ticker: str,
+        period: str,
+        interval: str,
+    ) -> dict[str, str] | None:
+        cache_key = self._cache_key(normalize_ticker(ticker), period, interval)
+        meta = self._history_fetch_meta.get(cache_key)
+        if meta is None:
+            return None
+        payload = {"source": meta.source, "status": meta.status}
+        if meta.reason is not None:
+            payload["reason"] = meta.reason
+        return payload
+
     def get_cached_analysis(self, cache_key: str, force: bool = False) -> Any | None:
         if force:
             return None
@@ -265,6 +313,122 @@ class BISTDataFetcher:
 
     def _store_quote(self, ticker: str, price: float) -> None:
         self._quote_cache[ticker] = CacheEntry(value=float(price), cached_at=self._now())
+
+    def _record_quote_resolution_meta(
+        self,
+        ticker: str,
+        *,
+        source: str,
+        status: str,
+        reason: str | None = None,
+    ) -> None:
+        self._quote_resolution_meta[ticker] = QuoteResolutionMeta(
+            source=source,
+            status=status,
+            reason=reason,
+        )
+
+    def get_last_quote_resolution_meta(self, ticker: str) -> dict[str, str] | None:
+        meta = self._quote_resolution_meta.get(normalize_ticker(ticker))
+        if meta is None:
+            return None
+        payload = {"source": meta.source, "status": meta.status}
+        if meta.reason is not None:
+            payload["reason"] = meta.reason
+        return payload
+
+    def _log_quote_resolution_outcome(self, ticker: str, price: float | None) -> None:
+        meta = self.get_last_quote_resolution_meta(ticker) or {}
+        log_method = logger.info if meta.get("status") == "success" else logger.error
+        log_method(
+            "quote_resolution_completed"
+            if meta.get("status") == "success"
+            else "quote_resolution_terminal_failed",
+            ticker=ticker,
+            quote_source=meta.get("source", "unknown"),
+            quote_status=meta.get("status", "unknown"),
+            quote_reason=meta.get("reason"),
+            resolved_price=round(float(price), 4) if price is not None else None,
+        )
+
+    def _fetch_single_batch_fallback(
+        self,
+        ticker: str,
+        *,
+        period: str,
+        interval: str,
+        validate: bool,
+        reason: str,
+    ) -> pd.DataFrame | None:
+        logger.info(
+            "history_fetch_batch_fallback_started",
+            ticker=ticker,
+            period=period,
+            interval=interval,
+            provider=type(self.provider).__name__,
+            reason=reason,
+        )
+        try:
+            raw_batch = self.provider.fetch_batch([ticker], period=period, interval=interval)
+        except Exception as exc:
+            self._record_history_fetch_meta(
+                ticker,
+                period,
+                interval,
+                source="batch_fallback",
+                status="failed",
+                reason=reason,
+            )
+            logger.warning(
+                "history_fetch_batch_fallback_failed",
+                ticker=ticker,
+                period=period,
+                interval=interval,
+                provider=type(self.provider).__name__,
+                reason=reason,
+                error_type=type(exc).__name__,
+            )
+            return None
+
+        raw_df = raw_batch.get(ticker) if raw_batch else None
+        df = self._normalize_history(ticker, raw_df, validate=validate)
+        if df is None:
+            self._record_history_fetch_meta(
+                ticker,
+                period,
+                interval,
+                source="batch_fallback",
+                status="missing",
+                reason=reason,
+            )
+            logger.warning(
+                "history_fetch_batch_fallback_empty",
+                ticker=ticker,
+                period=period,
+                interval=interval,
+                provider=type(self.provider).__name__,
+                reason=reason,
+            )
+            return None
+
+        logger.info(
+            "history_fetch_batch_fallback_succeeded",
+            ticker=ticker,
+            period=period,
+            interval=interval,
+            provider=type(self.provider).__name__,
+            candle_count=len(df),
+            reason=reason,
+        )
+        self._record_history_fetch_meta(
+            ticker,
+            period,
+            interval,
+            source="batch_fallback",
+            status="success",
+            reason=reason,
+        )
+        return df
 
     def fetch_single(
         self,
@@ -292,6 +456,13 @@ class BISTDataFetcher:
 
         cached = self._get_cached_data(normalized_ticker, period, interval, force=force)
         if cached is not None:
+            self._record_history_fetch_meta(
+                normalized_ticker,
+                period,
+                interval,
+                source="cache",
+                status="success",
+            )
             logger.debug(
                 "history_cache_hit",
                 ticker=normalized_ticker,
@@ -306,6 +477,7 @@ class BISTDataFetcher:
                 ticker=normalized_ticker,
                 period=period,
                 interval=interval,
+                provider=type(self.provider).__name__,
             )
 
             raw_df = fetch_helpers.fetch_history_with_provider(
@@ -314,21 +486,81 @@ class BISTDataFetcher:
                 period=period,
                 interval=interval,
             )
+            fetch_source = "single"
             df = self._normalize_history(normalized_ticker, raw_df, validate=validate)
+            if df is None:
+                logger.warning(
+                    "history_fetch_single_empty",
+                    ticker=normalized_ticker,
+                    period=period,
+                    interval=interval,
+                    provider=type(self.provider).__name__,
+                )
+                df = self._fetch_single_batch_fallback(
+                    normalized_ticker,
+                    period=period,
+                    interval=interval,
+                    validate=validate,
+                    reason="empty_single_response",
+                )
+                if df is None:
+                    return None
+                fetch_source = "batch_fallback"
             if df is None:
                 return None
 
             self._store_cache(normalized_ticker, period, interval, df)
+            self._record_history_fetch_meta(
+                normalized_ticker,
+                period,
+                interval,
+                source=fetch_source,
+                status="success",
+            )
 
             logger.info(
                 "history_fetch_succeeded",
                 ticker=normalized_ticker,
                 candle_count=len(df),
                 last_close=round(float(df["close"].iloc[-1]), 2),
+                source=fetch_source,
             )
             return df
 
         except Exception as e:
+            logger.warning(
+                "history_fetch_single_failed",
+                ticker=normalized_ticker,
+                period=period,
+                interval=interval,
+                provider=type(self.provider).__name__,
+                error_type=type(e).__name__,
+            )
+            df = self._fetch_single_batch_fallback(
+                normalized_ticker,
+                period=period,
+                interval=interval,
+                validate=validate,
+                reason="single_exception",
+            )
+            if df is not None:
+                self._store_cache(normalized_ticker, period, interval, df)
+                self._record_history_fetch_meta(
+                    normalized_ticker,
+                    period,
+                    interval,
+                    source="batch_fallback",
+                    status="success",
+                    reason="single_exception",
+                )
+                logger.info(
+                    "history_fetch_succeeded",
+                    ticker=normalized_ticker,
+                    candle_count=len(df),
+                    last_close=round(float(df["close"].iloc[-1]), 2),
+                    source="batch_fallback",
+                )
+                return df
             logger.error(
                 "history_fetch_failed",
                 ticker=normalized_ticker,
@@ -501,7 +733,9 @@ class BISTDataFetcher:
         ticker = normalize_ticker(ticker)
         cached = self.get_cached_quote(ticker)
         if cached is not None:
+            self._record_quote_resolution_meta(ticker, source="cache", status="success")
             logger.debug("quote_cache_hit", ticker=ticker)
+            self._log_quote_resolution_outcome(ticker, cached)
             return cached
 
         if getattr(settings, "ENABLE_REALTIME_SCRAPING", True):
@@ -509,6 +743,12 @@ class BISTDataFetcher:
                 scraped_price = self.quote_provider.fetch_quote(ticker)
             except Exception as exc:
                 scraped_price = None
+                self._record_quote_resolution_meta(
+                    ticker,
+                    source="scrape",
+                    status="failed",
+                    reason=type(exc).__name__,
+                )
                 logger.warning(
                     "quote_scrape_failed",
                     ticker=ticker,
@@ -517,22 +757,69 @@ class BISTDataFetcher:
 
             if scraped_price is not None:
                 self._store_quote(ticker, float(scraped_price))
-                logger.info("quote_scrape_succeeded", ticker=ticker)
+                self._record_quote_resolution_meta(ticker, source="scrape", status="success")
+                logger.info(
+                    "quote_scrape_succeeded",
+                    ticker=ticker,
+                    quote_source="scrape",
+                    quote_status="success",
+                )
+                self._log_quote_resolution_outcome(ticker, float(scraped_price))
                 return float(scraped_price)
 
             provider_quote = self.provider.fetch_quote(ticker)
             if provider_quote is not None:
                 self._store_quote(ticker, float(provider_quote))
-                logger.info("quote_provider_succeeded", ticker=ticker)
+                self._record_quote_resolution_meta(
+                    ticker,
+                    source="provider_quote",
+                    status="success",
+                )
+                logger.info(
+                    "quote_provider_succeeded",
+                    ticker=ticker,
+                    quote_source="provider_quote",
+                    quote_status="success",
+                )
+                self._log_quote_resolution_outcome(ticker, float(provider_quote))
                 return float(provider_quote)
 
         df = self.fetch_single(ticker, period="5d", interval="1d")
+        history_meta = self.get_last_history_fetch_meta(ticker, "5d", "1d") or {}
         if df is not None and not df.empty:
             self._store_quote(ticker, float(df["close"].iloc[-1]))
-            logger.info("quote_history_fallback_succeeded", ticker=ticker)
+            self._record_quote_resolution_meta(
+                ticker,
+                source="history_fallback",
+                status="success",
+                reason=history_meta.get("source"),
+            )
+            logger.info(
+                "quote_history_fallback_succeeded",
+                ticker=ticker,
+                quote_source="history_fallback",
+                quote_status="success",
+                history_source=history_meta.get("source", "unknown"),
+                history_status=history_meta.get("status", "unknown"),
+            )
+            self._log_quote_resolution_outcome(ticker, float(df["close"].iloc[-1]))
             return float(df["close"].iloc[-1])
 
-        logger.error("quote_resolution_failed", ticker=ticker)
+        self._record_quote_resolution_meta(
+            ticker,
+            source="failed",
+            status="failed",
+            reason=history_meta.get("source") or "unresolved",
+        )
+        logger.error(
+            "quote_resolution_failed",
+            ticker=ticker,
+            quote_source="failed",
+            quote_status="failed",
+            history_source=history_meta.get("source", "unknown"),
+            history_status=history_meta.get("status", "unknown"),
+        )
+        self._log_quote_resolution_outcome(ticker, None)
         return None
 
     def get_stock_info(self, ticker: str) -> dict[str, str | int | float | None]:
@@ -582,6 +869,7 @@ class BISTDataFetcher:
             ]
             for history_key in history_keys:
                 self._history_cache.pop(history_key, None)
+                self._history_fetch_meta.pop(history_key, None)
 
         if scope in {"all", "analysis"}:
             analysis_keys: list[str] = [
@@ -645,20 +933,25 @@ class BISTDataFetcher:
         trigger_period = trigger_period or getattr(settings, "MTF_TRIGGER_PERIOD", "1mo")
         trigger_interval = trigger_interval or getattr(settings, "MTF_TRIGGER_INTERVAL", "15m")
 
-        trend_data = self.fetch_all(
-            period=trend_period, interval=trend_interval, force=force_refresh, validate=validate
-        )
-        trigger_data = self.fetch_all(
-            period=trigger_period, interval=trigger_interval, force=force_refresh, validate=validate
-        )
-
         combined: dict[str, dict[str, pd.DataFrame]] = {}
         for ticker in tickers:
-            trend_df = trend_data.get(ticker)
-            trigger_df = trigger_data.get(ticker)
+            trend_df = self.fetch_single(
+                ticker,
+                period=trend_period,
+                interval=trend_interval,
+                force=force_refresh,
+                validate=validate,
+            )
+            trigger_df = self.fetch_single(
+                ticker,
+                period=trigger_period,
+                interval=trigger_interval,
+                force=force_refresh,
+                validate=validate,
+            )
             if trend_df is None or trigger_df is None:
                 continue
-            combined[ticker] = {"trend": trend_df, "trigger": trigger_df}
+            combined[normalize_ticker(ticker)] = {"trend": trend_df, "trigger": trigger_df}
         return combined
 
 

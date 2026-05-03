@@ -7,13 +7,14 @@ import streamlit as st
 from bist_bot.config.settings import settings
 from bist_bot.state.session_state import init_session_state
 from bist_bot.ui.components.app_shell import (
+    PAGE_META,
     get_active_page,
-    render_bottom_nav,
     render_shell,
     set_active_page,
 )
 from bist_bot.ui.pages.analyze_page import render_analyze_page
 from bist_bot.ui.pages.overview_page import render_overview_page
+from bist_bot.ui.pages.scan_detail_page import render_scan_detail_page
 from bist_bot.ui.pages.settings_page import render_settings_page
 from bist_bot.ui.pages.signals_page import render_signals_page
 from bist_bot.ui.runtime import api_request, prepare_streamlit_runtime
@@ -23,7 +24,7 @@ st.set_page_config(
     page_title="BIST Bot",
     page_icon="🤖",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
 
@@ -93,7 +94,7 @@ def _complete_auth(email: str, token: str) -> None:
     st.session_state.is_authenticated = True
     st.session_state.app_bootstrapped = False
     st.session_state.just_logged_in = True
-    set_active_page("dashboard")
+    st.query_params["page"] = "dashboard"
     st.rerun()
 
 
@@ -182,6 +183,8 @@ def _login_form() -> bool:
 
 
 def _handle_shell_action(action: str | None) -> None:
+    if not action:
+        return
     if action == "logout":
         st.session_state.auth_token = None
         st.session_state.auth_email = ""
@@ -189,8 +192,11 @@ def _handle_shell_action(action: str | None) -> None:
         st.session_state.app_bootstrapped = False
         st.session_state.just_logged_in = False
         set_active_page("dashboard")
-    if action and action != "logout":
-        set_active_page(action)
+        return
+    if action.startswith("page:"):
+        target = action.split(":", 1)[1].strip().lower()
+        if target in PAGE_META:
+            set_active_page(target)
 
 
 def _bootstrap_authenticated_app() -> None:
@@ -222,15 +228,14 @@ def main() -> None:
 
     if page == "dashboard":
         render_overview_page()
+    elif page == "scan":
+        render_scan_detail_page()
     elif page == "signals":
         render_signals_page()
     elif page == "analysis":
         render_analyze_page()
     else:
         render_settings_page()
-
-    nav_action = render_bottom_nav(page)
-    _handle_shell_action(nav_action)
 
 
 if __name__ == "__main__":

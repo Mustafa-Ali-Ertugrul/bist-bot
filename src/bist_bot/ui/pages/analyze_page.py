@@ -25,6 +25,24 @@ from bist_bot.ui.runtime import api_request
 from bist_bot.ui.session_cooldown import consume_cooldown
 
 
+def _signal_tone(score: float) -> str:
+    if score >= settings.BUY_THRESHOLD:
+        return "positive"
+    if score >= settings.WEAK_BUY_THRESHOLD:
+        return "positive"
+    if score <= settings.WEAK_SELL_THRESHOLD:
+        return "danger"
+    return "neutral"
+
+
+def _badge_class_for_tone(tone: str) -> str:
+    return f"bb-badge bb-badge-{tone}"
+
+
+def _is_buy_side_score(score: float) -> bool:
+    return score >= settings.WEAK_BUY_THRESHOLD
+
+
 def render_analyze_page() -> None:
     render_page_hero(
         "Analysis",
@@ -88,9 +106,8 @@ def render_analyze_page() -> None:
     signal_score = float(signal.get("score", 0) or 0)
     signal_type = str(signal.get("type", "N/A"))
     trend = str(snapshot.get("trend", "N/A"))
-    verdict_badge = (
-        "bb-badge bb-badge-positive" if signal_score >= 10 else "bb-badge bb-badge-danger"
-    )
+    signal_tone = _signal_tone(signal_score)
+    verdict_badge = _badge_class_for_tone(signal_tone)
 
     headline_html = (
         "<div style='display:flex;justify-content:space-between;gap:14px;align-items:flex-start;'>"
@@ -101,7 +118,10 @@ def render_analyze_page() -> None:
         f"<span class='{verdict_badge}'>{html.escape(signal_type)}</span>"
         "</div>"
     )
-    render_html_panel(headline_html, accent="positive" if signal_score >= 10 else "danger")
+    render_html_panel(
+        headline_html,
+        accent=signal_tone,
+    )
 
     m1, m2, m3, m4 = st.columns(4)
     with m1:
@@ -123,7 +143,7 @@ def render_analyze_page() -> None:
             "Signal score",
             f"{signal_score:+.0f}",
             signal_type,
-            accent="positive" if signal_score >= 10 else "danger",
+            accent=signal_tone,
         )
 
     if price_data:
@@ -148,17 +168,23 @@ def render_analyze_page() -> None:
     render_section_title("Trade plan", "Key execution levels")
     p1, p2 = st.columns([1, 1], gap="large")
     with p1:
-        render_html_panel(
-            (
+        if _is_buy_side_score(signal_score):
+            plan_html = (
                 "<div class='bb-list'>"
                 f"<div class='bb-list-row'><div><div class='bb-label'>Signal</div><div class='bb-note-strong'>{html.escape(signal_type)}</div></div><div class='bb-note-strong'>{signal_score:+.0f}</div></div>"
                 f"<div class='bb-list-row'><div><div class='bb-label'>Stop loss</div><div class='bb-note-strong bb-text-danger'>TL{float(signal.get('stop_loss', 0) or 0):.2f}</div></div></div>"
                 f"<div class='bb-list-row'><div><div class='bb-label'>Target</div><div class='bb-note-strong bb-text-positive'>TL{float(signal.get('target', 0) or 0):.2f}</div></div></div>"
                 f"<div class='bb-list-row'><div><div class='bb-label'>Position size</div><div class='bb-note-strong'>{html.escape(str(signal.get('position_size', '-')))}</div></div></div>"
                 "</div>"
-            ),
-            accent="positive" if signal_score >= 10 else "danger",
-        )
+            )
+        else:
+            plan_html = (
+                "<div class='bb-list'>"
+                f"<div class='bb-list-row'><div><div class='bb-label'>Signal</div><div class='bb-note-strong'>{html.escape(signal_type)}</div></div><div class='bb-note-strong'>{signal_score:+.0f}</div></div>"
+                "<div class='bb-note'>Long trade plan is hidden because this signal is not buy-side.</div>"
+                "</div>"
+            )
+        render_html_panel(plan_html, accent=signal_tone)
     with p2:
         reasons = signal.get("reasons", [])
         reason_rows = "".join(

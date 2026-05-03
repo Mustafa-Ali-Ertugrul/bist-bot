@@ -22,6 +22,19 @@ from bist_bot.services.signal_change_service import SignalChangeService
 from bist_bot.strategy.signal_models import Signal, SignalType
 
 logger = get_logger(__name__, component="scanner")
+EMPTY_REJECTION_BREAKDOWN = {
+    "total_rejections": 0,
+    "by_reason": [],
+    "by_stage": [],
+    "scan_id": "",
+}
+
+EMPTY_REJECTION_BREAKDOWN = {
+    "total_rejections": 0,
+    "by_reason": [],
+    "by_stage": [],
+    "scan_id": "",
+}
 
 
 class ScanService:
@@ -76,6 +89,8 @@ class ScanService:
             "buys": 0,
             "sells": 0,
         }
+        self.last_side_effects: dict[str, bool] = {"paper_trades_queued": False}
+        self.last_rejection_breakdown: dict[str, object] = dict(EMPTY_REJECTION_BREAKDOWN)
         self.circuit_breaker = circuit_breaker
 
     def _auto_execute_signals(self, signals: list[Signal]) -> None:
@@ -106,6 +121,7 @@ class ScanService:
             return []
 
         try:
+            self.last_side_effects["paper_trades_queued"] = False
             if force_refresh:
                 self.fetcher.clear_cache(scope="intraday_fetch")
                 self.fetcher.clear_cache(scope="analysis")
@@ -131,9 +147,26 @@ class ScanService:
                 return []
 
             signals = self.engine.scan_all(all_data)
+            breakdown_getter = getattr(self.engine, "get_last_rejection_breakdown", None)
+            breakdown = (
+                breakdown_getter()
+                if callable(breakdown_getter)
+                else dict(EMPTY_REJECTION_BREAKDOWN)
+            )
+            self.last_rejection_breakdown = (
+                breakdown if isinstance(breakdown, dict) else dict(EMPTY_REJECTION_BREAKDOWN)
+            )
             actionable = self.engine.get_actionable_signals(signals)
-            buys = [s for s in signals if s.score > 0]
-            sells = [s for s in signals if s.score < 0]
+            buys = [
+                s
+                for s in actionable
+                if s.signal_type in (SignalType.BUY, SignalType.STRONG_BUY, SignalType.WEAK_BUY)
+            ]
+            sells = [
+                s
+                for s in actionable
+                if s.signal_type in (SignalType.SELL, SignalType.STRONG_SELL, SignalType.WEAK_SELL)
+            ]
             self.last_scan_stats = {
                 "scanned": len(all_data),
                 "signals": len(signals),
@@ -144,9 +177,23 @@ class ScanService:
 
             self._check_signal_changes(signals)
             self.db.save_signals(signals)
+            save_breakdown = getattr(self.db, "save_latest_rejection_breakdown", None)
+            if callable(save_breakdown):
+                save_breakdown(self.last_rejection_breakdown)
             self._auto_execute_signals(actionable)
-            self.paper_trade_service.queue_actionable_signals(actionable)
-            self.db.save_scan_log(len(all_data), len(signals), len(buys), len(sells))
+            if getattr(self.settings, "PAPER_MODE", False):
+                self.last_side_effects["paper_trades_queued"] = bool(
+                    self.paper_trade_service.queue_actionable_signals(actionable)
+                )
+            self.db.save_scan_log(
+                len(all_data),
+                len(signals),
+                len(buys),
+                len(sells),
+                len(actionable),
+                scan_id=str(self.last_rejection_breakdown.get("scan_id", "") or ""),
+                rejection_breakdown=self.last_rejection_breakdown,
+            )
             self.notification_service.notify_scan_results(signals, actionable, len(all_data))
 
             if getattr(self.settings, "PAPER_MODE", False):

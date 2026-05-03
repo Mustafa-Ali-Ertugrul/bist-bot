@@ -34,8 +34,9 @@ class DummyFetcher:
         trend_interval: str = "1d",
         trigger_period: str = "1mo",
         trigger_interval: str = "15m",
+        force_refresh: bool = False,
     ):
-        _ = trend_period, trend_interval, trigger_period, trigger_interval
+        _ = trend_period, trend_interval, trigger_period, trigger_interval, force_refresh
         return {}
 
     def fetch_single(
@@ -60,6 +61,9 @@ class DummyEngine:
     def analyze(self, ticker: str, df, enforce_sector_limit: bool = False):
         _ = ticker, df, enforce_sector_limit
         return None
+
+    def get_last_rejection_breakdown(self):
+        return {"total_rejections": 0, "by_reason": [], "by_stage": [], "scan_id": ""}
 
 
 def build_test_client(tmp_path):
@@ -192,6 +196,204 @@ def test_register_returns_403_when_public_registration_disabled(tmp_path):
             {"email": "newuser@bistbot.local"},
         ).scalar_one()
     assert stored_count == 0
+
+
+def test_stats_endpoint_returns_stable_rejection_breakdown_shape(tmp_path):
+    client, manager = build_db_user_client(tmp_path)
+
+    login_response = client.post(
+        "/api/auth/login",
+        json={"email": "dbadmin@bistbot.local", "password": "db-password"},
+    )
+    assert login_response.status_code == 200
+    payload = login_response.get_json()
+    assert payload is not None
+    token = payload["access_token"]
+
+    db = DataAccess(manager)
+    db.save_latest_rejection_breakdown(
+        {
+            "total_rejections": 3,
+            "by_reason": [
+                {"reason_code": "score_filtered_sideways", "count": 2},
+                {"reason_code": "insufficient_history", "count": 1},
+            ],
+            "by_stage": [
+                {"stage": "scoring", "count": 2},
+                {"stage": "data", "count": 1},
+            ],
+            "scan_id": "scan-api123",
+        }
+    )
+
+    response = client.get("/api/stats", headers={"Authorization": f"Bearer {token}"})
+
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data is not None
+    breakdown = data["rejection_breakdown"]
+    assert breakdown == {
+        "total_rejections": 3,
+        "by_reason": [
+            {"reason_code": "score_filtered_sideways", "count": 2},
+            {"reason_code": "insufficient_history", "count": 1},
+        ],
+        "by_stage": [
+            {"stage": "scoring", "count": 2},
+            {"stage": "data", "count": 1},
+        ],
+        "scan_id": "scan-api123",
+    }
+    assert data["stats"]["rejection_breakdown"] == breakdown
+
+
+def test_stats_endpoint_returns_empty_rejection_breakdown_when_missing(tmp_path):
+    client, _manager = build_db_user_client(tmp_path)
+
+    login_response = client.post(
+        "/api/auth/login",
+        json={"email": "dbadmin@bistbot.local", "password": "db-password"},
+    )
+    assert login_response.status_code == 200
+    payload = login_response.get_json()
+    assert payload is not None
+
+    response = client.get(
+        "/api/stats",
+        headers={"Authorization": f"Bearer {payload['access_token']}"},
+    )
+
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data is not None
+    assert data["rejection_breakdown"] == {
+        "total_rejections": 0,
+        "by_reason": [],
+        "by_stage": [],
+        "scan_id": "",
+    }
+
+
+def test_scan_log_persists_rejection_snapshot_history(tmp_path):
+    _client, manager = build_db_user_client(tmp_path)
+    db = DataAccess(manager)
+
+    db.save_scan_log(
+        20,
+        6,
+        3,
+        1,
+        4,
+        scan_id="scan-persist",
+        rejection_breakdown={
+            "total_rejections": 8,
+            "by_reason": [{"reason_code": "score_filtered_sideways", "count": 5}],
+            "by_stage": [{"stage": "scoring", "count": 5}],
+            "scan_id": "scan-persist",
+        },
+    )
+
+    rows = db.get_recent_scan_logs(limit=1)
+
+    assert len(rows) == 1
+    assert rows[0]["scan_id"] == "scan-persist"
+    assert rows[0]["rejection_breakdown"] == {
+        "total_rejections": 8,
+        "by_reason": [{"reason_code": "score_filtered_sideways", "count": 5}],
+        "by_stage": [{"stage": "scoring", "count": 5}],
+        "scan_id": "scan-persist",
+    }
+
+
+def test_scan_history_endpoint_returns_aggregated_history(tmp_path):
+    client, manager = build_db_user_client(tmp_path)
+
+    login_response = client.post(
+        "/api/auth/login",
+        json={"email": "dbadmin@bistbot.local", "password": "db-password"},
+    )
+    assert login_response.status_code == 200
+    payload = login_response.get_json()
+    assert payload is not None
+    token = payload["access_token"]
+
+    db = DataAccess(manager)
+    db.save_scan_log(
+        20,
+        6,
+        3,
+        1,
+        4,
+        scan_id="scan-002",
+        rejection_breakdown={
+            "total_rejections": 8,
+            "by_reason": [{"reason_code": "score_filtered_sideways", "count": 5}],
+            "by_stage": [{"stage": "scoring", "count": 5}],
+            "scan_id": "scan-002",
+        },
+    )
+    db.save_scan_log(
+        20,
+        4,
+        2,
+        0,
+        2,
+        scan_id="scan-001",
+        rejection_breakdown={
+            "total_rejections": 2,
+            "by_reason": [{"reason_code": "insufficient_history", "count": 2}],
+            "by_stage": [{"stage": "data", "count": 2}],
+            "scan_id": "scan-001",
+        },
+    )
+
+    response = client.get(
+        "/api/scans/history?limit=2",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data is not None
+    history = data["history"]
+    assert history["window_size"] == 2
+    assert history["returned_scans"] == 2
+    assert history["by_reason"][0] == {"reason_code": "score_filtered_sideways", "count": 5}
+    assert history["by_stage"][0] == {"stage": "scoring", "count": 5}
+    assert (
+        history["scans"][0]["scan_id"] == "scan-001" or history["scans"][0]["scan_id"] == "scan-002"
+    )
+    assert {scan["scan_id"] for scan in history["scans"]} == {"scan-001", "scan-002"}
+    assert history["average_rejection_rate"] == 25.0
+
+
+def test_scan_history_endpoint_returns_empty_shape_without_scans(tmp_path):
+    client, _manager = build_db_user_client(tmp_path)
+
+    login_response = client.post(
+        "/api/auth/login",
+        json={"email": "dbadmin@bistbot.local", "password": "db-password"},
+    )
+    assert login_response.status_code == 200
+    payload = login_response.get_json()
+    assert payload is not None
+
+    response = client.get(
+        "/api/scans/history?limit=5",
+        headers={"Authorization": f"Bearer {payload['access_token']}"},
+    )
+
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data is not None
+    assert data["history"] == {
+        "window_size": 5,
+        "returned_scans": 0,
+        "average_rejection_rate": 0.0,
+        "by_reason": [],
+        "by_stage": [],
+        "scans": [],
+    }
 
 
 def test_register_rejects_duplicate_email(tmp_path):

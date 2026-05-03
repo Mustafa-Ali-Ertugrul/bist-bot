@@ -15,19 +15,19 @@ def score_momentum(params, last, _prev) -> tuple[float, list[str]]:
     if pd.notna(rsi):
         if rsi < params.rsi_oversold_extreme:
             score += params.score_rsi_extreme
-            reasons.append(f"RSI çok düşük ({rsi:.1f}) → Aşırı satım")
+            reasons.append(f"RSI cok dusuk ({rsi:.1f}) -> Asiri satim, tepki alimi potansiyeli")
         elif rsi < params.rsi_oversold:
             score += params.score_rsi_normal
-            reasons.append(f"RSI düşük ({rsi:.1f}) → Satım bölgesi")
+            reasons.append(f"RSI dusuk ({rsi:.1f}) -> Asiri satim bolgesi")
         elif rsi < params.rsi_neutral_low:
             score += params.score_rsi_weak_low
             reasons.append(f"RSI düşük-nötr ({rsi:.1f})")
         elif rsi > params.rsi_overbought_extreme:
             score -= params.score_rsi_extreme
-            reasons.append(f"RSI çok yüksek ({rsi:.1f}) → Aşırı alım")
+            reasons.append(f"RSI cok yuksek ({rsi:.1f}) -> Asiri alim, duzeltme riski")
         elif rsi > params.rsi_overbought:
             score -= params.score_rsi_normal
-            reasons.append(f"RSI yüksek ({rsi:.1f}) → Alım bölgesi")
+            reasons.append(f"RSI yuksek ({rsi:.1f}) -> Asiri alim bolgesi")
         elif rsi > params.rsi_neutral_high:
             score -= params.score_rsi_weak_high
             reasons.append(f"RSI yüksek-nötr ({rsi:.1f})")
@@ -74,6 +74,8 @@ def score_momentum(params, last, _prev) -> tuple[float, list[str]]:
             score -= params.score_cci_normal
             reasons.append(f"CCI yüksek ({cci:.0f})")
 
+    MAX_MOMENTUM_SCORE = 25
+    score = max(-MAX_MOMENTUM_SCORE, min(MAX_MOMENTUM_SCORE, score))
     return score, reasons
 
 
@@ -90,11 +92,15 @@ def score_trend(params, last, prev) -> tuple[float, list[str]]:
         if above_ema and not last_above_ema:
             reasons.append(f"Fiyat EMA{settings.EMA_LONG}'i kesti (yukarı)")
         elif above_ema:
-            if pd.notna(adx) and adx >= getattr(settings, "ADX_THRESHOLD", 20):
+            if pd.notna(adx) and adx >= params.adx_threshold:
                 score += params.score_ema_cross
                 reasons.append(f"yükseliş trendi (EMA{settings.EMA_LONG} üzerinde)")
         elif not above_ema and last_above_ema:
             reasons.append(f"Fiyat EMA{settings.EMA_LONG}'i kesti (aşağı)")
+        elif not above_ema:
+            if pd.notna(adx) and adx >= params.adx_threshold:
+                score -= params.score_ema_cross / 2
+                reasons.append(f"düşüş trendi (EMA{settings.EMA_LONG} altında)")
 
     sma_cross = last.get("sma_cross", "NONE")
     if sma_cross == "GOLDEN_CROSS":
@@ -173,6 +179,8 @@ def score_trend(params, last, prev) -> tuple[float, list[str]]:
         score -= params.score_di_cross
         reasons.append("+DI/-DI Bearish Cross")
 
+    MAX_TREND_SCORE = 25
+    score = max(-MAX_TREND_SCORE, min(MAX_TREND_SCORE, score))
     return score, reasons
 
 
@@ -191,6 +199,7 @@ def score_volume(params, last) -> tuple[float, list[str]]:
 
     vol_spike = last.get("volume_spike", False)
     vol_ratio = last.get("volume_ratio", 1.0)
+    pv_direction = last.get("price_volume_direction", "NONE")
     pv_confirm = last.get("price_volume_confirm", False)
     vol_trend = last.get("volume_trend", "FLAT")
 
@@ -203,9 +212,14 @@ def score_volume(params, last) -> tuple[float, list[str]]:
             score -= params.score_volume_spike
             reasons.append(f"Hacim patlaması + düşüş ({vol_ratio:.1f}x)")
 
-    if pv_confirm:
+    if pv_direction == "BULLISH_CONFIRMATION" or (pv_direction == "NONE" and bool(pv_confirm)):
         score += params.score_price_volume_confirm
-        reasons.append("Fiyat-Hacim uyumu ✓")
+        reasons.append("Fiyat-Hacim yukselis onayi")
+    elif pv_direction == "BEARISH_CONFIRMATION":
+        score -= params.score_price_volume_confirm
+        reasons.append("Fiyat-Hacim dusus onayi")
+    elif pv_direction == "LOW_VOLUME_PULLBACK":
+        reasons.append("Dusuk hacimli geri cekilme")
 
     if vol_trend == "INCREASING":
         score += params.score_volume_trend
@@ -222,6 +236,8 @@ def score_volume(params, last) -> tuple[float, list[str]]:
         score -= params.score_obv_trend
         reasons.append("OBV düşüş trendi → Çıkış var")
 
+    MAX_VOLUME_SCORE = 15
+    score = max(-MAX_VOLUME_SCORE, min(MAX_VOLUME_SCORE, score))
     return score, reasons
 
 
@@ -276,4 +292,6 @@ def score_structure(params, last) -> tuple[float, list[str]]:
         score -= params.score_macd_divergence
         reasons.append("🔥 MACD Bearish Divergence → Güçlü dönüş sinyali")
 
+    MAX_STRUCTURE_SCORE = 20
+    score = max(-MAX_STRUCTURE_SCORE, min(MAX_STRUCTURE_SCORE, score))
     return score, reasons

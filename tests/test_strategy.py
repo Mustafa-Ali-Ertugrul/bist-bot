@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import sys
 from typing import Any, cast
+from unittest.mock import patch
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:
@@ -14,11 +15,15 @@ import pandas as pd  # noqa: E402
 import pytest  # noqa: E402
 
 from bist_bot.config.settings import settings  # noqa: E402
+from bist_bot.risk import RiskLevels  # noqa: E402
 from bist_bot.strategy import (  # noqa: E402
     StrategyEngine,
     TrendBias,
 )
+from bist_bot.strategy.engine_meta import append_signal_reasons, apply_buy_side_risk  # noqa: E402
 from bist_bot.strategy.params import StrategyParams  # noqa: E402
+from bist_bot.strategy.scoring import score_momentum, score_volume  # noqa: E402
+from bist_bot.strategy.signal_models import Signal, SignalType  # noqa: E402
 
 
 class IdentityIndicators:
@@ -72,6 +77,9 @@ class FakeRiskManager:
     def reset_portfolio(self) -> None:
         return None
 
+    def build_global_correlation_cache(self, data) -> None:
+        return None
+
     def check_sector_limit(self, ticker: str) -> bool:
         return True
 
@@ -91,18 +99,32 @@ class BiasControlledStrategyEngine(StrategyEngine):
         return self.bias
 
 
+class TickerBiasStrategyEngine(BiasControlledStrategyEngine):
+    def __init__(self, default_bias: TrendBias, bias_by_ticker: dict[str, TrendBias]):
+        super().__init__(default_bias)
+        self._bias_by_ticker = bias_by_ticker
+        self._active_ticker = ""
+
+    def analyze(self, ticker: str, df, enforce_sector_limit: bool = False):
+        self._active_ticker = ticker
+        return super().analyze(ticker, df, enforce_sector_limit=enforce_sector_limit)
+
+    def _get_trend_bias(self, df: pd.DataFrame) -> TrendBias:
+        return self._bias_by_ticker.get(self._active_ticker, self.bias)
+
+
 def classify(score: int | float, engine: StrategyEngine) -> str:
     if score >= engine.STRONG_BUY_THRESHOLD:
         return "STRONG_BUY"
     if score >= engine.BUY_THRESHOLD:
         return "BUY"
-    if score > max(0, engine.WEAK_BUY_THRESHOLD):
+    if score >= engine.WEAK_BUY_THRESHOLD:
         return "WEAK_BUY"
     if score <= engine.STRONG_SELL_THRESHOLD:
         return "STRONG_SELL"
     if score <= engine.SELL_THRESHOLD:
         return "SELL"
-    if score < min(0, engine.WEAK_SELL_THRESHOLD):
+    if score <= engine.WEAK_SELL_THRESHOLD:
         return "WEAK_SELL"
     return "HOLD"
 
@@ -199,6 +221,89 @@ def test_engine_uses_configured_sideways_and_momentum_thresholds():
     assert engine.params.sideways_score_multiplier == 0.6
 
 
+def test_non_buy_signal_does_not_expose_long_trade_plan():
+    risk_levels = RiskLevels(
+        final_stop=95.0,
+        final_target=120.0,
+        position_size=10,
+        risk_reward_ratio=2.0,
+        method_used="Test long plan",
+    )
+
+    adjusted = apply_buy_side_risk(
+        cast(Any, FakeRiskManager()),
+        None,
+        "TEST.IS",
+        build_signal_frame(),
+        signal_type=SignalType.HOLD,
+        enforce_sector_limit=False,
+        last=pd.Series({"close": 100.0}),
+        score=0.0,
+        trend_bias=TrendBias.NEUTRAL,
+        risk_levels=risk_levels,
+    )
+
+    assert adjusted is not None
+    assert adjusted.final_stop == 0.0
+    assert adjusted.final_target == 0.0
+    assert adjusted.position_size == 0
+
+    signal = Signal(
+        ticker="TEST.IS",
+        signal_type=SignalType.HOLD,
+        score=0.0,
+        price=100.0,
+    )
+    append_signal_reasons(signal, adjusted)
+
+    assert signal.reasons == ["Long trade plan not generated: signal is not buy-side"]
+
+
+def test_volume_price_confirmation_scores_directionally():
+    params = StrategyParams()
+    base = {
+        "volume_sma_20": 1000.0,
+        "volume": 1000.0,
+        "volume_spike": False,
+        "volume_ratio": 1.0,
+        "volume_trend": "FLAT",
+        "obv_trend": "FLAT",
+        "close": 100.0,
+        "_prev_close_for_scoring": 99.0,
+    }
+
+    bullish_score, bullish_reasons = score_volume(
+        params, pd.Series({**base, "price_volume_direction": "BULLISH_CONFIRMATION"})
+    )
+    bearish_score, bearish_reasons = score_volume(
+        params, pd.Series({**base, "price_volume_direction": "BEARISH_CONFIRMATION"})
+    )
+    pullback_score, pullback_reasons = score_volume(
+        params, pd.Series({**base, "price_volume_direction": "LOW_VOLUME_PULLBACK"})
+    )
+
+    assert bullish_score == params.score_price_volume_confirm
+    assert bullish_reasons == ["Fiyat-Hacim yukselis onayi"]
+    assert bearish_score == -params.score_price_volume_confirm
+    assert bearish_reasons == ["Fiyat-Hacim dusus onayi"]
+    assert pullback_score == 0.0
+    assert pullback_reasons == ["Dusuk hacimli geri cekilme"]
+
+
+def test_rsi_reasons_call_out_extreme_zones_without_reversed_action_wording():
+    params = StrategyParams()
+
+    oversold_score, oversold_reasons = score_momentum(params, pd.Series({"rsi": 25.0}), pd.Series())
+    overbought_score, overbought_reasons = score_momentum(
+        params, pd.Series({"rsi": 75.0}), pd.Series()
+    )
+
+    assert oversold_score > 0
+    assert overbought_score < 0
+    assert "Asiri satim" in oversold_reasons[0]
+    assert "Asiri alim" in overbought_reasons[0]
+
+
 def test_engine_uses_configurable_trigger_candle_minimum():
     engine = StrategyEngine(
         indicators=cast(Any, IdentityIndicators()),
@@ -215,7 +320,10 @@ def test_engine_uses_configurable_adx_threshold():
     engine.params.adx_threshold = 35.0
     trigger_df = build_signal_frame()
 
-    assert engine.analyze("TEST.IS", trigger_df) is None
+    signal = engine.analyze("TEST.IS", trigger_df)
+
+    assert signal is not None
+    assert any("ADX düşük" in r for r in signal.reasons)
 
 
 def test_engine_filters_when_adx_is_missing():
@@ -237,11 +345,11 @@ def test_score_classification_full_range():
         (20, "BUY"),
         (19, "WEAK_BUY"),
         (8.1, "WEAK_BUY"),
-        (8, "HOLD"),
+        (8, "WEAK_BUY"),
         (7, "HOLD"),
         (0, "HOLD"),
         (-7, "HOLD"),
-        (-8, "HOLD"),
+        (-8, "WEAK_SELL"),
         (-8.1, "WEAK_SELL"),
         (-19, "WEAK_SELL"),
         (-20, "SELL"),
@@ -305,6 +413,197 @@ def test_empty_dataframe_does_not_crash():
     signal = engine.analyze("TEST.IS", pd.DataFrame())
 
     assert signal is None
+
+
+def test_rejection_telemetry_emits_single_event_for_insufficient_history():
+    engine = BiasControlledStrategyEngine(TrendBias.LONG)
+    short_frame = build_signal_frame().head(10)
+
+    with patch("bist_bot.strategy.engine.logger") as mock_logger:
+        signal = engine.analyze("TEST.IS", short_frame)
+
+    assert signal is None
+    rejected_calls = [
+        call
+        for call in mock_logger.info.call_args_list
+        if call.args[0] == "strategy_candidate_rejected"
+    ]
+    assert len(rejected_calls) == 1
+    payload = rejected_calls[0].kwargs
+    assert payload["ticker"] == "TEST.IS"
+    assert payload["reason_code"] == "insufficient_history"
+    assert payload["stage"] == "data"
+    assert payload["trigger_candle_count"] == 10
+
+
+def test_rejection_telemetry_emits_single_event_for_portfolio_risk_block(bullish_frame):
+    class BlockingRiskManager(FakeRiskManager):
+        def apply_portfolio_risk(self, ticker: str, df: pd.DataFrame, levels: FakeRiskLevels):
+            levels.position_size = 0
+            levels.blocked_by_correlation = True
+            levels.liquidity_value = 250000.0
+            return levels
+
+    engine = StrategyEngine(
+        indicators=cast(Any, IdentityIndicators()),
+        risk_manager=cast(Any, BlockingRiskManager()),
+    )
+
+    with patch("bist_bot.strategy.engine.logger") as mock_logger:
+        signal = engine.analyze("TEST.IS", {"trend": bullish_frame, "trigger": bullish_frame})
+
+    assert signal is None
+    rejected_calls = [
+        call
+        for call in mock_logger.info.call_args_list
+        if call.args[0] == "strategy_candidate_rejected"
+    ]
+    assert len(rejected_calls) == 1
+    payload = rejected_calls[0].kwargs
+    assert payload["reason_code"] == "portfolio_risk_blocked"
+    assert payload["stage"] == "risk"
+    assert payload["blocked_by_correlation"] is True
+    assert payload["position_size"] == 0
+
+
+def test_scan_all_emits_rejections_only_for_failed_candidates(bullish_frame):
+    engine = TickerBiasStrategyEngine(
+        TrendBias.LONG,
+        bias_by_ticker={"FAIL_MTF.IS": TrendBias.SHORT},
+    )
+    short_frame = bullish_frame.head(10)
+    data = {
+        "PASS.IS": {"trend": bullish_frame, "trigger": bullish_frame},
+        "FAIL_MTF.IS": {"trend": bullish_frame, "trigger": bullish_frame},
+        "FAIL_SHORT.IS": {"trend": short_frame, "trigger": short_frame},
+    }
+
+    with patch("bist_bot.strategy.engine.logger") as mock_logger:
+        signals = engine.scan_all(data)
+
+    assert len(signals) == 1
+    assert signals[0].ticker == "PASS.IS"
+    rejected_calls = [
+        call
+        for call in mock_logger.info.call_args_list
+        if call.args[0] == "strategy_candidate_rejected"
+    ]
+    assert len(rejected_calls) == 2
+    rejected_tickers = {call.kwargs["ticker"] for call in rejected_calls}
+    assert rejected_tickers == {"FAIL_MTF.IS", "FAIL_SHORT.IS"}
+    assert all(call.kwargs["ticker"] != "PASS.IS" for call in rejected_calls)
+    scan_ids = {call.kwargs["scan_id"] for call in rejected_calls}
+    assert len(scan_ids) == 1
+    summary_calls = [
+        call for call in mock_logger.info.call_args_list if call.args[0] == "scan_rejection_summary"
+    ]
+    assert len(summary_calls) == 1
+    summary_payload = summary_calls[0].kwargs
+    assert summary_payload["scan_id"] in scan_ids
+    assert summary_payload["total_rejections"] == 2
+    assert summary_payload["top_reason"] in {"insufficient_history", "mtf_confluence_blocked"}
+    assert summary_payload["top_reason_count"] == 1
+    assert summary_payload["top_stage"] in {"data", "mtf"}
+    assert summary_payload["top_stage_count"] == 1
+
+
+def test_scan_all_stores_sorted_rejection_breakdown_and_resets_between_runs(bullish_frame):
+    engine = TickerBiasStrategyEngine(
+        TrendBias.LONG,
+        bias_by_ticker={
+            "FAIL_MTF_A.IS": TrendBias.SHORT,
+            "FAIL_MTF_B.IS": TrendBias.SHORT,
+        },
+    )
+    short_frame = bullish_frame.head(10)
+
+    first_data = {
+        "FAIL_SHORT.IS": {"trend": short_frame, "trigger": short_frame},
+        "FAIL_MTF_A.IS": {"trend": bullish_frame, "trigger": bullish_frame},
+        "FAIL_MTF_B.IS": {"trend": bullish_frame, "trigger": bullish_frame},
+    }
+    second_data = {"FAIL_SHORT_ONLY.IS": {"trend": short_frame, "trigger": short_frame}}
+
+    first_signals = engine.scan_all(first_data)
+    first_breakdown = engine.get_last_rejection_breakdown()
+    second_signals = engine.scan_all(second_data)
+    second_breakdown = engine.get_last_rejection_breakdown()
+
+    assert first_signals == []
+    assert first_breakdown["total_rejections"] == 3
+    assert first_breakdown["by_reason"] == [
+        {"reason_code": "mtf_confluence_blocked", "count": 2},
+        {"reason_code": "insufficient_history", "count": 1},
+    ]
+    assert first_breakdown["by_stage"] == [
+        {"stage": "mtf", "count": 2},
+        {"stage": "data", "count": 1},
+    ]
+    assert str(first_breakdown["scan_id"]).startswith("scan-")
+
+    assert second_signals == []
+    assert second_breakdown["total_rejections"] == 1
+    assert second_breakdown["by_reason"] == [{"reason_code": "insufficient_history", "count": 1}]
+    assert second_breakdown["by_stage"] == [{"stage": "data", "count": 1}]
+    assert str(second_breakdown["scan_id"]).startswith("scan-")
+    assert second_breakdown["scan_id"] != first_breakdown["scan_id"]
+
+
+def test_scan_rejection_summary_uses_sorted_aggregate_top_values(bullish_frame):
+    engine = TickerBiasStrategyEngine(
+        TrendBias.LONG,
+        bias_by_ticker={
+            "FAIL_MTF_A.IS": TrendBias.SHORT,
+            "FAIL_MTF_B.IS": TrendBias.SHORT,
+        },
+    )
+    short_frame = bullish_frame.head(10)
+    data = {
+        "FAIL_SHORT.IS": {"trend": short_frame, "trigger": short_frame},
+        "FAIL_MTF_A.IS": {"trend": bullish_frame, "trigger": bullish_frame},
+        "FAIL_MTF_B.IS": {"trend": bullish_frame, "trigger": bullish_frame},
+    }
+
+    with patch("bist_bot.strategy.engine.logger") as mock_logger:
+        signals = engine.scan_all(data)
+
+    assert signals == []
+    summary_calls = [
+        call for call in mock_logger.info.call_args_list if call.args[0] == "scan_rejection_summary"
+    ]
+    assert len(summary_calls) == 1
+    payload = summary_calls[0].kwargs
+    assert payload["total_rejections"] == 3
+    assert payload["top_reason"] == "mtf_confluence_blocked"
+    assert payload["top_reason_count"] == 2
+    assert payload["top_stage"] == "mtf"
+    assert payload["top_stage_count"] == 2
+
+
+def test_scan_rejection_summary_emits_once_for_zero_rejections(bullish_frame):
+    engine = TickerBiasStrategyEngine(TrendBias.LONG, bias_by_ticker={})
+    data = {"PASS.IS": {"trend": bullish_frame, "trigger": bullish_frame}}
+
+    with patch("bist_bot.strategy.engine.logger") as mock_logger:
+        signals = engine.scan_all(data)
+
+    assert len(signals) == 1
+    rejected_calls = [
+        call
+        for call in mock_logger.info.call_args_list
+        if call.args[0] == "strategy_candidate_rejected"
+    ]
+    assert rejected_calls == []
+    summary_calls = [
+        call for call in mock_logger.info.call_args_list if call.args[0] == "scan_rejection_summary"
+    ]
+    assert len(summary_calls) == 1
+    payload = summary_calls[0].kwargs
+    assert payload["total_rejections"] == 0
+    assert payload["top_reason"] == ""
+    assert payload["top_reason_count"] == 0
+    assert payload["top_stage"] == ""
+    assert payload["top_stage_count"] == 0
 
 
 def test_score_stays_within_expected_bounds(bullish_frame):
