@@ -32,8 +32,7 @@ def inject_styles() -> None:
                 --bb-radius-sm:18px;
                 --bb-shadow:0 30px 80px rgba(0, 0, 0, .36);
             }
-            [data-testid="stHeader"], [data-testid="stToolbar"], footer, #MainMenu,
-            section[data-testid="stSidebar"] {
+            [data-testid="stHeader"], [data-testid="stToolbar"], footer, #MainMenu {
                 display:none !important;
             }
             html, body, [class*="css"] {
@@ -49,7 +48,40 @@ def inject_styles() -> None:
             }
             .block-container {
                 max-width:1520px;
-                padding:6.2rem 1.25rem 4rem 18.5rem;
+                padding:6.2rem 1.25rem 4rem;
+            }
+            div[data-testid="collapsedControl"],
+            button[data-testid="stSidebarCollapseButton"],
+            button[data-testid="stSidebarExpandButton"] {
+                display:none !important;
+            }
+            section[data-testid="stSidebar"] {
+                display:block !important;
+                visibility:visible !important;
+                min-width:280px !important;
+                width:280px !important;
+                max-width:280px !important;
+                transform:translateX(0) !important;
+                background:linear-gradient(180deg, rgba(9,15,25,.98), rgba(7,12,18,.98)) !important;
+                border-right:1px solid rgba(255,255,255,.06);
+                box-shadow:18px 0 50px rgba(0,0,0,.22);
+                z-index:998;
+            }
+            section[data-testid="stSidebar"][aria-expanded="false"],
+            section[data-testid="stSidebar"][style*="visibility: hidden"],
+            section[data-testid="stSidebar"][style*="transform"] {
+                display:block !important;
+                visibility:visible !important;
+                min-width:280px !important;
+                width:280px !important;
+                max-width:280px !important;
+                transform:translateX(0) !important;
+            }
+            section[data-testid="stSidebar"] > div,
+            div[data-testid="stSidebarContent"] {
+                background:transparent !important;
+                padding-top:88px;
+                width:280px !important;
             }
             [data-testid="stVerticalBlock"] > [style*="flex-direction: column"] {
                 gap:1rem;
@@ -393,19 +425,6 @@ def inject_styles() -> None:
                 color:var(--bb-text);
                 font-weight:700;
             }
-            .bb-sidebar-shell {
-                position:fixed;
-                top:96px;
-                left:18px;
-                z-index:900;
-                width:238px;
-                padding:14px;
-                border-radius:24px;
-                background:linear-gradient(180deg, rgba(13,19,31,.90), rgba(10,15,22,.86));
-                border:1px solid rgba(255,255,255,.06);
-                box-shadow:0 20px 52px rgba(0,0,0,.30);
-                backdrop-filter:blur(20px);
-            }
             .bb-sidebar-kicker {
                 padding:4px 8px 12px;
                 color:var(--bb-faint);
@@ -415,37 +434,29 @@ def inject_styles() -> None:
                 letter-spacing:.24em;
                 text-transform:uppercase;
             }
-            .bb-sidebar-nav {
-                display:flex;
-                flex-direction:column;
-                gap:8px;
+            .bb-sidebar-note {
+                padding:0 8px 12px;
+                color:var(--bb-muted);
+                font-size:12px;
+                line-height:1.5;
             }
-            .bb-sidebar-link {
-                display:flex;
-                align-items:center;
-                gap:10px;
+            section[data-testid="stSidebar"] .stButton > button {
+                justify-content:flex-start;
                 min-height:48px;
-                padding:0 12px;
                 border-radius:16px;
-                color:var(--bb-muted) !important;
-                background:rgba(255,255,255,.03);
-                border:1px solid rgba(255,255,255,.04);
                 font-family:'Space Grotesk',sans-serif;
                 font-size:12px;
-                font-weight:700;
-                letter-spacing:.12em;
+                font-weight:800;
+                letter-spacing:.10em;
                 text-transform:uppercase;
-                transition:transform .18s ease, border-color .18s ease, background .18s ease;
+                background:rgba(255,255,255,.03);
+                border:1px solid rgba(255,255,255,.05);
+                color:var(--bb-muted);
             }
-            .bb-sidebar-link:hover {
-                transform:translateX(2px);
-                border-color:rgba(138,180,255,.22);
-                background:rgba(138,180,255,.08);
-            }
-            .bb-sidebar-link-active {
-                color:var(--bb-secondary) !important;
-                background:linear-gradient(180deg, rgba(77,226,191,.14), rgba(77,226,191,.06));
-                border:1px solid rgba(77,226,191,.18);
+            section[data-testid="stSidebar"] .stButton > button[kind="primary"] {
+                color:#061426;
+                background:linear-gradient(135deg, var(--bb-secondary), var(--bb-primary));
+                border-color:transparent;
             }
             .bb-nav-icon {
                 font-family:'Material Symbols Outlined';
@@ -546,6 +557,14 @@ def inject_styles() -> None:
                 .block-container {
                     padding:5.8rem .9rem 3.5rem;
                 }
+                section[data-testid="stSidebar"],
+                section[data-testid="stSidebar"][aria-expanded="false"],
+                section[data-testid="stSidebar"] > div,
+                div[data-testid="stSidebarContent"] {
+                    min-width:236px !important;
+                    width:236px !important;
+                    max-width:236px !important;
+                }
                 .desktop-only {
                     display:none !important;
                 }
@@ -562,38 +581,27 @@ def inject_styles() -> None:
                 .bb-session-pill {
                     display:none;
                 }
-                .bb-sidebar-shell {
-                    position:relative;
-                    top:auto;
-                    left:auto;
-                    width:100%;
-                    margin:0 0 1rem;
-                    padding:10px;
-                    border-radius:22px;
-                }
                 .bb-sidebar-kicker {
                     display:none;
                 }
-                .bb-sidebar-nav {
-                    display:grid;
-                    grid-template-columns:repeat(4, minmax(0, 1fr));
-                    gap:8px;
-                }
-                .bb-sidebar-link {
-                    justify-content:center;
+                section[data-testid="stSidebar"] .stButton > button {
                     min-height:46px;
-                    padding:0 8px;
                     font-size:10px;
                     letter-spacing:.08em;
-                }
-                .bb-sidebar-link .bb-nav-icon {
-                    display:none;
                 }
                 .bb-panel, .bb-metric-card, .bb-hero {
                     border-radius:24px;
                 }
             }
             @media (max-width: 640px) {
+                section[data-testid="stSidebar"],
+                section[data-testid="stSidebar"][aria-expanded="false"],
+                section[data-testid="stSidebar"] > div,
+                div[data-testid="stSidebarContent"] {
+                    min-width:208px !important;
+                    width:208px !important;
+                    max-width:208px !important;
+                }
                 .block-container {
                     padding-left:.7rem;
                     padding-right:.7rem;
@@ -605,10 +613,7 @@ def inject_styles() -> None:
                     padding:8px 10px;
                     font-size:11px;
                 }
-                .bb-sidebar-nav {
-                    grid-template-columns:repeat(2, minmax(0, 1fr));
-                }
-                .bb-sidebar-link {
+                section[data-testid="stSidebar"] .stButton > button {
                     min-height:44px;
                 }
             }
