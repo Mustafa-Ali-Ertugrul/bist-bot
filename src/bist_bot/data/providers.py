@@ -9,8 +9,10 @@ from datetime import datetime, timedelta
 from typing import Any, Protocol
 
 import pandas as pd
+import yfinance as yf
 
 from bist_bot.app_logging import get_logger
+from bist_bot.config.settings import settings
 from bist_bot.data import quotes as quote_helpers
 from bist_bot.data.scraper import scrape_bist_quote
 
@@ -38,44 +40,210 @@ class YFinanceProvider:
     def __init__(self, rate_limiter: RateLimiterProtocol) -> None:
         self.rate_limiter = rate_limiter
 
-    def fetch_history(self, ticker: str, period: str, interval: str) -> pd.DataFrame | None:
-        import yfinance as yf
+    @staticmethod
+    def _is_retryable_error(exc: Exception) -> bool:
+        if isinstance(exc, ConnectionError | TimeoutError | OSError):
+            return True
+        retryable_names = {"YFRateLimitError", "YFDownloadError", "YFTickerError"}
+        return type(exc).__name__ in retryable_names
 
-        self.rate_limiter.wait_if_needed("yahoo.finance")
-        stock = yf.Ticker(ticker)
-        return stock.history(period=period, interval=interval)
+    def _retry_yfinance_call(self, func, ticker: str, *args, **kwargs) -> Any:
+        max_retries = settings.data.YFINANCE_MAX_RETRIES
+        backoff = settings.data.YFINANCE_RETRY_BACKOFF_SECONDS
+        last_exc = None
+        for attempt in range(1, max_retries + 1):
+            try:
+                self.rate_limiter.wait_if_needed("yahoo.finance")
+                result = func(*args, **kwargs)
+                if result is None or (isinstance(result, pd.DataFrame) and result.empty):
+                    if attempt < max_retries:
+                        logger.warning(
+                            "yfinance_retry",
+                            ticker=ticker,
+                            attempt=attempt,
+                            max_retries=max_retries,
+                            error_type="empty_response",
+                            final_result="retrying",
+                        )
+                        time.sleep(backoff * (2 ** (attempt - 1)))
+                        continue
+                logger.info(
+                    "yfinance_fetch_success",
+                    ticker=ticker,
+                    attempt=attempt,
+                    max_retries=max_retries,
+                    final_result="success",
+                )
+                return result
+            except (ConnectionError, TimeoutError, OSError) as exc:
+                last_exc = exc
+                if attempt < max_retries:
+                    wait = backoff * (2 ** (attempt - 1))
+                    logger.warning(
+                        "yfinance_retry",
+                        ticker=ticker,
+                        attempt=attempt,
+                        max_retries=max_retries,
+                        error_type=type(exc).__name__,
+                        final_result="retrying",
+                    )
+                    time.sleep(wait)
+                    continue
+                logger.error(
+                    "yfinance_fetch_failed",
+                    ticker=ticker,
+                    attempt=attempt,
+                    max_retries=max_retries,
+                    error_type=type(exc).__name__,
+                    final_result="failure",
+                )
+                return None
+            except Exception as exc:
+                if self._is_retryable_error(exc):
+                    last_exc = exc
+                    if attempt < max_retries:
+                        wait = backoff * (2 ** (attempt - 1))
+                        logger.warning(
+                            "yfinance_retry",
+                            ticker=ticker,
+                            attempt=attempt,
+                            max_retries=max_retries,
+                            error_type=type(exc).__name__,
+                            final_result="retrying",
+                        )
+                        time.sleep(wait)
+                        continue
+                logger.error(
+                    "yfinance_fetch_failed",
+                    ticker=ticker,
+                    attempt=attempt,
+                    max_retries=max_retries,
+                    error_type=type(exc).__name__,
+                    final_result="failure",
+                )
+                return None
+        if last_exc is not None:
+            logger.error(
+                "yfinance_fetch_exhausted",
+                ticker=ticker,
+                max_retries=max_retries,
+                final_result="failure",
+            )
+        return None
+
+    def fetch_history(self, ticker: str, period: str, interval: str) -> pd.DataFrame | None:
+        def _fetch():
+            stock = yf.Ticker(ticker)
+            return stock.history(period=period, interval=interval)
+
+        return self._retry_yfinance_call(_fetch, ticker)
 
     def fetch_batch(
         self, tickers: list[str], period: str, interval: str
     ) -> dict[str, pd.DataFrame | None]:
-        import yfinance as yf
-
         if not tickers:
             return {}
 
-        self.rate_limiter.wait_if_needed("yahoo.finance")
-        raw_data = yf.download(
-            tickers=" ".join(tickers),
-            period=period,
-            interval=interval,
-            group_by="ticker",
-            auto_adjust=False,
-            progress=False,
-            threads=True,
-        )
-        if raw_data is None or raw_data.empty:
-            return {}
+        max_retries = settings.data.YFINANCE_MAX_RETRIES
+        backoff = settings.data.YFINANCE_RETRY_BACKOFF_SECONDS
+        last_exc = None
 
-        results: dict[str, pd.DataFrame | None] = {}
-        for ticker in tickers:
+        for attempt in range(1, max_retries + 1):
             try:
-                if isinstance(raw_data.columns, pd.MultiIndex):
-                    results[ticker] = raw_data[ticker].copy()
-                else:
-                    results[ticker] = raw_data.copy()
-            except KeyError:
-                results[ticker] = None
-        return results
+                self.rate_limiter.wait_if_needed("yahoo.finance")
+                raw_data = yf.download(
+                    tickers=" ".join(tickers),
+                    period=period,
+                    interval=interval,
+                    group_by="ticker",
+                    auto_adjust=False,
+                    progress=False,
+                    threads=True,
+                    timeout=getattr(settings.data, "PROVIDER_BATCH_TIMEOUT_SECONDS", 60),
+                )
+                if raw_data is None or (isinstance(raw_data, pd.DataFrame) and raw_data.empty):
+                    if attempt < max_retries:
+                        logger.warning(
+                            "yfinance_batch_retry",
+                            ticker_count=len(tickers),
+                            attempt=attempt,
+                            max_retries=max_retries,
+                            error_type="empty_response",
+                            final_result="retrying",
+                        )
+                        time.sleep(backoff * (2 ** (attempt - 1)))
+                        continue
+                    logger.warning("yfinance_batch_empty", ticker_count=len(tickers))
+                    return {}
+                logger.info(
+                    "yfinance_batch_success",
+                    ticker_count=len(tickers),
+                    attempt=attempt,
+                    max_retries=max_retries,
+                    final_result="success",
+                )
+                results: dict[str, pd.DataFrame | None] = {}
+                for ticker in tickers:
+                    try:
+                        if isinstance(raw_data.columns, pd.MultiIndex):
+                            results[ticker] = raw_data[ticker].copy()
+                        else:
+                            results[ticker] = raw_data.copy()
+                    except KeyError:
+                        logger.warning("yfinance_batch_missing_ticker", ticker=ticker)
+                        results[ticker] = None
+                return results
+            except (ConnectionError, TimeoutError, OSError) as exc:
+                last_exc = exc
+                if attempt < max_retries:
+                    wait = backoff * (2 ** (attempt - 1))
+                    logger.warning(
+                        "yfinance_batch_retry",
+                        ticker_count=len(tickers),
+                        attempt=attempt,
+                        max_retries=max_retries,
+                        error_type=type(exc).__name__,
+                        final_result="retrying",
+                    )
+                    time.sleep(wait)
+                    continue
+                logger.error(
+                    "yfinance_batch_failed",
+                    ticker_count=len(tickers),
+                    attempt=attempt,
+                    max_retries=max_retries,
+                    error_type=type(exc).__name__,
+                    final_result="failure",
+                )
+                return {}
+            except Exception as exc:
+                if self._is_retryable_error(exc):
+                    last_exc = exc
+                    if attempt < max_retries:
+                        wait = backoff * (2 ** (attempt - 1))
+                        logger.warning(
+                            "yfinance_batch_retry",
+                            ticker_count=len(tickers),
+                            attempt=attempt,
+                            max_retries=max_retries,
+                            error_type=type(exc).__name__,
+                            final_result="retrying",
+                        )
+                        time.sleep(wait)
+                        continue
+                logger.error(
+                    "yfinance_batch_failed",
+                    ticker_count=len(tickers),
+                    attempt=attempt,
+                    max_retries=max_retries,
+                    error_type=type(exc).__name__,
+                    final_result="failure",
+                )
+                return {}
+        if last_exc is not None:
+            logger.error("yfinance_batch_exhausted", ticker_count=len(tickers))
+            return {}
+        return {}
 
     def fetch_quote(self, ticker: str) -> float | None:
         _ = ticker
@@ -431,6 +599,8 @@ class BaseOfficialProvider(ABC):
         results: dict[str, pd.DataFrame | None] = {}
         for ticker in tickers:
             records = items.get(ticker, [])
+            if not records:
+                logger.info("official_batch_missing_ticker", ticker=ticker)
             results[ticker] = self._ohlcv_from_records(records)
         return results
 
@@ -621,12 +791,20 @@ class DataProviderRouter:
                 continue
             try:
                 result = provider.fetch_history(ticker, period, interval)
-                self._record_success(idx)
-                return result
+                if result is not None:
+                    self._record_success(idx)
+                    return result
+                logger.info(
+                    "provider_returned_none",
+                    provider_index=idx,
+                    provider_type=type(provider).__name__,
+                    ticker=ticker,
+                    method="fetch_history",
+                )
             except Exception:
                 self._record_failure(idx)
                 logger.warning("provider_failover", provider_index=idx, ticker=ticker)
-        return self._providers[-1].fetch_history(ticker, period, interval)
+        return None
 
     def fetch_batch(
         self, tickers: list[str], period: str, interval: str
@@ -636,7 +814,24 @@ class DataProviderRouter:
                 continue
             try:
                 result = provider.fetch_batch(tickers, period, interval)
+                if result is None:
+                    logger.info(
+                        "provider_batch_returned_none",
+                        provider_index=idx,
+                        provider_type=type(provider).__name__,
+                        ticker_count=len(tickers),
+                    )
+                    continue
                 self._record_success(idx)
+                none_tickers = [t for t in tickers if result.get(t) is None]
+                if none_tickers:
+                    logger.info(
+                        "provider_batch_partial_none",
+                        provider_index=idx,
+                        provider_type=type(provider).__name__,
+                        none_count=len(none_tickers),
+                        none_tickers=none_tickers[:20],
+                    )
                 return result
             except Exception:
                 self._record_failure(idx)
@@ -649,11 +844,19 @@ class DataProviderRouter:
                 continue
             try:
                 result = provider.fetch_quote(ticker)
-                self._record_success(idx)
-                return result
+                if result is not None:
+                    self._record_success(idx)
+                    return result
+                logger.info(
+                    "provider_returned_none",
+                    provider_index=idx,
+                    provider_type=type(provider).__name__,
+                    ticker=ticker,
+                    method="fetch_quote",
+                )
             except Exception:
                 self._record_failure(idx)
-        return self._providers[-1].fetch_quote(ticker)
+        return None
 
     def fetch_universe(self, force_refresh: bool = False) -> list[str]:
         for idx, provider in enumerate(self._providers):
