@@ -274,6 +274,11 @@ class DataSettings:
     FAILOVER_COOLDOWN_SECONDS: float = _get_float_env("FAILOVER_COOLDOWN_SECONDS", 60.0)
     STAMP_TAX: float = _get_float_env("STAMP_TAX", 0.00093)
     EXCHANGE_FEE: float = _get_float_env("EXCHANGE_FEE", 0.0005)
+    SCRAPER_REQUEST_TIMEOUT_SECONDS: int = _get_int_env("SCRAPER_REQUEST_TIMEOUT_SECONDS", 10)
+    PROVIDER_BATCH_TIMEOUT_SECONDS: int = _get_int_env("PROVIDER_BATCH_TIMEOUT_SECONDS", 60)
+    PROVIDER_SINGLE_TIMEOUT_SECONDS: int = _get_int_env("PROVIDER_SINGLE_TIMEOUT_SECONDS", 10)
+    YFINANCE_MAX_RETRIES: int = _get_int_env("YFINANCE_MAX_RETRIES", 3)
+    YFINANCE_RETRY_BACKOFF_SECONDS: float = _get_float_env("YFINANCE_RETRY_BACKOFF_SECONDS", 1.0)
 
 
 @dataclass(frozen=True)
@@ -311,7 +316,6 @@ class ServerSettings:
     STREAMLIT_BACKGROUND_SCAN_TIMEOUT_SECONDS: int = _get_int_env(
         "STREAMLIT_BACKGROUND_SCAN_TIMEOUT_SECONDS", 180
     )
-    STREAMLIT_INITIAL_SCAN_LIMIT: int = _get_int_env("STREAMLIT_INITIAL_SCAN_LIMIT", 20)
     API_REQUEST_TIMEOUT_SECONDS: int = _get_int_env("API_REQUEST_TIMEOUT_SECONDS", 30)
     SCAN_INTERVAL_MINUTES: int = _get_int_env("SCAN_INTERVAL_MINUTES", 15)
     MARKET_OPEN_HOUR: int = _get_int_env("MARKET_OPEN_HOUR", 9)
@@ -365,3 +369,4 @@ class NotificationSettings:
     # How long a generated signal remains fresh/actionable (minutes).
     # Signals older than this are marked expired and skipped for notifications.
     SIGNAL_TTL_MINUTES: int = _get_int_env("SIGNAL_TTL_MINUTES", 60)
+
