@@ -11,6 +11,7 @@ import streamlit as st
 
 from bist_bot.app_logging import get_logger
 from bist_bot.config.settings import settings
+from bist_bot.strategy.signal_models import SignalType
 from bist_bot.streamlit_utils import check_signals, send_signal_notification
 from bist_bot.ui.runtime_types import ScanResult
 from bist_bot.ui.session_cooldown import consume_cooldown
@@ -63,31 +64,20 @@ def collect_scan_result(
     db,
     last_scan_time: datetime | None = None,
     force_clear: bool = False,
-    limited_tickers: list[str] | None = None,
 ) -> ScanResult:
-    """Run one scan cycle and return the runtime payload."""
+    """Run one scan cycle over the full watchlist and return the runtime payload."""
     scan_started_at = datetime.now(TR)
     if _should_clear_cache(scan_started_at, last_scan_time, force_clear):
         fetcher.clear_cache(scope="intraday_fetch")
         fetcher.clear_cache(scope="analysis")
 
-    if limited_tickers:
-        timeframe_data = fetcher.fetch_multi_timeframe(
-            tickers=limited_tickers,
-            trend_period=settings.MTF_TREND_PERIOD,
-            trend_interval=settings.MTF_TREND_INTERVAL,
-            trigger_period=settings.MTF_TRIGGER_PERIOD,
-            trigger_interval=settings.MTF_TRIGGER_INTERVAL,
-            force_refresh=force_clear,
-        )
-    else:
-        timeframe_data = fetcher.fetch_multi_timeframe_all(
-            trend_period=settings.MTF_TREND_PERIOD,
-            trend_interval=settings.MTF_TREND_INTERVAL,
-            trigger_period=settings.MTF_TRIGGER_PERIOD,
-            trigger_interval=settings.MTF_TRIGGER_INTERVAL,
-            force_refresh=force_clear,
-        )
+    timeframe_data = fetcher.fetch_multi_timeframe_all(
+        trend_period=settings.MTF_TREND_PERIOD,
+        trend_interval=settings.MTF_TREND_INTERVAL,
+        trigger_period=settings.MTF_TRIGGER_PERIOD,
+        trigger_interval=settings.MTF_TRIGGER_INTERVAL,
+        force_refresh=force_clear,
+    )
     signals = engine.scan_all(timeframe_data)
     all_data = {
         ticker: data["trigger"]
@@ -96,6 +86,33 @@ def collect_scan_result(
     }
 
     db.save_signals(signals)
+
+    actionable = engine.get_actionable_signals(signals)
+    buys = [
+        s
+        for s in actionable
+        if s.signal_type in (SignalType.BUY, SignalType.STRONG_BUY, SignalType.WEAK_BUY)
+    ]
+    sells = [
+        s
+        for s in actionable
+        if s.signal_type in (SignalType.SELL, SignalType.STRONG_SELL, SignalType.WEAK_SELL)
+    ]
+    db.save_scan_log(
+        total=len(all_data),
+        generated=len(signals),
+        buys=len(buys),
+        sells=len(sells),
+        actionable=len(actionable),
+    )
+    logger.info(
+        "ui_scan_log_persisted",
+        total_scanned=len(all_data),
+        signals_generated=len(signals),
+        actionable=len(actionable),
+        buys=len(buys),
+        sells=len(sells),
+    )
 
     for ticker, market_data in timeframe_data.items():
         signal = check_signals(ticker, market_data, engine=engine)
@@ -178,8 +195,8 @@ def check_scan_timeout() -> bool:
     return True
 
 
-def start_background_scan(force_clear: bool = False, limited: bool = False) -> bool:
-    """Start a background scan for the current Streamlit session."""
+def start_background_scan(force_clear: bool = False) -> bool:
+    """Start a background scan for the current Streamlit session (full watchlist)."""
     session_key = st.session_state.get("_scan_session_key")
     if not session_key:
         return False
@@ -193,17 +210,10 @@ def start_background_scan(force_clear: bool = False, limited: bool = False) -> b
     st.session_state.scan_started_at = datetime.now(TR)
     st.session_state.scan_error = None
 
-    limited_tickers = None
-    if limited:
-        limit = int(getattr(settings, "STREAMLIT_INITIAL_SCAN_LIMIT", 20))
-        watchlist = list(getattr(settings, "WATCHLIST", []))
-        limited_tickers = watchlist[:limit] if watchlist else None
-
     logger.info(
         "ui_background_scan_started",
         session_key=session_key,
-        limited=limited,
-        ticker_count=len(limited_tickers) if limited_tickers else "all",
+        ticker_count="all",
     )
 
     def worker():
@@ -215,7 +225,6 @@ def start_background_scan(force_clear: bool = False, limited: bool = False) -> b
                 db,
                 last_scan_time=last_scan_time,
                 force_clear=force_clear,
-                limited_tickers=limited_tickers,
             )
             logger.info(
                 "ui_background_scan_completed",
@@ -276,9 +285,9 @@ def ensure_initial_data() -> None:
         cached = st.session_state.db.get_recent_signals(limit=len(settings.WATCHLIST))
         if cached:
             st.session_state.signals = map_cached_signals(cached)
-            start_background_scan(force_clear=False, limited=False)
+            start_background_scan(force_clear=False)
             return
-        if start_background_scan(force_clear=False, limited=False):
+        if start_background_scan(force_clear=False):
             st.session_state.scan_in_progress = True
     except Exception as exc:
         logger.error("ui_initial_scan_failed", error=str(exc))

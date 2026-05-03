@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
+from bist_bot.strategy.signal_models import SignalType
+
 TR = timezone(timedelta(hours=3))
 
 
@@ -39,7 +41,7 @@ def test_ensure_initial_data_starts_background_scan_when_no_cache():
 
         ensure_initial_data()
 
-        mock_start.assert_called_once_with(force_clear=False, limited=False)
+        mock_start.assert_called_once_with(force_clear=False)
         assert mock_session.scan_in_progress is True
 
 
@@ -79,7 +81,7 @@ def test_ensure_initial_data_uses_cached_signals_when_available():
         ensure_initial_data()
 
         assert mock_session.signals == mapped_signals
-        mock_start.assert_called_once_with(force_clear=False, limited=False)
+        mock_start.assert_called_once_with(force_clear=False)
 
 
 def test_ensure_initial_data_does_not_start_scan_if_already_running():
@@ -272,13 +274,10 @@ def test_start_background_scan_sets_scan_started_at():
         patch.object(runtime_scan.st, "session_state", fake),
         patch.object(runtime_scan, "threading") as mock_threading,
         patch.object(runtime_scan, "logger"),
-        patch.object(runtime_scan, "settings") as mock_settings,
     ):
-        mock_settings.WATCHLIST = ["THYAO.IS", "ASELS.IS"]
-        mock_settings.STREAMLIT_INITIAL_SCAN_LIMIT = 20
         mock_threading.Thread = MagicMock()
 
-        runtime_scan.start_background_scan(force_clear=False, limited=False)
+        runtime_scan.start_background_scan(force_clear=False)
 
         assert fake.scan_in_progress is True
         assert fake.scan_started_at is not None
@@ -312,17 +311,15 @@ def test_background_scan_worker_failure_clears_active_session():
         patch.object(runtime_scan.st, "session_state", fake),
         patch.object(runtime_scan, "threading") as mock_threading,
         patch.object(runtime_scan, "logger"),
-        patch.object(runtime_scan, "settings") as mock_settings,
         patch.object(
             runtime_scan,
             "_session_dependencies",
             return_value=(mock_fetcher, MagicMock(), MagicMock(), MagicMock(), None),
         ),
     ):
-        mock_settings.WATCHLIST = []
         mock_threading.Thread = MagicMock()
 
-        runtime_scan.start_background_scan(force_clear=False, limited=False)
+        runtime_scan.start_background_scan(force_clear=False)
 
         call_args = mock_threading.Thread.call_args
         worker_fn = call_args.kwargs["target"]
@@ -336,56 +333,8 @@ def test_background_scan_worker_failure_clears_active_session():
             assert pending.get("error") is not None
 
 
-def test_start_background_scan_limited_respects_initial_scan_limit():
-    """start_background_scan(limited=True) should slice watchlist to STREAMLIT_INITIAL_SCAN_LIMIT."""
-    from bist_bot.ui import runtime_scan
-
-    class FakeSession:
-        def __init__(self):
-            self._scan_session_key = "limit-key"
-            self.scan_in_progress = False
-            self.scan_error = None
-            self.scan_started_at = None
-            self.data_fetcher = MagicMock()
-            self.engine = MagicMock()
-            self.notifier = MagicMock()
-            self.db = MagicMock()
-            self.last_scan_time = None
-
-        def get(self, key, default=None):
-            return getattr(self, key, default)
-
-    fake = FakeSession()
-    full_watchlist = [f"TICK{i}.IS" for i in range(100)]
-
-    captured_tickers = None
-
-    with (
-        patch.object(runtime_scan.st, "session_state", fake),
-        patch.object(runtime_scan, "threading") as mock_threading,
-        patch.object(runtime_scan, "logger"),
-        patch.object(runtime_scan, "settings") as mock_settings,
-        patch.object(runtime_scan, "collect_scan_result") as mock_collect,
-    ):
-        mock_settings.WATCHLIST = full_watchlist
-        mock_settings.STREAMLIT_INITIAL_SCAN_LIMIT = 20
-        mock_threading.Thread = MagicMock()
-
-        runtime_scan.start_background_scan(force_clear=False, limited=True)
-
-        worker_fn = mock_threading.Thread.call_args.kwargs["target"]
-        worker_fn()
-
-        call_args = mock_collect.call_args
-        captured_tickers = call_args.kwargs.get("limited_tickers")
-
-    assert captured_tickers is not None
-    assert len(captured_tickers) == 20
-    assert captured_tickers == full_watchlist[:20]
-
-
-def test_start_background_scan_unlimited_scans_all_tickers():
-    """start_background_scan(limited=False) should pass limited_tickers=None to scan all tickers."""
+def test_start_background_scan_passes_no_limited_tickers():
+    """start_background_scan should always pass limited_tickers=None (full universe scan)."""
     from bist_bot.ui import runtime_scan
 
     class FakeSession:
@@ -404,25 +353,166 @@ def test_start_background_scan_unlimited_scans_all_tickers():
             return getattr(self, key, default)
 
     fake = FakeSession()
-    full_watchlist = [f"TICK{i}.IS" for i in range(100)]
 
     with (
         patch.object(runtime_scan.st, "session_state", fake),
         patch.object(runtime_scan, "threading") as mock_threading,
         patch.object(runtime_scan, "logger"),
-        patch.object(runtime_scan, "settings") as mock_settings,
         patch.object(runtime_scan, "collect_scan_result") as mock_collect,
     ):
-        mock_settings.WATCHLIST = full_watchlist
-        mock_settings.STREAMLIT_INITIAL_SCAN_LIMIT = 20
         mock_threading.Thread = MagicMock()
 
-        runtime_scan.start_background_scan(force_clear=False, limited=False)
+        runtime_scan.start_background_scan(force_clear=False)
 
         worker_fn = mock_threading.Thread.call_args.kwargs["target"]
         worker_fn()
 
         call_args = mock_collect.call_args
-        captured_tickers = call_args.kwargs.get("limited_tickers")
 
-    assert captured_tickers is None
+    assert "limited_tickers" not in call_args.kwargs
+
+
+def test_collect_scan_result_logs_low_coverage(caplog):
+    """collect_scan_result should log when fetcher returns fewer tickers than requested."""
+    import logging
+
+    from bist_bot.ui import runtime_scan
+
+    mock_fetcher = MagicMock()
+    mock_fetcher.watchlist = ["A.IS", "B.IS", "C.IS"]
+    mock_fetcher.fetch_multi_timeframe_all.return_value = {
+        "A.IS": {"trend": MagicMock(), "trigger": MagicMock()},
+    }
+    mock_engine = MagicMock()
+    mock_engine.scan_all.return_value = []
+    mock_notifier = MagicMock()
+    mock_db = MagicMock()
+
+    with (
+        patch.object(runtime_scan, "logger") as mock_logger,
+        caplog.at_level(logging.WARNING, logger="bist_bot.ui.runtime_scan"),
+    ):
+        result = runtime_scan.collect_scan_result(
+            fetcher=mock_fetcher,
+            engine=mock_engine,
+            notifier=mock_notifier,
+            db=mock_db,
+        )
+
+    assert len(result["all_data"]) == 1
+    assert "A.IS" in result["all_data"]
+
+
+def test_ensure_initial_data_always_starts_full_scan():
+    """ensure_initial_data must always call start_background_scan (no limited param)."""
+    from bist_bot.ui import runtime_scan
+
+    mock_db = MagicMock()
+    mock_db.get_recent_signals.return_value = []
+
+    class FakeSession:
+        def __init__(self):
+            self.signals = []
+            self.scan_in_progress = False
+            self.scan_error = None
+            self._scan_session_key = "test-key"
+            self.db = mock_db
+
+        def get(self, key, default=None):
+            return getattr(self, key, default)
+
+    fake = FakeSession()
+
+    with (
+        patch.object(runtime_scan.st, "session_state", fake),
+        patch.object(runtime_scan, "start_background_scan") as mock_start,
+        patch.object(runtime_scan, "apply_pending_scan_result"),
+        patch.object(runtime_scan, "logger"),
+    ):
+        mock_start.return_value = True
+        runtime_scan.ensure_initial_data()
+
+        mock_start.assert_called_once_with(force_clear=False)
+
+
+def test_collect_scan_result_persists_scan_log():
+    """collect_scan_result must call db.save_scan_log with correct counts."""
+    from bist_bot.ui import runtime_scan
+
+    mock_fetcher = MagicMock()
+    mock_fetcher.watchlist = ["A.IS", "B.IS", "C.IS"]
+    mock_fetcher.fetch_multi_timeframe_all.return_value = {
+        "A.IS": {"trend": MagicMock(), "trigger": MagicMock()},
+        "B.IS": {"trend": MagicMock(), "trigger": MagicMock()},
+        "C.IS": {"trend": MagicMock(), "trigger": MagicMock()},
+    }
+
+    buy_signal = MagicMock()
+    buy_signal.signal_type = SignalType.BUY
+    hold_signal = MagicMock()
+    hold_signal.signal_type = SignalType.HOLD
+    sell_signal = MagicMock()
+    sell_signal.signal_type = SignalType.SELL
+
+    mock_engine = MagicMock()
+    mock_engine.scan_all.return_value = [buy_signal, hold_signal, sell_signal]
+    mock_engine.get_actionable_signals.return_value = [buy_signal, sell_signal]
+
+    mock_db = MagicMock()
+    mock_notifier = MagicMock()
+
+    with patch.object(runtime_scan, "logger"):
+        runtime_scan.collect_scan_result(
+            fetcher=mock_fetcher,
+            engine=mock_engine,
+            notifier=mock_notifier,
+            db=mock_db,
+        )
+
+    mock_db.save_scan_log.assert_called_once()
+    call_args = mock_db.save_scan_log.call_args
+    assert call_args.kwargs["total"] == 3  # total_scanned
+    assert call_args.kwargs["generated"] == 3  # signals_generated
+    assert call_args.kwargs["buys"] == 1  # buys
+    assert call_args.kwargs["sells"] == 1  # sells
+    assert call_args.kwargs["actionable"] == 2  # actionable
+
+
+def test_collect_scan_result_scan_log_signature_matches_scanner():
+    """UI scan's save_scan_log call signature must match scanner.py contract."""
+    from bist_bot.ui import runtime_scan
+
+    mock_fetcher = MagicMock()
+    mock_fetcher.watchlist = ["X.IS"]
+    mock_fetcher.fetch_multi_timeframe_all.return_value = {
+        "X.IS": {"trend": MagicMock(), "trigger": MagicMock()},
+    }
+
+    strong_buy = MagicMock()
+    strong_buy.signal_type = SignalType.STRONG_BUY
+    weak_sell = MagicMock()
+    weak_sell.signal_type = SignalType.WEAK_SELL
+    hold = MagicMock()
+    hold.signal_type = SignalType.HOLD
+
+    mock_engine = MagicMock()
+    mock_engine.scan_all.return_value = [strong_buy, weak_sell, hold]
+    mock_engine.get_actionable_signals.return_value = [strong_buy, weak_sell]
+
+    mock_db = MagicMock()
+
+    with patch.object(runtime_scan, "logger"):
+        runtime_scan.collect_scan_result(
+            fetcher=mock_fetcher,
+            engine=mock_engine,
+            notifier=MagicMock(),
+            db=mock_db,
+        )
+
+    mock_db.save_scan_log.assert_called_once_with(
+        total=1,      # total
+        generated=3,  # generated (all signals including HOLD)
+        buys=1,       # buys (STRONG_BUY)
+        sells=1,      # sells (WEAK_SELL)
+        actionable=2, # actionable (STRONG_BUY + WEAK_SELL)
+    )
