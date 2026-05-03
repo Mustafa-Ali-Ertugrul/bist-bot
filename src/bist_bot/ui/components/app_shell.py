@@ -7,6 +7,7 @@ import streamlit as st
 
 PAGE_META = {
     "dashboard": {"label": "Dashboard", "icon": "dashboard"},
+    "scan": {"label": "Scan Detail", "icon": "monitoring"},
     "signals": {"label": "Signals", "icon": "query_stats"},
     "analysis": {"label": "Analysis", "icon": "analytics"},
     "settings": {"label": "Settings", "icon": "settings"},
@@ -36,6 +37,39 @@ def get_active_page(default: str = "dashboard") -> str:
     return page
 
 
+def _nav_action(page: str) -> str:
+    return f"page:{page}"
+
+
+def render_sidebar_nav(active_page: str) -> str | None:
+    page_keys = list(PAGE_META)
+    active_index = page_keys.index(active_page) if active_page in PAGE_META else 0
+    active_label = PAGE_META[page_keys[active_index]]["label"]
+    if st.session_state.get("_sidebar_active_page") != active_page:
+        st.session_state["sidebar_page_radio"] = active_label
+        st.session_state["_sidebar_active_page"] = active_page
+
+    with st.sidebar:
+        st.markdown(
+            ("<div class='bb-sidebar-shell'><div class='bb-sidebar-kicker'>Navigation</div></div>"),
+            unsafe_allow_html=True,
+        )
+        selected_label = st.radio(
+            "Navigation",
+            [PAGE_META[page]["label"] for page in page_keys],
+            index=active_index,
+            key="sidebar_page_radio",
+            label_visibility="collapsed",
+        )
+
+    selected_page = page_keys[
+        [PAGE_META[page]["label"] for page in page_keys].index(selected_label)
+    ]
+    if selected_page != active_page:
+        return _nav_action(selected_page)
+    return None
+
+
 def render_shell(active_page: str, email: str = "") -> str | None:
     active_label = PAGE_META[active_page]["label"]
     email_label = html.escape(email or "Guest Session")
@@ -59,30 +93,13 @@ def render_shell(active_page: str, email: str = "") -> str | None:
         unsafe_allow_html=True,
     )
 
+    action: str | None = render_sidebar_nav(active_page)
     _, logout_col = st.columns([8.6, 1.4], gap="small")
     with logout_col:
-        if st.button("Logout", key="top_logout", use_container_width=True):
-            return "logout"
-
-    return None
-
-
-def render_bottom_nav(active_page: str) -> str | None:
-    st.markdown("<div class='bb-bottomnav-spacer'></div>", unsafe_allow_html=True)
-    nav_columns = st.columns([1, 1, 1, 1], gap="small")
-    for (key, meta), column in zip(PAGE_META.items(), nav_columns, strict=False):
-        with column:
-            button_type: Literal["primary", "secondary", "tertiary"] = (
-                "primary" if key == active_page else "secondary"
-            )
-            if st.button(
-                meta["label"],
-                key=f"nav_{key}",
-                use_container_width=True,
-                type=button_type,
-            ):
-                return key
-    return None
+        button_type: Literal["primary", "secondary", "tertiary"] = "secondary"
+        if st.button("Logout", key="top_logout", use_container_width=True, type=button_type):
+            action = "logout"
+    return action
 
 
 def render_page_hero(

@@ -11,11 +11,18 @@ import streamlit as st
 
 from bist_bot.app_logging import get_logger
 from bist_bot.config.settings import settings
+from bist_bot.strategy.signal_models import SignalType
 from bist_bot.streamlit_utils import check_signals, send_signal_notification
-from bist_bot.ui.runtime_types import ScanResult
+from bist_bot.ui.runtime_types import ScanResult, ScanStats
 from bist_bot.ui.session_cooldown import consume_cooldown
 
 TR = timezone(timedelta(hours=3))
+EMPTY_REJECTION_BREAKDOWN = {
+    "total_rejections": 0,
+    "by_reason": [],
+    "by_stage": [],
+    "scan_id": "",
+}
 SCAN_LOCK = threading.Lock()
 PENDING_SCAN_RESULTS: dict[str, ScanResult] = {}
 ACTIVE_SCAN_SESSIONS: set[str] = set()
@@ -48,11 +55,13 @@ def _session_dependencies() -> tuple[Any, Any, Any, Any, datetime | None]:
 
 def _empty_scan_result(last_scan_time: datetime | None, error: str) -> ScanResult:
     """Build a consistent error payload for failed background scans."""
+    empty_stats: ScanStats = {"generated": 0, "actionable": 0, "hold": 0}
     return {
         "all_data": {},
         "signals": [],
         "last_scan_time": last_scan_time,
         "error": error,
+        "scan_stats": empty_stats,
     }
 
 
@@ -89,6 +98,10 @@ def collect_scan_result(
             force_refresh=force_clear,
         )
     signals = engine.scan_all(timeframe_data)
+    breakdown_getter = getattr(engine, "get_last_rejection_breakdown", None)
+    rejection_breakdown = (
+        breakdown_getter() if callable(breakdown_getter) else dict(EMPTY_REJECTION_BREAKDOWN)
+    )
     all_data = {
         ticker: data["trigger"]
         for ticker, data in timeframe_data.items()
@@ -96,18 +109,60 @@ def collect_scan_result(
     }
 
     db.save_signals(signals)
+    save_breakdown = getattr(db, "save_latest_rejection_breakdown", None)
+    if callable(save_breakdown):
+        save_breakdown(
+            rejection_breakdown
+            if isinstance(rejection_breakdown, dict)
+            else EMPTY_REJECTION_BREAKDOWN
+        )
+
+    buy_count = sum(
+        1
+        for signal in signals
+        if signal.signal_type in {SignalType.BUY, SignalType.STRONG_BUY, SignalType.WEAK_BUY}
+    )
+    sell_count = sum(
+        1
+        for signal in signals
+        if signal.signal_type in {SignalType.SELL, SignalType.STRONG_SELL, SignalType.WEAK_SELL}
+    )
 
     for ticker, market_data in timeframe_data.items():
         signal = check_signals(ticker, market_data, engine=engine)
         if signal is not None:
             send_signal_notification(signal, notifier)
 
-    return {
+    hold_count = sum(1 for signal in signals if signal.signal_type == SignalType.HOLD)
+    actionable_count = len(signals) - hold_count
+    normalized_breakdown = (
+        rejection_breakdown
+        if isinstance(rejection_breakdown, dict)
+        else dict(EMPTY_REJECTION_BREAKDOWN)
+    )
+    db.save_scan_log(
+        len(timeframe_data),
+        len(signals),
+        buy_count,
+        sell_count,
+        actionable_count,
+        scan_id=str(normalized_breakdown.get("scan_id", "") or ""),
+        rejection_breakdown=normalized_breakdown,
+    )
+    scan_stats: ScanStats = {
+        "generated": len(signals),
+        "actionable": actionable_count,
+        "hold": hold_count,
+    }
+
+    result: ScanResult = {
         "all_data": all_data,
         "signals": signals,
         "last_scan_time": scan_started_at,
         "error": None,
+        "scan_stats": scan_stats,
     }
+    return result
 
 
 def apply_scan_result(scan_result: ScanResult) -> None:
@@ -116,6 +171,9 @@ def apply_scan_result(scan_result: ScanResult) -> None:
     st.session_state.signals = scan_result["signals"]
     st.session_state.last_scan_time = scan_result["last_scan_time"]
     st.session_state.scan_error = scan_result.get("error")
+    st.session_state.scan_stats = scan_result.get(
+        "scan_stats", {"generated": 0, "actionable": 0, "hold": 0}
+    )
     st.session_state.scan_in_progress = False
 
 
@@ -207,6 +265,7 @@ def start_background_scan(force_clear: bool = False, limited: bool = False) -> b
     )
 
     def worker():
+        result = _empty_scan_result(last_scan_time, "scan did not complete")
         try:
             result = collect_scan_result(
                 fetcher,

@@ -201,6 +201,10 @@ def test_fetcher_uses_provider_quote_fallback_before_history(monkeypatch):
     )
 
     assert fetcher.get_current_price("THYAO.IS") == 111.0
+    assert fetcher.get_last_quote_resolution_meta("THYAO.IS") == {
+        "source": "provider_quote",
+        "status": "success",
+    }
 
 
 def test_dependencies_selects_configured_data_provider():
@@ -255,6 +259,10 @@ def test_fetch_single_uses_cache_until_ttl_expires(monkeypatch):
     first = fetcher.fetch_single("THYAO.IS", period="1mo", interval="15m")
     current_time[0] = pd.Timestamp("2025-01-01 10:01:00").to_pydatetime()
     second = fetcher.fetch_single("THYAO.IS", period="1mo", interval="15m")
+    assert fetcher.get_last_history_fetch_meta("THYAO.IS", "1mo", "15m") == {
+        "source": "cache",
+        "status": "success",
+    }
     current_time[0] = pd.Timestamp("2025-01-01 10:03:00").to_pydatetime()
     third = fetcher.fetch_single("THYAO.IS", period="1mo", interval="15m")
 
@@ -306,6 +314,106 @@ def test_fetch_single_force_refresh_bypasses_cache(monkeypatch):
     fetcher.fetch_single("THYAO.IS", period="1mo", interval="15m", force=True)
 
     assert provider.history_calls == 2
+
+
+def test_fetch_single_falls_back_to_batch_when_single_history_empty():
+    from bist_bot.data.fetcher import BISTDataFetcher
+
+    frame = pd.DataFrame(
+        {
+            "open": [1, 1, 1, 1, 1],
+            "high": [2, 2, 2, 2, 2],
+            "low": [0.5, 0.5, 0.5, 0.5, 0.5],
+            "close": [1.5, 1.5, 1.5, 1.5, 1.5],
+            "volume": [100, 100, 100, 100, 100],
+        },
+        index=pd.date_range("2025-01-01", periods=5),
+    )
+
+    class FallbackProvider:
+        def __init__(self):
+            self.history_calls = 0
+            self.batch_calls = 0
+
+        def fetch_history(self, ticker: str, period: str, interval: str):
+            _ = ticker, period, interval
+            self.history_calls += 1
+            return None
+
+        def fetch_batch(self, tickers: list[str], period: str, interval: str):
+            _ = period, interval
+            self.batch_calls += 1
+            return {tickers[0]: frame.copy()}
+
+        def fetch_quote(self, ticker: str):
+            _ = ticker
+            return None
+
+        def fetch_universe(self, force_refresh: bool = False):
+            _ = force_refresh
+            return ["THYAO.IS"]
+
+    provider = FallbackProvider()
+    fetcher = BISTDataFetcher(watchlist=["THYAO.IS"], provider=provider)
+
+    result = fetcher.fetch_single("THYAO.IS", period="1mo", interval="1d", force=True)
+
+    assert result is not None
+    assert provider.history_calls == 1
+    assert provider.batch_calls == 1
+
+
+@pytest.mark.parametrize("ticker", ["THYAO.IS", "ASELS.IS", "EREGL.IS"])
+def test_fetch_single_falls_back_to_batch_when_single_history_raises(ticker: str):
+    from bist_bot.data.fetcher import BISTDataFetcher
+
+    frame = pd.DataFrame(
+        {
+            "open": [1, 1, 1, 1, 1],
+            "high": [2, 2, 2, 2, 2],
+            "low": [0.5, 0.5, 0.5, 0.5, 0.5],
+            "close": [1.5, 1.5, 1.5, 1.5, 1.5],
+            "volume": [100, 100, 100, 100, 100],
+        },
+        index=pd.date_range("2025-01-01", periods=5),
+    )
+
+    class ExceptionFallbackProvider:
+        def __init__(self):
+            self.history_calls: list[str] = []
+            self.batch_calls: list[list[str]] = []
+
+        def fetch_history(self, current_ticker: str, period: str, interval: str):
+            _ = period, interval
+            self.history_calls.append(current_ticker)
+            raise RuntimeError("single fetch failed")
+
+        def fetch_batch(self, tickers: list[str], period: str, interval: str):
+            _ = period, interval
+            self.batch_calls.append(list(tickers))
+            return {tickers[0]: frame.copy()}
+
+        def fetch_quote(self, current_ticker: str):
+            _ = current_ticker
+            return None
+
+        def fetch_universe(self, force_refresh: bool = False):
+            _ = force_refresh
+            return [ticker]
+
+    provider = ExceptionFallbackProvider()
+    fetcher = BISTDataFetcher(watchlist=[ticker], provider=provider)
+
+    result = fetcher.fetch_single(ticker, period="1mo", interval="1d", force=True)
+
+    assert result is not None
+    assert provider.history_calls == [ticker]
+    assert provider.batch_calls == [[ticker]]
+    assert fetcher.get_last_history_fetch_meta(ticker, "1mo", "1d") == {
+        "source": "batch_fallback",
+        "status": "success",
+        "reason": "single_exception",
+    }
 
 
 def test_fetch_all_recovers_partial_batch_failures_with_fallback():

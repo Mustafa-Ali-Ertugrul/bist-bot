@@ -7,6 +7,7 @@ spec:
     metadata:
       annotations:
         run.googleapis.com/execution-environment: gen2
+        run.googleapis.com/sessionAffinity: 'true'
     spec:
       containerConcurrency: 20
       timeoutSeconds: 300
@@ -21,6 +22,10 @@ spec:
               value: "/tmp/bist_signals.db"
             - name: API_BASE_URL
               value: "https://bist-bot-api-REPLACE.a.run.app"
+            - name: STREAMLIT_BACKGROUND_SCAN_TIMEOUT_SECONDS
+              value: "180"
+            - name: API_REQUEST_TIMEOUT_SECONDS
+              value: "45"
           ports:
             - name: http1
               containerPort: 8080

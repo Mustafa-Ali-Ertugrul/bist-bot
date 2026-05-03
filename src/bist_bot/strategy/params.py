@@ -28,6 +28,7 @@ class StrategyParams:
     )
     min_trigger_candles: int = 30
     adx_threshold: float = field(default_factory=lambda: float(settings.ADX_THRESHOLD))
+    adx_low_trend_penalty: float = 5.0
     sideways_score_multiplier: float = 0.6
 
     # RSI Parametreleri

@@ -115,6 +115,7 @@ class TechnicalIndicators:
 
         rs = avg_gain / avg_loss
         df["rsi"] = 100 - (100 / (1 + rs))
+        df["rsi"] = df["rsi"].replace([np.inf, -np.inf], np.nan).clip(0, 100)
 
         df["rsi_zone"] = "UNKNOWN"
         rsi = df["rsi"]
@@ -366,7 +367,11 @@ class TechnicalIndicators:
 
         price_up = df["close"] > df["close"].shift(1)
         vol_up = df["volume"] > df["volume"].shift(1)
-        df["price_volume_confirm"] = (price_up & vol_up) | (~price_up & ~vol_up)
+        df["price_volume_direction"] = "NONE"
+        df.loc[price_up & vol_up, "price_volume_direction"] = "BULLISH_CONFIRMATION"
+        df.loc[~price_up & vol_up, "price_volume_direction"] = "BEARISH_CONFIRMATION"
+        df.loc[~price_up & ~vol_up, "price_volume_direction"] = "LOW_VOLUME_PULLBACK"
+        df["price_volume_confirm"] = df["price_volume_direction"] == "BULLISH_CONFIRMATION"
 
         df["volume_trend"] = "FLAT"
         df.loc[df["volume_sma_20"].diff() > 0, "volume_trend"] = "INCREASING"

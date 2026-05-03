@@ -36,14 +36,41 @@ class PaperTradeService:
         fee_pct = total_fees / entry_price * 100
         return round(gross_pct - fee_pct, 4)
 
-    def queue_actionable_signals(self, signals) -> None:
+    def queue_actionable_signals(self, signals) -> bool:
         if not getattr(self.settings, "PAPER_MODE", False):
-            return
+            return False
 
         for signal in signals:
             regime_frame = self.fetcher.fetch_single(signal.ticker, period="3mo")
+            fetch_meta_getter = getattr(self.fetcher, "get_last_history_fetch_meta", None)
+            fetch_meta_raw = (
+                fetch_meta_getter(
+                    signal.ticker, "3mo", getattr(self.settings, "DATA_INTERVAL", "1d")
+                )
+                if callable(fetch_meta_getter)
+                else None
+            )
+            fetch_meta = fetch_meta_raw if isinstance(fetch_meta_raw, dict) else {}
+            if regime_frame is None:
+                logger.warning(
+                    "paper_trade_regime_data_unavailable",
+                    ticker=signal.ticker,
+                    fetch_source=fetch_meta.get("source", "unknown"),
+                    fetch_status=fetch_meta.get("status", "unknown"),
+                    fetch_reason=fetch_meta.get("reason"),
+                )
             regime_enum = detect_regime(regime_frame)
             regime = regime_enum.value if regime_enum else "UNKNOWN"
+            if regime == "UNKNOWN":
+                logger.info(
+                    "paper_trade_regime_unknown",
+                    ticker=signal.ticker,
+                    fetch_source=fetch_meta.get("source", "unknown"),
+                    fetch_status=fetch_meta.get("status", "unknown"),
+                    fetch_reason=fetch_meta.get("reason"),
+                    has_frame=regime_frame is not None,
+                    candle_count=len(regime_frame) if regime_frame is not None else 0,
+                )
             self.db.add_paper_trade(
                 ticker=signal.ticker,
                 signal_type=signal.signal_type.value,
@@ -54,6 +81,7 @@ class PaperTradeService:
                 score=int(signal.score),
                 regime=regime,
             )
+        return True
 
     def update_open_trades(self) -> None:
         if not getattr(self.settings, "PAPER_MODE", False):
