@@ -42,7 +42,7 @@ class YFinanceProvider:
 
     @staticmethod
     def _is_retryable_error(exc: Exception) -> bool:
-        if isinstance(exc, (ConnectionError, TimeoutError, OSError)):
+        if isinstance(exc, ConnectionError | TimeoutError | OSError):
             return True
         retryable_names = {"YFRateLimitError", "YFDownloadError", "YFTickerError"}
         return type(exc).__name__ in retryable_names
