@@ -446,7 +446,6 @@ def test_overview_scan_metrics_prefer_session_scan_stats():
         session_scan_stats={"generated": 4, "actionable": 2},
         latest_scan={"total_scanned": 108, "actionable": 0},
         summary={"total_analyzed": 25},
-        signals=[object(), object()],
     )
 
     assert scanned_assets == 25
@@ -460,7 +459,6 @@ def test_overview_scan_metrics_fall_back_to_latest_scan_when_session_empty():
         session_scan_stats={"generated": 0, "actionable": 0},
         latest_scan={"total_scanned": 108, "actionable": 3},
         summary={"total_analyzed": 0},
-        signals=[],
     )
 
     assert scanned_assets == 108
