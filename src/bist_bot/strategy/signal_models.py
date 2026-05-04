@@ -15,6 +15,7 @@ class SignalType(Enum):
     BUY = "🟢 AL"
     WEAK_BUY = "🟡 ZAYIF AL"
     HOLD = "⚪ BEKLE"
+    RADAR = "🔭 İZLE"
     WEAK_SELL = "🟠 ZAYIF SAT"
     SELL = "🔴 SAT"
     STRONG_SELL = "🚨 GÜÇLÜ SAT"
@@ -26,6 +27,7 @@ class SignalType(Enum):
             "BUY": "signal.buy",
             "WEAK_BUY": "signal.weak_buy",
             "HOLD": "signal.hold",
+            "RADAR": "signal.radar",
             "WEAK_SELL": "signal.weak_sell",
             "SELL": "signal.sell",
             "STRONG_SELL": "signal.strong_sell",
