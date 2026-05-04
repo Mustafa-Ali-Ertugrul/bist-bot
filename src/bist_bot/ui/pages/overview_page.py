@@ -49,11 +49,10 @@ def _resolve_scan_metrics(
     session_scan_stats: dict[str, int] | None,
     latest_scan: dict[str, object],
     summary: dict[str, object],
-    signals: list[object],
 ) -> tuple[int, int]:
     session_scan_stats = session_scan_stats or {}
     session_scanned = _to_int(summary.get("total_analyzed", 0))
-    session_generated = _to_int(session_scan_stats.get("generated", len(signals)))
+    session_generated = _to_int(session_scan_stats.get("generated", 0))
     session_actionable = _to_int(session_scan_stats.get("actionable", 0))
 
     if session_scanned > 0 or session_generated > 0:
@@ -77,6 +76,7 @@ def _rejection_label(reason_code: str) -> str:
         "portfolio_risk_blocked": "Portföy risk limiti",
         "meta_model_blocked": "Meta-model elemesi",
         "mtf_confluence_blocked": "MTF uyumsuzluğu",
+        "hold_neutral_zone": "Nötr bölge (beklemede)",
     }
     return labels.get(reason_code, reason_code.replace("_", " ").title())
 
@@ -190,7 +190,6 @@ def render_overview_page() -> None:
         session_scan_stats=session_scan_stats if isinstance(session_scan_stats, dict) else None,
         latest_scan=latest_scan,
         summary=summary,
-        signals=signals,
     )
     profitable = int(stats.get("profitable", 0) or 0)
     win_rate = float(stats.get("win_rate", 0.0) or 0.0)
@@ -204,7 +203,7 @@ def render_overview_page() -> None:
     active_watch = (
         strong[:4] if strong else sorted(active_signals, key=lambda s: s.score, reverse=True)[:4]
     )
-    summary_ready = int(summary.get("total_analyzed", 0) or 0) > 0
+    summary_ready = scanned_assets > 0
     index_ready = any(float(data.get("value", 0.0) or 0.0) > 0 for data in index_data.values())
 
     render_page_hero(
@@ -279,7 +278,7 @@ def render_overview_page() -> None:
         else:
             radar_html = "<div class='bb-note'>Veri henüz hazır değil.</div>"
         scan_caption = (
-            f"Tarama kapsamı: {summary.get('total_analyzed', 0)} varlık"
+            f"Tarama kapsamı: {scanned_assets} varlık"
             if summary_ready
             else "Veri henüz hazır değil"
         )
