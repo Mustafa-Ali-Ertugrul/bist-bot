@@ -122,7 +122,12 @@ def _render_rejection_stage_summary(breakdown: dict[str, object]) -> str:
     )
 
 
-def _render_rejection_breakdown(breakdown: dict[str, object]) -> str:
+def _render_rejection_breakdown(
+    breakdown: dict[str, object],
+    *,
+    scanned: int = 0,
+    generated: int = 0,
+) -> str:
     total_rejections = _to_int(breakdown.get("total_rejections", 0))
     if total_rejections <= 0:
         return ""
@@ -149,6 +154,26 @@ def _render_rejection_breakdown(breakdown: dict[str, object]) -> str:
     if not items:
         return ""
     stage_summary = _render_rejection_stage_summary(breakdown)
+
+    # Outcome accounting
+    outcome_html = ""
+    if scanned > 0:
+        accounted = generated + total_rejections
+        invariant_held = accounted == scanned
+        invariant_color = "positive" if invariant_held else "danger"
+        invariant_icon = "✓" if invariant_held else "✗"
+        invariant_text = (
+            f"{invariant_icon} {accounted}/{scanned} hesaplandı"
+            if invariant_held
+            else f"{invariant_icon} {accounted}/{scanned} hesaplandı (fark: {scanned - accounted})"
+        )
+        outcome_html = (
+            "<div style='margin-top:8px;'>"
+            f"<div class='bb-text-{invariant_color}' style='font-size:0.85em;'>{invariant_text}</div>"
+            f"<div class='bb-list-row-subtitle'>Üretilen: {generated} • Elenen: {total_rejections}</div>"
+            "</div>"
+        )
+
     return (
         "<div style='height:14px;'></div>"
         "<div class='bb-list-row'>"
@@ -156,6 +181,7 @@ def _render_rejection_breakdown(breakdown: dict[str, object]) -> str:
         "</div>"
         f"<div class='bb-list'>{''.join(items)}</div>"
         f"{stage_summary}"
+        f"{outcome_html}"
     )
 
 
@@ -337,7 +363,11 @@ def render_overview_page() -> None:
                 "</div>"
             )
         rejection_html = (
-            _render_rejection_breakdown(rejection_breakdown)
+            _render_rejection_breakdown(
+                rejection_breakdown,
+                scanned=scanned_assets,
+                generated=actionable_signals,
+            )
             if isinstance(rejection_breakdown, dict)
             else ""
         )
