@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import html
+from typing import Literal
 
 import streamlit as st
 
@@ -86,13 +87,17 @@ def render_shell(active_page: str, email: str = "") -> str | None:
         ),
         unsafe_allow_html=True,
     )
-    render_sidebar_nav(active_page)
-    if active_page != "dashboard":
-        back_col, _ = st.columns([0.18, 0.82])
-        with back_col:
-            if st.button("Dashboard", key="content_back_dashboard", use_container_width=True):
-                set_active_page("dashboard")
-    return None
+
+    action: str | None = None
+    st.markdown("<div class='bb-logout-wrap'>", unsafe_allow_html=True)
+    button_type: Literal["primary", "secondary", "tertiary"] = "secondary"
+    if st.button("Logout", key="top_logout", use_container_width=True, type=button_type):
+        action = "logout"
+    st.markdown("</div>", unsafe_allow_html=True)
+    nav_action = render_sidebar_nav(active_page)
+    if nav_action:
+        action = nav_action
+    return action
 
 
 def render_page_hero(
