@@ -17,7 +17,12 @@ from bist_bot.ui.pages.overview_page import render_overview_page
 from bist_bot.ui.pages.scan_detail_page import render_scan_detail_page
 from bist_bot.ui.pages.settings_page import render_settings_page
 from bist_bot.ui.pages.signals_page import render_signals_page
-from bist_bot.ui.runtime import api_request, prepare_streamlit_runtime
+from bist_bot.ui.runtime import (
+    api_request,
+    finalize_streamlit_runtime,
+    prepare_streamlit_runtime,
+    run_initial_scan,
+)
 from bist_bot.ui.runtime_styles import inject_styles
 
 st.set_page_config(
@@ -99,6 +104,20 @@ def _complete_auth(email: str, token: str) -> None:
 
 
 def _login_form() -> bool:
+    st.markdown(
+        """
+        <style>
+            section[data-testid="stSidebar"] {
+                display:none !important;
+            }
+            .block-container {
+                max-width:760px;
+                padding:7rem 1rem 4rem;
+            }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
     st.markdown(
         """
         <section class="bb-hero bb-hero-secondary">
@@ -202,11 +221,33 @@ def _handle_shell_action(action: str | None) -> None:
 def _bootstrap_authenticated_app() -> None:
     if not st.session_state.get("just_logged_in"):
         return
-    with st.spinner("Uygulama yukleniyor, veriler hazirlaniyor..."):
-        prepare_streamlit_runtime()
+    inject_styles()
+    with st.spinner("Ilk piyasa taramasi hazirlaniyor..."):
+        loaded = run_initial_scan(force_clear=False, limited=True)
+    if not loaded:
+        st.error("Ilk tarama tamamlanamadi. Veri kaynagi yanit vermedi; lutfen biraz sonra tekrar deneyin.")
+        return
     st.session_state.just_logged_in = False
     st.session_state.app_bootstrapped = True
     st.rerun()
+    st.stop()
+
+
+def _ensure_market_data_ready() -> bool:
+    if st.session_state.get("all_data"):
+        return True
+    if st.session_state.get("scan_error"):
+        st.error(f"Tarama hatasi: {st.session_state.scan_error}")
+        return False
+    inject_styles()
+    with st.spinner("Piyasa verisi hazirlaniyor..."):
+        loaded = run_initial_scan(force_clear=False, limited=True)
+    if not loaded:
+        st.error("Piyasa verisi hazirlanamadi. Veri kaynagi yanit vermedi; lutfen biraz sonra tekrar deneyin.")
+        return False
+    st.rerun()
+    st.stop()
+    return False
 
 
 def main() -> None:
@@ -219,6 +260,10 @@ def main() -> None:
         return
 
     _bootstrap_authenticated_app()
+    if st.session_state.get("just_logged_in"):
+        return
+    if not _ensure_market_data_ready():
+        return
     prepare_streamlit_runtime()
     st.session_state.app_bootstrapped = True
 
@@ -236,6 +281,8 @@ def main() -> None:
         render_analyze_page()
     else:
         render_settings_page()
+
+    finalize_streamlit_runtime()
 
 
 if __name__ == "__main__":

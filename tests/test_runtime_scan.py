@@ -11,7 +11,7 @@ TR = timezone(timedelta(hours=3))
 
 
 def test_ensure_initial_data_starts_background_scan_when_no_cache():
-    """When no cached signals exist, ensure_initial_data should start a full background scan."""
+    """When no cached signals exist, ensure_initial_data should start a limited background scan."""
     mock_db = MagicMock()
     mock_db.get_recent_signals.return_value = []
 
@@ -41,7 +41,7 @@ def test_ensure_initial_data_starts_background_scan_when_no_cache():
 
         ensure_initial_data()
 
-        mock_start.assert_called_once_with(force_clear=False, limited=False)
+        mock_start.assert_called_once_with(force_clear=False, limited=True)
         assert mock_session.scan_in_progress is True
 
 
@@ -424,11 +424,10 @@ def test_sidebar_navigation_uses_streamlit_widget_not_page_reload_links():
 
     source = inspect.getsource(app_shell.render_sidebar_nav)
 
-    assert "st.radio" in source
+    assert "sidebar.button" in source
+    assert "st.radio" not in source
     assert "href='?page=" not in source
     assert 'href="?page=' not in source
-    assert "_sidebar_active_page" in source
-    assert "page:" in source
 
 
 def test_portfolio_page_uses_settings_thresholds_and_excludes_hold_fallback():
