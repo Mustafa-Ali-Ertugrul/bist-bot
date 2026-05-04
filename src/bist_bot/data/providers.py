@@ -233,6 +233,33 @@ class YFinanceProvider:
             return self._fetch_stockanalysis_history(ticker)
         return None
 
+    def _fetch_batch_individual(
+        self, tickers: list[str], period: str, interval: str
+    ) -> dict[str, pd.DataFrame | None]:
+        """Fallback: fetch each ticker individually via chart API with rate limiting."""
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        logger.info("batch_individual_fallback_started", ticker_count=len(tickers))
+        results: dict[str, pd.DataFrame | None] = {}
+        with ThreadPoolExecutor(max_workers=min(4, len(tickers))) as executor:
+            future_map = {
+                executor.submit(self.fetch_history, ticker, period, interval): ticker
+                for ticker in tickers
+            }
+            for future in as_completed(future_map):
+                ticker = future_map[future]
+                try:
+                    results[ticker] = future.result()
+                except Exception:
+                    results[ticker] = None
+        success = sum(1 for v in results.values() if v is not None)
+        logger.info(
+            "batch_individual_fallback_finished",
+            ticker_count=len(tickers),
+            success=success,
+        )
+        return results
+
     def fetch_batch(
         self, tickers: list[str], period: str, interval: str
     ) -> dict[str, pd.DataFrame | None]:
@@ -268,7 +295,7 @@ class YFinanceProvider:
                         time.sleep(backoff * (2 ** (attempt - 1)))
                         continue
                     logger.warning("yfinance_batch_empty", ticker_count=len(tickers))
-                    return {}
+                    return self._fetch_batch_individual(tickers, period, interval)
                 logger.info(
                     "yfinance_batch_success",
                     ticker_count=len(tickers),
@@ -309,7 +336,7 @@ class YFinanceProvider:
                     error_type=type(exc).__name__,
                     final_result="failure",
                 )
-                return {}
+                return self._fetch_batch_individual(tickers, period, interval)
             except Exception as exc:
                 if self._is_retryable_error(exc):
                     last_exc = exc
@@ -333,11 +360,10 @@ class YFinanceProvider:
                     error_type=type(exc).__name__,
                     final_result="failure",
                 )
-                return {}
+                return self._fetch_batch_individual(tickers, period, interval)
         if last_exc is not None:
             logger.error("yfinance_batch_exhausted", ticker_count=len(tickers))
-            return {}
-        return {}
+        return self._fetch_batch_individual(tickers, period, interval)
 
     def fetch_quote(self, ticker: str) -> float | None:
         _ = ticker
