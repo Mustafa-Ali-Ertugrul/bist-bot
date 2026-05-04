@@ -177,9 +177,6 @@ class ScanService:
 
             self._check_signal_changes(signals)
             self.db.save_signals(signals)
-            save_breakdown = getattr(self.db, "save_latest_rejection_breakdown", None)
-            if callable(save_breakdown):
-                save_breakdown(self.last_rejection_breakdown)
             self._auto_execute_signals(actionable)
             if getattr(self.settings, "PAPER_MODE", False):
                 self.last_side_effects["paper_trades_queued"] = bool(
@@ -200,15 +197,26 @@ class ScanService:
                 self.update_paper_trades()
 
             duration_ms = round((time.perf_counter() - started_at) * 1000, 2)
+            rejection_count = len(all_data) - len(signals)
+            radar_count = sum(1 for s in signals if s.signal_type == SignalType.RADAR)
+
             inc_counter("bist_scan_total")
             inc_counter("bist_signal_emitted_total", len(actionable))
             set_gauge("bist_last_scan_duration_ms", duration_ms)
             set_gauge("bist_last_scan_scanned_count", len(all_data))
+
             logger.info(
-                "scan_completed",
+                "scan_summary",
+                requested=len(self.settings.WATCHLIST),
+                fetched=len(all_data),
+                signals=len(signals),
+                actionable=len(actionable),
+                radar=radar_count,
+                rejected=rejection_count,
+                buys=len(buys),
+                sells=len(sells),
                 duration_ms=duration_ms,
-                scanned_count=len(all_data),
-                actionable_count=len(actionable),
+                scan_id=str(self.last_rejection_breakdown.get("scan_id", "") or ""),
             )
 
             for signal in signals:
