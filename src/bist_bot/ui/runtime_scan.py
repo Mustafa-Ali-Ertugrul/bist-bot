@@ -330,7 +330,7 @@ def ensure_initial_data() -> None:
             st.session_state.signals = map_cached_signals(cached)
             start_background_scan(force_clear=False, limited=False)
             return
-        if start_background_scan(force_clear=False, limited=False):
+        if start_background_scan(force_clear=False, limited=True):
             st.session_state.scan_in_progress = True
     except Exception as exc:
         logger.error("ui_initial_scan_failed", error=str(exc))
