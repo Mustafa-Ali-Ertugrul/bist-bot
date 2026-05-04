@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 
 import pandas as pd
 
@@ -22,3 +22,5 @@ class ScanResult(TypedDict):
     last_scan_time: datetime | None
     error: str | None
     scan_stats: ScanStats
+    rejection_breakdown: NotRequired[dict[str, object]]
+    scan_phase: NotRequired[str | None]

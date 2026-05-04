@@ -37,6 +37,7 @@ def init_session_state(container=None) -> None:
         "last_scan_time": None,
         "scan_in_progress": False,
         "scan_error": None,
+        "rejection_breakdown": {},
         "auth_token": None,
         "auth_email": "",
         "is_authenticated": False,
