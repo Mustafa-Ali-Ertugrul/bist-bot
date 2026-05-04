@@ -95,18 +95,24 @@ def apply_confluence(signal_type: SignalType, trend_bias: TrendBias, reasons: li
     short_signals = {SignalType.STRONG_SELL, SignalType.SELL, SignalType.WEAK_SELL}
 
     if signal_type in long_signals:
-        if trend_bias != TrendBias.LONG:
+        if trend_bias == TrendBias.LONG:
+            reasons.append("MTF confluence: günlük trend LONG, 15dk tetik destekliyor")
+            return True
+        if trend_bias == TrendBias.NEUTRAL:
+            reasons.append("MTF confluence zayıf: üst zaman dilimi nötr (RADAR adayı)")
+        else:
             reasons.append(f"MTF confluence başarısız: üst zaman dilimi {trend_bias.value}")
-            return False
-        reasons.append("MTF confluence: günlük trend LONG, 15dk tetik destekliyor")
-        return True
+        return False
 
     if signal_type in short_signals:
-        if trend_bias != TrendBias.SHORT:
+        if trend_bias == TrendBias.SHORT:
+            reasons.append("MTF confluence: günlük trend SHORT, 15dk tetik destekliyor")
+            return True
+        if trend_bias == TrendBias.NEUTRAL:
+            reasons.append("MTF confluence zayıf: üst zaman dilimi nötr (RADAR adayı)")
+        else:
             reasons.append(f"MTF confluence başarısız: üst zaman dilimi {trend_bias.value}")
-            return False
-        reasons.append("MTF confluence: günlük trend SHORT, 15dk tetik destekliyor")
-        return True
+        return False
 
     return True
 

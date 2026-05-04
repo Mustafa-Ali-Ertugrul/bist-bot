@@ -109,13 +109,6 @@ def collect_scan_result(
     }
 
     db.save_signals(signals)
-    save_breakdown = getattr(db, "save_latest_rejection_breakdown", None)
-    if callable(save_breakdown):
-        save_breakdown(
-            rejection_breakdown
-            if isinstance(rejection_breakdown, dict)
-            else EMPTY_REJECTION_BREAKDOWN
-        )
 
     buy_count = sum(
         1

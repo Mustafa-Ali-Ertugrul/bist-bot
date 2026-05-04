@@ -3,6 +3,7 @@ en = {
     "signal.buy": "🟢 BUY",
     "signal.weak_buy": "🟡 WEAK BUY",
     "signal.hold": "⚪ HOLD",
+    "signal.radar": "🔭 WATCH",
     "signal.weak_sell": "🟠 WEAK SELL",
     "signal.sell": "🔴 SELL",
     "signal.strong_sell": "🚨 STRONG SELL",
