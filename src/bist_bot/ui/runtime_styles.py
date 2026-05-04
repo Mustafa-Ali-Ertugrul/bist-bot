@@ -599,7 +599,8 @@ def inject_styles() -> None:
                 border:1px solid rgba(255,255,255,.08) !important;
                 border-radius:12px !important;
                 color:var(--bb-muted) !important;
-                z-index:1000 !important;
+                z-index:10001 !important;
+                pointer-events:auto !important;
             }
             button[data-testid="stSidebarCollapseButton"]:hover,
             button[data-testid="stSidebarExpandButton"]:hover {
@@ -607,9 +608,18 @@ def inject_styles() -> None:
                 border-color:rgba(138,180,255,.22) !important;
                 color:var(--bb-text) !important;
             }
+            button[data-testid="stSidebarExpandButton"] {
+                position:fixed !important;
+                top:12px !important;
+                left:12px !important;
+            }
             [data-testid="stSidebar"][aria-expanded="false"] ~ .block-container,
             [data-testid="stSidebar"][aria-expanded="false"] ~ [data-testid="stVerticalBlock"] {
                 padding-left:2.5rem !important;
+            }
+            [data-testid="stSidebar"][aria-expanded="false"] ~ .bb-topbar,
+            [data-testid="stSidebar"][aria-expanded="false"] + .bb-topbar {
+                left:48px !important;
             }
             [data-testid="stSidebar"][aria-expanded="false"] .bb-sidebar-shell {
                 display:none !important;

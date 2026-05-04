@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 from bist_bot.config.settings import settings
 from bist_bot.state.session_state import init_session_state
@@ -221,6 +222,31 @@ def main() -> None:
     _bootstrap_authenticated_app()
     prepare_streamlit_runtime()
     st.session_state.app_bootstrapped = True
+
+    inject_styles()
+
+    components.html(
+        """
+        <script>
+        (function() {
+            function forceSidebarOpen() {
+                var sidebar = parent.document.querySelector('[data-testid="stSidebar"]');
+                if (!sidebar) return;
+                var expanded = sidebar.getAttribute('aria-expanded');
+                if (expanded === 'false') {
+                    var btn = parent.document.querySelector('[data-testid="stSidebarExpandButton"]');
+                    if (btn) btn.click();
+                }
+            }
+            forceSidebarOpen();
+            setTimeout(forceSidebarOpen, 500);
+            setTimeout(forceSidebarOpen, 1500);
+        })();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
 
     page = get_active_page()
     shell_action = render_shell(page, email=st.session_state.get("auth_email", ""))
