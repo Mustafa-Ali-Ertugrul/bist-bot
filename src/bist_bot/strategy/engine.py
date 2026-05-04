@@ -527,6 +527,21 @@ class StrategyEngine:
         )
 
         if final_signal_type == SignalType.HOLD:
+            if signal.signal_type != SignalType.HOLD:
+                # Confluence already logged a rejection for this ticker
+                pass
+            else:
+                # Score fell in neutral zone — not rejected by any filter
+                # but also not actionable. Log so the count is complete.
+                self._log_candidate_rejected(
+                    ticker,
+                    stage="classification",
+                    reason_code="hold_neutral_zone",
+                    multi_timeframe=multi_timeframe,
+                    trigger_candle_count=len(df),
+                    score=score,
+                    reason_detail="score in neutral zone, signal classified as HOLD",
+                )
             return None
 
         signal.signal_type = final_signal_type
