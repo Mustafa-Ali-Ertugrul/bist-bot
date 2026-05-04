@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import time
 from abc import ABC
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Protocol
@@ -239,32 +238,6 @@ class YFinanceProvider:
     ) -> dict[str, pd.DataFrame | None]:
         if not tickers:
             return {}
-
-        if all(ticker.upper().endswith(".IS") for ticker in tickers):
-            with ThreadPoolExecutor(max_workers=min(6, len(tickers))) as executor:
-                future_map = {
-                    executor.submit(
-                        self._fetch_chart_history,
-                        ticker,
-                        period,
-                        interval,
-                        rate_limit=False,
-                    ): ticker
-                    for ticker in tickers
-                }
-                results: dict[str, pd.DataFrame | None] = {}
-                for future in as_completed(future_map):
-                    ticker = future_map[future]
-                    try:
-                        results[ticker] = future.result()
-                    except Exception:
-                        results[ticker] = None
-                    if results[ticker] is None:
-                        try:
-                            results[ticker] = self._fetch_stockanalysis_history(ticker)
-                        except Exception:
-                            results[ticker] = None
-                return results
 
         max_retries = settings.data.YFINANCE_MAX_RETRIES
         backoff = settings.data.YFINANCE_RETRY_BACKOFF_SECONDS
