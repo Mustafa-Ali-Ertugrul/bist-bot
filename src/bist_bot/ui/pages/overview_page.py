@@ -209,8 +209,8 @@ def render_overview_page() -> None:
 
     render_page_hero(
         "İşlem Paneli",
-        "Canlı işlem akışı için premium BIST kontrol merkezi",
-        "Panel ekranını mobil uyumlu bir kontrol merkezine dönüştürdük. Canlı performans, radar fırsatları ve son sinyaller tek koyu tema içinde sunuluyor.",
+        "BIST kontrol merkezi",
+        "Canlı performans, radar fırsatları ve son sinyaller.",
         badges=[
             f"{actionable_signals} pozitif sinyal",
             f"Kazanma oranı %{win_rate:.1f}",
@@ -248,8 +248,10 @@ def render_overview_page() -> None:
         render_section_title("Piyasa görünümü", "Öne çıkan fırsatlar")
         radar_rows = []
         for signal in active_watch:
+            is_radar = getattr(signal.signal_type, "name", "") == "RADAR"
+            row_class = "bb-list-row bb-radar-card" if is_radar else "bb-list-row"
             radar_rows.append(
-                "<div class='bb-list-row'>"
+                f"<div class='{row_class}'>"
                 "<div>"
                 f"<div class='bb-list-row-title'>{html.escape(signal.ticker.replace('.IS', ''))}</div>"
                 f"<div class='bb-list-row-subtitle'>{html.escape(signal.signal_type.display)} • Güven: {html.escape(_format_confidence_label(signal.confidence).title())}</div>"
