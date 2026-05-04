@@ -628,7 +628,6 @@ def inject_styles() -> None:
                     width:236px !important;
                     max-width:236px !important;
                 }
-                }
                 .desktop-only {
                     display:none !important;
                 }
