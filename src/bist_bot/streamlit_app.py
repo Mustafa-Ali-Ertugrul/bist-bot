@@ -225,7 +225,9 @@ def _bootstrap_authenticated_app() -> None:
     with st.spinner("Ilk piyasa taramasi hazirlaniyor..."):
         loaded = run_initial_scan(force_clear=False, limited=True)
     if not loaded:
-        st.error("Ilk tarama tamamlanamadi. Veri kaynagi yanit vermedi; lutfen biraz sonra tekrar deneyin.")
+        st.error(
+            "Ilk tarama tamamlanamadi. Veri kaynagi yanit vermedi; lutfen biraz sonra tekrar deneyin."
+        )
         return
     st.session_state.just_logged_in = False
     st.session_state.app_bootstrapped = True
@@ -243,7 +245,9 @@ def _ensure_market_data_ready() -> bool:
     with st.spinner("Piyasa verisi hazirlaniyor..."):
         loaded = run_initial_scan(force_clear=False, limited=True)
     if not loaded:
-        st.error("Piyasa verisi hazirlanamadi. Veri kaynagi yanit vermedi; lutfen biraz sonra tekrar deneyin.")
+        st.error(
+            "Piyasa verisi hazirlanamadi. Veri kaynagi yanit vermedi; lutfen biraz sonra tekrar deneyin."
+        )
         return False
     st.rerun()
     st.stop()
@@ -259,6 +263,7 @@ def main() -> None:
         _login_form()
         return
 
+    inject_styles()
     _bootstrap_authenticated_app()
     if st.session_state.get("just_logged_in"):
         return
