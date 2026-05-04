@@ -49,7 +49,7 @@ def inject_styles() -> None:
             }
             .block-container {
                 max-width:1520px;
-                padding:6.2rem 1.25rem 4rem 18.5rem;
+                padding:5.5rem 2.5rem 3rem 18.5rem;
             }
             [data-testid="stVerticalBlock"] > [style*="flex-direction: column"] {
                 gap:1rem;
@@ -64,7 +64,7 @@ def inject_styles() -> None:
                 left:0;
                 right:0;
                 z-index:999;
-                height:76px;
+                height:68px;
                 display:flex;
                 align-items:center;
                 justify-content:space-between;
@@ -151,6 +151,29 @@ def inject_styles() -> None:
                 border-color:rgba(255,143,143,.24);
                 color:var(--bb-danger) !important;
             }
+            .bb-logout-wrap {
+                position:fixed;
+                top:16px;
+                right:20px;
+                z-index:1001;
+                width:auto;
+            }
+            .bb-logout-wrap .stButton > button {
+                min-height:36px;
+                padding:0 14px;
+                border-radius:999px;
+                font-size:10px;
+                font-weight:700;
+                letter-spacing:.14em;
+                text-transform:uppercase;
+                color:var(--bb-muted);
+                background:rgba(255,255,255,.05);
+                border:1px solid rgba(255,255,255,.08);
+            }
+            .bb-logout-wrap .stButton > button:hover {
+                border-color:rgba(255,143,143,.24);
+                color:var(--bb-danger);
+            }
             .bb-badge {
                 border:1px solid rgba(138,180,255,.22);
                 background:rgba(138,180,255,.12);
@@ -193,12 +216,12 @@ def inject_styles() -> None:
             .bb-hero {
                 position:relative;
                 overflow:hidden;
-                padding:28px 24px;
-                border-radius:30px;
+                padding:16px 20px;
+                border-radius:22px;
                 background:linear-gradient(180deg, rgba(18,26,36,.94), rgba(12,18,26,.94));
                 border:1px solid rgba(138,180,255,.12);
                 box-shadow:var(--bb-shadow);
-                margin-bottom:.35rem;
+                margin-bottom:.15rem;
             }
             .bb-hero::before,
             .bb-hero::after {
@@ -231,7 +254,7 @@ def inject_styles() -> None:
             .bb-title {
                 position:relative;
                 z-index:1;
-                font-size:clamp(28px, 6vw, 46px);
+                font-size:clamp(20px, 3.5vw, 30px);
                 line-height:.98;
                 font-weight:900;
                 letter-spacing:-.06em;
@@ -241,11 +264,11 @@ def inject_styles() -> None:
             .bb-subtitle {
                 position:relative;
                 z-index:1;
-                margin-top:12px;
+                margin-top:6px;
                 max-width:760px;
                 color:var(--bb-muted);
-                font-size:14px;
-                line-height:1.72;
+                font-size:13px;
+                line-height:1.6;
             }
             .bb-chip-row {
                 position:relative;
@@ -253,7 +276,7 @@ def inject_styles() -> None:
                 display:flex;
                 flex-wrap:wrap;
                 gap:10px;
-                margin-top:18px;
+                margin-top:10px;
             }
             .bb-section-head {
                 display:flex;
@@ -337,6 +360,14 @@ def inject_styles() -> None:
             .bb-text-danger {
                 color:var(--bb-danger);
             }
+            .bb-radar-card {
+                background:linear-gradient(135deg, rgba(77,226,191,.06), rgba(18,26,36,.94));
+                border:1px solid rgba(77,226,191,.14);
+                border-left:3px solid var(--bb-secondary);
+            }
+            .bb-radar-card .bb-list-row-title {
+                color:var(--bb-secondary);
+            }
             .bb-table {
                 width:100%;
                 border-collapse:collapse;
@@ -395,7 +426,7 @@ def inject_styles() -> None:
             }
             .bb-sidebar-shell {
                 position:fixed;
-                top:96px;
+                top:88px;
                 left:18px;
                 z-index:900;
                 width:238px;
@@ -542,9 +573,23 @@ def inject_styles() -> None:
                 padding:.5rem;
                 overflow:hidden;
             }
+            ::-webkit-scrollbar {
+                width:6px;
+                height:6px;
+            }
+            ::-webkit-scrollbar-track {
+                background:transparent;
+            }
+            ::-webkit-scrollbar-thumb {
+                background:rgba(138,180,255,.18);
+                border-radius:999px;
+            }
+            ::-webkit-scrollbar-thumb:hover {
+                background:rgba(138,180,255,.32);
+            }
             @media (max-width: 900px) {
                 .block-container {
-                    padding:5.8rem .9rem 3.5rem;
+                    padding:5.2rem .9rem 3rem;
                 }
                 .desktop-only {
                     display:none !important;
@@ -553,7 +598,7 @@ def inject_styles() -> None:
                     display:block !important;
                 }
                 .bb-topbar {
-                    height:72px;
+                    height:64px;
                     padding:0 14px;
                 }
                 .bb-topbar-actions {
@@ -561,6 +606,10 @@ def inject_styles() -> None:
                 }
                 .bb-session-pill {
                     display:none;
+                }
+                .bb-logout-wrap {
+                    top:14px;
+                    right:14px;
                 }
                 .bb-sidebar-shell {
                     position:relative;

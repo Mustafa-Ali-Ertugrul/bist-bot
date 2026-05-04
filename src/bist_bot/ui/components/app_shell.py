@@ -93,12 +93,15 @@ def render_shell(active_page: str, email: str = "") -> str | None:
         unsafe_allow_html=True,
     )
 
-    action: str | None = render_sidebar_nav(active_page)
-    _, logout_col = st.columns([8.6, 1.4], gap="small")
-    with logout_col:
-        button_type: Literal["primary", "secondary", "tertiary"] = "secondary"
-        if st.button("Logout", key="top_logout", use_container_width=True, type=button_type):
-            action = "logout"
+    action: str | None = None
+    st.markdown("<div class='bb-logout-wrap'>", unsafe_allow_html=True)
+    button_type: Literal["primary", "secondary", "tertiary"] = "secondary"
+    if st.button("Logout", key="top_logout", use_container_width=True, type=button_type):
+        action = "logout"
+    st.markdown("</div>", unsafe_allow_html=True)
+    nav_action = render_sidebar_nav(active_page)
+    if nav_action:
+        action = nav_action
     return action
 
 
