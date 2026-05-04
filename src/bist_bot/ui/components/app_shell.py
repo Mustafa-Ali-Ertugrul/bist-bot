@@ -37,37 +37,31 @@ def get_active_page(default: str = "dashboard") -> str:
     return page
 
 
-def _nav_action(page: str) -> str:
-    return f"page:{page}"
-
-
-def render_sidebar_nav(active_page: str) -> str | None:
-    page_keys = list(PAGE_META)
-    active_index = page_keys.index(active_page) if active_page in PAGE_META else 0
-    active_label = PAGE_META[page_keys[active_index]]["label"]
-    if st.session_state.get("_sidebar_active_page") != active_page:
-        st.session_state["sidebar_page_radio"] = active_label
-        st.session_state["_sidebar_active_page"] = active_page
-
-    with st.sidebar:
-        st.markdown(
-            ("<div class='bb-sidebar-shell'><div class='bb-sidebar-kicker'>Navigation</div></div>"),
-            unsafe_allow_html=True,
-        )
-        selected_label = st.radio(
-            "Navigation",
-            [PAGE_META[page]["label"] for page in page_keys],
-            index=active_index,
-            key="sidebar_page_radio",
-            label_visibility="collapsed",
-        )
-
-    selected_page = page_keys[
-        [PAGE_META[page]["label"] for page in page_keys].index(selected_label)
-    ]
-    if selected_page != active_page:
-        return _nav_action(selected_page)
-    return None
+def render_sidebar_nav(active_page: str) -> None:
+    st.sidebar.markdown(
+        (
+            "<div class='bb-sidebar-kicker'>Navigation</div>"
+            "<div class='bb-sidebar-note'>Dashboard ana katman; diger ekranlar alt katmandir.</div>"
+        ),
+        unsafe_allow_html=True,
+    )
+    for page, meta in PAGE_META.items():
+        button_type = "primary" if page == active_page else "secondary"
+        if st.sidebar.button(
+            meta["label"],
+            key=f"nav_{page}",
+            type=button_type,
+            use_container_width=True,
+        ):
+            set_active_page(page)
+    if active_page != "dashboard":
+        st.sidebar.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
+        if st.sidebar.button(
+            "Dashboard'a Don",
+            key="nav_back_dashboard",
+            use_container_width=True,
+        ):
+            set_active_page("dashboard")
 
 
 def render_shell(active_page: str, email: str = "") -> str | None:
@@ -87,6 +81,7 @@ def render_shell(active_page: str, email: str = "") -> str | None:
             "<div class='bb-topbar-actions'>"
             f"<span class='bb-badge bb-badge-positive'>{html.escape(active_label)}</span>"
             f"<span class='bb-session-pill'>{email_label}</span>"
+            "<a class='bb-logout-link' href='?action=logout'>Logout</a>"
             "</div>"
             "</header>"
         ),
