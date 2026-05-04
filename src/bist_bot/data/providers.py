@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from abc import ABC
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Protocol
@@ -38,12 +39,111 @@ class YFinanceProvider:
     def __init__(self, rate_limiter: RateLimiterProtocol) -> None:
         self.rate_limiter = rate_limiter
 
+    def _fetch_chart_history(
+        self, ticker: str, period: str, interval: str, *, rate_limit: bool = True
+    ) -> pd.DataFrame | None:
+        import requests
+
+        if rate_limit:
+            self.rate_limiter.wait_if_needed("yahoo.finance")
+        response = requests.get(
+            f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}",
+            params={"range": period, "interval": interval},
+            timeout=6,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        result = (payload.get("chart", {}).get("result") or [None])[0]
+        if not result:
+            return None
+        timestamps = result.get("timestamp") or []
+        quote = ((result.get("indicators") or {}).get("quote") or [{}])[0]
+        if not timestamps or not quote:
+            return None
+        df = pd.DataFrame(
+            {
+                "Open": quote.get("open", []),
+                "High": quote.get("high", []),
+                "Low": quote.get("low", []),
+                "Close": quote.get("close", []),
+                "Volume": quote.get("volume", []),
+            },
+            index=pd.to_datetime(timestamps, unit="s", utc=True).tz_convert(None),
+        )
+        df = df.dropna(subset=["Open", "High", "Low", "Close"])
+        return None if df.empty else df
+
+    def _fetch_stockanalysis_history(self, ticker: str) -> pd.DataFrame | None:
+        """Fetch daily BIST OHLCV data from StockAnalysis when Yahoo is rate-limited."""
+        import requests
+        from bs4 import BeautifulSoup
+
+        symbol = ticker.upper().replace(".IS", "")
+        response = requests.get(
+            f"https://stockanalysis.com/quote/ist/{symbol}/history/",
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=10,
+        )
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, "html.parser")
+        table = soup.find("table")
+        if table is None:
+            return None
+        headers = [cell.get_text(strip=True) for cell in table.find_all("th")]
+        required = ["Date", "Open", "High", "Low", "Close", "Volume"]
+        if not all(column in headers for column in required):
+            return None
+        indexes = {column: headers.index(column) for column in required}
+        records: list[dict[str, str]] = []
+        for row in table.find_all("tr"):
+            cells = [cell.get_text(strip=True).replace(",", "") for cell in row.find_all("td")]
+            if len(cells) < len(headers):
+                continue
+            records.append({column: cells[indexes[column]] for column in required})
+        if not records:
+            return None
+        df = pd.DataFrame.from_records(records)
+        df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+        for column in ["Open", "High", "Low", "Close", "Volume"]:
+            df[column] = pd.to_numeric(df[column], errors="coerce")
+        df = df.dropna(subset=["Date", "Open", "High", "Low", "Close", "Volume"])
+        if df.empty:
+            return None
+        return df.sort_values("Date").set_index("Date")
+
     def fetch_history(self, ticker: str, period: str, interval: str) -> pd.DataFrame | None:
         import yfinance as yf
 
+        if ticker.upper().endswith(".IS"):
+            try:
+                chart_history = self._fetch_chart_history(ticker, period, interval)
+                if chart_history is not None:
+                    return chart_history
+            except Exception:
+                logger.warning("yahoo_chart_history_failed", ticker=ticker)
+
         self.rate_limiter.wait_if_needed("yahoo.finance")
         stock = yf.Ticker(ticker)
-        return stock.history(period=period, interval=interval)
+        try:
+            history = stock.history(period=period, interval=interval, timeout=12)
+        except TypeError:
+            history = stock.history(period=period, interval=interval)
+        except Exception:
+            logger.warning("yfinance_history_failed", ticker=ticker)
+            if ticker.upper().endswith(".IS"):
+                return self._fetch_stockanalysis_history(ticker)
+            return None
+        if history is not None and not history.empty:
+            return history
+        try:
+            chart_history = self._fetch_chart_history(ticker, period, interval)
+            if chart_history is not None:
+                return chart_history
+        except Exception:
+            logger.warning("yahoo_chart_history_fallback_failed", ticker=ticker)
+        if ticker.upper().endswith(".IS"):
+            return self._fetch_stockanalysis_history(ticker)
+        return None
 
     def fetch_batch(
         self, tickers: list[str], period: str, interval: str
@@ -52,6 +152,32 @@ class YFinanceProvider:
 
         if not tickers:
             return {}
+
+        if all(ticker.upper().endswith(".IS") for ticker in tickers):
+            with ThreadPoolExecutor(max_workers=min(6, len(tickers))) as executor:
+                future_map = {
+                    executor.submit(
+                        self._fetch_chart_history,
+                        ticker,
+                        period,
+                        interval,
+                        rate_limit=False,
+                    ): ticker
+                    for ticker in tickers
+                }
+                results: dict[str, pd.DataFrame | None] = {}
+                for future in as_completed(future_map):
+                    ticker = future_map[future]
+                    try:
+                        results[ticker] = future.result()
+                    except Exception:
+                        results[ticker] = None
+                    if results[ticker] is None:
+                        try:
+                            results[ticker] = self._fetch_stockanalysis_history(ticker)
+                        except Exception:
+                            results[ticker] = None
+                return results
 
         self.rate_limiter.wait_if_needed("yahoo.finance")
         raw_data = yf.download(
@@ -62,9 +188,13 @@ class YFinanceProvider:
             auto_adjust=False,
             progress=False,
             threads=True,
+            timeout=12,
         )
         if raw_data is None or raw_data.empty:
-            return {}
+            return {
+                ticker: self._fetch_chart_history(ticker, period, interval)
+                for ticker in tickers
+            }
 
         results: dict[str, pd.DataFrame | None] = {}
         for ticker in tickers:
@@ -74,7 +204,10 @@ class YFinanceProvider:
                 else:
                     results[ticker] = raw_data.copy()
             except KeyError:
-                results[ticker] = None
+                results[ticker] = self._fetch_chart_history(ticker, period, interval)
+        for ticker, df in list(results.items()):
+            if df is None or df.empty:
+                results[ticker] = self._fetch_chart_history(ticker, period, interval)
         return results
 
     def fetch_quote(self, ticker: str) -> float | None:

@@ -37,28 +37,30 @@ def get_active_page(default: str = "dashboard") -> str:
 
 
 def render_sidebar_nav(active_page: str) -> None:
-    links = []
-    for page, meta in PAGE_META.items():
-        active_class = " bb-sidebar-link-active" if page == active_page else ""
-        links.append(
-            (
-                f"<a class='bb-sidebar-link{active_class}' href='?page={page}'>"
-                f"<span class='bb-nav-icon'>{html.escape(meta['icon'])}</span>"
-                f"<span>{html.escape(meta['label'])}</span>"
-                "</a>"
-            )
-        )
-    st.markdown(
+    st.sidebar.markdown(
         (
-            "<aside class='bb-sidebar-shell'>"
             "<div class='bb-sidebar-kicker'>Navigation</div>"
-            "<nav class='bb-sidebar-nav'>"
-            f"{''.join(links)}"
-            "</nav>"
-            "</aside>"
+            "<div class='bb-sidebar-note'>Dashboard ana katman; diger ekranlar alt katmandir.</div>"
         ),
         unsafe_allow_html=True,
     )
+    for page, meta in PAGE_META.items():
+        button_type = "primary" if page == active_page else "secondary"
+        if st.sidebar.button(
+            meta["label"],
+            key=f"nav_{page}",
+            type=button_type,
+            use_container_width=True,
+        ):
+            set_active_page(page)
+    if active_page != "dashboard":
+        st.sidebar.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
+        if st.sidebar.button(
+            "Dashboard'a Don",
+            key="nav_back_dashboard",
+            use_container_width=True,
+        ):
+            set_active_page("dashboard")
 
 
 def render_shell(active_page: str, email: str = "") -> str | None:
@@ -84,8 +86,12 @@ def render_shell(active_page: str, email: str = "") -> str | None:
         ),
         unsafe_allow_html=True,
     )
-
     render_sidebar_nav(active_page)
+    if active_page != "dashboard":
+        back_col, _ = st.columns([0.18, 0.82])
+        with back_col:
+            if st.button("Dashboard", key="content_back_dashboard", use_container_width=True):
+                set_active_page("dashboard")
     return None
 
 

@@ -721,6 +721,78 @@ class BISTDataFetcher:
 
         return results
 
+    def fetch_batch(
+        self,
+        tickers: list[str],
+        period: str | None = None,
+        interval: str | None = None,
+        force: bool = False,
+        validate: bool = True,
+    ) -> dict[str, pd.DataFrame]:
+        """Fetch price history for a selected ticker list using provider batch calls."""
+        period = period or settings.DATA_PERIOD
+        interval = interval or settings.DATA_INTERVAL
+        normalized_tickers = _clean_ticker_list(tickers)
+
+        results: dict[str, pd.DataFrame] = {}
+        missing_tickers = []
+        for ticker in normalized_tickers:
+            cached = self._get_cached_data(ticker, period, interval, force=force)
+            if cached is not None:
+                results[ticker] = cached
+            else:
+                missing_tickers.append(ticker)
+
+        if not missing_tickers:
+            return results
+
+        try:
+            raw_batch = self.provider.fetch_batch(
+                missing_tickers,
+                period=period,
+                interval=interval,
+            )
+        except Exception as exc:
+            logger.warning(
+                "selected_provider_batch_failed",
+                error_type=type(exc).__name__,
+                ticker_count=len(missing_tickers),
+            )
+            raw_batch = {}
+
+        unresolved = list(missing_tickers)
+        if raw_batch:
+            unresolved = []
+            for ticker in missing_tickers:
+                df = self._normalize_history(ticker, raw_batch.get(ticker), validate=validate)
+                if df is None:
+                    unresolved.append(ticker)
+                    continue
+                self._store_cache(ticker, period, interval, df)
+                results[ticker] = df
+
+        if unresolved:
+            with ThreadPoolExecutor(max_workers=min(self._max_workers, len(unresolved))) as executor:
+                future_map = {
+                    executor.submit(self.fetch_single, ticker, period, interval, True, validate): ticker
+                    for ticker in unresolved
+                }
+                for future in as_completed(future_map):
+                    ticker = future_map[future]
+                    try:
+                        df = future.result()
+                    except Exception as exc:
+                        logger.warning(
+                            "selected_provider_fallback_failed",
+                            ticker=ticker,
+                            error_type=type(exc).__name__,
+                        )
+                        continue
+                    if df is not None:
+                        results[ticker] = df
+
+        return results
+
     def get_current_price(self, ticker: str) -> float | None:
         """Return the latest price using realtime scraping with Yahoo fallback.
 
@@ -933,25 +1005,30 @@ class BISTDataFetcher:
         trigger_period = trigger_period or getattr(settings, "MTF_TRIGGER_PERIOD", "1mo")
         trigger_interval = trigger_interval or getattr(settings, "MTF_TRIGGER_INTERVAL", "15m")
 
+        normalized_tickers = _clean_ticker_list(tickers)
+        trend_data = self.fetch_batch(
+            tickers=normalized_tickers,
+            period=trend_period,
+            interval=trend_interval,
+            force=force_refresh,
+            validate=validate,
+        )
+        trigger_data = self.fetch_batch(
+            tickers=normalized_tickers,
+            period=trigger_period,
+            interval=trigger_interval,
+            force=force_refresh,
+            validate=validate,
+        )
+
         combined: dict[str, dict[str, pd.DataFrame]] = {}
-        for ticker in tickers:
-            trend_df = self.fetch_single(
-                ticker,
-                period=trend_period,
-                interval=trend_interval,
-                force=force_refresh,
-                validate=validate,
-            )
-            trigger_df = self.fetch_single(
-                ticker,
-                period=trigger_period,
-                interval=trigger_interval,
-                force=force_refresh,
-                validate=validate,
-            )
+        for ticker in normalized_tickers:
+            normalized_ticker = normalize_ticker(ticker)
+            trend_df = trend_data.get(normalized_ticker)
+            trigger_df = trigger_data.get(normalized_ticker)
             if trend_df is None or trigger_df is None:
                 continue
-            combined[normalize_ticker(ticker)] = {"trend": trend_df, "trigger": trigger_df}
+            combined[normalized_ticker] = {"trend": trend_df, "trigger": trigger_df}
         return combined
 
 
