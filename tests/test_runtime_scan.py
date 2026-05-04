@@ -11,7 +11,7 @@ TR = timezone(timedelta(hours=3))
 
 
 def test_ensure_initial_data_starts_background_scan_when_no_cache():
-    """When no cached signals exist, ensure_initial_data should start a full background scan."""
+    """When no cached signals exist, ensure_initial_data should start a limited background scan."""
     mock_db = MagicMock()
     mock_db.get_recent_signals.return_value = []
 
@@ -41,7 +41,7 @@ def test_ensure_initial_data_starts_background_scan_when_no_cache():
 
         ensure_initial_data()
 
-        mock_start.assert_called_once_with(force_clear=False, limited=False)
+        mock_start.assert_called_once_with(force_clear=False, limited=True)
         assert mock_session.scan_in_progress is True
 
 
