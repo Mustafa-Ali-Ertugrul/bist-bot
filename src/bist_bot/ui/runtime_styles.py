@@ -32,8 +32,7 @@ def inject_styles() -> None:
                 --bb-radius-sm:18px;
                 --bb-shadow:0 30px 80px rgba(0, 0, 0, .36);
             }
-            [data-testid="stHeader"], [data-testid="stToolbar"], footer, #MainMenu,
-            section[data-testid="stSidebar"] {
+            [data-testid="stHeader"], [data-testid="stToolbar"], footer, #MainMenu {
                 display:none !important;
             }
             html, body, [class*="css"] {
@@ -49,7 +48,7 @@ def inject_styles() -> None:
             }
             .block-container {
                 max-width:1520px;
-                padding:5.5rem 2.5rem 3rem 18.5rem;
+                padding:5.5rem 2.5rem 3rem 2rem;
             }
             [data-testid="stVerticalBlock"] > [style*="flex-direction: column"] {
                 gap:1rem;
@@ -425,11 +424,10 @@ def inject_styles() -> None:
                 font-weight:700;
             }
             .bb-sidebar-shell {
-                position:fixed;
-                top:88px;
-                left:18px;
-                z-index:900;
-                width:238px;
+                position:relative;
+                top:auto;
+                left:auto;
+                width:100%;
                 padding:14px;
                 border-radius:24px;
                 background:linear-gradient(180deg, rgba(13,19,31,.90), rgba(10,15,22,.86));
@@ -587,6 +585,35 @@ def inject_styles() -> None:
             ::-webkit-scrollbar-thumb:hover {
                 background:rgba(138,180,255,.32);
             }
+            section[data-testid="stSidebar"] {
+                background:transparent !important;
+                border-right:none !important;
+            }
+            section[data-testid="stSidebar"] > div {
+                background:transparent !important;
+            }
+            button[data-testid="stSidebarCollapseButton"],
+            button[data-testid="stSidebarExpandButton"] {
+                background:rgba(9, 15, 25, .85) !important;
+                backdrop-filter:blur(18px);
+                border:1px solid rgba(255,255,255,.08) !important;
+                border-radius:12px !important;
+                color:var(--bb-muted) !important;
+                z-index:1000 !important;
+            }
+            button[data-testid="stSidebarCollapseButton"]:hover,
+            button[data-testid="stSidebarExpandButton"]:hover {
+                background:rgba(18,26,36,.92) !important;
+                border-color:rgba(138,180,255,.22) !important;
+                color:var(--bb-text) !important;
+            }
+            [data-testid="stSidebar"][aria-expanded="false"] ~ .block-container,
+            [data-testid="stSidebar"][aria-expanded="false"] ~ [data-testid="stVerticalBlock"] {
+                padding-left:2.5rem !important;
+            }
+            [data-testid="stSidebar"][aria-expanded="false"] .bb-sidebar-shell {
+                display:none !important;
+            }
             @media (max-width: 900px) {
                 .block-container {
                     padding:5.2rem .9rem 3rem;
@@ -612,10 +639,6 @@ def inject_styles() -> None:
                     right:14px;
                 }
                 .bb-sidebar-shell {
-                    position:relative;
-                    top:auto;
-                    left:auto;
-                    width:100%;
                     margin:0 0 1rem;
                     padding:10px;
                     border-radius:22px;
