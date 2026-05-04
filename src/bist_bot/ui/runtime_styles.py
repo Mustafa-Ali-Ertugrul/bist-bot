@@ -580,41 +580,54 @@ def inject_styles() -> None:
             section[data-testid="stSidebar"] {
                 background:transparent !important;
                 border-right:none !important;
+                width:236px !important;
+                min-width:236px !important;
+                max-width:236px !important;
+                transform:none !important;
+                visibility:visible !important;
+                display:block !important;
+                flex-shrink:0 !important;
             }
             section[data-testid="stSidebar"] > div {
                 background:transparent !important;
+                width:236px !important;
+                min-width:236px !important;
+                max-width:236px !important;
+                transform:none !important;
+                visibility:visible !important;
+            }
+            div[data-testid="stSidebarContent"] {
+                width:236px !important;
+                min-width:236px !important;
+                max-width:236px !important;
+                visibility:visible !important;
             }
             button[data-testid="stSidebarCollapseButton"],
             button[data-testid="stSidebarExpandButton"] {
-                background:rgba(9, 15, 25, .85) !important;
-                backdrop-filter:blur(18px);
-                border:1px solid rgba(255,255,255,.08) !important;
-                border-radius:12px !important;
-                color:var(--bb-muted) !important;
-                z-index:10001 !important;
-                pointer-events:auto !important;
+                display:none !important;
             }
-            button[data-testid="stSidebarCollapseButton"]:hover,
-            button[data-testid="stSidebarExpandButton"]:hover {
-                background:rgba(18,26,36,.92) !important;
-                border-color:rgba(138,180,255,.22) !important;
-                color:var(--bb-text) !important;
+            .block-container {
+                margin-left:236px !important;
+                max-width:calc(100% - 236px) !important;
             }
-            button[data-testid="stSidebarExpandButton"] {
-                position:fixed !important;
-                top:12px !important;
-                left:12px !important;
+            [data-testid="stSidebar"][aria-expanded="false"] {
+                width:236px !important;
+                min-width:236px !important;
+                max-width:236px !important;
+                transform:none !important;
+                visibility:visible !important;
+                display:block !important;
             }
-            [data-testid="stSidebar"][aria-expanded="false"] ~ .block-container,
+            [data-testid="stSidebar"][aria-expanded="false"] ~ .block-container {
+                margin-left:236px !important;
+                max-width:calc(100% - 236px) !important;
+                padding-left:2.5rem !important;
+            }
             [data-testid="stSidebar"][aria-expanded="false"] ~ [data-testid="stVerticalBlock"] {
                 padding-left:2.5rem !important;
             }
-            [data-testid="stSidebar"][aria-expanded="false"] ~ .bb-topbar,
-            [data-testid="stSidebar"][aria-expanded="false"] + .bb-topbar {
-                left:48px !important;
-            }
             [data-testid="stSidebar"][aria-expanded="false"] .bb-sidebar-shell {
-                display:none !important;
+                display:block !important;
             }
             @media (max-width: 900px) {
                 .block-container {
