@@ -19,7 +19,6 @@ from bist_bot.strategy.engine_filters import (
     get_valid_adx,
     is_buy_signal,
     passes_adx_filter,
-    passes_multi_timeframe_confluence,
 )
 from bist_bot.strategy.engine_meta import (
     append_signal_reasons,
@@ -393,7 +392,7 @@ class StrategyEngine:
     def _append_signal_reasons(self, signal: Signal, risk_levels: RiskLevels) -> None:
         append_signal_reasons(signal, risk_levels)
 
-    def _passes_multi_timeframe_confluence(
+    def _evaluate_confluence(
         self,
         ticker: str,
         *,
@@ -401,20 +400,32 @@ class StrategyEngine:
         trend_bias: TrendBias,
         multi_timeframe: bool,
         trigger_candle_count: int,
-    ) -> bool:
-        return passes_multi_timeframe_confluence(
+    ) -> SignalType:
+        """Evaluate signal confluence and determine if it should be upgraded to RADAR or rejected."""
+        if not (multi_timeframe and getattr(settings, "MTF_ENABLED", True)):
+            return signal.signal_type
+
+        # Use our enhanced apply_confluence which now adds specific reasons
+        if self._apply_confluence(signal.signal_type, trend_bias, signal.reasons):
+            return signal.signal_type
+
+        # Logic Tuning Phase 4A: Check for RADAR (watchlist) eligibility
+        # If bias is neutral (soft fail) but score is high, we keep it as RADAR
+        if trend_bias == TrendBias.NEUTRAL and abs(signal.score) >= self.BUY_THRESHOLD:
+            logger.debug("strategy_confluence_soft_fail_radar", ticker=ticker, score=signal.score)
+            return SignalType.RADAR
+
+        self._log_candidate_rejected(
             ticker,
-            signal=signal,
-            trend_bias=trend_bias,
+            stage="confluence",
+            reason_code="confluence_failed",
             multi_timeframe=multi_timeframe,
-            confluence_applier=self._apply_confluence,
-            reject_logger=lambda **fields: self._log_candidate_rejected(
-                ticker,
-                multi_timeframe=multi_timeframe,
-                trigger_candle_count=trigger_candle_count,
-                **fields,
-            ),
+            trigger_candle_count=trigger_candle_count,
+            trend_bias=trend_bias.value,
+            score=signal.score,
+            reason_detail=f"signal {signal.signal_type.name} mismatch with HTF bias {trend_bias.value}",
         )
+        return SignalType.HOLD
 
     def analyze(
         self,
@@ -450,6 +461,7 @@ class StrategyEngine:
                 reason_detail="adx missing or non-numeric on latest candle",
             )
             return None
+
         adx = get_valid_adx(self.params, ticker, last)
         scored = self._calculate_score_and_reasons(
             ticker,
@@ -460,6 +472,7 @@ class StrategyEngine:
         )
         if scored is None:
             return None
+
         score, reasons = scored
         if adx is not None and adx < self.params.adx_threshold:
             score, reasons = apply_low_adx_penalty(self.params, adx, score, reasons)
@@ -475,6 +488,7 @@ class StrategyEngine:
                     reason_detail="low adx penalty neutralized candidate score",
                 )
                 return None
+
         signal_type, confidence = self._classify_signal(score)
         risk_levels = self.risk_manager.calculate(df)
         adjusted_risk_levels = self._apply_buy_side_risk(
@@ -490,6 +504,7 @@ class StrategyEngine:
         )
         if adjusted_risk_levels is None:
             return None
+
         risk_levels = adjusted_risk_levels
         signal = self._build_signal(
             ticker,
@@ -501,15 +516,21 @@ class StrategyEngine:
             fallback_confidence=confidence,
         )
         self._append_signal_reasons(signal, risk_levels)
-        if not self._passes_multi_timeframe_confluence(
+
+        # Apply confluence evaluation (may downgrade to RADAR or HOLD)
+        final_signal_type = self._evaluate_confluence(
             ticker,
             signal=signal,
             trend_bias=trend_bias,
             multi_timeframe=multi_timeframe,
             trigger_candle_count=len(df),
-        ):
+        )
+
+        if final_signal_type == SignalType.HOLD:
             return None
-        if self._is_buy_signal(signal_type):
+
+        signal.signal_type = final_signal_type
+        if self._is_buy_signal(signal.signal_type):
             self.risk_manager.register_position(ticker, df)
         return signal
 
@@ -545,8 +566,12 @@ class StrategyEngine:
         return signals
 
     def get_actionable_signals(self, signals: list[Signal]) -> list[Signal]:
-        """Filter out hold signals from the signal list."""
-        return [s for s in signals if s.signal_type != SignalType.HOLD]
+        """Filter out hold and radar signals from the actionable list.
+
+        Actionable signals are those intended for immediate trade execution.
+        RADAR signals are for watchlist observation only.
+        """
+        return [s for s in signals if s.signal_type not in (SignalType.HOLD, SignalType.RADAR)]
 
     # ------------------------------------------------------------------
     # Plugin registry API

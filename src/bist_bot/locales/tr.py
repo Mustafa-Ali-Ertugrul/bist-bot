@@ -3,6 +3,7 @@ tr = {
     "signal.buy": "🟢 AL",
     "signal.weak_buy": "🟡 ZAYIF AL",
     "signal.hold": "⚪ BEKLE",
+    "signal.radar": "🔭 İZLE",
     "signal.weak_sell": "🟠 ZAYIF SAT",
     "signal.sell": "🔴 SAT",
     "signal.strong_sell": "🚨 GÜÇLÜ SAT",

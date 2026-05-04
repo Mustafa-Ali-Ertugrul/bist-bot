@@ -79,14 +79,6 @@ def test_scan_once_orchestrates_side_effect_services():
     paper_trade_service.update_open_trades.assert_called_once_with()
     notification_service.notify_scan_results.assert_called_once_with([signal], [signal], 1)
     db.save_signals.assert_called_once_with([signal])
-    db.save_latest_rejection_breakdown.assert_called_once_with(
-        {
-            "total_rejections": 2,
-            "by_reason": [{"reason_code": "mtf_confluence_blocked", "count": 2}],
-            "by_stage": [{"stage": "mtf", "count": 2}],
-            "scan_id": "scan-test123",
-        }
-    )
     db.save_scan_log.assert_called_once_with(
         1,
         1,

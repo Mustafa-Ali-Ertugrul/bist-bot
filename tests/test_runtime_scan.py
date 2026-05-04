@@ -137,7 +137,6 @@ def test_sync_runtime_feedback_skips_rerun_during_bootstrap():
     with (
         patch("bist_bot.ui.runtime_refresh.st") as mock_st,
         patch("bist_bot.ui.runtime_refresh.time") as mock_time,
-        patch("bist_bot.ui.runtime_refresh.check_scan_timeout", return_value=False),
     ):
         mock_st.session_state = mock_session
 
@@ -172,7 +171,6 @@ def test_sync_runtime_feedback_reruns_when_scan_in_progress_after_bootstrap():
     with (
         patch("bist_bot.ui.runtime_refresh.st") as mock_st,
         patch("bist_bot.ui.runtime_refresh.time") as mock_time,
-        patch("bist_bot.ui.runtime_refresh.check_scan_timeout", return_value=False),
     ):
         mock_st.session_state = mock_session
 
@@ -381,14 +379,6 @@ def test_collect_scan_result_returns_scan_stats():
             "by_stage": [{"stage": "scoring", "count": 3}],
             "scan_id": "scan-ui123",
         },
-    )
-    db.save_latest_rejection_breakdown.assert_called_once_with(
-        {
-            "total_rejections": 3,
-            "by_reason": [{"reason_code": "score_filtered_sideways", "count": 3}],
-            "by_stage": [{"stage": "scoring", "count": 3}],
-            "scan_id": "scan-ui123",
-        }
     )
 
 

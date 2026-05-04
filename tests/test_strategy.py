@@ -503,9 +503,9 @@ def test_scan_all_emits_rejections_only_for_failed_candidates(bullish_frame):
     summary_payload = summary_calls[0].kwargs
     assert summary_payload["scan_id"] in scan_ids
     assert summary_payload["total_rejections"] == 2
-    assert summary_payload["top_reason"] in {"insufficient_history", "mtf_confluence_blocked"}
+    assert summary_payload["top_reason"] in {"insufficient_history", "confluence_failed"}
     assert summary_payload["top_reason_count"] == 1
-    assert summary_payload["top_stage"] in {"data", "mtf"}
+    assert summary_payload["top_stage"] in {"data", "confluence"}
     assert summary_payload["top_stage_count"] == 1
 
 
@@ -534,11 +534,11 @@ def test_scan_all_stores_sorted_rejection_breakdown_and_resets_between_runs(bull
     assert first_signals == []
     assert first_breakdown["total_rejections"] == 3
     assert first_breakdown["by_reason"] == [
-        {"reason_code": "mtf_confluence_blocked", "count": 2},
+        {"reason_code": "confluence_failed", "count": 2},
         {"reason_code": "insufficient_history", "count": 1},
     ]
     assert first_breakdown["by_stage"] == [
-        {"stage": "mtf", "count": 2},
+        {"stage": "confluence", "count": 2},
         {"stage": "data", "count": 1},
     ]
     assert str(first_breakdown["scan_id"]).startswith("scan-")
@@ -576,9 +576,9 @@ def test_scan_rejection_summary_uses_sorted_aggregate_top_values(bullish_frame):
     assert len(summary_calls) == 1
     payload = summary_calls[0].kwargs
     assert payload["total_rejections"] == 3
-    assert payload["top_reason"] == "mtf_confluence_blocked"
+    assert payload["top_reason"] == "confluence_failed"
     assert payload["top_reason_count"] == 2
-    assert payload["top_stage"] == "mtf"
+    assert payload["top_stage"] == "confluence"
     assert payload["top_stage_count"] == 2
 
 
