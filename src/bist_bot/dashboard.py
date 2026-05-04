@@ -650,7 +650,6 @@ def create_dashboard_app(
     def api_stats():
         stats = get_db().get_performance_stats()
         latest_scan_record = get_db().get_latest_scan_log()
-        rejection_breakdown = get_db().get_latest_rejection_breakdown()
         if latest_scan_record is None:
             latest_scan = {
                 "total_scanned": 0,
@@ -659,8 +658,8 @@ def create_dashboard_app(
                 "sell_signals": 0,
                 "actionable": 0,
                 "timestamp": None,
+                "rejection_breakdown": _normalize_rejection_breakdown({}),
             }
-            rejection_breakdown = _normalize_rejection_breakdown(rejection_breakdown)
         else:
             buy = int(latest_scan_record.get("buy_signals", 0) or 0)
             sell = int(latest_scan_record.get("sell_signals", 0) or 0)
@@ -671,24 +670,19 @@ def create_dashboard_app(
                 "sell_signals": sell,
                 "actionable": latest_scan_record.get("actionable", buy + sell),
                 "timestamp": latest_scan_record.get("timestamp"),
+                "rejection_breakdown": _normalize_rejection_breakdown(
+                    latest_scan_record.get("rejection_breakdown", {}),
+                    scan_id=str(latest_scan_record.get("scan_id", "") or ""),
+                ),
             }
-            latest_breakdown = _normalize_rejection_breakdown(
-                latest_scan_record.get("rejection_breakdown", {}),
-                scan_id=str(latest_scan_record.get("scan_id", "") or ""),
-            )
-            rejection_breakdown = (
-                latest_breakdown
-                if latest_breakdown.get("scan_id") or latest_breakdown.get("total_rejections")
-                else _normalize_rejection_breakdown(rejection_breakdown)
-            )
         stats["latest_scan"] = latest_scan
-        stats["rejection_breakdown"] = rejection_breakdown
+        stats["rejection_breakdown"] = latest_scan["rejection_breakdown"]
         return jsonify(
             {
                 "status": "ok",
                 "stats": stats,
                 "latest_scan": latest_scan,
-                "rejection_breakdown": rejection_breakdown,
+                "rejection_breakdown": latest_scan["rejection_breakdown"],
             }
         )
 
