@@ -251,6 +251,24 @@ def render_scan_detail_page() -> None:
             accent="danger" if total_rejections > 0 else "positive",
         )
 
+    # Invariant check: scanned = generated + rejected
+    if scanned > 0:
+        accounted = generated + total_rejections
+        invariant_held = accounted == scanned
+        invariant_color = "positive" if invariant_held else "danger"
+        invariant_icon = "✓" if invariant_held else "✗"
+        invariant_text = (
+            f"{invariant_icon} {accounted}/{scanned} hesaplandı"
+            if invariant_held
+            else f"{invariant_icon} {accounted}/{scanned} hesaplandı (fark: {scanned - accounted})"
+        )
+        st.markdown(
+            f"<div style='text-align:right;margin-bottom:8px;'>"
+            f"<span class='bb-text-{invariant_color}' style='font-size:0.85em;'>{invariant_text}</span>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
     scan_meta = (
         "<div class='bb-list-row'>"
         f"<div><div class='bb-label'>Son scan zamani</div><div class='bb-list-row-subtitle'>{html.escape(timestamp or 'Kayit yok')}</div></div>"
