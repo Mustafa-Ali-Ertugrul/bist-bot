@@ -168,9 +168,10 @@ class TestFetchBatchRetry:
 
         with patch("bist_bot.data.providers.yf") as mock_yf:
             mock_yf.download = MagicMock(side_effect=ConnectionError("persistent failure"))
-            result = provider.fetch_batch(["THYAO.IS"], "3mo", "1d")
+            with patch.object(provider, "_fetch_batch_individual", return_value={"THYAO.IS": None}):
+                result = provider.fetch_batch(["THYAO.IS"], "3mo", "1d")
 
-        assert result == {}
+        assert result == {"THYAO.IS": None}
         assert mock_yf.download.call_count == 2
 
     @patch("bist_bot.data.providers.settings")
@@ -183,9 +184,10 @@ class TestFetchBatchRetry:
 
         with patch("bist_bot.data.providers.yf") as mock_yf:
             mock_yf.download = MagicMock(side_effect=ValueError("bad parameters"))
-            result = provider.fetch_batch(["THYAO.IS"], "3mo", "1d")
+            with patch.object(provider, "_fetch_batch_individual", return_value={"THYAO.IS": None}):
+                result = provider.fetch_batch(["THYAO.IS"], "3mo", "1d")
 
-        assert result == {}
+        assert result == {"THYAO.IS": None}
         assert mock_yf.download.call_count == 1
 
     @patch("bist_bot.data.providers.settings")
