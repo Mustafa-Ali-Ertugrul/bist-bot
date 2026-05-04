@@ -137,7 +137,6 @@ def test_sync_runtime_feedback_skips_rerun_during_bootstrap():
     with (
         patch("bist_bot.ui.runtime_refresh.st") as mock_st,
         patch("bist_bot.ui.runtime_refresh.time") as mock_time,
-        patch("bist_bot.ui.runtime_refresh.check_scan_timeout", return_value=False),
     ):
         mock_st.session_state = mock_session
 
@@ -172,7 +171,6 @@ def test_sync_runtime_feedback_reruns_when_scan_in_progress_after_bootstrap():
     with (
         patch("bist_bot.ui.runtime_refresh.st") as mock_st,
         patch("bist_bot.ui.runtime_refresh.time") as mock_time,
-        patch("bist_bot.ui.runtime_refresh.check_scan_timeout", return_value=False),
     ):
         mock_st.session_state = mock_session
 

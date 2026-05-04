@@ -8,8 +8,6 @@ from typing import cast
 
 import streamlit as st
 
-from bist_bot.ui.runtime_scan import check_scan_timeout
-
 TR = timezone(timedelta(hours=3))
 
 
@@ -20,9 +18,6 @@ def sync_runtime_feedback(run_scan_callback) -> None:
 
     if _should_auto_refresh():
         run_scan_callback()
-        st.rerun()
-
-    if check_scan_timeout():
         st.rerun()
 
     if st.session_state.get("scan_in_progress"):
