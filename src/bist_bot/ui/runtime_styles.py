@@ -626,6 +626,10 @@ def inject_styles() -> None:
             [data-testid="stSidebar"][aria-expanded="false"] ~ [data-testid="stVerticalBlock"] {
                 padding-left:2.5rem !important;
             }
+            [data-testid="stSidebar"][aria-expanded="false"] ~ .bb-topbar,
+            [data-testid="stSidebar"][aria-expanded="false"] + .bb-topbar {
+                left:48px !important;
+            }
             [data-testid="stSidebar"][aria-expanded="false"] .bb-sidebar-shell {
                 display:block !important;
             }
