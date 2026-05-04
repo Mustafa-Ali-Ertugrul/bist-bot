@@ -382,14 +382,6 @@ def test_collect_scan_result_returns_scan_stats():
             "scan_id": "scan-ui123",
         },
     )
-    db.save_latest_rejection_breakdown.assert_called_once_with(
-        {
-            "total_rejections": 3,
-            "by_reason": [{"reason_code": "score_filtered_sideways", "count": 3}],
-            "by_stage": [{"stage": "scoring", "count": 3}],
-            "scan_id": "scan-ui123",
-        }
-    )
 
 
 def test_apply_scan_result_persists_scan_stats():

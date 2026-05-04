@@ -211,8 +211,15 @@ def test_stats_endpoint_returns_stable_rejection_breakdown_shape(tmp_path):
     token = payload["access_token"]
 
     db = DataAccess(manager)
-    db.save_latest_rejection_breakdown(
-        {
+    # Save a scan log with rejection_breakdown (the new persistence contract)
+    db.save_scan_log(
+        20,
+        6,
+        3,
+        1,
+        4,
+        scan_id="scan-api123",
+        rejection_breakdown={
             "total_rejections": 3,
             "by_reason": [
                 {"reason_code": "score_filtered_sideways", "count": 2},
@@ -223,7 +230,7 @@ def test_stats_endpoint_returns_stable_rejection_breakdown_shape(tmp_path):
                 {"stage": "data", "count": 1},
             ],
             "scan_id": "scan-api123",
-        }
+        },
     )
 
     response = client.get("/api/stats", headers={"Authorization": f"Bearer {token}"})
@@ -245,6 +252,8 @@ def test_stats_endpoint_returns_stable_rejection_breakdown_shape(tmp_path):
         "scan_id": "scan-api123",
     }
     assert data["stats"]["rejection_breakdown"] == breakdown
+    # Verify latest_scan also contains the same rejection_breakdown
+    assert data["latest_scan"]["rejection_breakdown"] == breakdown
 
 
 def test_stats_endpoint_returns_empty_rejection_breakdown_when_missing(tmp_path):
