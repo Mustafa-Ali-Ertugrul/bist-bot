@@ -20,16 +20,21 @@ from bist_bot.ui.runtime_scan import (
     apply_pending_scan_result,
     ensure_initial_data,
     request_scan,
+    run_initial_scan,
     run_scan,
 )
 from bist_bot.ui.runtime_styles import inject_styles
 
 
 def prepare_streamlit_runtime() -> None:
-    """Prepare the Streamlit UI by loading data, styles, and refresh state."""
+    """Prepare the Streamlit UI by loading data and styles before page render."""
     inject_styles()
     ensure_initial_data()
     apply_pending_scan_result()
+
+
+def finalize_streamlit_runtime() -> None:
+    """Handle refresh feedback after the current page has rendered."""
     sync_runtime_feedback(run_scan)
 
 
@@ -61,10 +66,12 @@ __all__ = [
     "fetch_index_data",
     "fetch_stock_news",
     "filter_signals",
+    "finalize_streamlit_runtime",
     "get_market_summary",
     "inject_styles",
     "map_cached_signals",
     "prepare_streamlit_runtime",
     "request_scan",
+    "run_initial_scan",
     "run_scan",
 ]
