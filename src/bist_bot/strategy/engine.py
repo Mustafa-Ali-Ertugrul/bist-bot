@@ -19,7 +19,6 @@ from bist_bot.strategy.engine_filters import (
     get_valid_adx,
     is_buy_signal,
     passes_adx_filter,
-    passes_multi_timeframe_confluence,
 )
 from bist_bot.strategy.engine_meta import (
     append_signal_reasons,
