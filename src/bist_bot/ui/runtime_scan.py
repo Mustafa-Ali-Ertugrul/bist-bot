@@ -247,8 +247,9 @@ def start_background_scan(force_clear: bool = False, limited: bool = False) -> b
         ACTIVE_SCAN_SESSIONS.add(session_key)
 
     fetcher, engine, notifier, db, last_scan_time = _session_dependencies()
+    scan_started_at = datetime.now(TR)
     st.session_state.scan_in_progress = True
-    st.session_state.scan_started_at = datetime.now(TR)
+    st.session_state.scan_started_at = scan_started_at
     st.session_state.scan_error = None
 
     limited_tickers = None
@@ -279,12 +280,7 @@ def start_background_scan(force_clear: bool = False, limited: bool = False) -> b
             logger.info(
                 "ui_background_scan_completed",
                 session_key=session_key,
-                duration_seconds=round(
-                    (
-                        datetime.now(TR) - st.session_state.get("scan_started_at", datetime.now(TR))
-                    ).total_seconds(),
-                    1,
-                ),
+                duration_seconds=round((datetime.now(TR) - scan_started_at).total_seconds(), 1),
                 signal_count=len(result.get("signals", [])),
             )
         except Exception as exc:
@@ -337,7 +333,7 @@ def ensure_initial_data() -> None:
             st.session_state.signals = map_cached_signals(cached)
             start_background_scan(force_clear=False, limited=False)
             return
-        if start_background_scan(force_clear=False, limited=False):
+        if start_background_scan(force_clear=False, limited=True):
             st.session_state.scan_in_progress = True
     except Exception as exc:
         logger.error("ui_initial_scan_failed", error=str(exc))
