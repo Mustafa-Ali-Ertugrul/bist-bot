@@ -218,6 +218,13 @@ def render_overview_page() -> None:
         ],
         accent="secondary",
     )
+    if st.session_state.get("scan_in_progress"):
+        phase = st.session_state.get("scan_phase") or "Tarama baslatiliyor"
+        st.info(f"Arka plan taramasi suruyor: {phase}")
+    elif st.session_state.get("scan_error"):
+        phase = st.session_state.get("scan_phase")
+        detail = f" Son asama: {phase}" if phase else ""
+        st.warning(f"Tarama tamamlanamadi: {st.session_state.scan_error}.{detail}")
 
     k1, k2, k3, k4 = st.columns(4)
     with k1:

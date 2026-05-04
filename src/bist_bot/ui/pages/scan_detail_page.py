@@ -205,8 +205,23 @@ def render_scan_detail_page() -> None:
     scanned = _to_int(latest_scan.get("total_scanned", 0))
     generated = _to_int(latest_scan.get("signals_generated", 0))
     actionable = _to_int(latest_scan.get("actionable", 0))
+
+    session_scanned = len(st.session_state.get("all_data", {}) or {})
+    session_stats = st.session_state.get("scan_stats", {})
+    if session_scanned > scanned and isinstance(session_stats, dict):
+        scanned = session_scanned
+        generated = _to_int(session_stats.get("generated", 0))
+        actionable = _to_int(session_stats.get("actionable", 0))
+        session_breakdown = st.session_state.get("rejection_breakdown", {})
+        if isinstance(session_breakdown, dict):
+            rejection_breakdown = session_breakdown
+            scan_id = str(rejection_breakdown.get("scan_id", "") or "")
+
     total_rejections = _to_int(rejection_breakdown.get("total_rejections", 0))
     timestamp = str(latest_scan.get("timestamp", "") or "")
+    if session_scanned > 0 and not timestamp:
+        last_scan_time = st.session_state.get("last_scan_time")
+        timestamp = last_scan_time.isoformat() if last_scan_time else ""
 
     render_page_hero(
         "Scan Detail",
