@@ -439,17 +439,18 @@ def test_overview_page_uses_settings_strong_buy_threshold():
     assert "s.score >= 40" not in source
 
 
-def test_overview_scan_metrics_prefer_session_scan_stats():
+def test_overview_scan_metrics_api_first_when_api_has_more():
+    """When API reports more scanned than session, prefer API data."""
     from bist_bot.ui.pages.overview_page import _resolve_scan_metrics
 
     scanned_assets, actionable_signals = _resolve_scan_metrics(
         session_scan_stats={"generated": 4, "actionable": 2},
         latest_scan={"total_scanned": 108, "actionable": 0},
-        summary={"total_analyzed": 25},
+        all_data={f"T{i}.IS": object() for i in range(25)},
     )
 
-    assert scanned_assets == 25
-    assert actionable_signals == 2
+    assert scanned_assets == 108
+    assert actionable_signals == 0
 
 
 def test_overview_scan_metrics_fall_back_to_latest_scan_when_session_empty():
@@ -458,11 +459,39 @@ def test_overview_scan_metrics_fall_back_to_latest_scan_when_session_empty():
     scanned_assets, actionable_signals = _resolve_scan_metrics(
         session_scan_stats={"generated": 0, "actionable": 0},
         latest_scan={"total_scanned": 108, "actionable": 3},
-        summary={"total_analyzed": 0},
+        all_data={},
     )
 
     assert scanned_assets == 108
     assert actionable_signals == 3
+
+
+def test_overview_scan_metrics_session_overrides_when_session_has_more():
+    """When session has more tickers than API, override with session data."""
+    from bist_bot.ui.pages.overview_page import _resolve_scan_metrics
+
+    scanned_assets, actionable_signals = _resolve_scan_metrics(
+        session_scan_stats={"generated": 8, "actionable": 4},
+        latest_scan={"total_scanned": 10, "actionable": 2},
+        all_data={f"T{i}.IS": object() for i in range(20)},
+    )
+
+    assert scanned_assets == 20
+    assert actionable_signals == 4
+
+
+def test_overview_scan_metrics_zero_when_both_empty():
+    """When both API and session are empty, return zeros."""
+    from bist_bot.ui.pages.overview_page import _resolve_scan_metrics
+
+    scanned_assets, actionable_signals = _resolve_scan_metrics(
+        session_scan_stats=None,
+        latest_scan={},
+        all_data={},
+    )
+
+    assert scanned_assets == 0
+    assert actionable_signals == 0
 
 
 def test_overview_rejection_breakdown_renders_top_three_sorted_rows():
@@ -911,3 +940,91 @@ def test_start_background_scan_unlimited_scans_all_tickers():
         captured_tickers = call_args.kwargs.get("limited_tickers")
 
     assert captured_tickers is None
+
+
+def test_bootstrap_starts_full_scan_after_limited_scan():
+    """_bootstrap_authenticated_app should start a full background scan after limited scan succeeds."""
+    from bist_bot import streamlit_app
+
+    mock_session = MagicMock()
+    mock_session.just_logged_in = True
+    mock_session.app_bootstrapped = False
+    mock_session.get = lambda key, default=None: {
+        "just_logged_in": True,
+        "app_bootstrapped": False,
+    }.get(key, default)
+
+    with (
+        patch.object(streamlit_app, "st") as mock_st,
+        patch.object(streamlit_app, "run_initial_scan", return_value=True) as mock_run,
+        patch.object(streamlit_app, "start_background_scan") as mock_start_bg,
+        patch.object(streamlit_app, "inject_styles"),
+    ):
+        mock_st.session_state = mock_session
+        mock_st.spinner = MagicMock()
+        mock_st.spinner.return_value.__enter__ = MagicMock()
+        mock_st.spinner.return_value.__exit__ = MagicMock()
+
+        streamlit_app._bootstrap_authenticated_app()
+
+        mock_run.assert_called_once_with(force_clear=False, limited=True)
+        mock_start_bg.assert_called_once_with(force_clear=False, limited=False)
+
+
+def test_bootstrap_does_not_start_full_scan_when_limited_scan_fails():
+    """_bootstrap_authenticated_app should NOT start full scan if limited scan fails."""
+    from bist_bot import streamlit_app
+
+    mock_session = MagicMock()
+    mock_session.just_logged_in = True
+    mock_session.get = lambda key, default=None: {
+        "just_logged_in": True,
+    }.get(key, default)
+
+    with (
+        patch.object(streamlit_app, "st") as mock_st,
+        patch.object(streamlit_app, "run_initial_scan", return_value=False) as mock_run,
+        patch.object(streamlit_app, "start_background_scan") as mock_start_bg,
+        patch.object(streamlit_app, "inject_styles"),
+    ):
+        mock_st.session_state = mock_session
+        mock_st.spinner = MagicMock()
+        mock_st.spinner.return_value.__enter__ = MagicMock()
+        mock_st.spinner.return_value.__exit__ = MagicMock()
+
+        streamlit_app._bootstrap_authenticated_app()
+
+        mock_run.assert_called_once()
+        mock_start_bg.assert_not_called()
+
+
+def test_ensure_market_data_starts_full_scan_after_limited_scan():
+    """_ensure_market_data_ready should start a full background scan after limited scan succeeds."""
+    from bist_bot import streamlit_app
+
+    mock_session = MagicMock()
+    mock_session.all_data = {}
+    mock_session.scan_error = None
+    mock_session.get = lambda key, default=None: {
+        "all_data": {},
+        "scan_error": None,
+    }.get(key, default)
+
+    with (
+        patch.object(streamlit_app, "st") as mock_st,
+        patch.object(streamlit_app, "run_initial_scan", return_value=True) as mock_run,
+        patch.object(streamlit_app, "start_background_scan") as mock_start_bg,
+        patch.object(streamlit_app, "inject_styles"),
+    ):
+        mock_st.session_state = mock_session
+        mock_st.spinner = MagicMock()
+        mock_st.spinner.return_value.__enter__ = MagicMock()
+        mock_st.spinner.return_value.__exit__ = MagicMock()
+
+        try:
+            streamlit_app._ensure_market_data_ready()
+        except Exception:
+            pass
+
+        mock_run.assert_called_once_with(force_clear=False, limited=True)
+        mock_start_bg.assert_called_once_with(force_clear=False, limited=False)
