@@ -48,20 +48,19 @@ def _resolve_scan_metrics(
     *,
     session_scan_stats: dict[str, int] | None,
     latest_scan: dict[str, object],
-    summary: dict[str, object],
+    all_data: dict[str, object],
 ) -> tuple[int, int]:
-    session_scan_stats = session_scan_stats or {}
-    session_scanned = _to_int(summary.get("total_analyzed", 0))
-    session_generated = _to_int(session_scan_stats.get("generated", 0))
-    session_actionable = _to_int(session_scan_stats.get("actionable", 0))
-
-    if session_scanned > 0 or session_generated > 0:
-        return session_scanned, session_actionable
-
     scanned_assets = _to_int(latest_scan.get("total_scanned", 0))
     actionable_signals = _to_int(
         latest_scan.get("actionable", latest_scan.get("signals_generated", 0))
     )
+
+    session_scanned = len(all_data) if isinstance(all_data, dict) else 0
+    session_stats = session_scan_stats or {}
+    if session_scanned > scanned_assets and isinstance(session_stats, dict):
+        scanned_assets = session_scanned
+        actionable_signals = _to_int(session_stats.get("actionable", 0))
+
     return scanned_assets, actionable_signals
 
 
@@ -215,7 +214,7 @@ def render_overview_page() -> None:
     scanned_assets, actionable_signals = _resolve_scan_metrics(
         session_scan_stats=session_scan_stats if isinstance(session_scan_stats, dict) else None,
         latest_scan=latest_scan,
-        summary=summary,
+        all_data=all_data,
     )
     profitable = int(stats.get("profitable", 0) or 0)
     win_rate = float(stats.get("win_rate", 0.0) or 0.0)
