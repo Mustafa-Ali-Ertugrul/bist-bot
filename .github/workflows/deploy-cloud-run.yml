@@ -23,6 +23,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
+      issues: write
 
     env:
       GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
@@ -87,3 +88,134 @@ jobs:
         run: |
           echo "API_URL=$API_URL"
           echo "UI_URL=$UI_URL"
+
+      - name: Post-deploy smoke test checklist
+        run: |
+          cat <<'EOF' >> "$GITHUB_STEP_SUMMARY"
+          ## 🧪 Post-deploy smoke test checklist
+
+          | # | Kontrol | Durum |
+          |---|---------|-------|
+          | 1 | Dashboard ve Scan Detail `Taranan varlik` / `Scanned` tutarli mi? | Manuel |
+          | 2 | Invariant check: `accounted == total` ve `✓` mi? | Manuel |
+          | 3 | Empty-state: scan var ama dashboard boş / "veri henüz hazir değil" mi? | Manuel |
+          | 4 | Outcome accounting: generated, rejected, hold, error hepsi kapaniyor mu? | Manuel |
+          | 5 | Sayfa geçişleri + refresh sonrasi sayaçlar stabil mi? | Manuel |
+          | 6 | 0-signal scan: dashboard hala scan count gösteriyor mu? | Manuel |
+          | 7 | Karma outcome test: hepsi bir bucket’a düştü mü? | Manuel |
+          | 8 | Analysis sayfasi açiliyor, Plotly render oluyor, `yaxis` hatasi yok mu? | Manuel |
+          | 9 | Son Akis / kayitli sinyal alani doğru / net empty state mi? | Manuel |
+          | 10 | UX: gereksiz Logout başligi, nav tekrari, çelişen kartlar yok mu? | Manuel |
+
+          ### Pass criteria
+          - [ ] Dashboard ve Scan Detail ayni scan sayisini gösteriyor
+          - [ ] Invariant check `✓`
+          - [ ] Empty-state yanliş tetiklenmiyor
+          - [ ] Outcome’lar eksiksiz sayiliyor
+          - [ ] Refresh / page transition sonrasi veri bozulmuyor
+          - [ ] Analysis sayfasi patlamiyor
+
+          > .github/ISSUE_TEMPLATE/post_deploy_smoke_test.md template'inden kalici issue açabilirsiniz.
+          EOF
+
+      - name: Open post-deploy smoke test issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          DEPLOY_DATE="$(date -u +'%Y-%m-%d %H:%M UTC')"
+          SHORT_SHA="$(echo "$GITHUB_SHA" | cut -c1-8)"
+
+          gh issue create \
+            --title "Post-deploy smoke test – ${DEPLOY_DATE} (${SHORT_SHA})" \
+            --label "deploy,smoke-test,manual-check" \
+            --body "$(cat <<ISSUE_EOF
+          ## Deploy bilgisi
+          - **Commit SHA:** \`${{ github.sha }}\`
+          - **Deploy tarihi:** ${DEPLOY_DATE}
+          - **API URL:** ${API_URL}
+          - **UI URL:** ${UI_URL}
+          - **Workflow run:** [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+          ---
+
+          ## 1) Dashboard ve Scan Detail tutarliliği
+          - [ ] Uygulamaya giriş yapildi
+          - [ ] Bir scan çalistirildi
+          - [ ] Dashboard'daki \`Taranan varlik\` sayisi not alindi
+          - [ ] Scan Detail sayfasina geçildi
+          - [ ] \`Scanned\` degeri ile karşilaştirildi
+          - [ ] **Beklenen:** iki sayi ayni
+
+          ## 2) Invariant check doğrulamasi
+          - [ ] Scan Detail sayfasinda invariant göstergesi kontrol edildi
+          - [ ] \`accounted / total\` değerine bakildi
+          - [ ] Başarili durumda \`✓\` ve \`accounted == total\`
+          - [ ] Eğer \`✗\` varsa hangi outcome'un eksik sayildiği not alindi
+
+          ## 3) Empty-state davranişi
+          - [ ] Scan tamamlandiktan sonra Dashboard'a dönüldü
+          - [ ] \`Veri henüz hazir değil\` görünmemeli
+          - [ ] Actionable signal \`0\` olsa bile scan özeti görünmeli
+          - [ ] Hatali durum: scan var ama dashboard boş ekran veriyor mu? **Hayir**
+
+          ## 4) Outcome accounting kontrolü
+          - [ ] Dashboard rejection breakdown bölümü kontrol edildi
+          - [ ] Generated / rejected accounting görünüyor
+          - [ ] Hiçbir ticker sessizce kaybolmamiş
+          - [ ] Özellikle şu durumlar gözlemlendi:
+            - [ ] \`hold_neutral_zone\`
+            - [ ] \`confluence_failed\`
+            - [ ] \`insufficient_data\`
+            - [ ] Timeout / error varsa onlar da görünüyor
+
+          ## 5) Sayfa geçişlerinde veri stabilitesi
+          - [ ] Dashboard → Scan Detail → Dashboard geçişi yapildi
+          - [ ] Sayfa yenilendi
+          - [ ] Yeniden giriş yapilip tekrar kontrol edildi
+          - [ ] **Beklenen:** sayaçlar değişip bozulmamali, cache yüzünden eski veri görünmemeli
+
+          ## 6) Sinyal olmayan scan testi
+          - [ ] Hiç actionable signal üretmeyen bir scan senaryosu çaliştirildi
+          - [ ] Dashboard yine scan count gösteriyor
+          - [ ] "veri yok" değil, "0 signal" mantigiyla davraniyor
+          - [ ] Scan Detail'de rejection / outcome toplami kapaniyor
+
+          ## 7) Karisik outcome testi
+          - [ ] Mümkünse şu karisimi içeren bir scan çaliştirildi:
+            - Bazı ticker'lar rejected
+            - Bazilari hold / watch
+            - Bazilari insufficient data
+          - [ ] **Beklenen:** hepsi bir outcome bucket'ina düşmeli, toplam sayilar kapanmali
+
+          ## 8) Analysis sayfasi regresyon testi
+          - [ ] Analysis sayfasina girildi
+          - [ ] Sayfa açilmali
+          - [ ] Plotly grafikler render olmali
+          - [ ] Eski \`yaxis\` hatasi görünmemeli
+
+          ## 9) Son akis / son sinyaller bölümü
+          - [ ] Dashboard'daki \`Son Akis\` veya kayitli sinyal alani kontrol edildi
+          - [ ] Veri varsa doğru doluyor
+          - [ ] Veri yoksa misleading değil net empty state gösteriyor
+
+          ## 10) Görsel / UX kontrolü
+          - [ ] Gereksiz \`Logout\` başliği sizmayor
+          - [ ] Nav tekrarlari yok
+          - [ ] Boş alanlar anlamsiz büyük değil
+          - [ ] Metrik kartlari birbiriyle çelişmiyor
+
+          ---
+
+          | Kriter | Durum |
+          |--------|-------|
+          | Dashboard ve Scan Detail ayni scan sayisini gösteriyor | ☐ Pass ☐ Fail |
+          | Invariant check \`✓\` | ☐ Pass ☐ Fail |
+          | Empty-state yanliş tetiklenmiyor | ☐ Pass ☐ Fail |
+          | Outcome'lar eksiksiz sayiliyor | ☐ Pass ☐ Fail |
+          | Refresh / page transition sonrasi veri bozulmuyor | ☐ Pass ☐ Fail |
+          | Analysis sayfasi patlamiyor | ☐ Pass ☐ Fail |
+
+          **Genel sonuç:** ☐ PASS ☐ FAIL
+
+          ISSUE_EOF
+          )"
