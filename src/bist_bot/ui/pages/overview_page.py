@@ -49,11 +49,10 @@ def _resolve_scan_metrics(
     session_scan_stats: dict[str, int] | None,
     latest_scan: dict[str, object],
     summary: dict[str, object],
-    signals: list[object],
 ) -> tuple[int, int]:
     session_scan_stats = session_scan_stats or {}
     session_scanned = _to_int(summary.get("total_analyzed", 0))
-    session_generated = _to_int(session_scan_stats.get("generated", len(signals)))
+    session_generated = _to_int(session_scan_stats.get("generated", 0))
     session_actionable = _to_int(session_scan_stats.get("actionable", 0))
 
     if session_scanned > 0 or session_generated > 0:
@@ -77,6 +76,7 @@ def _rejection_label(reason_code: str) -> str:
         "portfolio_risk_blocked": "Portföy risk limiti",
         "meta_model_blocked": "Meta-model elemesi",
         "mtf_confluence_blocked": "MTF uyumsuzluğu",
+        "hold_neutral_zone": "Nötr bölge (beklemede)",
     }
     return labels.get(reason_code, reason_code.replace("_", " ").title())
 
@@ -122,7 +122,12 @@ def _render_rejection_stage_summary(breakdown: dict[str, object]) -> str:
     )
 
 
-def _render_rejection_breakdown(breakdown: dict[str, object]) -> str:
+def _render_rejection_breakdown(
+    breakdown: dict[str, object],
+    *,
+    scanned: int = 0,
+    generated: int = 0,
+) -> str:
     total_rejections = _to_int(breakdown.get("total_rejections", 0))
     if total_rejections <= 0:
         return ""
@@ -149,6 +154,26 @@ def _render_rejection_breakdown(breakdown: dict[str, object]) -> str:
     if not items:
         return ""
     stage_summary = _render_rejection_stage_summary(breakdown)
+
+    # Outcome accounting
+    outcome_html = ""
+    if scanned > 0:
+        accounted = generated + total_rejections
+        invariant_held = accounted == scanned
+        invariant_color = "positive" if invariant_held else "danger"
+        invariant_icon = "✓" if invariant_held else "✗"
+        invariant_text = (
+            f"{invariant_icon} {accounted}/{scanned} hesaplandı"
+            if invariant_held
+            else f"{invariant_icon} {accounted}/{scanned} hesaplandı (fark: {scanned - accounted})"
+        )
+        outcome_html = (
+            "<div style='margin-top:8px;'>"
+            f"<div class='bb-text-{invariant_color}' style='font-size:0.85em;'>{invariant_text}</div>"
+            f"<div class='bb-list-row-subtitle'>Üretilen: {generated} • Elenen: {total_rejections}</div>"
+            "</div>"
+        )
+
     return (
         "<div style='height:14px;'></div>"
         "<div class='bb-list-row'>"
@@ -156,6 +181,7 @@ def _render_rejection_breakdown(breakdown: dict[str, object]) -> str:
         "</div>"
         f"<div class='bb-list'>{''.join(items)}</div>"
         f"{stage_summary}"
+        f"{outcome_html}"
     )
 
 
@@ -190,7 +216,6 @@ def render_overview_page() -> None:
         session_scan_stats=session_scan_stats if isinstance(session_scan_stats, dict) else None,
         latest_scan=latest_scan,
         summary=summary,
-        signals=signals,
     )
     profitable = int(stats.get("profitable", 0) or 0)
     win_rate = float(stats.get("win_rate", 0.0) or 0.0)
@@ -204,7 +229,7 @@ def render_overview_page() -> None:
     active_watch = (
         strong[:4] if strong else sorted(active_signals, key=lambda s: s.score, reverse=True)[:4]
     )
-    summary_ready = int(summary.get("total_analyzed", 0) or 0) > 0
+    summary_ready = scanned_assets > 0
     index_ready = any(float(data.get("value", 0.0) or 0.0) > 0 for data in index_data.values())
 
     render_page_hero(
@@ -279,7 +304,7 @@ def render_overview_page() -> None:
         else:
             radar_html = "<div class='bb-note'>Veri henüz hazır değil.</div>"
         scan_caption = (
-            f"Tarama kapsamı: {summary.get('total_analyzed', 0)} varlık"
+            f"Tarama kapsamı: {scanned_assets} varlık"
             if summary_ready
             else "Veri henüz hazır değil"
         )
@@ -338,7 +363,11 @@ def render_overview_page() -> None:
                 "</div>"
             )
         rejection_html = (
-            _render_rejection_breakdown(rejection_breakdown)
+            _render_rejection_breakdown(
+                rejection_breakdown,
+                scanned=scanned_assets,
+                generated=actionable_signals,
+            )
             if isinstance(rejection_breakdown, dict)
             else ""
         )

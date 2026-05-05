@@ -272,6 +272,8 @@ def main() -> None:
     prepare_streamlit_runtime()
     st.session_state.app_bootstrapped = True
 
+    inject_styles()
+
     page = get_active_page()
     shell_action = render_shell(page, email=st.session_state.get("auth_email", ""))
     _handle_shell_action(shell_action)
