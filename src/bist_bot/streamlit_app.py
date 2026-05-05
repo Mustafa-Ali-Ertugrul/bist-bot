@@ -23,6 +23,7 @@ from bist_bot.ui.runtime import (
     prepare_streamlit_runtime,
     run_initial_scan,
 )
+from bist_bot.ui.runtime_scan import start_background_scan
 from bist_bot.ui.runtime_styles import inject_styles
 
 st.set_page_config(
@@ -229,6 +230,7 @@ def _bootstrap_authenticated_app() -> None:
             "Ilk tarama tamamlanamadi. Veri kaynagi yanit vermedi; lutfen biraz sonra tekrar deneyin."
         )
         return
+    start_background_scan(force_clear=False, limited=False)
     st.session_state.just_logged_in = False
     st.session_state.app_bootstrapped = True
     st.rerun()
@@ -249,6 +251,7 @@ def _ensure_market_data_ready() -> bool:
             "Piyasa verisi hazirlanamadi. Veri kaynagi yanit vermedi; lutfen biraz sonra tekrar deneyin."
         )
         return False
+    start_background_scan(force_clear=False, limited=False)
     st.rerun()
     st.stop()
     return False
