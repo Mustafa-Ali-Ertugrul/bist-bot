@@ -418,10 +418,6 @@ def ensure_initial_data() -> None:
         cached = st.session_state.db.get_recent_signals(limit=len(settings.WATCHLIST))
         if cached:
             st.session_state.signals = map_cached_signals(cached)
-            start_background_scan(force_clear=False, limited=False)
-            return
-        if start_background_scan(force_clear=False, limited=True):
-            st.session_state.scan_in_progress = True
     except Exception as exc:
         logger.error("ui_initial_scan_failed", error=str(exc))
         st.error(f"Tarama hatasi: {exc}")
