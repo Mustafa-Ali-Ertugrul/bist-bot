@@ -113,8 +113,11 @@ def _login_form() -> bool:
                 display:none !important;
             }
             .block-container {
-                max-width:760px;
-                padding:7rem 1rem 4rem;
+                width:min(100% - 2rem, 1280px) !important;
+                max-width:1280px !important;
+                margin-left:auto !important;
+                margin-right:auto !important;
+                padding:7rem 1rem 4rem !important;
             }
         </style>
         """,
