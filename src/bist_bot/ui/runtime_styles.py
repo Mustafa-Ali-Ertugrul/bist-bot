@@ -77,6 +77,43 @@ def inject_styles() -> None:
                 align-items:center;
                 gap:12px;
             }
+            #bb-sidebar-toggle-client {
+                position:fixed;
+                top:18px;
+                left:188px;
+                z-index:1002;
+                width:32px;
+                height:32px;
+                border-radius:10px;
+                display:inline-flex;
+                align-items:center;
+                justify-content:center;
+                cursor:pointer;
+                color:var(--bb-muted) !important;
+                background:rgba(255,255,255,.08) !important;
+                border:1px solid rgba(255,255,255,.10) !important;
+                font-family:'Space Grotesk',sans-serif;
+                font-size:15px;
+                font-weight:900;
+                letter-spacing:-.08em;
+                user-select:none;
+            }
+            #bb-sidebar-toggle-client:hover {
+                color:var(--bb-text) !important;
+                border-color:rgba(138,180,255,.28) !important;
+                background:rgba(138,180,255,.14) !important;
+            }
+            body.bb-sidebar-collapsed section[data-testid="stSidebar"] {
+                display:none !important;
+                width:0 !important;
+                min-width:0 !important;
+                max-width:0 !important;
+            }
+            body.bb-sidebar-collapsed .block-container {
+                max-width:1520px !important;
+                padding-left:2.5rem !important;
+                padding-right:2.5rem !important;
+            }
             .bb-brand-mark {
                 width:44px;
                 height:44px;
@@ -580,67 +617,31 @@ def inject_styles() -> None:
             section[data-testid="stSidebar"] {
                 background:transparent !important;
                 border-right:none !important;
+            }
+            section[data-testid="stSidebar"][aria-expanded="true"] {
                 width:236px !important;
                 min-width:236px !important;
                 max-width:236px !important;
-                transform:none !important;
-                visibility:visible !important;
-                display:block !important;
                 flex-shrink:0 !important;
             }
-            section[data-testid="stSidebar"] > div {
+            section[data-testid="stSidebar"][aria-expanded="true"] > div {
                 background:transparent !important;
                 width:236px !important;
                 min-width:236px !important;
                 max-width:236px !important;
-                transform:none !important;
-                visibility:visible !important;
             }
-            div[data-testid="stSidebarContent"] {
+            section[data-testid="stSidebar"][aria-expanded="true"] div[data-testid="stSidebarContent"] {
                 width:236px !important;
                 min-width:236px !important;
                 max-width:236px !important;
-                visibility:visible !important;
-            }
-            button[data-testid="stSidebarCollapseButton"],
-            button[data-testid="stSidebarExpandButton"] {
-                display:none !important;
-            }
-            .block-container {
-                margin-left:236px !important;
-                max-width:calc(100% - 236px) !important;
-            }
-            [data-testid="stSidebar"][aria-expanded="false"] {
-                width:236px !important;
-                min-width:236px !important;
-                max-width:236px !important;
-                transform:none !important;
-                visibility:visible !important;
-                display:block !important;
-            }
-            [data-testid="stSidebar"][aria-expanded="false"] ~ .block-container {
-                margin-left:236px !important;
-                max-width:calc(100% - 236px) !important;
-                padding-left:2.5rem !important;
-            }
-            [data-testid="stSidebar"][aria-expanded="false"] ~ [data-testid="stVerticalBlock"] {
-                padding-left:2.5rem !important;
-            }
-            [data-testid="stSidebar"][aria-expanded="false"] ~ .bb-topbar,
-            [data-testid="stSidebar"][aria-expanded="false"] + .bb-topbar {
-                left:48px !important;
-            }
-            [data-testid="stSidebar"][aria-expanded="false"] .bb-sidebar-shell {
-                display:block !important;
             }
             @media (max-width: 900px) {
                 .block-container {
                     padding:5.2rem .9rem 3rem;
                 }
-                section[data-testid="stSidebar"],
-                section[data-testid="stSidebar"][aria-expanded="false"],
-                section[data-testid="stSidebar"] > div,
-                div[data-testid="stSidebarContent"] {
+                section[data-testid="stSidebar"][aria-expanded="true"],
+                section[data-testid="stSidebar"][aria-expanded="true"] > div,
+                section[data-testid="stSidebar"][aria-expanded="true"] div[data-testid="stSidebarContent"] {
                     min-width:236px !important;
                     width:236px !important;
                     max-width:236px !important;
@@ -683,10 +684,9 @@ def inject_styles() -> None:
                 }
             }
             @media (max-width: 640px) {
-                section[data-testid="stSidebar"],
-                section[data-testid="stSidebar"][aria-expanded="false"],
-                section[data-testid="stSidebar"] > div,
-                div[data-testid="stSidebarContent"] {
+                section[data-testid="stSidebar"][aria-expanded="true"],
+                section[data-testid="stSidebar"][aria-expanded="true"] > div,
+                section[data-testid="stSidebar"][aria-expanded="true"] div[data-testid="stSidebarContent"] {
                     min-width:208px !important;
                     width:208px !important;
                     max-width:208px !important;

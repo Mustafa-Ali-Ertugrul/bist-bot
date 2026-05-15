@@ -50,16 +50,14 @@ def _resolve_scan_metrics(
     latest_scan: dict[str, object],
     all_data: dict[str, object],
 ) -> tuple[int, int]:
-    scanned_assets = _to_int(latest_scan.get("total_scanned", 0))
-    actionable_signals = _to_int(
-        latest_scan.get("actionable", latest_scan.get("signals_generated", 0))
-    )
+    _ = latest_scan
 
     session_scanned = len(all_data) if isinstance(all_data, dict) else 0
     session_stats = session_scan_stats or {}
-    if session_scanned > scanned_assets and isinstance(session_stats, dict):
-        scanned_assets = session_scanned
-        actionable_signals = _to_int(session_stats.get("actionable", 0))
+    scanned_assets = session_scanned
+    actionable_signals = (
+        _to_int(session_stats.get("actionable", 0)) if isinstance(session_stats, dict) else 0
+    )
 
     return scanned_assets, actionable_signals
 
