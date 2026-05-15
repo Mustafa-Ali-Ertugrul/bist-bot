@@ -54,7 +54,9 @@ def render_whale_alerts_page() -> None:
         st.warning(f"Arka plan taramasi suruyor: {phase}")
 
     if not alerts:
-        st.info("Su an esigi gecen balina sinyal adayi yok. Yeni tarama tamamlaninca tekrar hesaplanir.")
+        st.info(
+            "Su an esigi gecen balina sinyal adayi yok. Yeni tarama tamamlaninca tekrar hesaplanir."
+        )
         return
 
     for alert in alerts:

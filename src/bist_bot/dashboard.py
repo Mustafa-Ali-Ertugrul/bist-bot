@@ -511,7 +511,9 @@ def create_dashboard_app(
                 Callable[..., dict[str, dict[str, Any]]] | None,
                 getattr(runtime_fetcher, "fetch_multi_timeframe", None),
             )
-            use_mtf_analysis = mtf_enabled and callable(fetch_mtf)
+            use_mtf_analysis = (
+                mtf_enabled and _coerce_bool(request.args.get("mtf")) and callable(fetch_mtf)
+            )
             if use_mtf_analysis and fetch_mtf is not None:
                 cache_key = (
                     f"{normalized_ticker}|analyze|mtf|"

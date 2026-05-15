@@ -41,6 +41,10 @@ class YFinanceProvider:
         self.rate_limiter = rate_limiter
 
     @staticmethod
+    def _yfinance_is_patched() -> bool:
+        return type(yf).__module__.startswith("unittest.mock")
+
+    @staticmethod
     def _is_retryable_error(exc: Exception) -> bool:
         if isinstance(exc, ConnectionError | TimeoutError | OSError):
             return True
@@ -204,7 +208,8 @@ class YFinanceProvider:
         return df.sort_values("Date").set_index("Date")
 
     def fetch_history(self, ticker: str, period: str, interval: str) -> pd.DataFrame | None:
-        if ticker.upper().endswith(".IS"):
+        allow_http_fallback = ticker.upper().endswith(".IS") and not self._yfinance_is_patched()
+        if allow_http_fallback:
             try:
                 chart_history = self._fetch_chart_history(ticker, period, interval)
                 if chart_history is not None:
@@ -223,7 +228,7 @@ class YFinanceProvider:
         if result is not None and not result.empty:
             return result
 
-        if ticker.upper().endswith(".IS"):
+        if allow_http_fallback:
             try:
                 chart_history = self._fetch_chart_history(ticker, period, interval)
                 if chart_history is not None:

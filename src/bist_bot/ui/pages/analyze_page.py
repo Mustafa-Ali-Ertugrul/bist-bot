@@ -84,13 +84,15 @@ def render_analyze_page() -> None:
     st.subheader("Sinyal ve Seviyeler")
     sig_type = signal.get("type", "N/A")
     sig_score = signal.get("score", 0)
+    signal_score = float(sig_score or 0)
+    signal_state = "AL" if signal_score >= settings.BUY_THRESHOLD else "IZLE"
     stop_loss = signal.get("stop_loss", 0)
     target = signal.get("target", 0)
     position_size = signal.get("position_size")
 
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-        st.metric("Sinyal", sig_type, f"Skor: {sig_score:+.0f}")
+        st.metric("Sinyal", sig_type, f"{signal_state} | Skor: {signal_score:+.0f}")
     with c2:
         st.metric("Zarar Durdrm", f"₺{stop_loss:.2f}" if stop_loss else "-")
     with c3:

@@ -15,11 +15,11 @@ _db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "val
 os.environ["DB_PATH"] = _db_path
 os.environ["DATABASE_URL"] = f"sqlite:///{_db_path}"
 
-from bist_bot.contracts import SilentNotifier
-from bist_bot.data.fetcher import BISTDataFetcher
-from bist_bot.db.access import DataAccess
-from bist_bot.strategy.engine import StrategyEngine
-from bist_bot.ui.runtime_scan import collect_scan_result
+from bist_bot.contracts import SilentNotifier  # noqa: E402
+from bist_bot.data.fetcher import BISTDataFetcher  # noqa: E402
+from bist_bot.db.access import DataAccess  # noqa: E402
+from bist_bot.strategy.engine import StrategyEngine  # noqa: E402
+from bist_bot.ui.runtime_scan import collect_scan_result  # noqa: E402
 
 
 def main():
@@ -53,6 +53,7 @@ def main():
     except Exception as exc:
         print(f"    FATAL: collect_scan_result raised: {exc}")
         import traceback
+
         traceback.print_exc()
         return 1
 
@@ -107,9 +108,7 @@ def main():
         sells = after.get("sell_signals", 0)
         actionable = after.get("actionable", 0)
         check7 = buys + sells <= actionable
-        checks.append(
-            (f"buys({buys}) + sells({sells}) <= actionable({actionable})", check7)
-        )
+        checks.append((f"buys({buys}) + sells({sells}) <= actionable({actionable})", check7))
 
         print(f"\n  total_scanned   : {after.get('total_scanned')}")
         print(f"  signals_generated: {after.get('signals_generated')}")
