@@ -212,7 +212,9 @@ def score_volume(params, last) -> tuple[float, list[str]]:
             score -= params.score_volume_spike
             reasons.append(f"Hacim patlaması + düşüş ({vol_ratio:.1f}x)")
 
-    if pv_direction == "BULLISH_CONFIRMATION" or (pv_direction == "NONE" and bool(pv_confirm)):
+    if pv_direction == "BULLISH_CONFIRMATION" or (
+        pv_direction == "NONE" and bool(pv_confirm)
+    ):
         score += params.score_price_volume_confirm
         reasons.append("Fiyat-Hacim yukselis onayi")
     elif pv_direction == "BEARISH_CONFIRMATION":

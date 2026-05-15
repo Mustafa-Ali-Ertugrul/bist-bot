@@ -772,13 +772,9 @@ class BISTDataFetcher:
                 results[ticker] = df
 
         if unresolved:
-            with ThreadPoolExecutor(
-                max_workers=min(self._max_workers, len(unresolved))
-            ) as executor:
+            with ThreadPoolExecutor(max_workers=min(self._max_workers, len(unresolved))) as executor:
                 future_map = {
-                    executor.submit(
-                        self.fetch_single, ticker, period, interval, True, validate
-                    ): ticker
+                    executor.submit(self.fetch_single, ticker, period, interval, True, validate): ticker
                     for ticker in unresolved
                 }
                 for future in as_completed(future_map):

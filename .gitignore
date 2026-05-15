@@ -15,18 +15,19 @@ __pycache__/
 .venv
 venv/
 
-# SQLite and log files (covers bist_signals.db, bot.log, etc.)
+# SQLite and log files
 *.db
 *.sqlite
 *.sqlite3
 *.log
+bot.log
+bist_signals.db
 NUL
-nul
 
 # DS_Store
 .DS_Store
 
-# Testing / linting caches
+# Testing
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
@@ -34,13 +35,6 @@ nul
 .pip-audit-tmp/
 .coverage
 htmlcov/
-
-# Pytest temp directories (Windows path artefacts)
-pytest_tmp_run/
-pytest_tmp_target/
-tmppytest-*/
-Users*AppData*/
-Users*Temp*/
 
 # Streamlit secrets
 .streamlit/secrets.toml
@@ -62,14 +56,3 @@ models/*.pkl
 tmp/
 cache/
 test.txt
-
-# Stray pip / shell redirect artefacts (root-anchored)
-/=*
-
-# PR / review artefacts
-pr_body*.txt
-
-# Test/lint stdout/stderr captures
-*_err.txt
-*_out.txt
-*_output.txt

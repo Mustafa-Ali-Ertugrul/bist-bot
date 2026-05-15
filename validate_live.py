@@ -9,24 +9,20 @@ from __future__ import annotations
 import os
 import sys
 
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
-def _configure_runtime() -> None:
-    root = os.path.dirname(os.path.abspath(__file__))
-    sys.path.insert(0, os.path.join(root, "src"))
-    db_path = os.path.join(root, "data", "validation_test.db")
-    os.environ["DB_PATH"] = db_path
-    os.environ["DATABASE_URL"] = f"sqlite:///{db_path}"
+_db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "validation_test.db")
+os.environ["DB_PATH"] = _db_path
+os.environ["DATABASE_URL"] = f"sqlite:///{_db_path}"
+
+from bist_bot.contracts import SilentNotifier
+from bist_bot.data.fetcher import BISTDataFetcher
+from bist_bot.db.access import DataAccess
+from bist_bot.strategy.engine import StrategyEngine
+from bist_bot.ui.runtime_scan import collect_scan_result
 
 
-def main() -> int:
-    _configure_runtime()
-
-    from bist_bot.contracts import SilentNotifier
-    from bist_bot.data.fetcher import BISTDataFetcher
-    from bist_bot.db.access import DataAccess
-    from bist_bot.strategy.engine import StrategyEngine
-    from bist_bot.ui.runtime_scan import collect_scan_result
-
+def main():
     print("=" * 60)
     print("LIVE VALIDATION: collect_scan_result scan_log persistence")
     print("=" * 60)
@@ -57,7 +53,6 @@ def main() -> int:
     except Exception as exc:
         print(f"    FATAL: collect_scan_result raised: {exc}")
         import traceback
-
         traceback.print_exc()
         return 1
 
@@ -112,7 +107,9 @@ def main() -> int:
         sells = after.get("sell_signals", 0)
         actionable = after.get("actionable", 0)
         check7 = buys + sells <= actionable
-        checks.append((f"buys({buys}) + sells({sells}) <= actionable({actionable})", check7))
+        checks.append(
+            (f"buys({buys}) + sells({sells}) <= actionable({actionable})", check7)
+        )
 
         print(f"\n  total_scanned   : {after.get('total_scanned')}")
         print(f"  signals_generated: {after.get('signals_generated')}")
