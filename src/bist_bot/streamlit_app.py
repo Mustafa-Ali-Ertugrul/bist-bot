@@ -13,6 +13,7 @@ from bist_bot.ui.pages.overview_page import render_overview_page
 from bist_bot.ui.pages.portfolio_page import render_portfolio_page
 from bist_bot.ui.pages.settings_page import render_settings_page
 from bist_bot.ui.pages.signals_page import render_signals_page
+from bist_bot.ui.pages.whale_alerts_page import render_whale_alerts_page
 from bist_bot.ui.runtime import (
     api_request,
     finalize_streamlit_runtime,
@@ -253,7 +254,15 @@ def main() -> None:
 
     page = st.sidebar.radio(
         "Navigasyon",
-        options=["Overview", "Analyze", "Portfolio", "Signals", "Backtest", "Settings"],
+        options=[
+            "Overview",
+            "Analyze",
+            "Portfolio",
+            "Signals",
+            "Balina Radar",
+            "Backtest",
+            "Settings",
+        ],
         index=0,
     )
 
@@ -265,6 +274,8 @@ def main() -> None:
         render_portfolio_page()
     elif page == "Signals":
         render_signals_page()
+    elif page == "Balina Radar":
+        render_whale_alerts_page()
     elif page == "Backtest":
         render_backtest_page()
     else:
