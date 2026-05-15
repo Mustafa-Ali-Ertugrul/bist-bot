@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import html
-from typing import Literal
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 PAGE_META = {
     "dashboard": {"label": "Dashboard", "icon": "dashboard"},
@@ -88,13 +88,30 @@ def render_shell(active_page: str, email: str = "") -> str | None:
         ),
         unsafe_allow_html=True,
     )
+    components.html(
+        """
+        <script>
+        const doc = window.parent.document;
+        let btn = doc.getElementById("bb-sidebar-toggle-client");
+        if (!btn) {
+          btn = doc.createElement("button");
+          btn.id = "bb-sidebar-toggle-client";
+          btn.type = "button";
+          btn.title = "Sidebar ac/kapat";
+          btn.addEventListener("click", () => {
+            doc.body.classList.toggle("bb-sidebar-collapsed");
+            btn.textContent = doc.body.classList.contains("bb-sidebar-collapsed") ? ">>" : "<<";
+          });
+          doc.body.appendChild(btn);
+        }
+        btn.textContent = doc.body.classList.contains("bb-sidebar-collapsed") ? ">>" : "<<";
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
 
     action: str | None = None
-    st.markdown("<div class='bb-logout-wrap'>", unsafe_allow_html=True)
-    button_type: Literal["primary", "secondary", "tertiary"] = "secondary"
-    if st.button("Logout", key="top_logout", use_container_width=True, type=button_type):
-        action = "logout"
-    st.markdown("</div>", unsafe_allow_html=True)
     nav_action = render_sidebar_nav(active_page)
     if nav_action:
         action = nav_action
