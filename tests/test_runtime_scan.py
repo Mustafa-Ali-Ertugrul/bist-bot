@@ -10,8 +10,8 @@ from unittest.mock import MagicMock, patch
 TR = timezone(timedelta(hours=3))
 
 
-def test_ensure_initial_data_starts_background_scan_when_no_cache():
-    """When no cached signals exist, ensure_initial_data should start a limited background scan."""
+def test_ensure_initial_data_does_not_start_background_scan_when_no_cache():
+    """When no cached signals exist, ensure_initial_data should leave scanning manual."""
     mock_db = MagicMock()
     mock_db.get_recent_signals.return_value = []
 
@@ -41,12 +41,11 @@ def test_ensure_initial_data_starts_background_scan_when_no_cache():
 
         ensure_initial_data()
 
-        mock_start.assert_called_once_with(force_clear=False, limited=True)
-        assert mock_session.scan_in_progress is True
+        mock_start.assert_not_called()
 
 
-def test_ensure_initial_data_uses_cached_signals_when_available():
-    """When cached signals exist, ensure_initial_data should use them and start full background scan."""
+def test_ensure_initial_data_uses_cached_signals_without_background_scan():
+    """When cached signals exist, ensure_initial_data should use them without auto-scanning."""
     mock_db = MagicMock()
     mock_db.get_recent_signals.return_value = [
         {"ticker": "THYAO.IS", "signal_type": "AL", "score": 25.0, "price": 100.0}
@@ -81,7 +80,7 @@ def test_ensure_initial_data_uses_cached_signals_when_available():
         ensure_initial_data()
 
         assert mock_session.signals == mapped_signals
-        mock_start.assert_called_once_with(force_clear=False, limited=False)
+        mock_start.assert_not_called()
 
 
 def test_ensure_initial_data_does_not_start_scan_if_already_running():
@@ -439,8 +438,8 @@ def test_overview_page_uses_settings_strong_buy_threshold():
     assert "s.score >= 40" not in source
 
 
-def test_overview_scan_metrics_api_first_when_api_has_more():
-    """When API reports more scanned than session, prefer API data."""
+def test_overview_scan_metrics_use_session_data_when_api_has_more():
+    """Dashboard opening should not show historical API scan counts as current session counts."""
     from bist_bot.ui.pages.overview_page import _resolve_scan_metrics
 
     scanned_assets, actionable_signals = _resolve_scan_metrics(
@@ -449,11 +448,11 @@ def test_overview_scan_metrics_api_first_when_api_has_more():
         all_data={f"T{i}.IS": object() for i in range(25)},
     )
 
-    assert scanned_assets == 108
-    assert actionable_signals == 0
+    assert scanned_assets == 25
+    assert actionable_signals == 2
 
 
-def test_overview_scan_metrics_fall_back_to_latest_scan_when_session_empty():
+def test_overview_scan_metrics_ignore_latest_scan_when_session_empty():
     from bist_bot.ui.pages.overview_page import _resolve_scan_metrics
 
     scanned_assets, actionable_signals = _resolve_scan_metrics(
@@ -462,8 +461,8 @@ def test_overview_scan_metrics_fall_back_to_latest_scan_when_session_empty():
         all_data={},
     )
 
-    assert scanned_assets == 108
-    assert actionable_signals == 3
+    assert scanned_assets == 0
+    assert actionable_signals == 0
 
 
 def test_overview_scan_metrics_session_overrides_when_session_has_more():
@@ -942,8 +941,8 @@ def test_start_background_scan_unlimited_scans_all_tickers():
     assert captured_tickers is None
 
 
-def test_bootstrap_starts_full_scan_after_limited_scan():
-    """_bootstrap_authenticated_app should start a full background scan after limited scan succeeds."""
+def test_bootstrap_marks_login_complete_without_starting_scan():
+    """_bootstrap_authenticated_app should not scan immediately after login."""
     from bist_bot import streamlit_app
 
     mock_session = MagicMock()
@@ -956,50 +955,40 @@ def test_bootstrap_starts_full_scan_after_limited_scan():
 
     with (
         patch.object(streamlit_app, "st") as mock_st,
-        patch.object(streamlit_app, "run_initial_scan", return_value=True) as mock_run,
-        patch.object(streamlit_app, "start_background_scan") as mock_start_bg,
-        patch.object(streamlit_app, "inject_styles"),
     ):
         mock_st.session_state = mock_session
-        mock_st.spinner = MagicMock()
-        mock_st.spinner.return_value.__enter__ = MagicMock()
-        mock_st.spinner.return_value.__exit__ = MagicMock()
 
         streamlit_app._bootstrap_authenticated_app()
 
-        mock_run.assert_called_once_with(force_clear=False, limited=True)
-        mock_start_bg.assert_called_once_with(force_clear=False, limited=False)
+        assert mock_session.just_logged_in is False
+        assert mock_session.app_bootstrapped is True
+        mock_st.rerun.assert_called_once()
+        mock_st.stop.assert_called_once()
 
 
-def test_bootstrap_does_not_start_full_scan_when_limited_scan_fails():
-    """_bootstrap_authenticated_app should NOT start full scan if limited scan fails."""
+def test_bootstrap_noops_when_not_just_logged_in():
+    """_bootstrap_authenticated_app should do nothing outside the login transition."""
     from bist_bot import streamlit_app
 
     mock_session = MagicMock()
-    mock_session.just_logged_in = True
+    mock_session.just_logged_in = False
     mock_session.get = lambda key, default=None: {
-        "just_logged_in": True,
+        "just_logged_in": False,
     }.get(key, default)
 
     with (
         patch.object(streamlit_app, "st") as mock_st,
-        patch.object(streamlit_app, "run_initial_scan", return_value=False) as mock_run,
-        patch.object(streamlit_app, "start_background_scan") as mock_start_bg,
-        patch.object(streamlit_app, "inject_styles"),
     ):
         mock_st.session_state = mock_session
-        mock_st.spinner = MagicMock()
-        mock_st.spinner.return_value.__enter__ = MagicMock()
-        mock_st.spinner.return_value.__exit__ = MagicMock()
 
         streamlit_app._bootstrap_authenticated_app()
 
-        mock_run.assert_called_once()
-        mock_start_bg.assert_not_called()
+        mock_st.rerun.assert_not_called()
+        mock_st.stop.assert_not_called()
 
 
-def test_ensure_market_data_starts_full_scan_after_limited_scan():
-    """_ensure_market_data_ready should start a full background scan after limited scan succeeds."""
+def test_ensure_market_data_ready_does_not_start_scan():
+    """Dashboard rendering should not start a scan implicitly."""
     from bist_bot import streamlit_app
 
     mock_session = MagicMock()
@@ -1010,21 +999,9 @@ def test_ensure_market_data_starts_full_scan_after_limited_scan():
         "scan_error": None,
     }.get(key, default)
 
-    with (
-        patch.object(streamlit_app, "st") as mock_st,
-        patch.object(streamlit_app, "run_initial_scan", return_value=True) as mock_run,
-        patch.object(streamlit_app, "start_background_scan") as mock_start_bg,
-        patch.object(streamlit_app, "inject_styles"),
-    ):
+    with patch.object(streamlit_app, "st") as mock_st:
         mock_st.session_state = mock_session
-        mock_st.spinner = MagicMock()
-        mock_st.spinner.return_value.__enter__ = MagicMock()
-        mock_st.spinner.return_value.__exit__ = MagicMock()
 
-        try:
-            streamlit_app._ensure_market_data_ready()
-        except Exception:
-            pass
-
-        mock_run.assert_called_once_with(force_clear=False, limited=True)
-        mock_start_bg.assert_called_once_with(force_clear=False, limited=False)
+        assert streamlit_app._ensure_market_data_ready() is True
+        mock_st.rerun.assert_not_called()
+        mock_st.stop.assert_not_called()

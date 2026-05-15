@@ -22,9 +22,7 @@ from bist_bot.ui.runtime import (
     api_request,
     finalize_streamlit_runtime,
     prepare_streamlit_runtime,
-    run_initial_scan,
 )
-from bist_bot.ui.runtime_scan import start_background_scan
 from bist_bot.ui.runtime_styles import inject_styles
 
 st.set_page_config(
@@ -81,6 +79,16 @@ def _extract_token(response) -> str | None:
 
 def _handle_query_actions() -> None:
     action = str(st.query_params.get("action", "")).lower().strip()
+    if action == "toggle_sidebar":
+        st.session_state.sidebar_collapsed = not bool(
+            st.session_state.get("sidebar_collapsed", False)
+        )
+        try:
+            del st.query_params["action"]
+        except KeyError:
+            pass
+        st.rerun()
+        return
     if action != "logout":
         return
     st.session_state.auth_token = None
@@ -220,15 +228,6 @@ def _handle_shell_action(action: str | None) -> None:
 def _bootstrap_authenticated_app() -> None:
     if not st.session_state.get("just_logged_in"):
         return
-    inject_styles()
-    with st.spinner("Ilk piyasa taramasi hazirlaniyor..."):
-        loaded = run_initial_scan(force_clear=False, limited=True)
-    if not loaded:
-        st.error(
-            "Ilk tarama tamamlanamadi. Veri kaynagi yanit vermedi; lutfen biraz sonra tekrar deneyin."
-        )
-        return
-    start_background_scan(force_clear=False, limited=False)
     st.session_state.just_logged_in = False
     st.session_state.app_bootstrapped = True
     st.rerun()
@@ -236,23 +235,7 @@ def _bootstrap_authenticated_app() -> None:
 
 
 def _ensure_market_data_ready() -> bool:
-    if st.session_state.get("all_data"):
-        return True
-    if st.session_state.get("scan_error"):
-        st.error(f"Tarama hatasi: {st.session_state.scan_error}")
-        return False
-    inject_styles()
-    with st.spinner("Piyasa verisi hazirlaniyor..."):
-        loaded = run_initial_scan(force_clear=False, limited=True)
-    if not loaded:
-        st.error(
-            "Piyasa verisi hazirlanamadi. Veri kaynagi yanit vermedi; lutfen biraz sonra tekrar deneyin."
-        )
-        return False
-    start_background_scan(force_clear=False, limited=False)
-    st.rerun()
-    st.stop()
-    return False
+    return True
 
 
 def main() -> None:
