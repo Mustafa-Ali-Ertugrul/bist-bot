@@ -9,6 +9,7 @@ PAGE_META = {
     "dashboard": {"label": "Dashboard", "icon": "dashboard"},
     "scan": {"label": "Scan Detail", "icon": "monitoring"},
     "signals": {"label": "Signals", "icon": "query_stats"},
+    "whale": {"label": "Balina Radar", "icon": "radar"},
     "analysis": {"label": "Analysis", "icon": "analytics"},
     "settings": {"label": "Settings", "icon": "settings"},
 }
