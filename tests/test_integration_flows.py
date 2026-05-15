@@ -69,19 +69,6 @@ class ApiFetcherStub:
         self.scan_calls += 1
         return self.scan_payload
 
-    def fetch_multi_timeframe(
-        self,
-        tickers: list[str],
-        trend_period: str = "6mo",
-        trend_interval: str = "1d",
-        trigger_period: str = "1mo",
-        trigger_interval: str = "15m",
-        force_refresh: bool = False,
-    ) -> dict[str, dict[str, pd.DataFrame]]:
-        _ = tickers, trend_period, trend_interval, trigger_period, trigger_interval, force_refresh
-        self.analyze_calls += 1
-        return {"THYAO.IS": {"trend": self.analyze_df, "trigger": _history_frame(periods=8)}}
-
     def fetch_single(
         self,
         ticker: str,
@@ -242,7 +229,7 @@ def test_api_analyze_returns_signal_payload(tmp_path) -> None:
     assert payload is not None
     assert payload["ticker"] == "THYAO.IS"
     assert payload["signal"]["type"] == SignalType.BUY.value
-    assert len(payload["price_data"]) == 8
+    assert len(payload["price_data"]) == 60
 
 
 def test_api_analyze_uses_batch_fallback_when_single_fetch_fails(tmp_path) -> None:
@@ -294,9 +281,13 @@ def test_api_analyze_uses_batch_fallback_when_single_fetch_fails(tmp_path) -> No
     assert payload is not None
     assert payload["ticker"] == "THYAO.IS"
     assert payload["signal"]["type"] == SignalType.BUY.value
-    assert fetcher.provider.history_calls == []
+    assert fetcher.provider.history_calls == ["THYAO.IS", "THYAO.IS"]
     assert fetcher.provider.batch_calls == [["THYAO.IS"], ["THYAO.IS"]]
-    assert len(payload["price_data"]) == 60
+    assert fetcher.get_last_history_fetch_meta("THYAO.IS", "6mo", "1d") == {
+        "source": "batch_fallback",
+        "status": "success",
+        "reason": "single_exception",
+    }
 
 
 def test_api_analyze_returns_500_when_engine_fails(tmp_path) -> None:

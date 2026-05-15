@@ -1,0 +1,11 @@
+Error processing line 7 of C:\Users\Ali\AppData\Local\Programs\Python\Python313\Lib\site-packages\pywin32.pth:
+
+  Traceback (most recent call last):
+    File "<frozen site>", line 207, in addpackage
+    File "<string>", line 1, in <module>
+  ModuleNotFoundError: No module named 'pywin32_bootstrap'
+
+Remainder of file ignored
+Requirement already satisfied: holidays in C:\Users\Ali\AppData\Local\Programs\Python\Python313\Lib\site-packages (0.95)
+Requirement already satisfied: python-dateutil<3,>=2.9.0.post0 in C:\Users\Ali\AppData\Roaming\Python\Python313\site-packages (from holidays) (2.9.0.post0)
+Requirement already satisfied: six>=1.5 in C:\Users\Ali\AppData\Roaming\Python\Python313\site-packages (from python-dateutil<3,>=2.9.0.post0->holidays) (1.17.0)

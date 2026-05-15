@@ -1,0 +1,21 @@
+Fixes production scan persistence inconsistency.
+
+Previously the scheduler/API scan path persisted only `actionable` signals,
+so scans where all assets returned `HOLD/BEKLE` produced zero DB records.
+This made the dashboard show "Signal volume 0" despite successful market
+data fetching.
+
+Changes:
+- Persist all analyzed signals (`signals`) instead of only `actionable`.
+- Add `latest_scan` metadata (`total_scanned`, `signals_generated`,
+  `buy_signals`, `sell_signals`) to `/api/stats`.
+- Update UI to display separate metrics: `Scanned assets` vs `Actionable signals`.
+- Improve empty-state messaging for scans where all assets are HOLD/BEKLE.
+
+Validation:
+- `ruff check .` → passes
+- `ruff format .` → passes
+- `pytest` → 435 passed
+
+The UI now correctly distinguishes a healthy scan with 20 assets scanned and
+0 actionable signals from a broken scan with 0 assets scanned.

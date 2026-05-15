@@ -1,0 +1,63 @@
+﻿F.................F...F.                                                 [100%]
+================================== FAILURES ===================================
+_____________________ test_high_atr_reduces_position_size _____________________
+
+    def test_high_atr_reduces_position_size():
+        manager = RiskManager(capital=100000)
+        low_vol = manager.calculate(build_frame(1.0, atr=1.0))
+        high_vol = manager.calculate(build_frame(1.0, atr=8.0))
+    
+        assert high_vol.volatility_scale < low_vol.volatility_scale
+>       assert high_vol.position_size < low_vol.position_size
+E       AssertionError: assert 35 < 35
+E        +  where 35 = RiskLevels(stop_atr=124.0, stop_support=127.36, stop_fibonacci=130.2, stop_percent=133.0, stop_swing=0.0, target_atr=1...ly_loss=False, blocked_by_probability=False, method_used='Stop: Yⁿzdelik | Hedef: ATR', confidence='confidence.medium').position_size
+E        +  and   35 = RiskLevels(stop_atr=138.0, stop_support=127.36, stop_fibonacci=130.2, stop_percent=133.0, stop_swing=0.0, target_atr=1...y_daily_loss=False, blocked_by_probability=False, method_used='Stop: ATR | Hedef: ATR', confidence='confidence.medium').position_size
+
+tests\test_risk_manager.py:40: AssertionError
+_______________________ test_sector_limit_functionality _______________________
+
+    def test_sector_limit_functionality():
+        """Test sector limit checking functionality."""
+        manager = RiskManager(capital=10000)
+    
+        # Mock sector settings
+        class MockSettings:
+            SECTOR_MAP = {"THYAO.IS": "Hava\xe7\u0131l\u0131k", "ASELS.IS": "Savunma"}
+            SECTOR_LIMIT = 1
+    
+        with patch("bist_bot.risk.manager.settings", MockSettings()):
+            # First check should pass
+            assert manager.check_sector_limit("THYAO.IS") is True
+    
+            # Second check for same sector should fail
+>           assert manager.check_sector_limit("THYAO.IS") is False  # Same ticker again
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           AssertionError: assert True is False
+E            +  where True = check_sector_limit('THYAO.IS')
+E            +    where check_sector_limit = <bist_bot.risk.manager.RiskManager object at 0x000001C47D1AE8B0>.check_sector_limit
+
+tests\test_risk_manager_extended.py:239: AssertionError
+__________________ test_risk_manager_with_custom_parameters ___________________
+
+    def test_risk_manager_with_custom_parameters():
+        """Test risk manager initialization with custom parameters."""
+        manager = RiskManager(
+            capital=50000,
+            max_risk_per_trade_pct=5.0,
+            atr_stop_multiplier=3.0,
+            atr_target_multiplier=5.0,
+            fixed_stop_pct=10.0,
+            fixed_target_pct=15.0
+        )
+    
+        assert manager.capital == 50000
+>       assert manager.max_risk_pct == 5.0
+E       assert 2.0 == 5.0
+E        +  where 2.0 = <bist_bot.risk.manager.RiskManager object at 0x000001C47D1AEEA0>.max_risk_pct
+
+tests\test_risk_manager_extended.py:338: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_risk_manager.py::test_high_atr_reduces_position_size - Asse...
+FAILED tests/test_risk_manager_extended.py::test_sector_limit_functionality
+FAILED tests/test_risk_manager_extended.py::test_risk_manager_with_custom_parameters
+3 failed, 21 passed, 308 deselected in 2.90s
