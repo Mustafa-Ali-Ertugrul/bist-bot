@@ -1,0 +1,45 @@
+﻿.................F.....                                                  [100%]
+================================== FAILURES ===================================
+____________________ test_risk_profile_loader_default_file ____________________
+
+    def test_risk_profile_loader_default_file():
+        """Loader should succeed using the bundled default_risk_profile.yaml."""
+        loader = RiskProfileLoader()
+>       profile = loader.load()
+                  ^^^^^^^^^^^^^
+
+tests\test_phase3_architecture.py:236: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src\bist_bot\risk\profile.py:91: in load
+    raw = self._read_file(target)
+          ^^^^^^^^^^^^^^^^^^^^^^^
+src\bist_bot\risk\profile.py:103: in _read_file
+    text = path.read_text(encoding="utf-8")
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Local\Programs\Python\Python313\Lib\pathlib\_local.py:546: in read_text
+    return PathBase.read_text(self, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Local\Programs\Python\Python313\Lib\pathlib\_abc.py:632: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('.'), mode = 'r', buffering = -1, encoding = 'utf-8'
+errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       PermissionError: [Errno 13] Permission denied: '.'
+
+..\..\..\AppData\Local\Programs\Python\Python313\Lib\pathlib\_local.py:537: PermissionError
+=========================== short test summary info ===========================
+FAILED tests/test_phase3_architecture.py::test_risk_profile_loader_default_file
+1 failed, 22 passed in 1.69s
