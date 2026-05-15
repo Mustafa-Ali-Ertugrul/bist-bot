@@ -6,11 +6,15 @@ import streamlit as st
 
 from bist_bot.config.settings import settings
 from bist_bot.state.session_state import init_session_state
-from bist_bot.ui.components.app_shell import PAGE_META, set_active_page
+from bist_bot.ui.components.app_shell import (
+    PAGE_META,
+    get_active_page,
+    render_shell,
+    set_active_page,
+)
 from bist_bot.ui.pages.analyze_page import render_analyze_page
-from bist_bot.ui.pages.backtest_page import render_backtest_page
 from bist_bot.ui.pages.overview_page import render_overview_page
-from bist_bot.ui.pages.portfolio_page import render_portfolio_page
+from bist_bot.ui.pages.scan_detail_page import render_scan_detail_page
 from bist_bot.ui.pages.settings_page import render_settings_page
 from bist_bot.ui.pages.signals_page import render_signals_page
 from bist_bot.ui.pages.whale_alerts_page import render_whale_alerts_page
@@ -102,43 +106,63 @@ def _complete_auth(email: str, token: str) -> None:
 
 
 def _login_form() -> bool:
-    st.title("BIST Bot Giris")
-    st.caption("Operator paneline erismek icin kimlik dogrulamasi yapin.")
-    auth_tabs = ["Giris"]
-    if settings.ALLOW_PUBLIC_REGISTRATION:
-        auth_tabs.append("Kaydol")
-    tabs = st.tabs(auth_tabs)
+    st.markdown(
+        """
+        <style>
+            section[data-testid="stSidebar"] {
+                display:none !important;
+            }
+            .block-container {
+                max-width:760px;
+                padding:7rem 1rem 4rem;
+            }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        """
+        <section class="bb-hero bb-hero-secondary">
+          <div class="bb-kicker">BIST Bot Access</div>
+          <div class="bb-title">Operator authentication for the premium trading console</div>
+          <div class="bb-subtitle">Neon dark fintech arayuzu artik giris ekraninda da devam ediyor. Hesabinizla oturum acip dashboard, signals, analysis ve settings yuzeylerine erisebilirsiniz.</div>
+          <div class="bb-chip-row">
+            <span class="bb-chip">Secure JWT Access</span>
+            <span class="bb-chip bb-chip-secondary">Mobile-first UI</span>
+          </div>
+        </section>
+        """,
+        unsafe_allow_html=True,
+    )
+    with st.form("login_form"):
+        email = st.text_input("Email", value=st.session_state.get("auth_email", ""))
+        password = st.text_input("Sifre", type="password")
+        submitted = st.form_submit_button("Giris yap", use_container_width=True, type="primary")
 
-    with tabs[0]:
-        with st.form("login_form"):
-            email = st.text_input("Email", value=st.session_state.get("auth_email", ""))
-            password = st.text_input("Sifre", type="password")
-            submitted = st.form_submit_button("Giris yap", use_container_width=True, type="primary")
-
-        if submitted:
-            try:
-                response = api_request(
-                    "POST",
-                    "/api/auth/login",
-                    json={"email": email, "password": password},
-                )
-            except Exception as exc:
-                st.error(f"API erisimi basarisiz: {exc}")
-                return False
-            if response.ok:
-                token = _extract_token(response)
-                if token:
-                    _complete_auth(str(email), token)
-                else:
-                    st.error("Giris yaniti token icermiyor. Lutfen tekrar deneyin.")
+    if submitted:
+        try:
+            response = api_request(
+                "POST",
+                "/api/auth/login",
+                json={"email": email, "password": password},
+            )
+        except Exception as exc:
+            st.error(f"API erisimi basarisiz: {exc}")
+            return False
+        if response.ok:
+            token = _extract_token(response)
+            if token:
+                _complete_auth(str(email), token)
             else:
-                st.error(_response_message(response, "Giris basarisiz. Email veya sifre hatali."))
+                st.error("Giris yaniti token icermiyor. Lutfen tekrar deneyin.")
+        else:
+            st.error(_response_message(response, "Giris basarisiz. Email veya sifre hatali."))
 
     if not settings.ALLOW_PUBLIC_REGISTRATION:
         st.info("Yeni hesap kaydi kapali. Lutfen tanimli operator hesabi ile giris yapin.")
         return False
 
-    with tabs[1]:
+    with st.expander("Yeni operator hesabi olustur"):
         with st.form("register_form"):
             register_email = st.text_input("Email", key="register_email")
             register_password = st.text_input("Sifre", type="password", key="register_password")
@@ -247,37 +271,21 @@ def main() -> None:
     st.session_state.app_bootstrapped = True
 
     inject_styles()
-    st.sidebar.caption(f"Oturum: {st.session_state.get('auth_email', '')}")
-    if st.sidebar.button("Logout", use_container_width=True):
-        _handle_shell_action("logout")
-        st.rerun()
 
-    page = st.sidebar.radio(
-        "Navigasyon",
-        options=[
-            "Overview",
-            "Analyze",
-            "Portfolio",
-            "Signals",
-            "Balina Radar",
-            "Backtest",
-            "Settings",
-        ],
-        index=0,
-    )
+    page = get_active_page()
+    shell_action = render_shell(page, email=st.session_state.get("auth_email", ""))
+    _handle_shell_action(shell_action)
 
-    if page == "Overview":
+    if page == "dashboard":
         render_overview_page()
-    elif page == "Analyze":
-        render_analyze_page()
-    elif page == "Portfolio":
-        render_portfolio_page()
-    elif page == "Signals":
+    elif page == "scan":
+        render_scan_detail_page()
+    elif page == "signals":
         render_signals_page()
-    elif page == "Balina Radar":
+    elif page == "whale":
         render_whale_alerts_page()
-    elif page == "Backtest":
-        render_backtest_page()
+    elif page == "analysis":
+        render_analyze_page()
     else:
         render_settings_page()
 
