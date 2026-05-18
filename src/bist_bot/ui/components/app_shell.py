@@ -100,11 +100,11 @@ def render_shell(active_page: str, email: str = "") -> str | None:
           btn.title = "Sidebar ac/kapat";
           btn.addEventListener("click", () => {
             doc.body.classList.toggle("bb-sidebar-collapsed");
-            btn.textContent = doc.body.classList.contains("bb-sidebar-collapsed") ? ">>" : "<<";
+            btn.textContent = doc.body.classList.contains("bb-sidebar-collapsed") ? "›" : "‹";
           });
           doc.body.appendChild(btn);
         }
-        btn.textContent = doc.body.classList.contains("bb-sidebar-collapsed") ? ">>" : "<<";
+        btn.textContent = doc.body.classList.contains("bb-sidebar-collapsed") ? "›" : "‹";
         </script>
         """,
         height=0,

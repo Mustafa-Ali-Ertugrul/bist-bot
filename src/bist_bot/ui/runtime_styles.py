@@ -67,7 +67,7 @@ def inject_styles() -> None:
                 display:flex;
                 align-items:center;
                 justify-content:space-between;
-                padding:0 20px;
+                padding:0 20px 0 64px;
                 background:rgba(9, 15, 25, .78);
                 backdrop-filter:blur(22px);
                 border-bottom:1px solid rgba(255,255,255,.05);
@@ -79,12 +79,12 @@ def inject_styles() -> None:
             }
             #bb-sidebar-toggle-client {
                 position:fixed;
-                top:18px;
-                left:188px;
+                top:14px;
+                left:20px;
                 z-index:1002;
-                width:32px;
-                height:32px;
-                border-radius:10px;
+                width:40px;
+                height:40px;
+                border-radius:12px;
                 display:inline-flex;
                 align-items:center;
                 justify-content:center;
@@ -93,9 +93,9 @@ def inject_styles() -> None:
                 background:rgba(255,255,255,.08) !important;
                 border:1px solid rgba(255,255,255,.10) !important;
                 font-family:'Space Grotesk',sans-serif;
-                font-size:15px;
-                font-weight:900;
-                letter-spacing:-.08em;
+                font-size:26px;
+                font-weight:400;
+                letter-spacing:0;
                 user-select:none;
             }
             #bb-sidebar-toggle-client:hover {
@@ -654,7 +654,7 @@ def inject_styles() -> None:
                 }
                 .bb-topbar {
                     height:64px;
-                    padding:0 14px;
+                    padding:0 14px 0 64px;
                 }
                 .bb-topbar-actions {
                     gap:8px;
