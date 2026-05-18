@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import html
-from typing import Literal
 
 import streamlit as st
 
@@ -9,6 +8,7 @@ PAGE_META = {
     "dashboard": {"label": "Dashboard", "icon": "dashboard"},
     "scan": {"label": "Scan Detail", "icon": "monitoring"},
     "signals": {"label": "Signals", "icon": "query_stats"},
+    "whale": {"label": "Balina Radar", "icon": "radar"},
     "analysis": {"label": "Analysis", "icon": "analytics"},
     "settings": {"label": "Settings", "icon": "settings"},
 }
@@ -33,38 +33,10 @@ def get_active_page(default: str = "dashboard") -> str:
     page = str(st.query_params.get("page", default)).lower().strip()
     if page not in PAGE_META:
         page = default
-    st.query_params["page"] = page
     return page
 
 
-def render_sidebar_nav(active_page: str) -> None:
-    st.sidebar.markdown(
-        (
-            "<div class='bb-sidebar-kicker'>Navigation</div>"
-            "<div class='bb-sidebar-note'>Dashboard ana katman; diger ekranlar alt katmandir.</div>"
-        ),
-        unsafe_allow_html=True,
-    )
-    for page, meta in PAGE_META.items():
-        button_type = "primary" if page == active_page else "secondary"
-        if st.sidebar.button(
-            meta["label"],
-            key=f"nav_{page}",
-            type=button_type,
-            use_container_width=True,
-        ):
-            set_active_page(page)
-    if active_page != "dashboard":
-        st.sidebar.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
-        if st.sidebar.button(
-            "Dashboard'a Don",
-            key="nav_back_dashboard",
-            use_container_width=True,
-        ):
-            set_active_page("dashboard")
-
-
-def render_shell(active_page: str, email: str = "") -> str | None:
+def render_shell(active_page: str, email: str = "") -> None:
     active_label = PAGE_META[active_page]["label"]
     email_label = html.escape(email or "Guest Session")
 
@@ -87,17 +59,6 @@ def render_shell(active_page: str, email: str = "") -> str | None:
         ),
         unsafe_allow_html=True,
     )
-
-    action: str | None = None
-    st.markdown("<div class='bb-logout-wrap'>", unsafe_allow_html=True)
-    button_type: Literal["primary", "secondary", "tertiary"] = "secondary"
-    if st.button("Logout", key="top_logout", use_container_width=True, type=button_type):
-        action = "logout"
-    st.markdown("</div>", unsafe_allow_html=True)
-    nav_action = render_sidebar_nav(active_page)
-    if nav_action:
-        action = nav_action
-    return action
 
 
 def render_page_hero(
