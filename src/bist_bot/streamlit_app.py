@@ -10,20 +10,18 @@ from bist_bot.ui.components.app_shell import (
     PAGE_META,
     get_active_page,
     render_shell,
-    set_active_page,
 )
 from bist_bot.ui.pages.analyze_page import render_analyze_page
 from bist_bot.ui.pages.overview_page import render_overview_page
 from bist_bot.ui.pages.scan_detail_page import render_scan_detail_page
 from bist_bot.ui.pages.settings_page import render_settings_page
 from bist_bot.ui.pages.signals_page import render_signals_page
+from bist_bot.ui.pages.whale_alerts_page import render_whale_alerts_page
 from bist_bot.ui.runtime import (
     api_request,
     finalize_streamlit_runtime,
     prepare_streamlit_runtime,
-    run_initial_scan,
 )
-from bist_bot.ui.runtime_scan import start_background_scan
 from bist_bot.ui.runtime_styles import inject_styles
 
 st.set_page_config(
@@ -80,18 +78,24 @@ def _extract_token(response) -> str | None:
 
 def _handle_query_actions() -> None:
     action = str(st.query_params.get("action", "")).lower().strip()
-    if action != "logout":
-        return
-    st.session_state.auth_token = None
-    st.session_state.auth_email = ""
-    st.session_state.is_authenticated = False
-    st.session_state.app_bootstrapped = False
-    st.session_state.just_logged_in = False
-    try:
-        del st.query_params["action"]
-    except KeyError:
-        pass
-    st.rerun()
+    if action == "logout":
+        st.session_state.auth_token = None
+        st.session_state.auth_email = ""
+        st.session_state.is_authenticated = False
+        st.session_state.app_bootstrapped = False
+        st.session_state.just_logged_in = False
+        try:
+            del st.query_params["action"]
+        except KeyError:
+            pass
+        st.rerun()
+    elif action == "toggle_sidebar":
+        st.session_state.sidebar_collapsed = not st.session_state.get("sidebar_collapsed", False)
+        try:
+            del st.query_params["action"]
+        except KeyError:
+            pass
+        st.rerun()
 
 
 def _complete_auth(email: str, token: str) -> None:
@@ -112,8 +116,11 @@ def _login_form() -> bool:
                 display:none !important;
             }
             .block-container {
-                max-width:760px;
-                padding:7rem 1rem 4rem;
+                width:min(100% - 2rem, 1280px) !important;
+                max-width:1280px !important;
+                margin-left:auto !important;
+                margin-right:auto !important;
+                padding:7rem 1rem 4rem !important;
             }
         </style>
         """,
@@ -133,16 +140,15 @@ def _login_form() -> bool:
         """,
         unsafe_allow_html=True,
     )
-    auth_tabs = ["Giris"]
-    if settings.ALLOW_PUBLIC_REGISTRATION:
-        auth_tabs.append("Kaydol")
-    tabs = st.tabs(auth_tabs)
+    login_tab, register_tab = st.tabs(["Giris", "Kayit Ol"])
 
-    with tabs[0]:
+    with login_tab:
         with st.form("login_form"):
             email = st.text_input("Email", value=st.session_state.get("auth_email", ""))
             password = st.text_input("Sifre", type="password")
-            submitted = st.form_submit_button("Giris yap", use_container_width=True, type="primary")
+            submitted = st.form_submit_button(
+                "Giris yap", use_container_width=True, type="primary"
+            )
 
         if submitted:
             try:
@@ -163,11 +169,11 @@ def _login_form() -> bool:
             else:
                 st.error(_response_message(response, "Giris basarisiz. Email veya sifre hatali."))
 
-    if not settings.ALLOW_PUBLIC_REGISTRATION:
-        st.info("Yeni hesap kaydi kapali. Lutfen tanimli operator hesabi ile giris yapin.")
-        return False
+    with register_tab:
+        if not settings.ALLOW_PUBLIC_REGISTRATION:
+            st.info("Yeni hesap kaydi kapali. Lutfen tanimli operator hesabi ile giris yapin.")
+            return False
 
-    with tabs[1]:
         with st.form("register_form"):
             register_email = st.text_input("Email", key="register_email")
             register_password = st.text_input("Sifre", type="password", key="register_password")
@@ -202,35 +208,9 @@ def _login_form() -> bool:
     return False
 
 
-def _handle_shell_action(action: str | None) -> None:
-    if not action:
-        return
-    if action == "logout":
-        st.session_state.auth_token = None
-        st.session_state.auth_email = ""
-        st.session_state.is_authenticated = False
-        st.session_state.app_bootstrapped = False
-        st.session_state.just_logged_in = False
-        set_active_page("dashboard")
-        return
-    if action.startswith("page:"):
-        target = action.split(":", 1)[1].strip().lower()
-        if target in PAGE_META:
-            set_active_page(target)
-
-
 def _bootstrap_authenticated_app() -> None:
     if not st.session_state.get("just_logged_in"):
         return
-    inject_styles()
-    with st.spinner("Ilk piyasa taramasi hazirlaniyor..."):
-        loaded = run_initial_scan(force_clear=False, limited=True)
-    if not loaded:
-        st.error(
-            "Ilk tarama tamamlanamadi. Veri kaynagi yanit vermedi; lutfen biraz sonra tekrar deneyin."
-        )
-        return
-    start_background_scan(force_clear=False, limited=False)
     st.session_state.just_logged_in = False
     st.session_state.app_bootstrapped = True
     st.rerun()
@@ -238,23 +218,7 @@ def _bootstrap_authenticated_app() -> None:
 
 
 def _ensure_market_data_ready() -> bool:
-    if st.session_state.get("all_data"):
-        return True
-    if st.session_state.get("scan_error"):
-        st.error(f"Tarama hatasi: {st.session_state.scan_error}")
-        return False
-    inject_styles()
-    with st.spinner("Piyasa verisi hazirlaniyor..."):
-        loaded = run_initial_scan(force_clear=False, limited=True)
-    if not loaded:
-        st.error(
-            "Piyasa verisi hazirlanamadi. Veri kaynagi yanit vermedi; lutfen biraz sonra tekrar deneyin."
-        )
-        return False
-    start_background_scan(force_clear=False, limited=False)
-    st.rerun()
-    st.stop()
-    return False
+    return True
 
 
 def main() -> None:
@@ -266,7 +230,6 @@ def main() -> None:
         _login_form()
         return
 
-    inject_styles()
     _bootstrap_authenticated_app()
     if st.session_state.get("just_logged_in"):
         return
@@ -275,11 +238,34 @@ def main() -> None:
     prepare_streamlit_runtime()
     st.session_state.app_bootstrapped = True
 
-    inject_styles()
+    sidebar_collapsed = st.session_state.get("sidebar_collapsed", False)
+    inject_styles(sidebar_collapsed=sidebar_collapsed)
 
     page = get_active_page()
-    shell_action = render_shell(page, email=st.session_state.get("auth_email", ""))
-    _handle_shell_action(shell_action)
+
+    toggle_label = "›" if sidebar_collapsed else "‹"
+    st.markdown("<span class='bb-sidebar-toggle-host'></span>", unsafe_allow_html=True)
+    if st.button(toggle_label, key="bb_sidebar_toggle_button", help="Sidebar ac/kapat"):
+        st.session_state.sidebar_collapsed = not sidebar_collapsed
+        st.rerun()
+
+    # Sidebar navigation — always rendered
+    st.sidebar.markdown(
+        "<div class='bb-sidebar-kicker'>Navigation</div>"
+        "<div class='bb-sidebar-note'>Dashboard ana katman; diger ekranlar alt katmandir.</div>",
+        unsafe_allow_html=True,
+    )
+    for p, meta in PAGE_META.items():
+        if st.sidebar.button(
+            meta['label'],
+            key=f"nav_{p}",
+            type="primary" if p == page else "secondary",
+            use_container_width=True,
+        ):
+            st.query_params["page"] = p
+            st.rerun()
+
+    render_shell(page, email=st.session_state.get("auth_email", ""))
 
     if page == "dashboard":
         render_overview_page()
@@ -287,6 +273,8 @@ def main() -> None:
         render_scan_detail_page()
     elif page == "signals":
         render_signals_page()
+    elif page == "whale":
+        render_whale_alerts_page()
     elif page == "analysis":
         render_analyze_page()
     else:
