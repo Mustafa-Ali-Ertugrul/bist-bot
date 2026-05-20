@@ -69,7 +69,10 @@ def _empty_scan_result(last_scan_time: datetime | None, error: str) -> ScanResul
 
 def _set_scan_phase(phase: str) -> None:
     """Publish scan progress for the Streamlit UI and logs."""
-    st.session_state.scan_phase = phase
+    try:
+        st.session_state.scan_phase = phase
+    except Exception:
+        pass  # Background thread may not have full session context
     logger.info("ui_scan_phase", phase=phase)
 
 
@@ -332,13 +335,25 @@ def start_background_scan(force_clear: bool = False, limited: bool = False) -> b
         ticker_count=len(limited_tickers) if limited_tickers else "all",
     )
 
+    from streamlit.runtime.scriptrunner import add_script_run_ctx, get_script_run_ctx
+    ctx = get_script_run_ctx()
+
+    def _collect_with_ctx(**kwargs):
+        if ctx:
+            add_script_run_ctx(threading.current_thread(), ctx)
+        return collect_scan_result(**kwargs)
+
     def worker():
+        if ctx:
+            add_script_run_ctx(threading.current_thread(), ctx)
         result = _empty_scan_result(last_scan_time, "scan did not complete")
         timeout_seconds = int(getattr(settings, "STREAMLIT_BACKGROUND_SCAN_TIMEOUT_SECONDS", 45))
+        if not limited:
+            timeout_seconds = max(timeout_seconds, 300)
         try:
             executor = ThreadPoolExecutor(max_workers=1)
             future = executor.submit(
-                collect_scan_result,
+                _collect_with_ctx,
                 fetcher=fetcher,
                 engine=engine,
                 notifier=notifier,
@@ -381,7 +396,10 @@ def start_background_scan(force_clear: bool = False, limited: bool = False) -> b
                 PENDING_SCAN_RESULTS[session_key] = result
                 ACTIVE_SCAN_SESSIONS.discard(session_key)
 
-    threading.Thread(target=worker, daemon=True).start()
+    t = threading.Thread(target=worker, daemon=True)
+    if ctx:
+        add_script_run_ctx(t, ctx)
+    t.start()
     return True
 
 
@@ -406,11 +424,13 @@ def apply_pending_scan_result() -> bool:
 
 
 def ensure_initial_data() -> None:
-    """Load cached signals without starting first-render scans in the background."""
+    """Load cached signals and kick off one limited first-render background scan."""
     apply_pending_scan_result()
-    if st.session_state.get("all_data") or st.session_state.signals:
+    if st.session_state.get("all_data"):
         return
     if st.session_state.get("scan_in_progress"):
+        return
+    if st.session_state.get("initial_background_scan_started"):
         return
     try:
         from bist_bot.ui.runtime_data import map_cached_signals
@@ -418,10 +438,8 @@ def ensure_initial_data() -> None:
         cached = st.session_state.db.get_recent_signals(limit=len(settings.WATCHLIST))
         if cached:
             st.session_state.signals = map_cached_signals(cached)
-            start_background_scan(force_clear=False, limited=False)
-            return
-        if start_background_scan(force_clear=False, limited=True):
-            st.session_state.scan_in_progress = True
     except Exception as exc:
         logger.error("ui_initial_scan_failed", error=str(exc))
         st.error(f"Tarama hatasi: {exc}")
+    if start_background_scan(limited=True):
+        st.session_state.initial_background_scan_started = True

@@ -44,22 +44,26 @@ def _to_int(value: object, default: int = 0) -> int:
         return default
 
 
+def _candidate_rejection_count(scanned: int, generated: int) -> int:
+    if scanned <= 0:
+        return 0
+    return max(scanned - max(generated, 0), 0)
+
+
 def _resolve_scan_metrics(
     *,
     session_scan_stats: dict[str, int] | None,
     latest_scan: dict[str, object],
     all_data: dict[str, object],
 ) -> tuple[int, int]:
-    scanned_assets = _to_int(latest_scan.get("total_scanned", 0))
-    actionable_signals = _to_int(
-        latest_scan.get("actionable", latest_scan.get("signals_generated", 0))
-    )
+    _ = latest_scan
 
     session_scanned = len(all_data) if isinstance(all_data, dict) else 0
     session_stats = session_scan_stats or {}
-    if session_scanned > scanned_assets and isinstance(session_stats, dict):
-        scanned_assets = session_scanned
-        actionable_signals = _to_int(session_stats.get("actionable", 0))
+    scanned_assets = session_scanned
+    actionable_signals = (
+        _to_int(session_stats.get("actionable", 0)) if isinstance(session_stats, dict) else 0
+    )
 
     return scanned_assets, actionable_signals
 
@@ -127,8 +131,8 @@ def _render_rejection_breakdown(
     scanned: int = 0,
     generated: int = 0,
 ) -> str:
-    total_rejections = _to_int(breakdown.get("total_rejections", 0))
-    if total_rejections <= 0:
+    blocker_events = _to_int(breakdown.get("total_rejections", 0))
+    if blocker_events <= 0:
         return ""
     raw_rows = breakdown.get("by_reason", [])
     rows = raw_rows if isinstance(raw_rows, list) else []
@@ -157,7 +161,8 @@ def _render_rejection_breakdown(
     # Outcome accounting
     outcome_html = ""
     if scanned > 0:
-        accounted = generated + total_rejections
+        candidate_rejections = _candidate_rejection_count(scanned, generated)
+        accounted = generated + candidate_rejections
         invariant_held = accounted == scanned
         invariant_color = "positive" if invariant_held else "danger"
         invariant_icon = "✓" if invariant_held else "✗"
@@ -169,14 +174,14 @@ def _render_rejection_breakdown(
         outcome_html = (
             "<div style='margin-top:8px;'>"
             f"<div class='bb-text-{invariant_color}' style='font-size:0.85em;'>{invariant_text}</div>"
-            f"<div class='bb-list-row-subtitle'>Üretilen: {generated} • Elenen: {total_rejections}</div>"
+            f"<div class='bb-list-row-subtitle'>Üretilen: {generated} • Elenen aday: {candidate_rejections} • Filtre kaydı: {blocker_events}</div>"
             "</div>"
         )
 
     return (
         "<div style='height:14px;'></div>"
         "<div class='bb-list-row'>"
-        f"<div><div class='bb-label'>En yaygın blokajlar</div><div class='bb-list-row-subtitle'>{total_rejections} aday elendi</div></div>"
+        f"<div><div class='bb-label'>En yaygın blokajlar</div><div class='bb-list-row-subtitle'>{blocker_events} filtre kaydı; tekil elenen aday taranan eksi üretilendir</div></div>"
         "</div>"
         f"<div class='bb-list'>{''.join(items)}</div>"
         f"{stage_summary}"
@@ -216,9 +221,9 @@ def render_overview_page() -> None:
         latest_scan=latest_scan,
         all_data=all_data,
     )
-    profitable = int(stats.get("profitable", 0) or 0)
-    win_rate = float(stats.get("win_rate", 0.0) or 0.0)
-    avg_profit = float(stats.get("avg_profit_pct", 0.0) or 0.0)
+    scan_stats = session_scan_stats if isinstance(session_scan_stats, dict) else {}
+    generated_signals = _to_int(scan_stats.get("generated", latest_scan.get("signals_generated", 0)))
+    rejected_candidates = _candidate_rejection_count(scanned_assets, generated_signals)
     active_signals = [s for s in signals if getattr(s.signal_type, "name", "") != "HOLD"]
     strong = sorted(
         [s for s in active_signals if s.score >= settings.STRONG_BUY_THRESHOLD],
@@ -237,8 +242,8 @@ def render_overview_page() -> None:
         "Canlı performans, radar fırsatları ve son sinyaller.",
         badges=[
             f"{actionable_signals} pozitif sinyal",
-            f"Kazanma oranı %{win_rate:.1f}",
-            f"Ortalama kâr %{avg_profit:.1f}",
+            f"{generated_signals} toplam sinyal",
+            f"{rejected_candidates} elenen aday",
         ],
         accent="secondary",
     )
@@ -261,17 +266,16 @@ def render_overview_page() -> None:
         )
     with k3:
         render_metric_block(
-            "Kârlı kapanışlar",
-            str(profitable),
-            "Kârla kapanan işlemler",
-            accent="positive",
+            "?retilen sinyaller",
+            str(generated_signals),
+            "HOLD dahil toplam sinyal",
         )
     with k4:
         render_metric_block(
-            "Kazanma oranı",
-            f"%{win_rate:.1f}",
-            f"Ort. kâr %{avg_profit:.1f}",
-            accent="positive" if win_rate >= 50 else "danger",
+            "Elenen adaylar",
+            str(rejected_candidates),
+            "BIST100 icinde sinyale donusmeyen tekil varlik",
+            accent="danger" if rejected_candidates else "positive",
         )
 
     left, right = st.columns([1.35, 1], gap="large")
@@ -365,7 +369,7 @@ def render_overview_page() -> None:
             _render_rejection_breakdown(
                 rejection_breakdown,
                 scanned=scanned_assets,
-                generated=actionable_signals,
+                generated=generated_signals,
             )
             if isinstance(rejection_breakdown, dict)
             else ""

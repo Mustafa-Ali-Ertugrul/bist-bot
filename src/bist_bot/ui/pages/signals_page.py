@@ -21,8 +21,26 @@ _SELL = int(settings.SELL_THRESHOLD)
 _STRONG_SELL = int(settings.STRONG_SELL_THRESHOLD)
 
 
+def _render_filter_status_html(
+    *, generated_count: int, visible_count: int, filtered_out_count: int
+) -> str:
+    if filtered_out_count <= 0:
+        return (
+            "<div class='bb-note'>"
+            f"Tüm sinyaller görünür: üretilen {generated_count} sinyalin {visible_count} tanesi "
+            "mevcut filtrelerden geçti."
+            "</div>"
+        )
+    return (
+        "<div class='bb-note'>"
+        f"Üretilen {generated_count} sinyalin {visible_count} tanesi görünür. "
+        f"Skor, RSI veya hacim filtresi nedeniyle {filtered_out_count} sinyal gizlendi."
+        "</div>"
+    )
+
+
 def _render_signal_group(title: str, items, all_data) -> None:
-    render_section_title(title, f"{len(items)} visible signals")
+    render_section_title(title, f"{len(items)} görünür sinyal")
     if not items:
         st.info(f"{title} icin uygun sinyal yok.")
         return
@@ -57,16 +75,16 @@ def render_signals_page() -> None:
     sell_count = len(weak_sell) + len(sell) + len(strong_sell)
 
     render_page_hero(
-        "Signals",
-        "Algorithmic signal flow with premium card-driven scanning",
-        f"Backend scanned {scanned_count} assets and generated {generated_count} signals. "
-        f"After UI filters: {visible_count} visible, {filtered_out_count} filtered out.",
+        get_message("ui.signals_title"),
+        "Premium kart tabanlı tarama ile algoritmik sinyal akışı",
+        f"Arka plan {scanned_count} varlığı taradı ve {generated_count} sinyal üretti. "
+        f"Arayüz filtrelerinden sonra: {visible_count} görünür, {filtered_out_count} filtrelendi.",
         badges=[
-            f"Scanned {scanned_count}",
-            f"Visible {visible_count}",
-            f"Buy {buy_count}",
-            f"Hold {len(hold)}",
-            f"Sell {sell_count}",
+            f"Taranan {scanned_count}",
+            f"Görünür {visible_count}",
+            f"Al {buy_count}",
+            f"Tut {len(hold)}",
+            f"Sat {sell_count}",
         ],
         accent="secondary",
     )
@@ -74,19 +92,20 @@ def render_signals_page() -> None:
     if filtered_out_count > 0:
         render_html_panel(
             f"<div class='bb-note'>"
-            f"Backend produced {generated_count} signals from {scanned_count} scanned assets. "
-            f"UI filters (score, RSI, volume) hid {filtered_out_count} of them. "
-            f"Adjust filters below to see more."
+            f"Arka plan, taranan {scanned_count} varlıktan {generated_count} sinyal üretti. "
+            f"Arayüz filtreleri (skor, RSI, hacim) bunlardan {filtered_out_count} tanesini gizledi. "
+            f"Daha fazlasını görmek için aşağıdaki filtreleri ayarlayın."
             f"</div>"
         )
 
-    render_section_title("Signal filters", "Refine the live feed")
+    render_section_title("Sinyal filtreleri", "Canlı akışı filtreleyin")
     with st.container():
         render_html_panel(
-            "<div class='bb-note'>"
-            f"Backend {generated_count} sinyal urettigi halde sadece {visible_count} tanesi mevcut UI filtrelerinden geciyor. "
-            f"Filtre disinda kalan sinyal sayisi: {filtered_out_count}."
-            "</div>"
+            _render_filter_status_html(
+                generated_count=generated_count,
+                visible_count=visible_count,
+                filtered_out_count=filtered_out_count,
+            )
         )
         f1, f2 = st.columns(2)
         with f1:
@@ -104,7 +123,7 @@ def render_signals_page() -> None:
                 get_message("ui.rsi_max"), 0, 100, st.session_state.rsi_max_filter
             )
             st.session_state.vol_ratio_filter = st.slider(
-                "Min volume ratio",
+                "Min hacim oranı",
                 0.0,
                 5.0,
                 float(st.session_state.vol_ratio_filter),
@@ -119,11 +138,11 @@ def render_signals_page() -> None:
         ]
     )
     with buy_tab:
-        _render_signal_group("High conviction", strong_buy, all_data)
-        _render_signal_group("Momentum continuation", buy, all_data)
+        _render_signal_group("Yüksek Güven", strong_buy, all_data)
+        _render_signal_group("Momentum Devamı", buy, all_data)
     with neutral_tab:
-        _render_signal_group("Hold / Watch", hold, all_data)
+        _render_signal_group("Tut / İzle", hold, all_data)
     with sell_tab:
-        _render_signal_group("Weak sell", weak_sell, all_data)
-        _render_signal_group("Sell", sell, all_data)
-        _render_signal_group("Strong sell", strong_sell, all_data)
+        _render_signal_group("Zayıf Sat", weak_sell, all_data)
+        _render_signal_group("Sat", sell, all_data)
+        _render_signal_group("Güçlü Sat", strong_sell, all_data)
