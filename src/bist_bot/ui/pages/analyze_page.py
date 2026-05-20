@@ -16,6 +16,7 @@ from bist_bot.ui.components.app_shell import (
 )
 from bist_bot.ui.components.chart_widget import (
     plot_candlestick,
+    plot_macd,
     plot_rsi,
     plot_volume,
     render_chart,
@@ -49,6 +50,105 @@ def _ticker_option_label(ticker: str) -> str:
     if not name or name == ticker:
         return symbol
     return f"{symbol} - {name}"
+
+
+def _metric_value(row: pd.Series, key: str, default: float = 0.0) -> float:
+    value = row.get(key, default)
+    try:
+        if pd.isna(value):
+            return default
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _indicator_tone(row: pd.Series, key: str) -> str:
+    close = _metric_value(row, "close")
+    value = _metric_value(row, key)
+    if key == "rsi":
+        if value > 55:
+            return "positive"
+        if value < 45:
+            return "danger"
+        return "neutral"
+    if key in {"sma_20", "sma_50", "ema_50"}:
+        if value <= 0 or close <= 0:
+            return "neutral"
+        return "positive" if close >= value else "danger"
+    if key == "macd":
+        signal = _metric_value(row, "macd_signal")
+        return "positive" if value >= signal else "danger"
+    if key == "macd_signal":
+        return "positive" if value >= 0 else "danger"
+    if key == "adx":
+        return "positive" if value >= 25 else "danger"
+    if key == "stoch":
+        return "positive" if _metric_value(row, "stoch_k") >= _metric_value(row, "stoch_d") else "danger"
+    if key == "cci":
+        return "positive" if value >= 0 else "danger"
+    if key == "volume_ratio":
+        return "positive" if value >= 1 else "danger"
+    if key == "obv_trend":
+        trend = str(row.get("obv_trend", "FLAT") or "FLAT").upper()
+        if trend == "UP":
+            return "positive"
+        if trend == "DOWN":
+            return "danger"
+        return "neutral"
+    if key == "sma_cross":
+        cross = str(row.get("sma_cross", "NONE") or "NONE").upper()
+        if cross == "GOLDEN_CROSS":
+            return "positive"
+        if cross == "DEATH_CROSS":
+            return "danger"
+        return "neutral"
+    return "neutral"
+
+
+def _tone_arrow(tone: str) -> str:
+    if tone == "positive":
+        return "<span class='bb-indicator-arrow bb-indicator-arrow-up'>&uarr;</span>"
+    if tone == "danger":
+        return "<span class='bb-indicator-arrow bb-indicator-arrow-down'>&darr;</span>"
+    return "<span class='bb-indicator-arrow bb-indicator-arrow-neutral'>-</span>"
+
+
+def _render_indicator_grid(row: pd.Series) -> str:
+    values = [
+        ("RSI 14", f"{_metric_value(row, 'rsi'):.1f}", "Momentum", _indicator_tone(row, "rsi")),
+        ("SMA 20", f"{_metric_value(row, 'sma_20'):.2f}", "Kısa trend", _indicator_tone(row, "sma_20")),
+        ("SMA 50", f"{_metric_value(row, 'sma_50'):.2f}", "Orta trend", _indicator_tone(row, "sma_50")),
+        ("EMA 50", f"{_metric_value(row, 'ema_50'):.2f}", "Üstel trend", _indicator_tone(row, "ema_50")),
+        ("MACD", f"{_metric_value(row, 'macd'):.2f}", "Momentum farkı", _indicator_tone(row, "macd")),
+        ("MACD Sinyal", f"{_metric_value(row, 'macd_signal'):.2f}", "Tetik çizgisi", _indicator_tone(row, "macd_signal")),
+        ("ADX 14", f"{_metric_value(row, 'adx'):.1f}", "Trend gücü", _indicator_tone(row, "adx")),
+        (
+            "Stoch K/D",
+            f"{_metric_value(row, 'stoch_k'):.1f}/{_metric_value(row, 'stoch_d'):.1f}",
+            "Osilatör",
+            _indicator_tone(row, "stoch"),
+        ),
+        ("CCI 20", f"{_metric_value(row, 'cci'):.1f}", "Sapma", _indicator_tone(row, "cci")),
+        ("Hacim Oranı", f"{_metric_value(row, 'volume_ratio', 1.0):.2f}x", "20 gün ort.", _indicator_tone(row, "volume_ratio")),
+        ("OBV", str(row.get("obv_trend", "FLAT") or "FLAT"), "Para akışı", _indicator_tone(row, "obv_trend")),
+        ("SMA Kesişim", str(row.get("sma_cross", "NONE") or "NONE"), "Trend sinyali", _indicator_tone(row, "sma_cross")),
+    ]
+    cards = []
+    for label, value, subtitle, tone in values:
+        cards.append(
+            "<div class='bb-list-row'>"
+            f"<div><div class='bb-label'>{html.escape(label)}</div>"
+            f"<div class='bb-note-strong'>{html.escape(value)}</div>"
+            f"<div class='bb-list-row-subtitle'>{html.escape(subtitle)}</div></div>"
+            f"{_tone_arrow(tone)}"
+            "</div>"
+        )
+    return (
+        "<div class='bb-section-caption'>Analist teknik göstergeleri</div>"
+        "<div class='bb-indicator-grid'>"
+        + "".join(cards)
+        + "</div>"
+    )
 
 
 def render_analyze_page() -> None:
@@ -169,8 +269,10 @@ def render_analyze_page() -> None:
         df["date"] = pd.to_datetime(df["date"])
         df = df.set_index("date")
         df_ind = TechnicalIndicators().add_all(df.copy())
+        latest_indicator = df_ind.iloc[-1]
 
         render_section_title("Teknik Görünüm", "Fiyat yapısı ve momentum")
+        render_html_panel(_render_indicator_grid(latest_indicator), accent="secondary")
         render_chart(plot_candlestick(df_ind, ticker_input), "analysis_candlestick_main")
 
         c_left, c_right = st.columns([1, 1], gap="large")
@@ -180,6 +282,8 @@ def render_analyze_page() -> None:
         with c_right:
             if "rsi" in df_ind.columns:
                 render_chart(plot_rsi(df_ind), "analysis_rsi")
+        if {"macd", "macd_signal"}.issubset(df_ind.columns):
+            render_chart(plot_macd(df_ind), "analysis_macd")
     else:
         st.info("Fiyat verisi mevcut degil.")
 

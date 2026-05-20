@@ -83,6 +83,41 @@ def fetch_stock_news(ticker, max_results=5):
     return all_news[:max_results]
 
 
+@st.cache_data(ttl=900, show_spinner=False)
+def fetch_bist100_news(max_results: int = 5) -> list[dict[str, str]]:
+    """Fetch recent BIST100-related news headlines from Google News RSS."""
+    all_news: list[dict[str, str]] = []
+    try:
+        query = "BIST 100 OR BIST100 OR XU100 borsa"
+        url = f"https://news.google.com/rss/search?q={query}&hl=tr&gl=TR&ceid=TR:tr"
+        response = requests.get(url, timeout=8, headers={"User-Agent": "Mozilla/5.0"})
+        response.raise_for_status()
+        root = ET.fromstring(response.content)
+        items = root.findall(".//item")
+        for item in items[:max_results]:
+            title = (
+                item.findtext("title", "")
+                .replace("&amp;", "&")
+                .replace("&#39;", "'")
+                .replace("&quot;", '"')
+            )
+            link = item.findtext("link", "")
+            source = item.find("source")
+            source_name = source.text if source is not None and source.text else "Google Haberler"
+            if len(title) > 10 and link:
+                all_news.append(
+                    {
+                        "title": title,
+                        "url": link,
+                        "source": source_name,
+                        "published_at": item.findtext("pubDate", "")[:16],
+                    }
+                )
+    except Exception:
+        pass
+    return all_news[:max_results]
+
+
 def get_market_summary(signals, all_data):
     """Build aggregate market summary metrics for the portfolio view."""
     if not signals or not all_data:

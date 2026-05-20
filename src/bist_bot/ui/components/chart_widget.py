@@ -32,14 +32,15 @@ def _continuous_x_axis(index: Sequence) -> tuple[list[str], dict]:
     )
 
 
-def _base_layout(height: int) -> dict:
+def _base_layout(height: int, title: str = "") -> dict:
     return dict(
         template="plotly_dark",
         height=height,
-        margin=dict(l=12, r=12, t=24, b=12),
+        margin=dict(l=12, r=12, t=52 if title else 24, b=12),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="#0f1722",
         font=dict(color="#eef3ff", family="Inter, sans-serif"),
+        title=dict(text=title, x=0.02, xanchor="left", font=dict(size=14)) if title else None,
         xaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)", zeroline=False),
         yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)", zeroline=False),
     )
@@ -71,6 +72,16 @@ def plot_candlestick(df, ticker: str):
                 line=dict(color="#adc6ff", width=2),
             )
         )
+    if "sma_50" in df.columns:
+        fig.add_trace(
+            go.Scatter(
+                x=x_values,
+                y=df["sma_50"],
+                mode="lines",
+                name="SMA 50",
+                line=dict(color="#ffd38a", width=2),
+            )
+        )
     if "ema_50" in df.columns:
         fig.add_trace(
             go.Scatter(
@@ -81,12 +92,13 @@ def plot_candlestick(df, ticker: str):
                 line=dict(color="#ffb4aa", width=2),
             )
         )
-    base_layout = _base_layout(440)
+    clean_ticker = str(ticker).replace(".IS", "")
+    base_layout = _base_layout(440, f"{clean_ticker} fiyat grafiği")
     fig.update_layout({
         **base_layout,
         "xaxis": {**base_layout["xaxis"], **xaxis},
         "xaxis_rangeslider_visible": False,
-        "legend": dict(orientation="h", yanchor="bottom", y=1.02, x=0),
+        "legend": dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     })
     return fig
 
@@ -97,8 +109,8 @@ def plot_volume(df):
         "#48ddbc" if df["close"].iloc[i] >= df["open"].iloc[i] else "#ff796c"
         for i in range(len(df))
     ]
-    base_layout = _base_layout(180)
-    fig = go.Figure(data=[go.Bar(x=x_values, y=df["volume"], marker_color=colors)])
+    base_layout = _base_layout(180, "Hacim grafiği: Günlük işlem hacmi")
+    fig = go.Figure(data=[go.Bar(x=x_values, y=df["volume"], marker_color=colors, name="Hacim")])
     fig.update_layout({
         **base_layout,
         "xaxis": {**base_layout["xaxis"], **xaxis},
@@ -111,17 +123,66 @@ def plot_rsi(df):
     x_values, xaxis = _continuous_x_axis(df.index)
     fig = go.Figure()
     fig.add_trace(
-        go.Scatter(x=x_values, y=df["rsi"], mode="lines", line=dict(color="#48ddbc", width=2))
+        go.Scatter(
+            x=x_values,
+            y=df["rsi"],
+            mode="lines",
+            name="RSI 14",
+            line=dict(color="#48ddbc", width=2),
+        )
     )
     fig.add_hrect(y0=0, y1=30, fillcolor="green", opacity=0.08, line_width=0)
     fig.add_hrect(y0=70, y1=100, fillcolor="red", opacity=0.08, line_width=0)
     fig.add_hline(y=50, line_dash="dash", line_color="#8b90a0")
-    base_layout = _base_layout(180)
+    base_layout = _base_layout(180, "RSI (14)")
     fig.update_layout({
         **base_layout,
         "xaxis": {**base_layout["xaxis"], **xaxis},
         "yaxis": {**base_layout["yaxis"], "range": [0, 100]},
-        "showlegend": False,
+        "showlegend": True,
+        "legend": dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    })
+    return fig
+
+
+def plot_macd(df):
+    x_values, xaxis = _continuous_x_axis(df.index)
+    fig = go.Figure()
+    if "macd_histogram" in df.columns:
+        colors = ["#48ddbc" if value >= 0 else "#ff796c" for value in df["macd_histogram"]]
+        fig.add_trace(
+            go.Bar(
+                x=x_values,
+                y=df["macd_histogram"],
+                marker_color=colors,
+                name="MACD histogram",
+            )
+        )
+    if "macd" in df.columns:
+        fig.add_trace(
+            go.Scatter(
+                x=x_values,
+                y=df["macd"],
+                mode="lines",
+                name="MACD",
+                line=dict(color="#48ddbc", width=2),
+            )
+        )
+    if "macd_signal" in df.columns:
+        fig.add_trace(
+            go.Scatter(
+                x=x_values,
+                y=df["macd_signal"],
+                mode="lines",
+                name="Sinyal",
+                line=dict(color="#adc6ff", width=2),
+            )
+        )
+    base_layout = _base_layout(220, "MACD")
+    fig.update_layout({
+        **base_layout,
+        "xaxis": {**base_layout["xaxis"], **xaxis},
+        "legend": dict(orientation="h", yanchor="bottom", y=1.02, x=0),
     })
     return fig
 

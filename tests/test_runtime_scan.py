@@ -10,8 +10,8 @@ from unittest.mock import MagicMock, patch
 TR = timezone(timedelta(hours=3))
 
 
-def test_ensure_initial_data_starts_full_background_scan_when_no_cache():
-    """When no cached signals exist, ensure_initial_data should start one full scan."""
+def test_ensure_initial_data_starts_limited_background_scan_when_no_cache():
+    """When no cached signals exist, ensure_initial_data should start one limited scan."""
     mock_db = MagicMock()
     mock_db.get_recent_signals.return_value = []
 
@@ -45,12 +45,12 @@ def test_ensure_initial_data_starts_full_background_scan_when_no_cache():
 
         ensure_initial_data()
 
-        mock_start.assert_called_once_with(limited=False)
+        mock_start.assert_called_once_with(limited=True)
         assert mock_session.initial_background_scan_started is True
 
 
-def test_ensure_initial_data_uses_cached_signals_and_starts_full_scan():
-    """Cached signals should load while a full background scan starts for all_data."""
+def test_ensure_initial_data_uses_cached_signals_and_starts_limited_scan():
+    """Cached signals should load while a limited background scan starts for all_data."""
     mock_db = MagicMock()
     mock_db.get_recent_signals.return_value = [
         {"ticker": "THYAO.IS", "signal_type": "AL", "score": 25.0, "price": 100.0}
@@ -89,7 +89,7 @@ def test_ensure_initial_data_uses_cached_signals_and_starts_full_scan():
         ensure_initial_data()
 
         assert mock_session.signals == mapped_signals
-        mock_start.assert_called_once_with(limited=False)
+        mock_start.assert_called_once_with(limited=True)
         assert mock_session.initial_background_scan_started is True
 
 
@@ -566,6 +566,39 @@ def test_overview_scan_metrics_zero_when_both_empty():
     assert actionable_signals == 0
 
 
+def test_overview_candidate_rejection_count_stays_within_scanned_universe():
+    from bist_bot.ui.pages.overview_page import _candidate_rejection_count
+
+    assert _candidate_rejection_count(scanned=100, generated=5) == 95
+    assert _candidate_rejection_count(scanned=100, generated=157) == 0
+    assert _candidate_rejection_count(scanned=0, generated=5) == 0
+
+
+def test_signals_filter_status_does_not_warn_when_everything_is_visible():
+    from bist_bot.ui.pages.signals_page import _render_filter_status_html
+
+    html_output = _render_filter_status_html(
+        generated_count=19,
+        visible_count=19,
+        filtered_out_count=0,
+    )
+
+    assert "Tüm sinyaller görünür" in html_output
+    assert "gizlendi" not in html_output
+
+
+def test_signals_filter_status_reports_hidden_signal_count():
+    from bist_bot.ui.pages.signals_page import _render_filter_status_html
+
+    html_output = _render_filter_status_html(
+        generated_count=19,
+        visible_count=12,
+        filtered_out_count=7,
+    )
+
+    assert "7 sinyal gizlendi" in html_output
+
+
 def test_overview_rejection_breakdown_renders_top_three_sorted_rows():
     from bist_bot.ui.pages.overview_page import _render_rejection_breakdown
 
@@ -703,13 +736,13 @@ def test_scan_detail_summary_chips_use_top_reason_and_stage_from_sorted_payload(
         total_scanned=20,
     )
 
-    assert "Top blocker" in html_output
+    assert "En çok engelleyen" in html_output
     assert "Yatay piyasa filtresi" in html_output
     assert "score_filtered_sideways" in html_output
-    assert "Top stage" in html_output
+    assert "En çok eleyen aşama" in html_output
     assert "Skorlama" in html_output
     assert "scoring" in html_output
-    assert "Rejection rate" in html_output
+    assert "Filtre kaydı oranı" in html_output
     assert "%35.0" in html_output
 
 
@@ -762,7 +795,7 @@ def test_scan_detail_rejection_rate_history_renders_recent_rows():
         ]
     )
 
-    assert "Recent rejection rates" in html_output
+    assert "Son eleme oranları" in html_output
     assert "scan-002" in html_output
     assert "%40.0" in html_output
     assert "score_filtered_sideways" in html_output
@@ -781,9 +814,9 @@ def test_scan_detail_history_summary_chips_use_aggregated_history_payload():
         }
     )
 
-    assert "Last N scans" in html_output
+    assert "Son N tarama" in html_output
     assert "7/20" in html_output
-    assert "Most frequent blocker" in html_output
+    assert "En sık engelleyen" in html_output
     assert "Yatay piyasa filtresi" in html_output
     assert "%22.5" in html_output
 
@@ -916,10 +949,10 @@ def test_scan_detail_page_renders_historical_analytics_when_history_exists():
         scan_detail_page.render_scan_detail_page()
 
     section_calls = [call.args for call in mock_section_title.call_args_list]
-    assert ("Historical Analytics", "Son 20 scan trendi") in section_calls
+    assert ("Geçmiş Analizleri", "Son 20 tarama trendi") in section_calls
     history_panels = [call.args[0] for call in mock_render_html_panel.call_args_list]
-    assert any("Most frequent blockers" in panel for panel in history_panels)
-    assert any("Recent rejection rates" in panel for panel in history_panels)
+    assert any("En Sık Engelleyenler" in panel for panel in history_panels)
+    assert any("Son eleme oranları" in panel for panel in history_panels)
 
 
 def test_start_background_scan_limited_respects_initial_scan_limit():

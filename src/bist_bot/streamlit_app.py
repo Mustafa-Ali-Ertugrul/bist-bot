@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import html
+
 import streamlit as st
 
 from bist_bot.config.settings import settings
@@ -19,6 +21,7 @@ from bist_bot.ui.pages.signals_page import render_signals_page
 from bist_bot.ui.pages.whale_alerts_page import render_whale_alerts_page
 from bist_bot.ui.runtime import (
     api_request,
+    fetch_bist100_news,
     finalize_streamlit_runtime,
     prepare_streamlit_runtime,
 )
@@ -48,7 +51,6 @@ def _response_message(response, default: str) -> str:
             return f"API tarafinda hata olustu (HTTP {code}). Lutfen daha sonra tekrar deneyin."
         if snippet:
             return f"HTTP {code}: {snippet}"
-        return default
     if isinstance(payload, dict):
         msg = payload.get("message", "")
         if msg:
@@ -60,6 +62,45 @@ def _response_message(response, default: str) -> str:
     if code >= 500:
         return f"API tarafinda hata olustu (HTTP {code}). Lutfen daha sonra tekrar deneyin."
     return default or f"HTTP {code}: bilinmeyen hata"
+
+
+def _render_sidebar_news_html(news_items: list[dict[str, str]]) -> str:
+    if not news_items:
+        return (
+            "<div class='bb-sidebar-news'>"
+            "<div class='bb-sidebar-kicker'>BIST100 Haberleri</div>"
+            "<div class='bb-sidebar-note'>Güncel haberler şu an alınamadı.</div>"
+            "</div>"
+        )
+
+    rows = []
+    for item in news_items[:5]:
+        title = html.escape(str(item.get("title", "") or "Haber başlığı yok"))
+        url = html.escape(str(item.get("url", "") or "#"), quote=True)
+        source = html.escape(str(item.get("source", "") or "Haber"))
+        published_at = html.escape(str(item.get("published_at", "") or ""))
+        meta = f"{source} · {published_at}" if published_at else source
+        rows.append(
+            "<a class='bb-sidebar-news-link' "
+            f"href='{url}' target='_blank' rel='noopener noreferrer'>"
+            f"<span class='bb-sidebar-news-title'>{title}</span>"
+            f"<span class='bb-sidebar-news-meta'>{meta}</span>"
+            "</a>"
+        )
+
+    return (
+        "<div class='bb-sidebar-news'>"
+        "<div class='bb-sidebar-kicker'>BIST100 Haberleri</div>"
+        "<div class='bb-sidebar-news-list'>"
+        + "".join(rows)
+        + "</div>"
+        "</div>"
+    )
+
+
+def _render_sidebar_news() -> None:
+    news_items = fetch_bist100_news(max_results=5)
+    st.sidebar.markdown(_render_sidebar_news_html(news_items), unsafe_allow_html=True)
 
 
 def _extract_token(response) -> str | None:
@@ -129,12 +170,12 @@ def _login_form() -> bool:
     st.markdown(
         """
         <section class="bb-hero bb-hero-secondary">
-          <div class="bb-kicker">BIST Bot Access</div>
-          <div class="bb-title">Operator authentication for the premium trading console</div>
-          <div class="bb-subtitle">Neon dark fintech arayuzu artik giris ekraninda da devam ediyor. Hesabinizla oturum acip dashboard, signals, analysis ve settings yuzeylerine erisebilirsiniz.</div>
+          <div class="bb-kicker">BIST Bot Girişi</div>
+          <div class="bb-title">Premium trading konsolu için operatör kimlik doğrulaması</div>
+          <div class="bb-subtitle">Neon dark fintech arayüzü artık giriş ekranında da devam ediyor. Hesabınızla oturum açıp dashboard, sinyaller, analiz ve ayarlar yüzeylerine erişebilirsiniz.</div>
           <div class="bb-chip-row">
-            <span class="bb-chip">Secure JWT Access</span>
-            <span class="bb-chip bb-chip-secondary">Mobile-first UI</span>
+            <span class="bb-chip">Güvenli JWT Erişimi</span>
+            <span class="bb-chip bb-chip-secondary">Mobil Öncelikli Arayüz</span>
           </div>
         </section>
         """,
@@ -251,8 +292,8 @@ def main() -> None:
 
     # Sidebar navigation — always rendered
     st.sidebar.markdown(
-        "<div class='bb-sidebar-kicker'>Navigation</div>"
-        "<div class='bb-sidebar-note'>Dashboard ana katman; diger ekranlar alt katmandir.</div>",
+        "<div class='bb-sidebar-kicker'>Navigasyon</div>"
+        "<div class='bb-sidebar-note'>Dashboard ana katmandır; diğer ekranlar alt katmandır.</div>",
         unsafe_allow_html=True,
     )
     for p, meta in PAGE_META.items():
@@ -264,6 +305,8 @@ def main() -> None:
         ):
             st.query_params["page"] = p
             st.rerun()
+
+    _render_sidebar_news()
 
     render_shell(page, email=st.session_state.get("auth_email", ""))
 
