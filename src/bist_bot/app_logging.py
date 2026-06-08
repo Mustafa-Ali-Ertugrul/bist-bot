@@ -73,7 +73,7 @@ def configure_logging(
             formatter = jsonlogger.JsonFormatter(
                 fmt or "%(asctime)s %(levelname)s %(name)s %(component)s %(message)s"
             )
-        except ImportError:
+        except ImportError:  # pragma: no cover - optional dependency
             formatter = logging.Formatter(fmt or "%(message)s")
     else:
         formatter = logging.Formatter(fmt or "%(message)s")
@@ -106,7 +106,7 @@ def _configure_sentry() -> None:
                 environment=getattr(settings, "ENVIRONMENT", "production"),
                 traces_sample_rate=0.1,
             )
-        except ImportError:
+        except ImportError:  # pragma: no cover - optional dependency
             pass
 
 

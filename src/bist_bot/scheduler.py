@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from time import sleep
+from typing import Any
 
 from bist_bot.app_logging import get_logger
 from bist_bot.config.settings import settings as default_settings
@@ -12,7 +13,12 @@ logger = get_logger(__name__, component="scheduler")
 
 
 class MarketScheduler:
-    def __init__(self, scan_service, notifier, settings=default_settings):
+    def __init__(
+        self,
+        scan_service: Any,
+        notifier: Any,
+        settings: Any = default_settings,
+    ) -> None:
         self.scanner = scan_service
         self.notifier = notifier
         self.settings = settings
@@ -21,7 +27,7 @@ class MarketScheduler:
     def _now(self) -> datetime:
         return datetime.now(TR)
 
-    def run_loop(self):
+    def run_loop(self) -> None:
         self.running = True
 
         logger.info("scheduler_started")
