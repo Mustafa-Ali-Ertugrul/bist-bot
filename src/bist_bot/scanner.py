@@ -14,7 +14,6 @@ from bist_bot.contracts import (
     SignalRepositoryProtocol,
     StrategyEngineProtocol,
 )
-from bist_bot.exceptions import DataFetchError, SignalProcessingError
 from bist_bot.risk.circuit_breaker import CircuitBreaker
 from bist_bot.services.execution_service import ExecutionService
 from bist_bot.services.notification_service import NotificationDispatchService
@@ -226,7 +225,7 @@ class ScanService:
                 self.circuit_breaker.record_success()
 
             return cast(list[Signal], signals)
-        except (DataFetchError, SignalProcessingError, ValueError, KeyError, TypeError) as exc:
+        except Exception as exc:
             duration_ms = round((time.perf_counter() - started_at) * 1000, 2)
             inc_counter("bist_scan_fail_total")
             set_gauge("bist_last_scan_duration_ms", duration_ms)

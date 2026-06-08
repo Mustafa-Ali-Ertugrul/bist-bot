@@ -57,7 +57,7 @@ tr = {
     "log.actionable": "Aksiyon gerekli",
     "api.invalid_credentials": "Geçersiz kimlik bilgileri",
     "api.invalid_email": "Geçersiz e-posta adresi",
-    "api.password_too_short": "Şifre en az 8 karakter olmalı",
+    "api.password_too_short": "Şifre en az 12 karakter olmalı",
     "api.email_already_exists": "Bu e-posta zaten kayıtlı",
     "api.register_error": "Kayıt oluşturulamadı",
     "api.registration_disabled": "Herkese açık kayıt kapalı",

@@ -430,7 +430,7 @@ def test_register_rejects_short_password(tmp_path):
     assert response.status_code == 400
     payload = response.get_json()
     assert payload is not None
-    assert payload["message"] == "Şifre en az 8 karakter olmalı"
+    assert payload["message"] == "Şifre en az 12 karakter olmalı"
 
 
 def test_login_rate_limit_returns_429(tmp_path):
