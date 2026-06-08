@@ -67,10 +67,12 @@ class MarketScheduler:
                 sleep(60)
                 continue
 
-            if hour >= half_day_hour and hour < self.settings.MARKET_CLOSE_HOUR:
+            if half_day_hour <= hour < self.settings.MARKET_CLOSE_HOUR:
                 logger.info("scheduler_half_day_scan_window")
-                self.scanner.scan_once()
-                sleep(3600 * (self.settings.MARKET_CLOSE_HOUR - half_day_hour))
+                if hour == half_day_hour:
+                    self.scanner.scan_once()
+                wait_until_close = max(60, (self.settings.MARKET_CLOSE_HOUR - hour) * 3600)
+                sleep(min(wait_until_close, 3600))
                 continue
 
             try:

@@ -1,3 +1,4 @@
+import html
 import time
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
@@ -11,6 +12,10 @@ from bist_bot.strategy.signal_models import Signal, SignalType
 TR = timezone(timedelta(hours=3))
 
 logger = get_logger(__name__, component="notifier")
+
+
+def _escape_html(value: object) -> str:
+    return html.escape(str(value), quote=True)
 
 
 def send_telegram_with_retry(
@@ -101,6 +106,10 @@ class TelegramNotifier:
 
     def send_signal(self, signal: Signal) -> bool:
         name = settings.TICKER_NAMES.get(signal.ticker, signal.ticker)
+        safe_name = _escape_html(name)
+        safe_ticker = _escape_html(signal.ticker.replace(".IS", ""))
+        safe_signal_type = _escape_html(signal.signal_type.value)
+        safe_confidence = _escape_html(signal.confidence)
 
         emoji_map = {
             SignalType.STRONG_BUY: "🚀💰",
@@ -113,15 +122,15 @@ class TelegramNotifier:
         }
         emoji = emoji_map.get(signal.signal_type, "📊")
 
-        reasons_html = "\n".join([f"  • {r}" for r in signal.reasons])
+        reasons_html = "\n".join([f"  • {_escape_html(r)}" for r in signal.reasons])
 
         message = f"""
-{emoji} <b>{name}</b> ({signal.ticker.replace(".IS", "")})
+{emoji} <b>{safe_name}</b> ({safe_ticker})
 ━━━━━━━━━━━━━━━━━━━━
 
-📊 <b>Sinyal:</b> {signal.signal_type.value}
+📊 <b>Sinyal:</b> {safe_signal_type}
 📈 <b>Skor:</b> {signal.score:+.0f}/100
-🎯 <b>Güven:</b> {signal.confidence}
+🎯 <b>Güven:</b> {safe_confidence}
 
 💰 <b>Fiyat:</b> ₺{signal.price:.2f}
 🛑 <b>Stop-Loss:</b> ₺{signal.stop_loss:.2f}
@@ -189,6 +198,10 @@ class TelegramNotifier:
 
     def send_signal_change(self, ticker: str, old_signal: Signal, new_signal: Signal) -> bool:
         name = settings.TICKER_NAMES.get(ticker, ticker)
+        safe_name = _escape_html(name)
+        safe_ticker = _escape_html(ticker.replace(".IS", ""))
+        safe_old_signal_type = _escape_html(old_signal.signal_type.value)
+        safe_new_signal_type = _escape_html(new_signal.signal_type.value)
 
         emoji_map = {
             SignalType.STRONG_BUY: "🚀💰",
@@ -209,11 +222,11 @@ class TelegramNotifier:
 🔔 <b>SİNYAL DEĞİŞİKLİĞİ!</b>
 ━━━━━━━━━━━━━━━━━━━━
 
-📊 <b>{name}</b> ({ticker.replace(".IS", "")})
+📊 <b>{safe_name}</b> ({safe_ticker})
 
-{old_emoji} {old_signal.signal_type.value}
+{old_emoji} {safe_old_signal_type}
      ↓
-{new_emoji} <b>{new_signal.signal_type.value}</b>
+{new_emoji} <b>{safe_new_signal_type}</b>
 
 📈 <b>Skor:</b> {old_signal.score:+.0f} → <b>{new_signal.score:+.0f}</b>
 {direction}

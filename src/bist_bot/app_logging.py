@@ -15,7 +15,6 @@ try:
 except ImportError:  # pragma: no cover - optional dependency
     _structlog = None
 
-from bist_bot.config.settings import settings
 
 _DEFAULT_COMPONENT = "app"
 
@@ -31,11 +30,15 @@ def set_correlation_id(cid: str | None) -> None:
 
 
 def _normalize_level(level: str | None = None) -> int:
+    from bist_bot.config.settings import settings
+
     raw_level = str(level or getattr(settings, "LOG_LEVEL", "INFO") or "INFO")
     return getattr(logging, raw_level.upper(), logging.INFO)
 
 
 def _json_enabled() -> bool:
+    from bist_bot.config.settings import settings
+
     return str(getattr(settings, "LOG_FORMAT", "console")).strip().lower() == "json"
 
 
@@ -89,6 +92,8 @@ def configure_logging(
 
 
 def _configure_sentry() -> None:
+    from bist_bot.config.settings import settings
+
     sentry_dsn = getattr(settings, "SENTRY_DSN", None)
     if sentry_dsn:
         try:
