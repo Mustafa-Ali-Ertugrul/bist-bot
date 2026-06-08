@@ -283,27 +283,25 @@ def test_volume_price_confirmation_scores_directionally():
     )
 
     assert bullish_score == params.score_price_volume_confirm
-    assert bullish_reasons == ["Fiyat-Hacim yukselis onayi"]
+    assert bullish_reasons == ["Fiyat-Hacim yükseliş onayı"]
     assert bearish_score == -params.score_price_volume_confirm
-    assert bearish_reasons == ["Fiyat-Hacim dusus onayi"]
+    assert bearish_reasons == ["Fiyat-Hacim düşüş onayı"]
     assert pullback_score == 0.0
-    assert pullback_reasons == ["Dusuk hacimli geri cekilme"]
+    assert pullback_reasons == ["Düşük hacimli geri çekilme"]
 
 
 def test_rsi_reasons_call_out_extreme_zones_without_reversed_action_wording():
     params = StrategyParams()
 
-    oversold_score, oversold_reasons = score_momentum(
-        params, pd.Series({"rsi": 25.0}), pd.Series()
-    )
+    oversold_score, oversold_reasons = score_momentum(params, pd.Series({"rsi": 25.0}), pd.Series())
     overbought_score, overbought_reasons = score_momentum(
         params, pd.Series({"rsi": 75.0}), pd.Series()
     )
 
     assert oversold_score > 0
     assert overbought_score < 0
-    assert "Asiri satim" in oversold_reasons[0]
-    assert "Asiri alim" in overbought_reasons[0]
+    assert "Aşırı satım" in oversold_reasons[0]
+    assert "Aşırı alım" in overbought_reasons[0]
 
 
 def test_engine_uses_configurable_trigger_candle_minimum():

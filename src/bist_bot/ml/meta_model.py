@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal, cast
 
+import joblib
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
@@ -209,8 +210,13 @@ class SignalMetaModel:
     ) -> Path:
         path = Path(output_dir)
         path.mkdir(parents=True, exist_ok=True)
-        (path / "meta_model.pkl").write_bytes(pickle.dumps(self.model))
-        (path / "probability_calibrator.pkl").write_bytes(pickle.dumps(self.calibrator))
+        # Model: XGBoost native format (safe) if available, else joblib
+        if _HAS_XGBOOST and hasattr(self.model, "save_model"):
+            self.model.save_model(str(path / "meta_model.ubj"))
+        else:
+            joblib.dump(self.model, path / "meta_model.joblib")
+        # Calibrator: always use joblib (safer than pickle)
+        joblib.dump(self.calibrator, path / "probability_calibrator.joblib")
         (path / "feature_columns.json").write_text(
             json.dumps(self.feature_names, indent=2, ensure_ascii=False),
             encoding="utf-8",
@@ -229,8 +235,33 @@ class SignalMetaModel:
     def load_artifacts(cls, artifact_dir: str | Path) -> SignalMetaModel:
         path = Path(artifact_dir)
         feature_names = json.loads((path / "feature_columns.json").read_text(encoding="utf-8"))
-        model = pickle.loads((path / "meta_model.pkl").read_bytes())
-        calibrator = pickle.loads((path / "probability_calibrator.pkl").read_bytes())
+
+        # Model: try XGBoost native (.ubj) → joblib (.joblib) → pickle (.pkl, backward compat)
+        ubj_path = path / "meta_model.ubj"
+        joblib_path = path / "meta_model.joblib"
+        pkl_path = path / "meta_model.pkl"
+        if ubj_path.exists():
+            if not _HAS_XGBOOST:
+                raise RuntimeError("XGBoost model found but xgboost package is not available")
+            model = _build_classifier()
+            model.load_model(str(ubj_path))
+        elif joblib_path.exists():
+            model = joblib.load(joblib_path)
+        elif pkl_path.exists():
+            model = pickle.loads(pkl_path.read_bytes())
+        else:
+            raise FileNotFoundError(f"No model file (ubj/joblib/pkl) found in {path}")
+
+        # Calibrator: try joblib → pickle (backward compat)
+        cal_joblib = path / "probability_calibrator.joblib"
+        cal_pkl = path / "probability_calibrator.pkl"
+        if cal_joblib.exists():
+            calibrator = joblib.load(cal_joblib)
+        elif cal_pkl.exists():
+            calibrator = pickle.loads(cal_pkl.read_bytes())
+        else:
+            raise FileNotFoundError(f"No calibrator file (joblib/pkl) found in {path}")
+
         instance = cls(getattr(calibrator, "method", "platt"))
         instance.model = model
         instance.calibrator = calibrator

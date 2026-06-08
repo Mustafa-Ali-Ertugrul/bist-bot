@@ -16,7 +16,7 @@ def _render_alert(alert: WhaleAlert) -> None:
 
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Fiyat", f"TL{alert.price:.2f}")
-        c2.metric("Degisim", f"{alert.change_pct:+.1f}%")
+        c2.metric("Değişim", f"{alert.change_pct:+.1f}%")
         c3.metric("Hacim", f"{alert.volume_ratio:.1f}x")
         c4.metric("Model", f"{alert.signal_score:+.0f}")
 
@@ -36,26 +36,26 @@ def render_whale_alerts_page() -> None:
 
     st.title("Balina Radar")
     st.caption(
-        "Mevcut BIST100 taramasindan hacim, fiyat ayrismasi, trend ve model skorunu "
-        "birlestirerek olagandisi hareket adaylarini siralar."
+        "Mevcut BIST100 taramasından hacim, fiyat ayrışması, trend ve model skorunu "
+        "birleştirerek olağandışı hareket adaylarını sıralar."
     )
     st.info(
-        "Yatirim tavsiyesi degildir. Bu ekran gercek araci kurum dagilimi veya emir "
-        "defteri sahipligini gormez; sadece mevcut teknik veriden izleme adayi uretir."
+        "Yatırım tavsiyesi değildir. Bu ekran gerçek aracı kurum dağılımı veya emir "
+        "defteri sahipliğini görmez; sadece mevcut teknik veriden izleme adayı üretir."
     )
 
     c1, c2, c3 = st.columns(3)
     c1.metric("Aday", len(alerts))
-    c2.metric("Yuksek", high_count)
+    c2.metric("Yüksek", high_count)
     c3.metric("Orta", medium_count)
 
     if st.session_state.get("scan_in_progress"):
-        phase = st.session_state.get("scan_phase") or "Tarama baslatiliyor"
-        st.warning(f"Arka plan taramasi suruyor: {phase}")
+        phase = st.session_state.get("scan_phase") or "Tarama başlatılıyor"
+        st.warning(f"Arka plan taraması sürüyor: {phase}")
 
     if not alerts:
         st.info(
-            "Su an esigi gecen balina sinyal adayi yok. Yeni tarama tamamlaninca tekrar hesaplanir."
+            "Şu an eşiği geçen balina sinyal adayı yok. Yeni tarama tamamlanınca tekrar hesaplanır."
         )
         return
 

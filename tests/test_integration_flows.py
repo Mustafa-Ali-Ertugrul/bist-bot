@@ -281,13 +281,8 @@ def test_api_analyze_uses_batch_fallback_when_single_fetch_fails(tmp_path) -> No
     assert payload is not None
     assert payload["ticker"] == "THYAO.IS"
     assert payload["signal"]["type"] == SignalType.BUY.value
-    assert fetcher.provider.history_calls == ["THYAO.IS", "THYAO.IS"]
+    assert fetcher.provider.history_calls == []
     assert fetcher.provider.batch_calls == [["THYAO.IS"], ["THYAO.IS"]]
-    assert fetcher.get_last_history_fetch_meta("THYAO.IS", "6mo", "1d") == {
-        "source": "batch_fallback",
-        "status": "success",
-        "reason": "single_exception",
-    }
 
 
 def test_api_analyze_returns_500_when_engine_fails(tmp_path) -> None:

@@ -711,9 +711,15 @@ class Backtester:
         trades: list[BacktestTrade] = []
         capital_history: list[float] = [capital]
         last_buy_date: datetime | None = None
+        vectors: VectorizedSignals | None = None
+        signal_context_builder = getattr(self._build_signal_context, "__func__", None)
+        if (
+            self.signal_builder is None
+            and signal_context_builder is Backtester._build_signal_context
+        ):
+            vectors = self._build_vectorized_signals(self._precalculate_signals(df))
 
         for i in range(1, len(df)):
-            history = df.iloc[:i]
             bar = df.iloc[i]
             date = _to_datetime(df.index[i])
             open_price = _to_float(bar.get("open"), _to_float(bar.get("close")))
@@ -721,7 +727,10 @@ class Backtester:
             low_price = _to_float(bar.get("low"), open_price)
             close_price = _to_float(bar.get("close"), open_price)
 
-            signal = self._build_signal_context(ticker, history)
+            if vectors is None:
+                signal = self._build_signal_context(ticker, df.iloc[:i])
+            else:
+                signal = self._build_precomputed_signal_context(df.iloc[i - 1], vectors, i)
 
             if position is not None and self._should_exit_on_open(signal):
                 exit_fill_price = self._calculate_fill_price(
@@ -839,6 +848,25 @@ class Backtester:
         signal.update(self._meta_signal_fields(history, score, stop_loss, target_price))
         return signal
 
+    def _build_precomputed_signal_context(
+        self,
+        last: pd.Series,
+        vectors: VectorizedSignals,
+        idx: int,
+    ) -> dict[str, float | bool]:
+        score = float(vectors.scores[idx])
+        stop_loss = float(vectors.stop_losses[idx])
+        target_price = float(vectors.target_prices[idx])
+        signal: dict[str, float | bool] = {
+            "enter": bool(vectors.enter_signals[idx]),
+            "exit": bool(vectors.exit_signals[idx]),
+            "score": score,
+            "stop_loss": stop_loss,
+            "target_price": target_price,
+        }
+        signal.update(self._meta_signal_fields_from_last(last, score, stop_loss, target_price))
+        return signal
+
     def _meta_signal_fields(
         self,
         history: pd.DataFrame,
@@ -848,7 +876,17 @@ class Backtester:
     ) -> dict[str, float | bool]:
         if self.meta_model is None or history.empty:
             return {}
-        last = history.iloc[-1]
+        return self._meta_signal_fields_from_last(history.iloc[-1], score, stop_loss, target_price)
+
+    def _meta_signal_fields_from_last(
+        self,
+        last: pd.Series,
+        score: float,
+        stop_loss: float,
+        target_price: float,
+    ) -> dict[str, float | bool]:
+        if self.meta_model is None:
+            return {}
         last_close = _to_float(last.get("close"))
         if last_close <= 0:
             return {}

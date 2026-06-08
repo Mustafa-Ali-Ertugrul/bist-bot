@@ -4,6 +4,7 @@ import streamlit as st
 
 from bist_bot.config import store as config_store
 from bist_bot.config.settings import settings
+from bist_bot.locales import get_message
 from bist_bot.ui.components.app_shell import (
     mask_secret,
     render_html_panel,
@@ -15,20 +16,20 @@ from bist_bot.ui.runtime import request_scan
 
 def render_settings_page() -> None:
     render_page_hero(
-        "Settings",
-        "Unified controls for scan cadence, indicators and alert routing",
-        "Settings ekranini kart bazli bir control room yapisina tasidim. Tipografi, spacing, input ve CTA stilleri premium koyu tema cizgisinde birlestirildi.",
-        badges=["Masked secrets", "Reusable cards", "Responsive controls"],
+        "Ayarlar",
+        "Tarama aralığı, göstergeler ve bildirim yönlendirmesi için birleşik kontroller",
+        "Ayarlar ekranı; tipografi, boşluk, giriş ve işlem kontrollerini koyu tema içinde toplar.",
+        badges=["Maskeli anahtarlar", "Yeniden kullanılabilir kartlar", "Duyarlı kontroller"],
     )
 
     runtime_left, runtime_right = st.columns([1, 1], gap="large")
     with runtime_left:
-        render_section_title("Runtime", "Refresh and notification behavior")
+        render_section_title("Çalışma Zamanı", "Yenileme ve bildirim davranışı")
         st.session_state.auto_refresh = st.toggle(
             "Otomatik yenile", value=st.session_state.auto_refresh
         )
         st.session_state.refresh_interval = st.select_slider(
-            "Tarama araligi (dk)",
+            "Tarama aralığı (dk)",
             options=[1, 3, 5, 10, 15],
             value=st.session_state.refresh_interval,
         )
@@ -57,26 +58,50 @@ def render_settings_page() -> None:
             disabled=not tg_ready,
         )
 
-    render_section_title("Indicator model", "Trading thresholds")
+    render_section_title("Sinyal filtreleri", "Görünür sinyaller için canlı filtreleme")
+    sf1, sf2 = st.columns(2, gap="large")
+    with sf1:
+        st.session_state.min_score_filter = st.slider(
+            get_message("ui.min_score"),
+            -100,
+            100,
+            st.session_state.min_score_filter,
+        )
+        st.session_state.rsi_min_filter = st.slider(
+            get_message("ui.rsi_min"), 0, 100, st.session_state.rsi_min_filter
+        )
+    with sf2:
+        st.session_state.rsi_max_filter = st.slider(
+            get_message("ui.rsi_max"), 0, 100, st.session_state.rsi_max_filter
+        )
+        st.session_state.vol_ratio_filter = st.slider(
+            "Minimum hacim oranı",
+            0.0,
+            5.0,
+            float(st.session_state.vol_ratio_filter),
+            0.1,
+        )
+
+    render_section_title("Gösterge modeli", "Trading eşikleri")
     i1, i2 = st.columns(2, gap="large")
     with i1:
         st.session_state.ind_rsi_period = st.slider(
             "RSI Periyot", 5, 30, st.session_state.ind_rsi_period
         )
         st.session_state.ind_rsi_oversold = st.slider(
-            "RSI Asiri Satim", 10, 40, st.session_state.ind_rsi_oversold
+            "RSI Aşırı Satım", 10, 40, st.session_state.ind_rsi_oversold
         )
-        st.session_state.ind_sma_fast = st.slider("SMA Hizli", 5, 30, st.session_state.ind_sma_fast)
-        st.session_state.ind_ema_fast = st.slider("EMA Hizli", 5, 30, st.session_state.ind_ema_fast)
+        st.session_state.ind_sma_fast = st.slider("SMA Hızlı", 5, 30, st.session_state.ind_sma_fast)
+        st.session_state.ind_ema_fast = st.slider("EMA Hızlı", 5, 30, st.session_state.ind_ema_fast)
     with i2:
         st.session_state.ind_rsi_overbought = st.slider(
-            "RSI Asiri Alim", 60, 90, st.session_state.ind_rsi_overbought
+            "RSI Aşırı Alım", 60, 90, st.session_state.ind_rsi_overbought
         )
         st.session_state.ind_sma_slow = st.slider(
-            "SMA Yavas", 20, 100, st.session_state.ind_sma_slow
+            "SMA Yavaş", 20, 100, st.session_state.ind_sma_slow
         )
         st.session_state.ind_ema_slow = st.slider(
-            "EMA Yavas", 20, 100, st.session_state.ind_ema_slow
+            "EMA Yavaş", 20, 100, st.session_state.ind_ema_slow
         )
         st.session_state.ind_adx_threshold = st.slider(
             "ADX Esigi", 10, 40, st.session_state.ind_adx_threshold
@@ -123,7 +148,7 @@ def render_settings_page() -> None:
             if request_scan():
                 st.success("Ayarlar kaydedildi.")
             else:
-                st.info("Ayarlar kaydedildi. Tarama icin cooldown suresinin bitmesi bekleniyor.")
+                st.info("Ayarlar kaydedildi. Tarama için bekleme süresinin bitmesi bekleniyor.")
     with c_reset:
         if st.button("Varsayilanlara don", use_container_width=True):
             config_store.reset_settings()

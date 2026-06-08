@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -148,3 +149,12 @@ def test_whale_page_is_registered_and_renders_service_results() -> None:
         whale_alerts_page.render_whale_alerts_page()
 
     build.assert_called_once_with(session_state["all_data"], session_state["signals"])
+
+
+def test_streamlit_app_keeps_running_if_whale_page_is_missing() -> None:
+    from bist_bot import streamlit_app
+
+    source = inspect.getsource(streamlit_app)
+
+    assert 'exc.name != "bist_bot.ui.pages.whale_alerts_page"' in source
+    assert "Balina Radar ekranı bu dağıtım paketinde bulunamadı" in source

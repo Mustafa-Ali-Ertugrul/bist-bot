@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+import threading
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -10,8 +11,8 @@ from unittest.mock import MagicMock, patch
 TR = timezone(timedelta(hours=3))
 
 
-def test_ensure_initial_data_starts_limited_background_scan_when_no_cache():
-    """When no cached signals exist, ensure_initial_data should start one limited scan."""
+def test_ensure_initial_data_auto_starts_first_background_scan_when_no_cache():
+    """Initial page load should start one non-blocking BIST100 scan."""
     mock_db = MagicMock()
     mock_db.get_recent_signals.return_value = []
 
@@ -45,12 +46,12 @@ def test_ensure_initial_data_starts_limited_background_scan_when_no_cache():
 
         ensure_initial_data()
 
-        mock_start.assert_called_once_with(limited=True)
+        mock_start.assert_called_once_with(force_clear=False, limited=False)
         assert mock_session.initial_background_scan_started is True
 
 
-def test_ensure_initial_data_uses_cached_signals_and_starts_limited_scan():
-    """Cached signals should load while a limited background scan starts for all_data."""
+def test_ensure_initial_data_uses_cached_signals_then_starts_scan():
+    """Cached signals should render while the first background scan starts."""
     mock_db = MagicMock()
     mock_db.get_recent_signals.return_value = [
         {"ticker": "THYAO.IS", "signal_type": "AL", "score": 25.0, "price": 100.0}
@@ -89,7 +90,7 @@ def test_ensure_initial_data_uses_cached_signals_and_starts_limited_scan():
         ensure_initial_data()
 
         assert mock_session.signals == mapped_signals
-        mock_start.assert_called_once_with(limited=True)
+        mock_start.assert_called_once_with(force_clear=False, limited=False)
         assert mock_session.initial_background_scan_started is True
 
 
@@ -164,6 +165,29 @@ def test_ensure_initial_data_does_not_restart_initial_background_scan():
         ensure_initial_data()
 
         mock_start.assert_not_called()
+
+
+def test_request_scan_uses_background_scan_for_streamlit_session():
+    """Manual Streamlit scans should not block the page while BIST100 data is fetched."""
+    mock_session = MagicMock()
+    mock_session._scan_session_key = "test-key"
+    mock_session.get = lambda key, default=None: {
+        "_scan_session_key": "test-key",
+    }.get(key, default)
+
+    with (
+        patch("bist_bot.ui.runtime_scan.st") as mock_st,
+        patch("bist_bot.ui.runtime_scan.consume_cooldown", return_value=(True, 0.0)),
+        patch("bist_bot.ui.runtime_scan.start_background_scan", return_value=True) as mock_start,
+        patch("bist_bot.ui.runtime_scan.run_scan") as mock_run,
+    ):
+        mock_st.session_state = mock_session
+
+        from bist_bot.ui.runtime_scan import request_scan
+
+        assert request_scan(force_clear=True) is True
+        mock_start.assert_called_once_with(force_clear=True, limited=False)
+        mock_run.assert_not_called()
 
 
 def test_sync_runtime_feedback_skips_rerun_during_bootstrap():
@@ -264,7 +288,7 @@ def test_scan_timeout_resets_stale_scan_in_progress():
         assert result is True
         assert fake.scan_in_progress is False
         assert fake.scan_error is not None
-        assert "tamamlanamadi" in fake.scan_error.lower()
+        assert "tamamlanamadı" in fake.scan_error.lower()
         mock_logger.warning.assert_called_once()
 
 
@@ -487,7 +511,7 @@ def test_login_form_uses_tabs_for_login_and_registration():
 
     source = inspect.getsource(streamlit_app._login_form)
 
-    assert 'st.tabs(["Giris", "Kayit Ol"])' in source
+    assert 'st.tabs(["Giriş", "Kayıt Ol"])' in source
     assert "st.expander" not in source
     assert "Yeni operator hesabi olustur" not in source
 
@@ -865,7 +889,7 @@ def test_scan_detail_page_shows_empty_state_when_no_completed_scan():
 
     mock_section_title.assert_called_with("Scan durumu", "Bekleyen veri")
     empty_panels = [call.args[0] for call in mock_render_html_panel.call_args_list]
-    assert any("Henuz tamamlanmis bir scan kaydi bulunmuyor" in panel for panel in empty_panels)
+    assert any("Henüz tamamlanmış bir tarama kaydı bulunmuyor" in panel for panel in empty_panels)
 
 
 def test_scan_detail_page_renders_historical_analytics_when_history_exists():
@@ -1111,3 +1135,27 @@ def test_ensure_market_data_ready_does_not_start_scan():
         assert streamlit_app._ensure_market_data_ready() is True
         mock_st.rerun.assert_not_called()
         mock_st.stop.assert_not_called()
+
+
+def test_set_scan_phase_does_not_mutate_session_state_from_background_thread():
+    """Background threads must not touch st.session_state (F-30)."""
+    from bist_bot.ui import runtime_scan
+
+    class FakeSession:
+        def __init__(self):
+            self.scan_phase = None
+
+    fake = FakeSession()
+    captured = {}
+
+    def worker():
+        runtime_scan._set_scan_phase("bg_phase")
+        captured["ran"] = True
+
+    with patch.object(runtime_scan.st, "session_state", fake), patch.object(runtime_scan, "logger"):
+        thread = threading.Thread(target=worker)
+        thread.start()
+        thread.join(timeout=2.0)
+
+    assert captured.get("ran") is True
+    assert fake.scan_phase is None

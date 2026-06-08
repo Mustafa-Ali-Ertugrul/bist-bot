@@ -1,0 +1,70 @@
+{
+  "model": "vllm/qwen-27b",
+  "default_agent": "reviewer",
+  "active_profile": "safe-review",
+  "permissions": {
+    "edit": "ask",
+    "bash": "ask",
+    "webfetch": "allow",
+    "websearch": "allow",
+    "task": "allow",
+    "skill": "allow"
+  },
+  "watch": {
+    "ignore": [
+      "**/.git/**",
+      "**/.venv/**",
+      "**/venv/**",
+      "**/__pycache__/**",
+      "**/.pytest_cache/**",
+      "**/.mypy_cache/**",
+      "**/.ruff_cache/**",
+      "**/node_modules/**",
+      "**/dist/**",
+      "**/build/**",
+      "**/coverage/**",
+      "**/htmlcov/**",
+      "**/*.min.js",
+      "**/*.lock"
+    ]
+  },
+  "agents": {
+    "build": {
+      "prompt": "{file:.opencode/prompts/build.md}",
+      "permission": { "edit": "allow", "bash": "allow" }
+    },
+    "reviewer": {
+      "prompt": "{file:.opencode/prompts/reviewer.md}",
+      "permission": { "edit": "deny", "bash": "ask" }
+    },
+    "plan": {
+      "prompt": "{file:.opencode/prompts/plan.md}",
+      "permission": { "edit": "deny", "bash": "ask" }
+    },
+    "architect": {
+      "prompt": "{file:.opencode/prompts/architect.md}",
+      "permission": { "edit": "deny", "bash": "deny" }
+    }
+  },
+  "profiles": {
+    "safe-review": {
+      "agent": "reviewer",
+      "permissions": {
+        "edit": "deny",
+        "bash": { "git status": "allow", "git log": "allow", "git diff": "allow", "*": "ask" }
+      }
+    },
+    "trusted-build": {
+      "agent": "build",
+      "permissions": {
+        "edit": "allow",
+        "bash": "ask"
+      }
+    }
+  },
+  "plugins": [
+    ".opencode/plugins/risk-shield.ts",
+    ".opencode/plugins/telemetry.ts",
+    ".opencode/plugins/compaction-memory.ts"
+  ]
+}

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 import pandas as pd
@@ -23,10 +24,16 @@ FEATURE_COLUMNS = [
 
 
 def to_float(value: Any, default: float = 0.0) -> float:
+    if value is None:
+        return default
+    if isinstance(value, int | float):
+        numeric_value = float(value)
+        return default if math.isnan(numeric_value) else numeric_value
     try:
         if pd.isna(value):
             return default
-        return float(value)
+        numeric_value = float(value)
+        return default if math.isnan(numeric_value) else numeric_value
     except (TypeError, ValueError):
         return default
 

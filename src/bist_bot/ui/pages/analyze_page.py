@@ -83,7 +83,11 @@ def _indicator_tone(row: pd.Series, key: str) -> str:
     if key == "adx":
         return "positive" if value >= 25 else "danger"
     if key == "stoch":
-        return "positive" if _metric_value(row, "stoch_k") >= _metric_value(row, "stoch_d") else "danger"
+        return (
+            "positive"
+            if _metric_value(row, "stoch_k") >= _metric_value(row, "stoch_d")
+            else "danger"
+        )
     if key == "cci":
         return "positive" if value >= 0 else "danger"
     if key == "volume_ratio":
@@ -116,11 +120,36 @@ def _tone_arrow(tone: str) -> str:
 def _render_indicator_grid(row: pd.Series) -> str:
     values = [
         ("RSI 14", f"{_metric_value(row, 'rsi'):.1f}", "Momentum", _indicator_tone(row, "rsi")),
-        ("SMA 20", f"{_metric_value(row, 'sma_20'):.2f}", "Kısa trend", _indicator_tone(row, "sma_20")),
-        ("SMA 50", f"{_metric_value(row, 'sma_50'):.2f}", "Orta trend", _indicator_tone(row, "sma_50")),
-        ("EMA 50", f"{_metric_value(row, 'ema_50'):.2f}", "Üstel trend", _indicator_tone(row, "ema_50")),
-        ("MACD", f"{_metric_value(row, 'macd'):.2f}", "Momentum farkı", _indicator_tone(row, "macd")),
-        ("MACD Sinyal", f"{_metric_value(row, 'macd_signal'):.2f}", "Tetik çizgisi", _indicator_tone(row, "macd_signal")),
+        (
+            "SMA 20",
+            f"{_metric_value(row, 'sma_20'):.2f}",
+            "Kısa trend",
+            _indicator_tone(row, "sma_20"),
+        ),
+        (
+            "SMA 50",
+            f"{_metric_value(row, 'sma_50'):.2f}",
+            "Orta trend",
+            _indicator_tone(row, "sma_50"),
+        ),
+        (
+            "EMA 50",
+            f"{_metric_value(row, 'ema_50'):.2f}",
+            "Üstel trend",
+            _indicator_tone(row, "ema_50"),
+        ),
+        (
+            "MACD",
+            f"{_metric_value(row, 'macd'):.2f}",
+            "Momentum farkı",
+            _indicator_tone(row, "macd"),
+        ),
+        (
+            "MACD Sinyal",
+            f"{_metric_value(row, 'macd_signal'):.2f}",
+            "Tetik çizgisi",
+            _indicator_tone(row, "macd_signal"),
+        ),
         ("ADX 14", f"{_metric_value(row, 'adx'):.1f}", "Trend gücü", _indicator_tone(row, "adx")),
         (
             "Stoch K/D",
@@ -129,9 +158,24 @@ def _render_indicator_grid(row: pd.Series) -> str:
             _indicator_tone(row, "stoch"),
         ),
         ("CCI 20", f"{_metric_value(row, 'cci'):.1f}", "Sapma", _indicator_tone(row, "cci")),
-        ("Hacim Oranı", f"{_metric_value(row, 'volume_ratio', 1.0):.2f}x", "20 gün ort.", _indicator_tone(row, "volume_ratio")),
-        ("OBV", str(row.get("obv_trend", "FLAT") or "FLAT"), "Para akışı", _indicator_tone(row, "obv_trend")),
-        ("SMA Kesişim", str(row.get("sma_cross", "NONE") or "NONE"), "Trend sinyali", _indicator_tone(row, "sma_cross")),
+        (
+            "Hacim Oranı",
+            f"{_metric_value(row, 'volume_ratio', 1.0):.2f}x",
+            "20 gün ort.",
+            _indicator_tone(row, "volume_ratio"),
+        ),
+        (
+            "OBV",
+            str(row.get("obv_trend", "FLAT") or "FLAT"),
+            "Para akışı",
+            _indicator_tone(row, "obv_trend"),
+        ),
+        (
+            "SMA Kesişim",
+            str(row.get("sma_cross", "NONE") or "NONE"),
+            "Trend sinyali",
+            _indicator_tone(row, "sma_cross"),
+        ),
     ]
     cards = []
     for label, value, subtitle, tone in values:
@@ -145,9 +189,7 @@ def _render_indicator_grid(row: pd.Series) -> str:
         )
     return (
         "<div class='bb-section-caption'>Analist teknik göstergeleri</div>"
-        "<div class='bb-indicator-grid'>"
-        + "".join(cards)
-        + "</div>"
+        "<div class='bb-indicator-grid'>" + "".join(cards) + "</div>"
     )
 
 
@@ -155,7 +197,7 @@ def render_analyze_page() -> None:
     render_page_hero(
         "Analiz",
         "Tek varlık için koyu trading terminali stilinde araştırma paneli",
-        "Analysis ekranini premium mobil fintech mockup diline yaklastirdim. Arama, snapshot, chart ve level kartlari artik ayni tasarim sistemi icinde calisiyor.",
+        "Analiz ekranı, arama, özet, grafik ve seviye kartlarını aynı tasarım sistemi içinde toplar.",
         badges=["Mum Grafiği + RSI", "Sinyal Nedenleri", "Mobil Öncelikli Düzen"],
     )
 
@@ -164,13 +206,15 @@ def render_analyze_page() -> None:
     with c1:
         ticker_options = list(settings.WATCHLIST or settings.DEFAULT_BIST100_WATCHLIST)
         default_ticker = "THYAO.IS"
-        default_index = ticker_options.index(default_ticker) if default_ticker in ticker_options else 0
+        default_index = (
+            ticker_options.index(default_ticker) if default_ticker in ticker_options else 0
+        )
         ticker_input = st.selectbox(
             "Hisse",
             options=ticker_options,
             index=default_index,
             format_func=_ticker_option_label,
-            placeholder="Sembol veya sirket adi ara",
+            placeholder="Sembol veya şirket adı ara",
         )
     with c2:
         st.markdown("<div style='height:28px;'></div>", unsafe_allow_html=True)
@@ -190,21 +234,21 @@ def render_analyze_page() -> None:
             cooldown_seconds=float(getattr(settings, "STREAMLIT_ANALYZE_COOLDOWN_SECONDS", 4.0)),
         )
         if not allowed:
-            st.warning(f"Cok sik istek gonderildi, birkac saniye bekleyin. ({remaining:.1f}s)")
+            st.warning(f"Çok sık istek gönderildi, birkaç saniye bekleyin. ({remaining:.1f}s)")
             return
         try:
             response = api_request("GET", f"/api/analyze/{ticker_input}")
         except Exception as exc:
-            st.error(f"API hatasi: {exc}")
+            st.error(f"API hatası: {exc}")
             return
 
         if not response.ok:
-            st.error(f"Analiz basarisiz: {response.json().get('message', 'Bilinmeyen hata')}")
+            st.error(f"Analiz başarısız: {response.json().get('message', 'Bilinmeyen hata')}")
             return
 
         data = response.json()
         if data.get("status") != "ok":
-            st.error(f"Sonuc hatasi: {data.get('message', '')}")
+            st.error(f"Sonuç hatası: {data.get('message', '')}")
             return
 
         st.session_state["last_analyzed_ticker"] = ticker_input
@@ -285,7 +329,7 @@ def render_analyze_page() -> None:
         if {"macd", "macd_signal"}.issubset(df_ind.columns):
             render_chart(plot_macd(df_ind), "analysis_macd")
     else:
-        st.info("Fiyat verisi mevcut degil.")
+        st.info("Fiyat verisi mevcut değil.")
 
     render_section_title("İşlem Planı", "Kritik seviyeler")
     p1, p2 = st.columns([1, 1], gap="large")

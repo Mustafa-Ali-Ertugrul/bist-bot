@@ -1,16 +1,6 @@
 {
-  "model": "vllm/qwen-27b",
-  "default_agent": "reviewer",
-  "active_profile": "safe-review",
-  "permissions": {
-    "edit": "ask",
-    "bash": "ask",
-    "webfetch": "allow",
-    "websearch": "allow",
-    "task": "allow",
-    "skill": "allow"
-  },
-  "watch": {
+  "$schema": "https://opencode.ai/config.json",
+  "watcher": {
     "ignore": [
       "**/.git/**",
       "**/.venv/**",
@@ -25,46 +15,16 @@
       "**/coverage/**",
       "**/htmlcov/**",
       "**/*.min.js",
-      "**/*.lock"
+      "**/*.lock",
+      ".agentflow/**"
     ]
   },
-  "agents": {
-    "build": {
-      "prompt": "{file:.opencode/prompts/build.md}",
-      "permission": { "edit": "allow", "bash": "allow" }
-    },
-    "reviewer": {
-      "prompt": "{file:.opencode/prompts/reviewer.md}",
-      "permission": { "edit": "deny", "bash": "ask" }
-    },
-    "plan": {
-      "prompt": "{file:.opencode/prompts/plan.md}",
-      "permission": { "edit": "deny", "bash": "ask" }
-    },
-    "architect": {
-      "prompt": "{file:.opencode/prompts/architect.md}",
-      "permission": { "edit": "deny", "bash": "deny" }
-    }
-  },
-  "profiles": {
-    "safe-review": {
-      "agent": "reviewer",
-      "permissions": {
-        "edit": "deny",
-        "bash": { "git status": "allow", "git log": "allow", "git diff": "allow", "*": "ask" }
-      }
-    },
-    "trusted-build": {
-      "agent": "build",
-      "permissions": {
-        "edit": "allow",
-        "bash": "ask"
+  "provider": {
+    "freemodel": {
+      "options": {
+        "baseURL": "https://api.freemodel.dev/v1",
+        "apiKey": "fe_oa_bdda32fcddaa98a9fc53e09b9d6dc9e8bf2b631bda665a1b"
       }
     }
-  },
-  "plugins": [
-    ".opencode/plugins/risk-shield.ts",
-    ".opencode/plugins/telemetry.ts",
-    ".opencode/plugins/compaction-memory.ts"
-  ]
+  }
 }

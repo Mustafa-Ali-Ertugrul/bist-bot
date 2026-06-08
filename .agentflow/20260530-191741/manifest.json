@@ -1,0 +1,46 @@
+{
+    "task":  "kayit olmayi ekle",
+    "workflow":  "C:\\Users\\Ali\\.config\\opencode\\agentflow\\workflow.default.json",
+    "workspace":  "C:\\Users\\Ali\\OneDrive\\Masaüstü\\bist_bot",
+    "runDir":  "C:\\Users\\Ali\\OneDrive\\Masaüstü\\bist_bot\\.agentflow\\20260530-191741",
+    "started":  "2026-05-30T19:17:41.6342790+03:00",
+    "dryRun":  true,
+    "steps":  [
+                  {
+                      "name":  "01-plan",
+                      "agent":  "plan",
+                      "model":  "9router/antigravity-claude-sonnet-4-6",
+                      "output":  "C:\\Users\\Ali\\OneDrive\\Masaüstü\\bist_bot\\.agentflow\\20260530-191741\\01-plan.md",
+                      "exitCode":  0
+                  },
+                  {
+                      "name":  "02-code",
+                      "agent":  "build",
+                      "model":  "9router/antigravity-claude-sonnet-4-6",
+                      "output":  "C:\\Users\\Ali\\OneDrive\\Masaüstü\\bist_bot\\.agentflow\\20260530-191741\\02-code.md",
+                      "exitCode":  0
+                  },
+                  {
+                      "name":  "03-test",
+                      "agent":  "flow-tester",
+                      "model":  "9router/gemini-3.1-flash-lite-preview",
+                      "output":  "C:\\Users\\Ali\\OneDrive\\Masaüstü\\bist_bot\\.agentflow\\20260530-191741\\03-test.md",
+                      "exitCode":  0
+                  },
+                  {
+                      "name":  "04-review",
+                      "agent":  "flow-reviewer",
+                      "model":  "9router/antigravity-claude-sonnet-4-6",
+                      "output":  "C:\\Users\\Ali\\OneDrive\\Masaüstü\\bist_bot\\.agentflow\\20260530-191741\\04-review.md",
+                      "exitCode":  0
+                  },
+                  {
+                      "name":  "05-fix",
+                      "agent":  "build",
+                      "model":  "9router/antigravity-claude-sonnet-4-6",
+                      "output":  "C:\\Users\\Ali\\OneDrive\\Masaüstü\\bist_bot\\.agentflow\\20260530-191741\\05-fix.md",
+                      "exitCode":  0
+                  }
+              ],
+    "completed":  "2026-05-30T19:17:41.7890586+03:00"
+}

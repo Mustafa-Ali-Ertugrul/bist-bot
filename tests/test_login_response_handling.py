@@ -62,7 +62,7 @@ def test_response_message_json_without_message_uses_status_code_fallback():
     resp = MagicMock()
     resp.status_code = 401
     resp.json.return_value = {"status": "error"}
-    assert "Email veya sifre hatali" in _response_message(resp, "default")
+    assert "E-posta veya şifre hatalı" in _response_message(resp, "default")
 
 
 def test_response_message_non_json_500_shows_server_error_message():
@@ -71,7 +71,7 @@ def test_response_message_non_json_500_shows_server_error_message():
     resp.json.side_effect = ValueError("not json")
     resp.text = "<html><body>Internal Server Error</body></html>"
     result = _response_message(resp, "default")
-    assert "API tarafinda hata" in result
+    assert "API tarafında hata" in result
     assert "500" in result
 
 
@@ -81,7 +81,7 @@ def test_response_message_empty_non_json_500_shows_server_error_message():
     resp.json.side_effect = ValueError("not json")
     resp.text = ""
     result = _response_message(resp, "default")
-    assert "API tarafinda hata" in result
+    assert "API tarafında hata" in result
     assert "500" in result
 
 
@@ -89,14 +89,14 @@ def test_response_message_429_rate_limit():
     resp = MagicMock()
     resp.status_code = 429
     resp.json.return_value = {}
-    assert "Cok fazla giris denemesi" in _response_message(resp, "default")
+    assert "Çok fazla giriş denemesi" in _response_message(resp, "default")
 
 
 def test_response_message_401_unauthorized():
     resp = MagicMock()
     resp.status_code = 401
     resp.json.return_value = {}
-    assert "Email veya sifre hatali" in _response_message(resp, "default")
+    assert "E-posta veya şifre hatalı" in _response_message(resp, "default")
 
 
 def test_response_message_500_server_error():
@@ -104,7 +104,7 @@ def test_response_message_500_server_error():
     resp.status_code = 502
     resp.json.return_value = {}
     result = _response_message(resp, "default")
-    assert "API tarafinda hata" in result
+    assert "API tarafında hata" in result
     assert "502" in result
 
 
@@ -114,7 +114,7 @@ def test_response_message_non_json_429_shows_message():
     resp.json.side_effect = ValueError("not json")
     resp.text = ""
     result = _response_message(resp, "default")
-    assert "Cok fazla giris denemesi" in result
+    assert "Çok fazla giriş denemesi" in result
 
 
 # ── _extract_token tests ───────────────────────────────────────────────────
@@ -218,6 +218,7 @@ def test_handle_query_actions_toggle_sidebar():
     class SessionStateStub(dict):
         def __getattr__(self, key):
             return self[key]
+
         def __setattr__(self, key, value):
             self[key] = value
 
@@ -240,6 +241,7 @@ def test_handle_query_actions_ignores_invalid_action():
     class SessionStateStub(dict):
         def __getattr__(self, key):
             return self[key]
+
         def __setattr__(self, key, value):
             self[key] = value
 

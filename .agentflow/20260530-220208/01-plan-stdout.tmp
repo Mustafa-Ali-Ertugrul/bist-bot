@@ -1,0 +1,80 @@
+scan_logs tool placeholder
+pytest_changed tool placeholder
+market_data_health tool placeholder
+config_audit tool placeholder
+Let me inspect the current state of the registration code more closely.
+Let me check the existing tests and the auth settings configuration more closely.
+Let me check the current test status and the locale files for registration messages.
+Let me run the full auth test suite to see all failures, and also check if `.env.example` has `ALLOW_PUBLIC_REGISTRATION`.
+Now I have a complete picture. Here's the plan:
+
+---
+
+## Plan: "kayit olmayi ekle" — Fix Registration Tests
+
+### Problem Restatement
+
+Registration (kayıt olma) **already exists** in the codebase: a `POST /api/auth/register` endpoint in `dashboard.py` and a "Kayıt Ol" tab in `streamlit_app.py`. However, **3 tests are failing** due to Turkish character mismatches between test expectations and locale strings, making CI/verification fail.
+
+### Relevant Files Inspected
+
+| File | Status |
+|------|--------|
+| `src/bist_bot/dashboard.py` (lines 304–410) | Register endpoint + `create_user()` — looks correct |
+| `src/bist_bot/streamlit_app.py` (lines 221–257) | "Kayıt Ol" UI tab — looks correct |
+| `src/bist_bot/locales/tr.py` (lines 60–63) | Has proper Turkish locale strings |
+| `src/bist_bot/config/subsettings.py` (line 296) | `ALLOW_PUBLIC_REGISTRATION` setting |
+| `.env` | `ALLOW_PUBLIC_REGISTRATION=true` — already enabled |
+| `tests/test_auth.py` (lines 180–198, 408–434) | **3 test assertions with wrong character encodings** |
+
+### Failing Tests (3 failures in `tests/test_auth.py`)
+
+| # | Test | Line | Expected (wrong) | Actual (correct) |
+|---|------|------|-----------------|-----------------|
+| 1 | `test_register_returns_403_when_public_registration_disabled` | 191 | `'Herkese acik kayit kapali'` | `'Herkese açık kayıt kapalı'` |
+| 2 | `test_register_rejects_duplicate_email` | 419 | `'Bu email zaten kayitli'` | `'Bu e-posta zaten kayıtlı'` |
+| 3 | `test_register_rejects_short_password` | 433 | `'Sifre en az 8 karakter olmali'` | `'Şifre en az 8 karakter olmalı'` |
+
+The locale file (`tr.py`) uses proper Turkish Unicode characters (ç, ı, ö, ü, ş, ğ). The tests were written with ASCII approximations. The tests need to match the locale.
+
+### Implementation Steps
+
+1. **Fix `tests/test_auth.py` line 191**: Change `'Herkese acik kayit kapali'` → `'Herkese açık kayıt kapalı'`
+2. **Fix `tests/test_auth.py` line 419**: Change `'Bu email zaten kayitli'` → `'Bu e-posta zaten kayıtlı'`
+3. **Fix `tests/test_auth.py` line 433**: Change `'Sifre en az 8 karakter olmali'` → `'Şifre en az 8 karakter olmalı'`
+
+### Risk Points
+
+- **Low risk** — only test string literals are changing
+- No production code, no config, no schema changes
+- The register endpoint, `create_user()`, and Streamlit UI all remain untouched
+
+### Verification Commands
+
+```powershell
+# After fixes:
+python -m pytest tests/test_auth.py -v --tb=short
+
+# Broader check for regressions:
+python -m pytest tests/test_passwords.py -v
+
+# Lint:
+ruff check tests/test_auth.py
+```
+
+### Assumptions
+
+- The user wants the registration feature to pass tests and work correctly, which it already does functionally
+- The Turkish locale strings in `tr.py` are the correct/authoritative versions
+- No additional registration features (email verification, password reset, etc.) are needed
+
+### Handoff Instructions for Coding Stage
+
+1. Read `tests/test_auth.py` — apply 3 edits (lines 191, 419, 433) replacing non-Turkish-ASCII strings with the proper Unicode Turkish strings from the locale
+2. Run `python -m pytest tests/test_auth.py -q --tb=short` — confirm 24 passed, 0 failed
+3. Run `ruff check tests/test_auth.py` — confirm no lint issues
+4. Report result
+
+---
+
+Shall I proceed with this fix? The changes are purely in test assertions — no production code is affected.

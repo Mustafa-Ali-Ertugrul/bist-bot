@@ -14,7 +14,7 @@ TR = timezone(timedelta(hours=3))
 def sync_runtime_feedback(run_scan_callback) -> None:
     """Handle refresh timers, pending background state, and user feedback."""
     if st.session_state.get("scan_error"):
-        st.error(f"Arka plan taramasi hatasi: {st.session_state.scan_error}")
+        st.error(f"Arka plan taraması hatası: {st.session_state.scan_error}")
 
     if _should_auto_refresh():
         run_scan_callback()
@@ -23,7 +23,7 @@ def sync_runtime_feedback(run_scan_callback) -> None:
     if st.session_state.get("scan_in_progress"):
         if st.session_state.get("just_logged_in"):
             return
-        st.caption("Arka planda guncel tarama suruyor; sonuc hazir oldugunda ekran yenilenir.")
+        st.caption("Arka planda güncel tarama sürüyor; sonuç hazır olduğunda ekran yenilenir.")
         time.sleep(1)
         st.rerun()
 

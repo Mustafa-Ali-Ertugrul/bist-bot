@@ -23,7 +23,7 @@ class WhaleAlert:
     volume_ratio: float
     signal_score: float
     reasons: list[str] = field(default_factory=list)
-    action_note: str = "Izleme listesine al; tek basina alim-satim karari degildir."
+    action_note: str = "İzleme listesine al; tek başına alım-satım kararı değildir."
 
 
 def _to_float(value: Any, default: float = 0.0) -> float:
@@ -143,31 +143,31 @@ def build_whale_alerts(
         abs_change = abs(change_pct)
         if abs_change >= 5.0:
             score += 25
-            reasons.append(f"Sert fiyat ayrismasi: %{change_pct:+.1f}")
+            reasons.append(f"Sert fiyat ayrışması: %{change_pct:+.1f}")
         elif abs_change >= 3.0:
             score += 18
             reasons.append(f"Belirgin fiyat hareketi: %{change_pct:+.1f}")
         elif abs_change >= 1.8:
             score += 10
-            reasons.append(f"Gun ici hareket dikkat cekiyor: %{change_pct:+.1f}")
+            reasons.append(f"Gün içi hareket dikkat çekiyor: %{change_pct:+.1f}")
 
         if abs(signal_score) >= 60:
             score += 22
-            reasons.append(f"Mevcut model sinyali guclu: {signal_score:+.0f}")
+            reasons.append(f"Mevcut model sinyali güçlü: {signal_score:+.0f}")
         elif abs(signal_score) >= 35:
             score += 14
             reasons.append(f"Mevcut model sinyali destekliyor: {signal_score:+.0f}")
 
         if adx >= 25:
             score += 8
-            reasons.append(f"Trend gucu yuksek: ADX {adx:.1f}")
+            reasons.append(f"Trend gücü yüksek: ADX {adx:.1f}")
 
         if resistance > 0 and close >= resistance * 0.99:
             score += 8
-            reasons.append("Fiyat direnc bolgesine yakin")
+            reasons.append("Fiyat direnç bölgesine yakın")
         elif support > 0 and close <= support * 1.01:
             score += 8
-            reasons.append("Fiyat destek bolgesinde hacimle izlenmeli")
+            reasons.append("Fiyat destek bölgesinde hacimle izlenmeli")
 
         if obv_trend in {"RISING", "FALLING"}:
             score += 7

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import html
+
 import streamlit as st
 
 from bist_bot.config.settings import settings
@@ -24,17 +26,33 @@ _STRONG_SELL = int(settings.STRONG_SELL_THRESHOLD)
 def _render_filter_status_html(
     *, generated_count: int, visible_count: int, filtered_out_count: int
 ) -> str:
+    # Enforce strict typing and sanitize to prevent any potential XSS
+    min_score = int(st.session_state.get("min_score_filter", -100))
+    rsi_min = int(st.session_state.get("rsi_min_filter", 0))
+    rsi_max = int(st.session_state.get("rsi_max_filter", 100))
+    vol_ratio = float(st.session_state.get("vol_ratio_filter", 0.0))
+
+    filter_details = (
+        "<div style='margin-top: 8px; font-size: 11px; opacity: 0.85; display: flex; gap: 12px; flex-wrap: wrap;'>"
+        f"<span><strong>Min Skor:</strong> {html.escape(str(min_score))}</span>"
+        f"<span><strong>RSI Aralığı:</strong> {html.escape(str(rsi_min))} - {html.escape(str(rsi_max))}</span>"
+        f"<span><strong>Min Hacim Oranı:</strong> {html.escape(f'{vol_ratio:.2f}')}</span>"
+        "</div>"
+    )
+
     if filtered_out_count <= 0:
         return (
             "<div class='bb-note'>"
             f"Tüm sinyaller görünür: üretilen {generated_count} sinyalin {visible_count} tanesi "
             "mevcut filtrelerden geçti."
+            f"{filter_details}"
             "</div>"
         )
     return (
         "<div class='bb-note'>"
         f"Üretilen {generated_count} sinyalin {visible_count} tanesi görünür. "
         f"Skor, RSI veya hacim filtresi nedeniyle {filtered_out_count} sinyal gizlendi."
+        f"{filter_details}"
         "</div>"
     )
 
@@ -98,37 +116,22 @@ def render_signals_page() -> None:
             f"</div>"
         )
 
-    render_section_title("Sinyal filtreleri", "Canlı akışı filtreleyin")
+    render_section_title("Aktif Filtreler", "Canlı akış filtreleme durum ve eşikleri")
     with st.container():
-        render_html_panel(
-            _render_filter_status_html(
-                generated_count=generated_count,
-                visible_count=visible_count,
-                filtered_out_count=filtered_out_count,
+        col_status, col_btn = st.columns([3, 1], gap="medium")
+        with col_status:
+            render_html_panel(
+                _render_filter_status_html(
+                    generated_count=generated_count,
+                    visible_count=visible_count,
+                    filtered_out_count=filtered_out_count,
+                )
             )
-        )
-        f1, f2 = st.columns(2)
-        with f1:
-            st.session_state.min_score_filter = st.slider(
-                get_message("ui.min_score"),
-                -100,
-                100,
-                st.session_state.min_score_filter,
-            )
-            st.session_state.rsi_min_filter = st.slider(
-                get_message("ui.rsi_min"), 0, 100, st.session_state.rsi_min_filter
-            )
-        with f2:
-            st.session_state.rsi_max_filter = st.slider(
-                get_message("ui.rsi_max"), 0, 100, st.session_state.rsi_max_filter
-            )
-            st.session_state.vol_ratio_filter = st.slider(
-                "Min hacim oranı",
-                0.0,
-                5.0,
-                float(st.session_state.vol_ratio_filter),
-                0.1,
-            )
+        with col_btn:
+            st.write("")  # spacing
+            if st.button("Filtreleri Düzenle", use_container_width=True, type="secondary"):
+                st.query_params["page"] = "settings"
+                st.rerun()
 
     buy_tab, neutral_tab, sell_tab = st.tabs(
         [

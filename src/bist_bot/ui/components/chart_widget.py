@@ -94,12 +94,14 @@ def plot_candlestick(df, ticker: str):
         )
     clean_ticker = str(ticker).replace(".IS", "")
     base_layout = _base_layout(440, f"{clean_ticker} fiyat grafiği")
-    fig.update_layout({
-        **base_layout,
-        "xaxis": {**base_layout["xaxis"], **xaxis},
-        "xaxis_rangeslider_visible": False,
-        "legend": dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-    })
+    fig.update_layout(
+        {
+            **base_layout,
+            "xaxis": {**base_layout["xaxis"], **xaxis},
+            "xaxis_rangeslider_visible": False,
+            "legend": dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        }
+    )
     return fig
 
 
@@ -111,11 +113,13 @@ def plot_volume(df):
     ]
     base_layout = _base_layout(180, "Hacim grafiği: Günlük işlem hacmi")
     fig = go.Figure(data=[go.Bar(x=x_values, y=df["volume"], marker_color=colors, name="Hacim")])
-    fig.update_layout({
-        **base_layout,
-        "xaxis": {**base_layout["xaxis"], **xaxis},
-        "showlegend": False,
-    })
+    fig.update_layout(
+        {
+            **base_layout,
+            "xaxis": {**base_layout["xaxis"], **xaxis},
+            "showlegend": False,
+        }
+    )
     return fig
 
 
@@ -135,13 +139,15 @@ def plot_rsi(df):
     fig.add_hrect(y0=70, y1=100, fillcolor="red", opacity=0.08, line_width=0)
     fig.add_hline(y=50, line_dash="dash", line_color="#8b90a0")
     base_layout = _base_layout(180, "RSI (14)")
-    fig.update_layout({
-        **base_layout,
-        "xaxis": {**base_layout["xaxis"], **xaxis},
-        "yaxis": {**base_layout["yaxis"], "range": [0, 100]},
-        "showlegend": True,
-        "legend": dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-    })
+    fig.update_layout(
+        {
+            **base_layout,
+            "xaxis": {**base_layout["xaxis"], **xaxis},
+            "yaxis": {**base_layout["yaxis"], "range": [0, 100]},
+            "showlegend": True,
+            "legend": dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        }
+    )
     return fig
 
 
@@ -179,11 +185,13 @@ def plot_macd(df):
             )
         )
     base_layout = _base_layout(220, "MACD")
-    fig.update_layout({
-        **base_layout,
-        "xaxis": {**base_layout["xaxis"], **xaxis},
-        "legend": dict(orientation="h", yanchor="bottom", y=1.02, x=0),
-    })
+    fig.update_layout(
+        {
+            **base_layout,
+            "xaxis": {**base_layout["xaxis"], **xaxis},
+            "legend": dict(orientation="h", yanchor="bottom", y=1.02, x=0),
+        }
+    )
     return fig
 
 

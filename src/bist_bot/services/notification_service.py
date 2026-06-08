@@ -28,8 +28,8 @@ class NotificationDispatchService:
             return
 
         self.notifier.send_scan_summary(signals, total_scanned)
-        min_score = getattr(self.settings, "TELEGRAM_MIN_SCORE", 48)
-        strong = [signal for signal in actionable if abs(signal.score) >= min_score]
+        min_score = getattr(self.settings, "TELEGRAM_MIN_SCORE", 40)
+        strong = [signal for signal in actionable if signal.score >= min_score]
         for signal in strong:
             if hasattr(signal, "is_expired") and signal.is_expired():
                 logger.info(

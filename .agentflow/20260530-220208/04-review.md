@@ -1,0 +1,56 @@
+# Agentflow Step: 04-review
+
+- Agent: flow-reviewer
+- Model: opencode/deepseek-v4-flash-free
+- Started: 2026-05-30T22:06:45.8743684+03:00
+scan_logs tool placeholder
+pytest_changed tool placeholder
+market_data_health tool placeholder
+config_audit tool placeholder
+
+## STDERR
+[0m
+> flow-reviewer · deepseek-v4-flash-free
+[0m
+[0m$ [0mgit diff tests/test_auth.py
+diff --git a/tests/test_auth.py b/tests/test_auth.py
+index 9148668..aae30d3 100644
+--- a/tests/test_auth.py
++++ b/tests/test_auth.py
+@@ -188,7 +188,7 @@ def test_register_returns_403_when_public_registration_disabled(tmp_path):
+     assert response.status_code == 403
+     payload = response.get_json()
+     assert payload is not None
+-    assert payload["message"] == "Herkese acik kayit kapali"
++    assert payload["message"] == "Herkese açık kayıt kapalı"
+ 
+     with manager.engine.begin() as conn:
+         stored_count = conn.execute(
+@@ -416,7 +416,7 @@ def test_register_rejects_duplicate_email(tmp_path):
+     assert response.status_code == 400
+     payload = response.get_json()
+     assert payload is not None
+-    assert payload["message"] == "Bu email zaten kayitli"
++    assert payload["message"] == "Bu e-posta zaten kayıtlı"
+ 
+ 
+ def test_register_rejects_short_password(tmp_path):
+@@ -430,7 +430,7 @@ def test_register_rejects_short_password(tmp_path):
+     assert response.status_code == 400
+     payload = response.get_json()
+     assert payload is not None
+-    assert payload["message"] == "Sifre en az 8 karakter olmali"
++    assert payload["message"] == "Şifre en az 8 karakter olmalı"
+ 
+ 
+ def test_login_rate_limit_returns_429(tmp_path):
+[0m
+[93m[1m! [0mpermission requested: bash (python -m pytest tests/test_auth.py -q --tb=short 2>&1); auto-rejecting
+[0m✗ [0mpython -m pytest tests/test_auth.py -q --tb=short 2>&1 failed
+[91m[1mError: [0mThe user rejected permission to use this specific tool call.
+[93m[1m! [0mpermission requested: bash (python -m pytest tests/test_passwords.py -q --tb=short 2>&1); auto-rejecting
+[0m✗ [0mpython -m pytest tests/test_passwords.py -q --tb=short 2>&1 failed
+[91m[1mError: [0mThe user rejected permission to use this specific tool call.
+[93m[1m! [0mpermission requested: bash (ruff check tests/test_auth.py 2>&1); auto-rejecting
+[0m✗ [0mruff check tests/test_auth.py 2>&1 failed
+[91m[1mError: [0mThe user rejected permission to use this specific tool call.
