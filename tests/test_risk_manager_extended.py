@@ -253,8 +253,10 @@ def test_sector_limit_functionality():
 
 
 def test_sector_scan_context_manager():
-    """Test sector scan context manager resets sectors."""
+    """Test sector scan context manager isolates scan-local sector reservations."""
     manager = RiskManager(capital=10000)
+    manager.max_sector_cap_pct = 5.0
+    manager.max_position_cap_pct = 5.0
 
     class MockSettings:
         SECTOR_MAP = {"THYAO.IS": "Test"}
@@ -269,7 +271,28 @@ def test_sector_scan_context_manager():
             # Should be able to use sector again inside context
             assert manager.check_sector_limit("THYAO.IS") is True
 
-        # After context, should be reset
+        # After context, previous reservations should be restored instead of lost
+        assert manager.check_sector_limit("THYAO.IS") is False
+
+
+def test_sector_scan_nested_context_restores_parent_reservations():
+    """Nested sector scans should not leak or wipe parent reservations."""
+    manager = RiskManager(capital=10000)
+    manager.max_sector_cap_pct = 5.0
+    manager.max_position_cap_pct = 5.0
+
+    class MockSettings:
+        SECTOR_MAP = {"THYAO.IS": "Test"}
+        SECTOR_LIMIT = 1
+
+    with patch("bist_bot.risk.manager.settings", MockSettings()):
+        with manager.sector_scan():
+            assert manager.check_sector_limit("THYAO.IS") is True
+            with manager.sector_scan():
+                assert manager.check_sector_limit("THYAO.IS") is True
+                assert manager.check_sector_limit("THYAO.IS") is False
+            assert manager.check_sector_limit("THYAO.IS") is False
+
         assert manager.check_sector_limit("THYAO.IS") is True
 
 

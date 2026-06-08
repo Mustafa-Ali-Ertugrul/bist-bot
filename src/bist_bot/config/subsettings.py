@@ -361,9 +361,7 @@ class MLSettings:
 class NotificationSettings:
     TELEGRAM_BOT_TOKEN: str = _get_str_env("TELEGRAM_BOT_TOKEN")
     TELEGRAM_CHAT_ID: str = _get_str_env("TELEGRAM_CHAT_ID")
-    TELEGRAM_MIN_SCORE: int = _get_int_env(
-        "TELEGRAM_MIN_SCORE", _get_int_env("STRONG_BUY_THRESHOLD", 48)
-    )
+    TELEGRAM_MIN_SCORE: int = _get_int_env("TELEGRAM_MIN_SCORE", 40)
     NOTIFICATION_MAX_RETRIES: int = _get_int_env("NOTIFICATION_MAX_RETRIES", 3)
     NOTIFICATION_RETRY_DELAY: int = _get_int_env("NOTIFICATION_RETRY_DELAY", 5)
     # How long a generated signal remains fresh/actionable (minutes).

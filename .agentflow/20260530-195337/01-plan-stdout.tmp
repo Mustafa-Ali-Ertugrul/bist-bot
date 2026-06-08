@@ -1,0 +1,49 @@
+scan_logs tool placeholder
+pytest_changed tool placeholder
+market_data_health tool placeholder
+config_audit tool placeholder
+Register form already exists in `streamlit_app.py` (lines 221–257). Now check backend API for `/api/auth/register`.
+Now check `ALLOW_PUBLIC_REGISTRATION` in settings:
+Full picture now. Summary:
+
+---
+
+## Problem
+
+"Kayıt olmayı ekle" = "Add registration." **Registration is already implemented end-to-end** — both backend (`/api/auth/register` in `dashboard.py:394`) and frontend (`register_tab` in `streamlit_app.py:221`). It is **gated** behind `ALLOW_PUBLIC_REGISTRATION=false` in `.env`. The UI shows "Kayıt kapalı" info message when flag is off.
+
+---
+
+## Current State
+
+| Layer | Status |
+|---|---|
+| Flask `POST /api/auth/register` | ✅ exists, validates email/pw, hashes, inserts user, returns JWT |
+| Streamlit "Kayıt Ol" tab | ✅ exists, calls `/api/auth/register`, auto-logs-in on success |
+| `ALLOW_PUBLIC_REGISTRATION` env flag | ❌ defaults `false` — blocks both API (returns 403) and UI (shows info message) |
+| Locale strings | ✅ tr.py + en.py have all keys |
+
+---
+
+## What "add registration" likely means
+
+Two possible interpretations — need your input:
+
+**A. Just enable it** — set `ALLOW_PUBLIC_REGISTRATION=true` in `.env`. Zero code changes.
+
+**B. Something is broken** — registration tab renders but fails silently, or API endpoint has a bug.
+
+**C. UI tab is missing** — you see only "Giriş" tab, no "Kayıt Ol" tab. (Code shows it exists, but maybe there's a conditional hide.)
+
+---
+
+## Question for you
+
+Which case applies?
+
+1. Registration never worked, want to **enable** it → just flip env flag
+2. Registration tab **missing from UI** even though code has it
+3. Registration form **submits but fails** (what error?)
+4. Want registration feature **for a different UI** (Flask dashboard, Android app?)
+
+Tell me which, then I execute the right minimal fix.

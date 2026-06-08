@@ -29,7 +29,6 @@ from sqlalchemy.orm import (
     scoped_session,
     sessionmaker,
 )
-from sqlalchemy.pool import QueuePool
 
 from bist_bot.app_logging import get_logger
 from bist_bot.config.settings import settings
@@ -180,8 +179,14 @@ class DatabaseManager:
         write_retry_attempts: int = 3,
         write_retry_backoff_seconds: float = 0.05,
     ) -> None:
-        self.database_url = (database_url or settings.DATABASE_URL or "").strip()
         self.sqlite_path = sqlite_path or settings.DB_PATH or "/tmp/bist_signals.db"
+        if database_url is None and sqlite_path is not None:
+            # sqlite_path explicitly given, database_url not given → use sqlite_path
+            self.database_url = ""
+        else:
+            self.database_url = (
+                database_url if database_url is not None else (settings.DATABASE_URL or "").strip()
+            ).strip()
         self._is_sqlite = not self.database_url or self.database_url.startswith("sqlite")
         if self._is_sqlite:
             self._ensure_sqlite_parent_dir()
@@ -191,17 +196,20 @@ class DatabaseManager:
         engine_url = self.database_url or f"sqlite:///{Path(self.sqlite_path)}"
         engine_kwargs: dict[str, Any] = {
             "future": True,
-            "pool_size": pool_size,
-            "max_overflow": max_overflow,
-            "pool_timeout": pool_timeout,
             "pool_pre_ping": True,
         }
         if self._is_sqlite:
-            engine_kwargs["poolclass"] = QueuePool
+            from sqlalchemy.pool import NullPool
+
+            engine_kwargs["poolclass"] = NullPool
             engine_kwargs["connect_args"] = {
                 "check_same_thread": False,
                 "timeout": busy_timeout_ms / 1000,
             }
+        else:
+            engine_kwargs["pool_size"] = pool_size
+            engine_kwargs["max_overflow"] = max_overflow
+            engine_kwargs["pool_timeout"] = pool_timeout
         self.engine = create_engine(engine_url, **engine_kwargs)
         if self._is_sqlite:
             self._register_pragmas()
@@ -262,6 +270,7 @@ class DatabaseManager:
             pass
 
     def _migrate_signals_table(self, conn) -> None:
+        """Migrate signals table schema."""
         signal_columns = {
             row[1] for row in conn.execute(text("PRAGMA table_info(signals)")).fetchall()
         }
@@ -276,6 +285,7 @@ class DatabaseManager:
                 conn.execute(text(sql))
 
     def _migrate_scan_log_table(self, conn) -> None:
+        """Migrate scan_log table schema."""
         scan_log_columns = {
             row[1] for row in conn.execute(text("PRAGMA table_info(scan_log)")).fetchall()
         }
@@ -288,6 +298,7 @@ class DatabaseManager:
                 conn.execute(text(sql))
 
     def _migrate_paper_trades_table(self, conn) -> None:
+        """Migrate paper_trades table schema."""
         paper_table = _validate_table_name(settings.PAPER_TRADES_TABLE)
         quoted_paper_table = _quote_identifier(paper_table)
         paper_columns = {
@@ -307,6 +318,7 @@ class DatabaseManager:
                 conn.execute(text(sql))
 
     def _create_indexes(self, conn) -> None:
+        """Create database indexes."""
         indexes = [
             "CREATE INDEX IF NOT EXISTS idx_signals_created_at ON signals(created_at DESC)",
             "CREATE INDEX IF NOT EXISTS idx_signals_ticker_created_at ON signals(ticker, created_at DESC)",
@@ -325,46 +337,6 @@ class DatabaseManager:
             self._migrate_paper_trades_table(conn)
             self._normalize_timestamp_columns(conn)
             self._create_indexes(conn)
-
-    @staticmethod
-    def _normalize_timestamp_columns_static(conn) -> None:
-        paper_trades_table = _validate_table_name(settings.PAPER_TRADS_TABLE)
-        migrations = {
-            "signals": ["timestamp", "created_at", "outcome_date"],
-            paper_trades_table: ["signal_time", "exit_date", "close_time"],
-            "scan_log": ["timestamp"],
-            "users": ["created_at", "updated_at"],
-            "orders": ["created_at", "updated_at"],
-            "app_settings": ["updated_at"],
-        }
-        for table, columns in migrations.items():
-            try:
-                col_info = {
-                    row[1]: row[2]
-                    for row in conn.execute(text(f"PRAGMA table_info({table})")).fetchall()
-                }
-            except OperationalError:
-                continue
-            for col in columns:
-                if col not in col_info:
-                    continue
-                conn.execute(
-                    text(
-                        "UPDATE " + table + " SET " + col + " = "
-                        "CASE "
-                        "  WHEN " + col + " IS NULL OR " + col + " = ‘’ THEN NULL "
-                        "  WHEN "
-                        + col
-                        + " GLOB ‘*[a-zA-Z]*’ AND "
-                        + col
-                        + " NOT GLOB ‘*[0-9]*’ THEN NULL "
-                        "  WHEN substr(" + col + ", 11, 1) = ‘ ’ THEN "
-                        "    substr(" + col + ", 1, 10) || ‘T’ || substr(" + col + ", 12) "
-                        "  ELSE " + col + " "
-                        "END "
-                        "WHERE " + col + " IS NOT NULL AND " + col + " != ‘’"
-                    )
-                )
 
     def _normalize_timestamp_columns(self, conn) -> None:
         """Convert legacy TEXT timestamps to ISO-8601 so SQLAlchemy DateTime can parse them.

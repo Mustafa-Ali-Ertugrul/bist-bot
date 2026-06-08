@@ -1,0 +1,12 @@
+[
+  "score",
+  "adx",
+  "rsi",
+  "volume_ratio",
+  "atr_pct",
+  "risk_reward_ratio",
+  "volatility_scale",
+  "correlation_scale",
+  "trend_bias",
+  "close_vs_ema_long"
+]

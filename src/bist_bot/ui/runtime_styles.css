@@ -570,10 +570,54 @@
                 border:1px solid rgba(255,255,255,.07) !important;
                 border-radius:18px !important;
             }}
-            .stSlider [data-baseweb="slider"] > div div,
+            /* Slider Track background */
+            .stSlider [data-baseweb="slider"] > div {{
+                background: rgba(255, 255, 255, 0.05) !important;
+                height: 6px !important;
+                border-radius: 3px !important;
+            }}
+            /* Active Track portion */
+            .stSlider [data-baseweb="slider"] > div > div {{
+                background: linear-gradient(90deg, var(--bb-primary), var(--bb-secondary)) !important;
+                height: 6px !important;
+            }}
+            /* Slider Handle/Thumb */
             .stSlider [role="slider"],
             .stSelectSlider [role="slider"] {{
-                background:var(--bb-secondary) !important;
+                background: var(--bb-text) !important;
+                border: 3px solid var(--bb-secondary) !important;
+                box-shadow: 0 0 12px rgba(77, 226, 191, 0.5) !important;
+                width: 20px !important;
+                height: 20px !important;
+                border-radius: 50% !important;
+                transition: transform 0.1s ease, box-shadow 0.1s ease !important;
+            }}
+            /* Hover/Active states for Handle */
+            .stSlider [role="slider"]:hover,
+            .stSelectSlider [role="slider"]:hover {{
+                transform: scale(1.15) !important;
+                box-shadow: 0 0 16px rgba(77, 226, 191, 0.8) !important;
+                cursor: grab !important;
+            }}
+            .stSlider [role="slider"]:active,
+            .stSelectSlider [role="slider"]:active {{
+                transform: scale(1.1) !important;
+                cursor: grabbing !important;
+            }}
+            /* Slider value inputs (top right) */
+            .stSlider input,
+            .stSlider input:invalid,
+            .stSlider input:out-of-range {{
+                background: rgba(8, 13, 20, 0.6) !important;
+                color: var(--bb-text) !important;
+                border: 1px solid rgba(255, 255, 255, 0.08) !important;
+                border-radius: 8px !important;
+                padding: 2px 6px !important;
+                font-family: 'Space Grotesk', sans-serif !important;
+                font-size: 11px !important;
+                font-weight: 700 !important;
+                text-decoration: none !important;
+                box-shadow: none !important;
             }}
             .stTabs [data-baseweb="tab-list"] {{
                 gap:.5rem;

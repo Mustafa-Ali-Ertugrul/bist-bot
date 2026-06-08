@@ -268,7 +268,7 @@ class YFinanceProvider:
 
         max_retries = settings.data.YFINANCE_MAX_RETRIES
         backoff = settings.data.YFINANCE_RETRY_BACKOFF_SECONDS
-        last_exc = None
+        last_exc: Exception | None = None
         for attempt in range(1, max_retries + 1):
             try:
                 self.rate_limiter.wait_if_needed("yahoo.finance")

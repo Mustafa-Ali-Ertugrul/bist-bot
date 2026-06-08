@@ -35,6 +35,13 @@ NUL
 .pip-audit-tmp/
 .coverage
 htmlcov/
+pytest_tmp_*/
+tmppytest-bist-bot/
+ruff_err.txt
+pytest_err.txt
+pytest_risk_err.txt
+test_out.txt
+test_output.txt
 
 # Streamlit secrets
 .streamlit/secrets.toml

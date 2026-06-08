@@ -5,12 +5,12 @@ import html
 import streamlit as st
 
 PAGE_META = {
-    "dashboard": {"label": "Dashboard", "icon": "dashboard"},
-    "scan": {"label": "Scan Detail", "icon": "monitoring"},
-    "signals": {"label": "Signals", "icon": "query_stats"},
+    "dashboard": {"label": "İşlem Paneli", "icon": "dashboard"},
+    "scan": {"label": "Tarama Detayı", "icon": "monitoring"},
+    "signals": {"label": "Sinyaller", "icon": "query_stats"},
     "whale": {"label": "Balina Radar", "icon": "radar"},
-    "analysis": {"label": "Analysis", "icon": "analytics"},
-    "settings": {"label": "Settings", "icon": "settings"},
+    "analysis": {"label": "Analiz", "icon": "analytics"},
+    "settings": {"label": "Ayarlar", "icon": "settings"},
 }
 
 
@@ -38,7 +38,7 @@ def get_active_page(default: str = "dashboard") -> str:
 
 def render_shell(active_page: str, email: str = "") -> None:
     active_label = PAGE_META[active_page]["label"]
-    email_label = html.escape(email or "Guest Session")
+    email_label = html.escape(email or "Misafir Oturumu")
 
     st.markdown(
         (
@@ -53,7 +53,7 @@ def render_shell(active_page: str, email: str = "") -> None:
             "<div class='bb-topbar-actions'>"
             f"<span class='bb-badge bb-badge-positive'>{html.escape(active_label)}</span>"
             f"<span class='bb-session-pill'>{email_label}</span>"
-            "<a class='bb-logout-link' href='?action=logout'>Logout</a>"
+            "<a class='bb-logout-link' href='?action=logout'>Çıkış</a>"
             "</div>"
             "</header>"
         ),

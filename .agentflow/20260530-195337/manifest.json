@@ -1,0 +1,17 @@
+{
+    "task":  "kayit olmayi ekle",
+    "workflow":  "C:\\Users\\Ali\\.config\\opencode\\agentflow\\workflow.default.json",
+    "workspace":  "C:\\Users\\Ali\\OneDrive\\Masaüstü\\bist_bot",
+    "runDir":  "C:\\Users\\Ali\\OneDrive\\Masaüstü\\bist_bot\\.agentflow\\20260530-195337",
+    "started":  "2026-05-30T19:53:37.9716741+03:00",
+    "dryRun":  false,
+    "steps":  [
+                  {
+                      "name":  "01-plan",
+                      "agent":  "plan",
+                      "model":  "9router/antigravity-claude-sonnet-4-6",
+                      "output":  "C:\\Users\\Ali\\OneDrive\\Masaüstü\\bist_bot\\.agentflow\\20260530-195337\\01-plan.md",
+                      "exitCode":  0
+                  }
+              ]
+}

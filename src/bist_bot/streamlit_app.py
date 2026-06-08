@@ -18,7 +18,6 @@ from bist_bot.ui.pages.overview_page import render_overview_page
 from bist_bot.ui.pages.scan_detail_page import render_scan_detail_page
 from bist_bot.ui.pages.settings_page import render_settings_page
 from bist_bot.ui.pages.signals_page import render_signals_page
-from bist_bot.ui.pages.whale_alerts_page import render_whale_alerts_page
 from bist_bot.ui.runtime import (
     api_request,
     fetch_bist100_news,
@@ -26,6 +25,18 @@ from bist_bot.ui.runtime import (
     prepare_streamlit_runtime,
 )
 from bist_bot.ui.runtime_styles import inject_styles
+
+try:
+    from bist_bot.ui.pages.whale_alerts_page import render_whale_alerts_page
+except ModuleNotFoundError as exc:
+    if exc.name != "bist_bot.ui.pages.whale_alerts_page":
+        raise
+
+    def render_whale_alerts_page() -> None:
+        st.warning(
+            "Balina Radar ekranı bu dağıtım paketinde bulunamadı. Lütfen deployment artefactını yenileyin."
+        )
+
 
 st.set_page_config(
     page_title="BIST Bot",
@@ -44,11 +55,11 @@ def _response_message(response, default: str) -> str:
         text = response.text.strip()
         snippet = text[:120] if text else ""
         if code == 429:
-            return "Cok fazla giris denemesi. Lutfen biraz bekleyip tekrar deneyin."
+            return "Çok fazla giriş denemesi. Lütfen biraz bekleyip tekrar deneyin."
         if code == 401:
-            return "Giris basarisiz. Email veya sifre hatali."
+            return "Giriş başarısız. E-posta veya şifre hatalı."
         if code >= 500:
-            return f"API tarafinda hata olustu (HTTP {code}). Lutfen daha sonra tekrar deneyin."
+            return f"API tarafında hata oluştu (HTTP {code}). Lütfen daha sonra tekrar deneyin."
         if snippet:
             return f"HTTP {code}: {snippet}"
     if isinstance(payload, dict):
@@ -56,11 +67,11 @@ def _response_message(response, default: str) -> str:
         if msg:
             return str(msg)
     if code == 429:
-        return "Cok fazla giris denemesi. Lutfen biraz bekleyip tekrar deneyin."
+        return "Çok fazla giriş denemesi. Lütfen biraz bekleyip tekrar deneyin."
     if code == 401:
-        return "Giris basarisiz. Email veya sifre hatali."
+        return "Giriş başarısız. E-posta veya şifre hatalı."
     if code >= 500:
-        return f"API tarafinda hata olustu (HTTP {code}). Lutfen daha sonra tekrar deneyin."
+        return f"API tarafında hata oluştu (HTTP {code}). Lütfen daha sonra tekrar deneyin."
     return default or f"HTTP {code}: bilinmeyen hata"
 
 
@@ -91,9 +102,7 @@ def _render_sidebar_news_html(news_items: list[dict[str, str]]) -> str:
     return (
         "<div class='bb-sidebar-news'>"
         "<div class='bb-sidebar-kicker'>BIST100 Haberleri</div>"
-        "<div class='bb-sidebar-news-list'>"
-        + "".join(rows)
-        + "</div>"
+        "<div class='bb-sidebar-news-list'>" + "".join(rows) + "</div>"
         "</div>"
     )
 
@@ -172,7 +181,7 @@ def _login_form() -> bool:
         <section class="bb-hero bb-hero-secondary">
           <div class="bb-kicker">BIST Bot Girişi</div>
           <div class="bb-title">Premium trading konsolu için operatör kimlik doğrulaması</div>
-          <div class="bb-subtitle">Neon dark fintech arayüzü artık giriş ekranında da devam ediyor. Hesabınızla oturum açıp dashboard, sinyaller, analiz ve ayarlar yüzeylerine erişebilirsiniz.</div>
+          <div class="bb-subtitle">Koyu fintech arayüzü giriş ekranında da devam ediyor. Hesabınızla oturum açıp işlem paneli, sinyaller, analiz ve ayarlar ekranlarına erişebilirsiniz.</div>
           <div class="bb-chip-row">
             <span class="bb-chip">Güvenli JWT Erişimi</span>
             <span class="bb-chip bb-chip-secondary">Mobil Öncelikli Arayüz</span>
@@ -181,15 +190,13 @@ def _login_form() -> bool:
         """,
         unsafe_allow_html=True,
     )
-    login_tab, register_tab = st.tabs(["Giris", "Kayit Ol"])
+    login_tab, register_tab = st.tabs(["Giriş", "Kayıt Ol"])
 
     with login_tab:
         with st.form("login_form"):
-            email = st.text_input("Email", value=st.session_state.get("auth_email", ""))
-            password = st.text_input("Sifre", type="password")
-            submitted = st.form_submit_button(
-                "Giris yap", use_container_width=True, type="primary"
-            )
+            email = st.text_input("E-posta", value=st.session_state.get("auth_email", ""))
+            password = st.text_input("Şifre", type="password")
+            submitted = st.form_submit_button("Giriş yap", use_container_width=True, type="primary")
 
         if submitted:
             try:
@@ -199,27 +206,27 @@ def _login_form() -> bool:
                     json={"email": email, "password": password},
                 )
             except Exception as exc:
-                st.error(f"API erisimi basarisiz: {exc}")
+                st.error(f"API erişimi başarısız: {exc}")
                 return False
             if response.ok:
                 token = _extract_token(response)
                 if token:
                     _complete_auth(str(email), token)
                 else:
-                    st.error("Giris yaniti token icermiyor. Lutfen tekrar deneyin.")
+                    st.error("Giriş yanıtı token içermiyor. Lütfen tekrar deneyin.")
             else:
-                st.error(_response_message(response, "Giris basarisiz. Email veya sifre hatali."))
+                st.error(_response_message(response, "Giriş başarısız. E-posta veya şifre hatalı."))
 
     with register_tab:
         if not settings.ALLOW_PUBLIC_REGISTRATION:
-            st.info("Yeni hesap kaydi kapali. Lutfen tanimli operator hesabi ile giris yapin.")
+            st.info("Yeni hesap kaydı kapalı. Lütfen tanımlı operatör hesabı ile giriş yapın.")
             return False
 
         with st.form("register_form"):
-            register_email = st.text_input("Email", key="register_email")
-            register_password = st.text_input("Sifre", type="password", key="register_password")
+            register_email = st.text_input("E-posta", key="register_email")
+            register_password = st.text_input("Şifre", type="password", key="register_password")
             register_password_confirm = st.text_input(
-                "Sifre tekrar", type="password", key="register_password_confirm"
+                "Şifre tekrar", type="password", key="register_password_confirm"
             )
             register_submitted = st.form_submit_button(
                 "Kaydol", use_container_width=True, type="primary"
@@ -227,7 +234,7 @@ def _login_form() -> bool:
 
         if register_submitted:
             if register_password != register_password_confirm:
-                st.error("Sifreler eslesmiyor.")
+                st.error("Şifreler eşleşmiyor.")
                 return False
             try:
                 response = api_request(
@@ -236,16 +243,16 @@ def _login_form() -> bool:
                     json={"email": register_email, "password": register_password},
                 )
             except Exception as exc:
-                st.error(f"API erisimi basarisiz: {exc}")
+                st.error(f"API erişimi başarısız: {exc}")
                 return False
             if response.ok:
                 token = _extract_token(response)
                 if token:
                     _complete_auth(str(register_email), token)
                 else:
-                    st.error("Kayit yaniti token icermiyor. Lutfen tekrar deneyin.")
+                    st.error("Kayıt yanıtı token içermiyor. Lütfen tekrar deneyin.")
             else:
-                st.error(_response_message(response, "Kayit basarisiz."))
+                st.error(_response_message(response, "Kayıt başarısız."))
     return False
 
 
@@ -293,12 +300,12 @@ def main() -> None:
     # Sidebar navigation — always rendered
     st.sidebar.markdown(
         "<div class='bb-sidebar-kicker'>Navigasyon</div>"
-        "<div class='bb-sidebar-note'>Dashboard ana katmandır; diğer ekranlar alt katmandır.</div>",
+        "<div class='bb-sidebar-note'>İşlem paneli ana katmandır; diğer ekranlar alt katmandır.</div>",
         unsafe_allow_html=True,
     )
     for p, meta in PAGE_META.items():
         if st.sidebar.button(
-            meta['label'],
+            meta["label"],
             key=f"nav_{p}",
             type="primary" if p == page else "secondary",
             use_container_width=True,

@@ -21,10 +21,10 @@ def test_signal_ttl_minutes_default_is_60():
     assert settings.SIGNAL_TTL_MINUTES == 60
 
 
-def test_telegram_min_score_default_is_48():
+def test_telegram_min_score_default_is_40():
     from bist_bot.config.settings import settings
 
-    assert settings.TELEGRAM_MIN_SCORE == 48
+    assert settings.TELEGRAM_MIN_SCORE == 40
 
 
 # ── Signal is_expired behavior ─────────────────────────────────────────────
@@ -115,7 +115,7 @@ def test_signal_auto_sets_expires_at():
 def signals_repo():
     temp_fd, temp_path = tempfile.mkstemp(suffix=".db")
     os.close(temp_fd)
-    manager = DatabaseManager(sqlite_path=temp_path)
+    manager = DatabaseManager(database_url=f"sqlite:///{temp_path}", sqlite_path=temp_path)
     repo = SignalsRepository(manager=manager)
     try:
         yield repo
@@ -221,3 +221,27 @@ def test_expired_signal_not_sent_to_notifier():
 
     assert len(sent) == 1
     assert sent[0].ticker == "FRESH.IS"
+
+
+def test_notification_sends_only_positive_scores_at_minimum():
+    from bist_bot.services.notification_service import NotificationDispatchService
+
+    sent = []
+
+    class FakeNotifier:
+        def send_scan_summary(self, signals, total):
+            pass
+
+        def send_signal(self, signal):
+            sent.append(signal)
+
+    actionable = [
+        Signal(ticker="LOW.IS", signal_type=SignalType.BUY, score=39.0, price=100.0),
+        Signal(ticker="MIN.IS", signal_type=SignalType.BUY, score=40.0, price=100.0),
+        Signal(ticker="SELL.IS", signal_type=SignalType.STRONG_SELL, score=-60.0, price=100.0),
+    ]
+
+    service = NotificationDispatchService(FakeNotifier(), sleeper=lambda _: None)
+    service.notify_scan_results(actionable, actionable, 100)
+
+    assert [signal.ticker for signal in sent] == ["MIN.IS"]

@@ -1,0 +1,54 @@
+scan_logs tool placeholder
+pytest_changed tool placeholder
+market_data_health tool placeholder
+config_audit tool placeholder
+## Test Results Report
+
+### Test commands run
+
+| # | Command | Result |
+|---|---------|--------|
+| 1 | `python -m pytest tests/test_auth.py -q --tb=short` | **24 passed** ✅ |
+| 2 | `python -m pytest tests/test_passwords.py -q --tb=short` | **3 passed** ✅ |
+| 3 | `ruff check tests/test_auth.py` | **All checks passed** ✅ |
+
+### Git diff confirms — only 3 lines changed
+
+```
+-    assert payload["message"] == "Herkese acik kayit kapali"
++    assert payload["message"] == "Herkese açık kayıt kapalı"
+
+-    assert payload["message"] == "Bu email zaten kayitli"
++    assert payload["message"] == "Bu e-posta zaten kayıtlı"
+
+-    assert payload["message"] == "Sifre en az 8 karakter olmali"
++    assert payload["message"] == "Şifre en az 8 karakter olmalı"
+```
+
+No production code was touched. Only `tests/test_auth.py` was modified.
+
+### Failures diagnosed
+
+- **Before fix**: 3 failures in `test_auth.py` — Turkish character mismatches between test assertions (`acik`, `kayit`, `Sifre`, `email`) and the actual locale strings (`açık`, `kayıt`, `Şifre`, `e-posta`).
+- **After fix**: All 24 auth tests + 3 password tests pass. Zero failures.
+- **Lint**: Only pre-existing errors in third-party `get-pip.py` (9 issues, none in project code).
+
+### Coverage gaps
+
+The registration feature appears well-tested:
+- 3 registration-specific tests (`test_register_returns_403_when_public_registration_disabled`, `test_register_rejects_duplicate_email`, `test_register_rejects_short_password`) all pass.
+- No missing regression tests detected. The existing test coverage is adequate for this change.
+
+### Verdict
+
+All checks pass. The changes are minimal (3 string literals), low-risk, and correctly applied. Proceed to the next pipeline stage.
+
+### Recommended next action for reviewer/fixer
+
+No further action needed. The fix is complete and verified:
+- ✅ Test assertions now match the authoritative Turkish locale strings
+- ✅ All 27 relevant tests pass (24 auth + 3 password)
+- ✅ No lint issues in the changed file
+- ✅ No production code changes
+- ✅ No regression uncovered
+Testing stage complete. All verifications passed — the fix is clean and ready for review.

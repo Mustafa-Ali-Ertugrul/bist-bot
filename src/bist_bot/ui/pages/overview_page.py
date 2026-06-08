@@ -17,6 +17,7 @@ from bist_bot.ui.runtime import (
     fetch_index_data,
     filter_signals,
     get_market_summary,
+    request_scan,
 )
 
 
@@ -79,6 +80,7 @@ def _rejection_label(reason_code: str) -> str:
         "portfolio_risk_blocked": "Portföy risk limiti",
         "meta_model_blocked": "Meta-model elemesi",
         "mtf_confluence_blocked": "MTF uyumsuzluğu",
+        "confluence_failed": "Uyum filtresi",
         "hold_neutral_zone": "Nötr bölge (beklemede)",
     }
     return labels.get(reason_code, reason_code.replace("_", " ").title())
@@ -92,6 +94,7 @@ def _stage_label(stage: str) -> str:
         "classification": "Sınıflandırma",
         "risk": "Risk",
         "mtf": "MTF",
+        "confluence": "Uyum",
     }
     return labels.get(stage, stage)
 
@@ -222,7 +225,9 @@ def render_overview_page() -> None:
         all_data=all_data,
     )
     scan_stats = session_scan_stats if isinstance(session_scan_stats, dict) else {}
-    generated_signals = _to_int(scan_stats.get("generated", latest_scan.get("signals_generated", 0)))
+    generated_signals = _to_int(
+        scan_stats.get("generated", latest_scan.get("signals_generated", 0))
+    )
     rejected_candidates = _candidate_rejection_count(scanned_assets, generated_signals)
     active_signals = [s for s in signals if getattr(s.signal_type, "name", "") != "HOLD"]
     strong = sorted(
@@ -247,13 +252,20 @@ def render_overview_page() -> None:
         ],
         accent="secondary",
     )
+    if not st.session_state.get("scan_in_progress"):
+        if st.button("BIST100 taramasını başlat", type="primary", use_container_width=True):
+            if request_scan(force_clear=True):
+                st.info("BIST100 taraması arka planda başlatıldı.")
+                st.rerun()
+            else:
+                st.info("Tarama şu an başlatılamadı. Birkaç saniye sonra tekrar deneyin.")
     if st.session_state.get("scan_in_progress"):
-        phase = st.session_state.get("scan_phase") or "Tarama baslatiliyor"
-        st.info(f"Arka plan taramasi suruyor: {phase}")
+        phase = st.session_state.get("scan_phase") or "Tarama başlatılıyor"
+        st.info(f"Arka plan taraması sürüyor: {phase}")
     elif st.session_state.get("scan_error"):
         phase = st.session_state.get("scan_phase")
-        detail = f" Son asama: {phase}" if phase else ""
-        st.warning(f"Tarama tamamlanamadi: {st.session_state.scan_error}.{detail}")
+        detail = f" Son aşama: {phase}" if phase else ""
+        st.warning(f"Tarama tamamlanamadı: {st.session_state.scan_error}.{detail}")
 
     k1, k2, k3, k4 = st.columns(4)
     with k1:
@@ -266,7 +278,7 @@ def render_overview_page() -> None:
         )
     with k3:
         render_metric_block(
-            "?retilen sinyaller",
+            "Üretilen sinyaller",
             str(generated_signals),
             "HOLD dahil toplam sinyal",
         )
@@ -274,7 +286,7 @@ def render_overview_page() -> None:
         render_metric_block(
             "Elenen adaylar",
             str(rejected_candidates),
-            "BIST100 icinde sinyale donusmeyen tekil varlik",
+            "BIST100 içinde sinyale dönüşmeyen tekil varlık",
             accent="danger" if rejected_candidates else "positive",
         )
 
@@ -354,9 +366,9 @@ def render_overview_page() -> None:
                 "<div class='bb-list-row'>"
                 "<div><div class='bb-label'>Piyasa dağılımı</div><div class='bb-list-row-subtitle'>Aşırı satım / nötr / aşırı alım dağılımı</div></div>"
                 "<div style='display:flex;gap:8px;flex-wrap:wrap;'>"
-                + _badge(f"Aşırı Satım {tone.get('Asiri Satim', 0)}")
+                + _badge(f"Aşırı Satım {tone.get('Aşırı Satım', tone.get('Asiri Satim', 0))}")
                 + _badge(f"Nötr {tone.get('Notr', 0)}", positive=False)
-                + _badge(f"Aşırı Alım {tone.get('Asiri Alim', 0)}")
+                + _badge(f"Aşırı Alım {tone.get('Aşırı Alım', tone.get('Asiri Alim', 0))}")
                 + "</div></div>"
             )
         else:
@@ -422,7 +434,11 @@ def render_overview_page() -> None:
     rows: list[str] = []
     for sig in recent_signals[:10]:
         score = float(sig.get("score", 0) or 0)
-        outcome = html.escape(str(sig.get("outcome", get_message("ui.pending"))))
+        raw_outcome = str(sig.get("outcome", get_message("ui.pending")) or "")
+        outcome_label = (
+            get_message("ui.pending") if raw_outcome.upper() == "PENDING" else raw_outcome
+        )
+        outcome = html.escape(outcome_label)
         rows.append(
             "<tr>"
             f"<td><code>{html.escape(str(sig.get('ticker', '')).replace('.IS', ''))}</code></td>"

@@ -123,7 +123,7 @@ def append_signal_reasons(signal: Signal, risk_levels: RiskLevels) -> None:
         return
     signal.reasons.append(f"R/R: 1:{risk_levels.risk_reward_ratio:.1f} | {risk_levels.method_used}")
     signal.reasons.append(
-        f"Pozisyon: {risk_levels.position_size} lot | Risk Butcesi: TL{risk_levels.risk_budget_tl:.2f}"
+        f"Pozisyon: {risk_levels.position_size} lot | Risk Bütçesi: TL{risk_levels.risk_budget_tl:.2f}"
     )
     signal.reasons.append(
         f"Volatilite throttle: x{risk_levels.volatility_scale:.2f} | ATR%: %{risk_levels.atr_pct * 100:.2f}"

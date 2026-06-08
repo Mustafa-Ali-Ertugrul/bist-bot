@@ -30,7 +30,7 @@ def render_signal_card(signal, df_data=None, chart_factory=None) -> None:
     badge_class, accent_color, panel_accent = _accent(float(getattr(signal, "score", 0)))
     confidence = str(getattr(signal, "confidence", "CACHE") or "CACHE").replace("confidence.", "")
     confidence_label = (
-        get_message(f"confidence.{confidence.lower()}") if confidence != "CACHE" else "BELIRSIZ"
+        get_message(f"confidence.{confidence.lower()}") if confidence != "CACHE" else "BELİRSİZ"
     )
     reasons = [html.escape(str(item)) for item in getattr(signal, "reasons", [])[:4]]
     reasons_html = "".join(
@@ -42,14 +42,14 @@ def render_signal_card(signal, df_data=None, chart_factory=None) -> None:
     <div style='display:grid;gap:16px;'>
       <div style='display:flex;align-items:flex-start;justify-content:space-between;gap:14px;'>
         <div>
-          <div class='bb-label'>Sinyal Akisi</div>
+          <div class='bb-label'>Sinyal Akışı</div>
           <div style='font-size:30px;font-weight:900;letter-spacing:-.05em;margin-top:6px;color:var(--bb-text);'>{html.escape(short_name)}</div>
           <div class='bb-note'>{html.escape(ticker)}</div>
         </div>
         <span class='{badge_class}'>{html.escape(signal.signal_type.display)}</span>
       </div>
       <div style='display:flex;flex-wrap:wrap;gap:8px;'>
-        <span class='bb-chip'>Guven {html.escape(confidence_label.title())}</span>
+        <span class='bb-chip'>Güven {html.escape(confidence_label.title())}</span>
         <span class='bb-chip bb-chip-secondary'>Pozisyon boyutu {html.escape(str(signal.position_size if signal.position_size is not None else "-"))}</span>
       </div>
       <div style='display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;'>

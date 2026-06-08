@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from unittest.mock import patch
 
@@ -9,6 +10,33 @@ import pandas as pd
 import pytest
 
 from bist_bot.data.fetcher import BISTDataFetcher
+
+
+def _parse_structured_logs(caplog) -> list[dict]:
+    """Extract structured JSON log records from caplog (handles app_logging format)."""
+    records = []
+    for record in caplog.records:
+        try:
+            # Try to parse the entire message as JSON
+            msg = getattr(record, "msg", "") or getattr(record, "message", "")
+            if isinstance(msg, str) and msg.strip().startswith("{"):
+                records.append(json.loads(msg))
+                continue
+            # Fallback: try to extract JSON from the full log line
+            if hasattr(record, "getMessage"):
+                full = record.getMessage()
+                if "event=" in full:
+                    # Simple key=value parser for structured logs
+                    data = {}
+                    for part in full.split():
+                        if "=" in part:
+                            k, v = part.split("=", 1)
+                            data[k] = v.strip('"')
+                    if "event" in data:
+                        records.append(data)
+        except Exception:
+            continue
+    return records
 
 
 def test_get_current_price_realtime_success(caplog):
@@ -30,8 +58,11 @@ def test_get_current_price_realtime_success(caplog):
         "source": "scrape",
         "status": "success",
     }
-    assert "quote_resolution_completed" in caplog.text
-    assert "quote_source=scrape" in caplog.text
+    logs = _parse_structured_logs(caplog)
+    assert any(
+        log.get("event") == "quote_resolution_completed" and log.get("quote_source") == "scrape"
+        for log in logs
+    )
 
 
 def test_get_current_price_realtime_failure_yahoo_fallback():
@@ -99,8 +130,12 @@ def test_get_current_price_both_fail(caplog):
                     "status": "failed",
                     "reason": "batch_fallback",
                 }
-                assert "quote_resolution_terminal_failed" in caplog.text
-                assert "quote_source=failed" in caplog.text
+                logs = _parse_structured_logs(caplog)
+                assert any(
+                    log.get("event") == "quote_resolution_terminal_failed"
+                    and log.get("quote_source") == "failed"
+                    for log in logs
+                )
 
 
 def test_get_current_price_realtime_disabled():

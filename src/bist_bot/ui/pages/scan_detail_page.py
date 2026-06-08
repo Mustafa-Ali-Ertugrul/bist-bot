@@ -183,7 +183,7 @@ def render_scan_detail_page() -> None:
     try:
         stats_response = api_request("GET", "/api/stats")
     except Exception as exc:
-        st.warning(f"Scan detay verisi alinamadi: {exc}")
+        st.warning(f"Tarama detay verisi alınamadı: {exc}")
         return
 
     try:
@@ -290,7 +290,9 @@ def render_scan_detail_page() -> None:
 
     if scanned <= 0 and not scan_id:
         render_section_title("Scan durumu", "Bekleyen veri")
-        render_html_panel("<div class='bb-note'>Henuz tamamlanmis bir scan kaydi bulunmuyor.</div>")
+        render_html_panel(
+            "<div class='bb-note'>Henüz tamamlanmış bir tarama kaydı bulunmuyor.</div>"
+        )
         return
 
     left, right = st.columns(2, gap="large")
@@ -360,5 +362,5 @@ def render_scan_detail_page() -> None:
         render_html_panel(_render_rejection_rate_history(history_scans), accent="secondary")
     else:
         render_html_panel(
-            "<div class='bb-note'>Historical analytics icin yeterli scan gecmisi henuz birikmedi.</div>"
+            "<div class='bb-note'>Geçmiş analitiği için yeterli tarama geçmişi henüz birikmedi.</div>"
         )

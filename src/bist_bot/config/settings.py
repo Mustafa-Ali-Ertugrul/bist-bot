@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from dataclasses import replace as dataclass_replace
@@ -191,22 +192,14 @@ class Settings:
         return errors
 
     SCAN_TIMEOUT_SECONDS: int = field(
-        default_factory=lambda: int(
-            getattr(__import__("os").environ, "get", lambda _k, d: d)("SCAN_TIMEOUT_SECONDS", "30")
-        )
+        default_factory=lambda: int(os.environ.get("SCAN_TIMEOUT_SECONDS", "30"))
     )
     STREAMLIT_INITIAL_SCAN_LIMIT: int = field(
-        default_factory=lambda: int(
-            getattr(__import__("os").environ, "get", lambda _k, d: d)(
-                "STREAMLIT_INITIAL_SCAN_LIMIT", "10"
-            )
-        )
+        default_factory=lambda: int(os.environ.get("STREAMLIT_INITIAL_SCAN_LIMIT", "10"))
     )
     STREAMLIT_BACKGROUND_SCAN_TIMEOUT_SECONDS: int = field(
         default_factory=lambda: int(
-            getattr(__import__("os").environ, "get", lambda _k, d: d)(
-                "STREAMLIT_BACKGROUND_SCAN_TIMEOUT_SECONDS", "45"
-            )
+            os.environ.get("STREAMLIT_BACKGROUND_SCAN_TIMEOUT_SECONDS", "45")
         )
     )
 

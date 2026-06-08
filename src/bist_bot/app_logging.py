@@ -15,7 +15,6 @@ try:
 except ImportError:  # pragma: no cover - optional dependency
     _structlog = None
 
-
 _DEFAULT_COMPONENT = "app"
 
 _correlation_id_ctx: ContextVar[str | None] = ContextVar("correlation_id", default=None)

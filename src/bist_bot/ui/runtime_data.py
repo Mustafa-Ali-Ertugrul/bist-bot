@@ -143,9 +143,9 @@ def get_market_summary(signals, all_data):
             rsi_values.append(rsi)
             vol_ratios.append(vol)
             if rsi < 30:
-                sector_data["Asiri Satim"] = sector_data.get("Asiri Satim", 0) + 1
+                sector_data["Aşırı Satım"] = sector_data.get("Aşırı Satım", 0) + 1
             elif rsi > 70:
-                sector_data["Asiri Alim"] = sector_data.get("Asiri Alim", 0) + 1
+                sector_data["Aşırı Alım"] = sector_data.get("Aşırı Alım", 0) + 1
             else:
                 sector_data["Notr"] = sector_data.get("Notr", 0) + 1
         except Exception:

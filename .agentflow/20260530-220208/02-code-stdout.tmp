@@ -1,0 +1,24 @@
+scan_logs tool placeholder
+pytest_changed tool placeholder
+market_data_health tool placeholder
+config_audit tool placeholder
+The plan is correct — 3 test assertions use ASCII approximations instead of proper Turkish Unicode characters. Let me fix them.
+All three edits applied. Now let me verify.
+All 24 tests pass. Let me also run the broader checks.
+## Report
+
+**Files changed:**
+- `tests/test_auth.py` — 3 test assertions fixed
+
+**Behavior changed:**
+- No production code changed. This is purely a test fix.
+- Line 191: `"Herkese acik kayit kapali"` → `"Herkese açık kayıt kapalı"`
+- Line 419: `"Bu email zaten kayitli"` → `"Bu e-posta zaten kayıtlı"`
+- Line 433: `"Sifre en az 8 karakter olmali"` → `"Şifre en az 8 karakter olmalı"`
+
+**Commands run and results:**
+- `python -m pytest tests/test_auth.py -q --tb=short` — **24 passed** ✅
+- `python -m pytest tests/test_passwords.py -q --tb=short` — **3 passed** ✅
+- `ruff check tests/test_auth.py` — **All checks passed** ✅
+
+**Risk:** Low. Only test string literals changed to match the authoritative Turkish locale strings in `tr.py`. The registration feature itself was already functional.

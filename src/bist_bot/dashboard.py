@@ -219,7 +219,7 @@ def create_dashboard_app(
     app.config["broker"] = broker
     app.config["circuit_breaker"] = circuit_breaker
     app.config["JWT_SECRET_KEY"] = settings.JWT_SECRET_KEY
-    app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(hours=12)
+    app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(hours=1)
     app.config["RATELIMIT_STORAGE_URI"] = settings.RATE_LIMIT_STORAGE_URI
     app.config["ALLOW_PUBLIC_REGISTRATION"] = settings.ALLOW_PUBLIC_REGISTRATION
 
@@ -305,9 +305,10 @@ def create_dashboard_app(
         manager = getattr(get_db(), "manager", None)
         if manager is None:
             return False, get_message("api.register_error")
-        if "@" not in email or "." not in email.split("@")[-1]:
+        parts = email.rsplit("@", 1)
+        if len(parts) != 2 or not parts[0] or "." not in parts[1] or " " in email:
             return False, get_message("api.invalid_email")
-        if len(password) < 8:
+        if len(password) < 12:
             return False, get_message("api.password_too_short")
 
         timestamp = datetime.now(TR)
@@ -317,7 +318,7 @@ def create_dashboard_app(
                     text(
                         """
                         INSERT INTO users (email, password_hash, role, created_at, updated_at)
-                        VALUES (:email, :password_hash, 'admin', :created_at, :updated_at)
+                        VALUES (:email, :password_hash, 'user', :created_at, :updated_at)
                         """
                     ),
                     {
@@ -337,6 +338,9 @@ def create_dashboard_app(
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; form-action 'self'; frame-ancestors 'none'"
+        )
         return response
 
     @app.route("/health")
@@ -389,7 +393,7 @@ def create_dashboard_app(
 
         logger.info("api_login_succeeded", email=email)
         token = create_access_token(identity=email)
-        return jsonify({"status": "ok", "access_token": token, "expires_in_hours": 12})
+        return jsonify({"status": "ok", "access_token": token, "expires_in_hours": 1})
 
     @app.route("/api/auth/register", methods=["POST"])
     @limiter.limit("5 per minute", key_func=_auth_rate_limit_key)
@@ -407,7 +411,7 @@ def create_dashboard_app(
             return jsonify({"status": "error", "message": message}), 400
 
         token = create_access_token(identity=email)
-        return jsonify({"status": "ok", "access_token": token, "expires_in_hours": 12}), 201
+        return jsonify({"status": "ok", "access_token": token, "expires_in_hours": 1}), 201
 
     @app.route("/api/scan", methods=["POST"])
     @jwt_required()
@@ -639,6 +643,7 @@ def create_dashboard_app(
 
     @app.route("/api/signals/history")
     @jwt_required()
+    @limiter.limit("60 per minute")
     def api_signal_history():
         limit = request.args.get("limit", 50, type=int)
         ticker = request.args.get("ticker")
@@ -725,7 +730,7 @@ def main() -> None:
         host="0.0.0.0",
         port=settings.FLASK_PORT,
         debug=False,
-        use_reloader=settings.FLASK_DEBUG,
+        use_reloader=False,
     )
 
 

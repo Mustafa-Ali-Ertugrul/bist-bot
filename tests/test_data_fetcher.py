@@ -167,6 +167,44 @@ def test_fetcher_falls_back_to_static_universe_when_provider_universe_empty():
     assert fetcher.watchlist == BIST100_TICKERS
 
 
+def test_static_bist100_universe_has_exactly_100_unique_symbols():
+    from bist_bot.config.settings import settings
+    from bist_bot.data.bist100 import BIST100_TICKERS
+
+    retired_or_invalid = {
+        "ANACM.IS",
+        "CLDNM.IS",
+        "FENIS.IS",
+        "HASAN.IS",
+        "HUSEIN.IS",
+        "ICTURKEY.IS",
+    }
+
+    assert len(BIST100_TICKERS) == 100
+    assert len(set(BIST100_TICKERS)) == 100
+    assert all(ticker.endswith(".IS") for ticker in BIST100_TICKERS)
+    assert retired_or_invalid.isdisjoint(BIST100_TICKERS)
+    assert settings.DEFAULT_BIST100_WATCHLIST == BIST100_TICKERS
+    assert settings.WATCHLIST == BIST100_TICKERS
+
+
+def test_get_bist100_tickers_uses_static_universe_without_wrong_screener_call():
+    from bist_bot.data.bist100 import BIST100_TICKERS
+    from bist_bot.data.quotes import get_bist100_tickers
+
+    class RateLimiterSpy:
+        calls = 0
+
+        def wait_if_needed(self, domain: str) -> None:
+            _ = domain
+            self.calls += 1
+
+    limiter = RateLimiterSpy()
+
+    assert get_bist100_tickers(limiter, force_refresh=True) == BIST100_TICKERS
+    assert limiter.calls == 0
+
+
 def test_fetcher_uses_provider_quote_fallback_before_history(monkeypatch):
     from bist_bot.data import fetcher as data_fetcher
     from bist_bot.data.fetcher import BISTDataFetcher
