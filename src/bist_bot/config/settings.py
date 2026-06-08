@@ -211,5 +211,5 @@ class Settings:
     )
 
 
-settings = Settings()
 _SETTINGS_FIELD_NAMES = frozenset(Settings.__dataclass_fields__)
+settings = Settings()

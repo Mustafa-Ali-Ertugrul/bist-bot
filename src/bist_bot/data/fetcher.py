@@ -172,7 +172,7 @@ class BISTDataFetcher:
         self._max_workers = min(8, max(2, len(self._watchlist)))
 
     def _cache_key(self, ticker: str, period: str, interval: str) -> tuple[str, str, str]:
-        return (ticker, period, interval)
+        return (normalize_ticker(ticker), period, interval)
 
     def _now(self) -> datetime:
         return datetime.now()

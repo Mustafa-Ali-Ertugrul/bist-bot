@@ -50,7 +50,7 @@ class YFinanceProvider:
     def _retry_yfinance_call(self, func, ticker: str, *args, **kwargs) -> Any:
         max_retries = settings.data.YFINANCE_MAX_RETRIES
         backoff = settings.data.YFINANCE_RETRY_BACKOFF_SECONDS
-        last_exc = None
+        last_exc: Exception | None = None
         for attempt in range(1, max_retries + 1):
             try:
                 self.rate_limiter.wait_if_needed("yahoo.finance")
@@ -99,8 +99,8 @@ class YFinanceProvider:
                 )
                 return None
             except Exception as exc:
+                last_exc = exc
                 if self._is_retryable_error(exc):
-                    last_exc = exc
                     if attempt < max_retries:
                         wait = backoff * (2 ** (attempt - 1))
                         logger.warning(

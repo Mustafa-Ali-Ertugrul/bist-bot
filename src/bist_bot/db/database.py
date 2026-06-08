@@ -42,9 +42,13 @@ class Base(DeclarativeBase):
 
 
 def _validate_table_name(name: str) -> str:
-    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,63}", name):
         raise ValueError(f"Invalid SQL table name configured for PAPER_TRADES_TABLE: {name!r}")
     return name
+
+
+def _quote_identifier(name: str) -> str:
+    return f'"{_validate_table_name(name)}"'
 
 
 class SignalRecord(Base):
@@ -75,7 +79,7 @@ class SignalRecord(Base):
 
 
 class PaperTradeRecord(Base):
-    __tablename__ = settings.PAPER_TRADES_TABLE
+    __tablename__ = _validate_table_name(settings.PAPER_TRADES_TABLE)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     ticker: Mapped[str] = mapped_column(String, nullable=False, index=True)
@@ -284,21 +288,23 @@ class DatabaseManager:
             if "rejection_breakdown" not in scan_log_columns:
                 conn.execute(text("ALTER TABLE scan_log ADD COLUMN rejection_breakdown TEXT"))
 
+            quoted_paper_table = _quote_identifier(paper_table)
             paper_columns = {
-                row[1] for row in conn.execute(text(f"PRAGMA table_info({paper_table})")).fetchall()
+                row[1]
+                for row in conn.execute(text(f"PRAGMA table_info({quoted_paper_table})")).fetchall()
             }
             if "stop_loss" not in paper_columns:
-                conn.execute(text(f"ALTER TABLE {paper_table} ADD COLUMN stop_loss REAL"))
+                conn.execute(text(f"ALTER TABLE {quoted_paper_table} ADD COLUMN stop_loss REAL"))
             if "target_price" not in paper_columns:
-                conn.execute(text(f"ALTER TABLE {paper_table} ADD COLUMN target_price REAL"))
+                conn.execute(text(f"ALTER TABLE {quoted_paper_table} ADD COLUMN target_price REAL"))
             if "exit_price" not in paper_columns:
-                conn.execute(text(f"ALTER TABLE {paper_table} ADD COLUMN exit_price REAL"))
+                conn.execute(text(f"ALTER TABLE {quoted_paper_table} ADD COLUMN exit_price REAL"))
             if "exit_date" not in paper_columns:
-                conn.execute(text(f"ALTER TABLE {paper_table} ADD COLUMN exit_date TEXT"))
+                conn.execute(text(f"ALTER TABLE {quoted_paper_table} ADD COLUMN exit_date TEXT"))
             if "close_reason" not in paper_columns:
-                conn.execute(text(f"ALTER TABLE {paper_table} ADD COLUMN close_reason TEXT"))
+                conn.execute(text(f"ALTER TABLE {quoted_paper_table} ADD COLUMN close_reason TEXT"))
             if "close_time" not in paper_columns:
-                conn.execute(text(f"ALTER TABLE {paper_table} ADD COLUMN close_time TEXT"))
+                conn.execute(text(f"ALTER TABLE {quoted_paper_table} ADD COLUMN close_time TEXT"))
 
             self._normalize_timestamp_columns(conn)
 
@@ -375,27 +381,30 @@ class DatabaseManager:
             "app_settings": ["updated_at"],
         }
         for table, columns in migrations.items():
+            quoted_table = _quote_identifier(table)
             try:
                 col_info = {
                     row[1]: row[2]
-                    for row in conn.execute(text(f"PRAGMA table_info({table})")).fetchall()
+                    for row in conn.execute(text(f"PRAGMA table_info({quoted_table})")).fetchall()
                 }
             except OperationalError:
                 continue
             for col in columns:
                 if col not in col_info:
                     continue
+                quoted_col = _quote_identifier(col)
                 conn.execute(
                     text(
-                        f"UPDATE {table} SET {col} = "
+                        f"UPDATE {quoted_table} SET {quoted_col} = "
                         f"CASE "
-                        f"  WHEN {col} IS NULL OR {col} = '' THEN NULL "
-                        f"  WHEN {col} GLOB '*[a-zA-Z]*' AND {col} NOT GLOB '*[0-9]*' THEN NULL "
-                        f"  WHEN substr({col}, 11, 1) = ' ' THEN "
-                        f"    substr({col}, 1, 10) || 'T' || substr({col}, 12) "
-                        f"  ELSE {col} "
+                        f"  WHEN {quoted_col} IS NULL OR {quoted_col} = '' THEN NULL "
+                        f"  WHEN {quoted_col} GLOB '*[a-zA-Z]*' "
+                        f"AND {quoted_col} NOT GLOB '*[0-9]*' THEN NULL "
+                        f"  WHEN substr({quoted_col}, 11, 1) = ' ' THEN "
+                        f"    substr({quoted_col}, 1, 10) || 'T' || substr({quoted_col}, 12) "
+                        f"  ELSE {quoted_col} "
                         f"END "
-                        f"WHERE {col} IS NOT NULL AND {col} != ''"
+                        f"WHERE {quoted_col} IS NOT NULL AND {quoted_col} != ''"
                     )
                 )
 

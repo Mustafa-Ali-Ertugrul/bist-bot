@@ -48,11 +48,13 @@ def apply_position_budget(
 
 
 def calculate_kelly_fraction(win_probability: float, reward_to_risk_ratio: float) -> float:
-    if reward_to_risk_ratio <= 0:
+    if reward_to_risk_ratio <= 0 or win_probability <= 0:
         return 0.0
+    if win_probability >= 1:
+        return 1.0
     probability = max(0.0, min(1.0, win_probability))
     loss_probability = 1.0 - probability
-    return max(0.0, probability - (loss_probability / reward_to_risk_ratio))
+    return max(0.0, min(1.0, probability - (loss_probability / reward_to_risk_ratio)))
 
 
 def estimate_liquidity_value(levels: RiskLevels, liquidity_value: float | None) -> None:
