@@ -11,7 +11,9 @@ try:
     import holidays as _holidays
 
     _TR_HOLIDAYS = _holidays.Turkey(years=range(2020, 2031))
-except Exception:
+except ImportError:
+    _TR_HOLIDAYS = {}
+except AttributeError:
     _TR_HOLIDAYS = {}
 
 TR = timezone(timedelta(hours=3))

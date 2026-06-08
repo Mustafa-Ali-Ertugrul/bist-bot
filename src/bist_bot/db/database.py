@@ -20,7 +20,7 @@ from sqlalchemy import (
     event,
     text,
 )
-from sqlalchemy.exc import IntegrityError, OperationalError
+from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
 from sqlalchemy.orm import (
     DeclarativeBase,
     Mapped,
@@ -256,72 +256,75 @@ class DatabaseManager:
                     message="Users table is empty and public registration is off. "
                     "Set ADMIN_BOOTSTRAP_EMAIL and ADMIN_BOOTSTRAP_PASSWORD_HASH to seed an admin user.",
                 )
-        except Exception:
+        except OperationalError:
             pass
+        except SQLAlchemyError:
+            pass
+
+    def _migrate_signals_table(self, conn) -> None:
+        signal_columns = {
+            row[1] for row in conn.execute(text("PRAGMA table_info(signals)")).fetchall()
+        }
+        migrations = [
+            ("conditions", "ALTER TABLE signals ADD COLUMN conditions TEXT NOT NULL DEFAULT '[]'"),
+            ("created_at", "ALTER TABLE signals ADD COLUMN created_at TEXT NOT NULL DEFAULT ''"),
+            ("position_size", "ALTER TABLE signals ADD COLUMN position_size INTEGER"),
+            ("expires_at", "ALTER TABLE signals ADD COLUMN expires_at TEXT"),
+        ]
+        for column, sql in migrations:
+            if column not in signal_columns:
+                conn.execute(text(sql))
+
+    def _migrate_scan_log_table(self, conn) -> None:
+        scan_log_columns = {
+            row[1] for row in conn.execute(text("PRAGMA table_info(scan_log)")).fetchall()
+        }
+        migrations = [
+            ("scan_id", "ALTER TABLE scan_log ADD COLUMN scan_id TEXT"),
+            ("rejection_breakdown", "ALTER TABLE scan_log ADD COLUMN rejection_breakdown TEXT"),
+        ]
+        for column, sql in migrations:
+            if column not in scan_log_columns:
+                conn.execute(text(sql))
+
+    def _migrate_paper_trades_table(self, conn) -> None:
+        paper_table = _validate_table_name(settings.PAPER_TRADES_TABLE)
+        quoted_paper_table = _quote_identifier(paper_table)
+        paper_columns = {
+            row[1]
+            for row in conn.execute(text(f"PRAGMA table_info({quoted_paper_table})")).fetchall()
+        }
+        migrations = [
+            ("stop_loss", f"ALTER TABLE {quoted_paper_table} ADD COLUMN stop_loss REAL"),
+            ("target_price", f"ALTER TABLE {quoted_paper_table} ADD COLUMN target_price REAL"),
+            ("exit_price", f"ALTER TABLE {quoted_paper_table} ADD COLUMN exit_price REAL"),
+            ("exit_date", f"ALTER TABLE {quoted_paper_table} ADD COLUMN exit_date TEXT"),
+            ("close_reason", f"ALTER TABLE {quoted_paper_table} ADD COLUMN close_reason TEXT"),
+            ("close_time", f"ALTER TABLE {quoted_paper_table} ADD COLUMN close_time TEXT"),
+        ]
+        for column, sql in migrations:
+            if column not in paper_columns:
+                conn.execute(text(sql))
+
+    def _create_indexes(self, conn) -> None:
+        indexes = [
+            "CREATE INDEX IF NOT EXISTS idx_signals_created_at ON signals(created_at DESC)",
+            "CREATE INDEX IF NOT EXISTS idx_signals_ticker_created_at ON signals(ticker, created_at DESC)",
+            "CREATE INDEX IF NOT EXISTS idx_orders_state ON orders(state)",
+            "CREATE INDEX IF NOT EXISTS idx_scan_log_scan_id ON scan_log(scan_id)",
+        ]
+        for sql in indexes:
+            conn.execute(text(sql))
 
     def _migrate_legacy_schema(self) -> None:
         if not self._is_sqlite:
             return
-        paper_table = _validate_table_name(settings.PAPER_TRADES_TABLE)
         with self.engine.begin() as conn:
-            signal_columns = {
-                row[1] for row in conn.execute(text("PRAGMA table_info(signals)")).fetchall()
-            }
-            if "conditions" not in signal_columns:
-                conn.execute(
-                    text("ALTER TABLE signals ADD COLUMN conditions TEXT NOT NULL DEFAULT '[]'")
-                )
-            if "created_at" not in signal_columns:
-                conn.execute(
-                    text("ALTER TABLE signals ADD COLUMN created_at TEXT NOT NULL DEFAULT ''")
-                )
-            if "position_size" not in signal_columns:
-                conn.execute(text("ALTER TABLE signals ADD COLUMN position_size INTEGER"))
-            if "expires_at" not in signal_columns:
-                conn.execute(text("ALTER TABLE signals ADD COLUMN expires_at TEXT"))
-
-            scan_log_columns = {
-                row[1] for row in conn.execute(text("PRAGMA table_info(scan_log)")).fetchall()
-            }
-            if "scan_id" not in scan_log_columns:
-                conn.execute(text("ALTER TABLE scan_log ADD COLUMN scan_id TEXT"))
-            if "rejection_breakdown" not in scan_log_columns:
-                conn.execute(text("ALTER TABLE scan_log ADD COLUMN rejection_breakdown TEXT"))
-
-            quoted_paper_table = _quote_identifier(paper_table)
-            paper_columns = {
-                row[1]
-                for row in conn.execute(text(f"PRAGMA table_info({quoted_paper_table})")).fetchall()
-            }
-            if "stop_loss" not in paper_columns:
-                conn.execute(text(f"ALTER TABLE {quoted_paper_table} ADD COLUMN stop_loss REAL"))
-            if "target_price" not in paper_columns:
-                conn.execute(text(f"ALTER TABLE {quoted_paper_table} ADD COLUMN target_price REAL"))
-            if "exit_price" not in paper_columns:
-                conn.execute(text(f"ALTER TABLE {quoted_paper_table} ADD COLUMN exit_price REAL"))
-            if "exit_date" not in paper_columns:
-                conn.execute(text(f"ALTER TABLE {quoted_paper_table} ADD COLUMN exit_date TEXT"))
-            if "close_reason" not in paper_columns:
-                conn.execute(text(f"ALTER TABLE {quoted_paper_table} ADD COLUMN close_reason TEXT"))
-            if "close_time" not in paper_columns:
-                conn.execute(text(f"ALTER TABLE {quoted_paper_table} ADD COLUMN close_time TEXT"))
-
+            self._migrate_signals_table(conn)
+            self._migrate_scan_log_table(conn)
+            self._migrate_paper_trades_table(conn)
             self._normalize_timestamp_columns(conn)
-
-            conn.execute(
-                text(
-                    "CREATE INDEX IF NOT EXISTS idx_signals_created_at ON signals(created_at DESC)"
-                )
-            )
-            conn.execute(
-                text(
-                    "CREATE INDEX IF NOT EXISTS idx_signals_ticker_created_at ON signals(ticker, created_at DESC)"
-                )
-            )
-            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_orders_state ON orders(state)"))
-            conn.execute(
-                text("CREATE INDEX IF NOT EXISTS idx_scan_log_scan_id ON scan_log(scan_id)")
-            )
+            self._create_indexes(conn)
 
     @staticmethod
     def _normalize_timestamp_columns_static(conn) -> None:
@@ -526,7 +529,9 @@ class DatabaseManager:
             with self.engine.connect() as conn:
                 conn.execute(text("SELECT 1"))
             return True
-        except Exception:
+        except OperationalError:
+            return False
+        except SQLAlchemyError:
             return False
 
     def get_journal_mode(self) -> str:
