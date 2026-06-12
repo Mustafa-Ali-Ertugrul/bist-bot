@@ -216,7 +216,7 @@ gcloud run services update bist-bot-api \
   --add-cloudsql-instances YOUR_PROJECT:YOUR_REGION:YOUR_INSTANCE \
   --set-secrets DATABASE_URL=database-url:latest,JWT_SECRET_KEY=jwt-secret-key:latest
 
-gcloud run services update bist-bot \
+gcloud run services update bist-bot-ui \
   --region YOUR_REGION \
   --add-cloudsql-instances YOUR_PROJECT:YOUR_REGION:YOUR_INSTANCE \
   --set-secrets DATABASE_URL=database-url:latest \
