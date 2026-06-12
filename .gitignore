@@ -51,6 +51,9 @@ dist/
 build/
 *.egg-info/
 
+# Agent workflow artifacts
+.agentflow/
+
 # Model and temp files
 models/*.pkl
 tmp/
