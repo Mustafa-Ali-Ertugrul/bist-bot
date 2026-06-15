@@ -71,6 +71,9 @@ def render_shell(active_page: str, email: str = "") -> str | None:
     st.markdown(
         (
             "<header class='bb-topbar'>"
+            "<div class='bb-topbar-actions-left'>"
+            "<button class='bb-sidebar-toggle' onclick='bbToggleSidebar()'>☰</button>"
+            "</div>"
             "<div class='bb-topbar-brand'>"
             "<div class='bb-brand-mark'>BB</div>"
             "<div>"
@@ -84,6 +87,24 @@ def render_shell(active_page: str, email: str = "") -> str | None:
             "<a class='bb-logout-link' href='?action=logout'>Logout</a>"
             "</div>"
             "</header>"
+            "<script>"
+            "function bbToggleSidebar(){"
+            "const sb=document.querySelector('section[data-testid=\"stSidebar\"]');"
+            "if(!sb)return;"
+            "const collapsed=sb.classList.toggle('bb-sidebar-collapsed');"
+            "try{localStorage.setItem('bb-sidebar-collapsed',collapsed?'1':'0');}catch(e){}"
+            "const bc=document.querySelector('.block-container');"
+            "if(bc)bc.style.marginLeft=collapsed?'0':'236px';"
+            "}"
+            "(function(){try{"
+            "if(localStorage.getItem('bb-sidebar-collapsed')==='1'){"
+            "const sb=document.querySelector('section[data-testid=\"stSidebar\"]');"
+            "if(sb)sb.classList.add('bb-sidebar-collapsed');"
+            "const bc=document.querySelector('.block-container');"
+            "if(bc)bc.style.marginLeft='0';"
+            "}"
+            "}catch(e){}})();"
+            "</script>"
         ),
         unsafe_allow_html=True,
     )
