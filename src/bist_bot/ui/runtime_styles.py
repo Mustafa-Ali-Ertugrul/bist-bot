@@ -66,7 +66,7 @@ def inject_styles() -> None:
                 height:68px;
                 display:flex;
                 align-items:center;
-                justify-content:space-between;
+                gap:12px;
                 padding:0 20px;
                 background:rgba(9, 15, 25, .78);
                 backdrop-filter:blur(22px);
@@ -76,6 +76,32 @@ def inject_styles() -> None:
                 display:flex;
                 align-items:center;
                 gap:12px;
+            }
+            .bb-topbar-actions-left {
+                display:flex;
+                align-items:center;
+            }
+            .bb-sidebar-toggle {
+                width:40px !important;
+                height:40px !important;
+                border-radius:12px;
+                border:1px solid rgba(255,255,255,.12);
+                background:rgba(255,255,255,.06);
+                color:var(--bb-text);
+                font-size:20px;
+                display:flex !important;
+                align-items:center;
+                justify-content:center;
+                cursor:pointer;
+                transition:all .15s ease;
+                margin-right:4px;
+            }
+            .bb-sidebar-toggle:hover {
+                background:rgba(255,255,255,.12);
+                border-color:rgba(255,255,255,.25);
+            }
+            .bb-sidebar-collapsed {
+                display:none !important;
             }
             .bb-brand-mark {
                 width:44px;
@@ -655,9 +681,12 @@ def inject_styles() -> None:
                     height:64px;
                     padding:0 14px;
                 }
-                .bb-topbar-actions {
-                    gap:8px;
-                }
+            .bb-topbar-actions {
+                display:flex;
+                align-items:center;
+                gap:12px;
+                margin-left:auto;
+            }
                 .bb-session-pill {
                     display:none;
                 }
