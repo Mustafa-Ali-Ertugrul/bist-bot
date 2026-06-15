@@ -106,6 +106,17 @@ def _build_broker() -> BaseExecutionProvider:
             ),
             dry_run=settings.ALGOLAB_DRY_RUN,
         )
+    if settings.BROKER_PROVIDER == "alpaca":
+        from bist_bot.execution.alpaca_broker import AlpacaBroker, AlpacaCredentials
+
+        return AlpacaBroker(
+            AlpacaCredentials(
+                api_key=settings.ALPACA_API_KEY,
+                secret_key=settings.ALPACA_SECRET_KEY,
+            ),
+            paper=settings.ALPACA_PAPER,
+            dry_run=settings.ALPACA_DRY_RUN,
+        )
     return PaperBroker(
         initial_cash=getattr(settings, "INITIAL_CAPITAL", 8500.0),
         manual_confirm=getattr(settings, "CONFIRM_LIVE_TRADING", False),

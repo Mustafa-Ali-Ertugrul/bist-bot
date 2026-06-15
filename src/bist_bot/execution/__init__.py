@@ -1,4 +1,5 @@
 from bist_bot.execution.algolab_broker import AlgoLabBroker, AlgoLabCredentials, AlgoLabEndpoints
+from bist_bot.execution.alpaca_broker import AlpacaBroker, AlpacaCredentials
 from bist_bot.execution.base import (
     AccountInfo,
     BaseExecutionProvider,
@@ -18,6 +19,8 @@ __all__ = [
     "AlgoLabBroker",
     "AlgoLabCredentials",
     "AlgoLabEndpoints",
+    "AlpacaBroker",
+    "AlpacaCredentials",
     "BaseExecutionProvider",
     "ExecutionProvider",
     "Order",

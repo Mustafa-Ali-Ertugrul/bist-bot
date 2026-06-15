@@ -147,8 +147,14 @@ class Settings:
         return bool(self.ADMIN_BOOTSTRAP_EMAIL and self.ADMIN_BOOTSTRAP_PASSWORD_HASH)
 
     def validate_broker_config(self) -> None:
-        if self.BROKER_PROVIDER not in {"paper", "algolab"}:
+        if self.BROKER_PROVIDER not in {"paper", "algolab", "alpaca"}:
             raise RuntimeError(f"Unsupported BROKER_PROVIDER: {self.BROKER_PROVIDER}")
+        if self.BROKER_PROVIDER == "alpaca":
+            if not self.ALPACA_API_KEY or not self.ALPACA_SECRET_KEY:
+                raise RuntimeError(
+                    "Missing required Alpaca credentials for BROKER_PROVIDER=alpaca"
+                )
+            return
         if self.BROKER_PROVIDER != "algolab":
             return
         if not self.ALGOLAB_API_KEY or not self.ALGOLAB_USERNAME or not self.ALGOLAB_PASSWORD:
