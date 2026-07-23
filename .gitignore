@@ -82,8 +82,3 @@ task_plan.md
 PROJECT_ACTIVITY_REPORT.md
 custom.db
 =0.50
-
-# One-off scripts and generated reports
-validate_live.py
-backtest_compare.py
-original_overview.py
