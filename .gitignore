@@ -45,6 +45,7 @@ app/memory/
 Thumbs.db
 .vscode/
 .idea/
+opencode.json
 
 # Build artifacts
 dist/
