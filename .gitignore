@@ -62,8 +62,7 @@ build/
 models/*.pkl
 models/*.ubj
 models/*.joblib
-models/latest-local/
-models/local-run/
+models/*/
 tmp/
 cache/
 test.txt
