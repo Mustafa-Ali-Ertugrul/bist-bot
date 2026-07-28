@@ -54,7 +54,13 @@ def _session_dependencies() -> tuple[Any, Any, Any, Any, datetime | None]:
     )
 
 
-def _empty_scan_result(last_scan_time: datetime | None, error: str) -> ScanResult:
+def _empty_scan_result(
+    last_scan_time: datetime | None,
+    error: str,
+    *,
+    skipped_tickers: list[str] | None = None,
+    warning: str | None = None,
+) -> ScanResult:
     """Build a consistent error payload for failed background scans."""
     empty_stats: ScanStats = {"generated": 0, "actionable": 0, "hold": 0}
     return {
@@ -64,12 +70,18 @@ def _empty_scan_result(last_scan_time: datetime | None, error: str) -> ScanResul
         "error": error,
         "scan_stats": empty_stats,
         "rejection_breakdown": dict(EMPTY_REJECTION_BREAKDOWN),
+        "skipped_tickers": list(skipped_tickers or []),
+        "warning": warning,
     }
 
 
 def _set_scan_phase(phase: str) -> None:
     """Publish scan progress for the Streamlit UI and logs."""
-    st.session_state.scan_phase = phase
+    if threading.current_thread() is threading.main_thread():
+        try:
+            st.session_state.scan_phase = phase
+        except Exception:
+            pass
     logger.info("ui_scan_phase", phase=phase)
 
 
@@ -90,7 +102,7 @@ def collect_scan_result(
         fetcher.clear_cache(scope="analysis")
 
     if limited_tickers:
-        _set_scan_phase(f"{len(limited_tickers)} hisse icin veri aliniyor")
+        _set_scan_phase(f"{len(limited_tickers)} hisse için veri alınıyor")
         timeframe_data = fetcher.fetch_multi_timeframe(
             tickers=limited_tickers,
             trend_period=settings.MTF_TREND_PERIOD,
@@ -100,13 +112,33 @@ def collect_scan_result(
             force_refresh=force_clear,
         )
     else:
-        _set_scan_phase("Tum izleme listesi icin veri aliniyor")
+        _set_scan_phase("Tüm izleme listesi için veri alınıyor")
         timeframe_data = fetcher.fetch_multi_timeframe_all(
             trend_period=settings.MTF_TREND_PERIOD,
             trend_interval=settings.MTF_TREND_INTERVAL,
             trigger_period=settings.MTF_TRIGGER_PERIOD,
             trigger_interval=settings.MTF_TRIGGER_INTERVAL,
             force_refresh=force_clear,
+        )
+    skipped_tickers: list[str] = []
+    skipped_getter = getattr(fetcher, "get_last_skipped_tickers", None)
+    if callable(skipped_getter):
+        try:
+            skipped_tickers = list(skipped_getter() or [])
+        except Exception as exc:
+            logger.warning(
+                "ui_scan_skipped_tickers_failed",
+                error_type=type(exc).__name__,
+                error=str(exc),
+            )
+    if skipped_tickers:
+        preview = ", ".join(skipped_tickers[:8])
+        more = f" (+{len(skipped_tickers) - 8})" if len(skipped_tickers) > 8 else ""
+        _set_scan_phase(f"{len(skipped_tickers)} sembol atlandı: {preview}{more}")
+        logger.warning(
+            "ui_scan_tickers_skipped",
+            skipped_count=len(skipped_tickers),
+            skipped_tickers=",".join(skipped_tickers[:20]),
         )
     _set_scan_phase(f"{len(timeframe_data)} hisse analiz ediliyor")
     signals = engine.scan_all(timeframe_data)
@@ -120,7 +152,7 @@ def collect_scan_result(
         if isinstance(data, dict) and "trigger" in data
     }
 
-    _set_scan_phase("Sonuclar kaydediliyor")
+    _set_scan_phase("Sonuçlar kaydediliyor")
     try:
         db.save_signals(signals)
     except Exception as exc:
@@ -179,6 +211,15 @@ def collect_scan_result(
         "hold": hold_count,
     }
 
+    warning = None
+    if skipped_tickers:
+        preview = ", ".join(skipped_tickers[:8])
+        more = f" ve {len(skipped_tickers) - 8} sembol daha" if len(skipped_tickers) > 8 else ""
+        warning = (
+            f"Veri alınamadı, atlandı ({len(skipped_tickers)}): {preview}{more}. "
+            "Rate-limit/timeout sonrası tarama devam etti."
+        )
+
     result: ScanResult = {
         "all_data": all_data,
         "signals": signals,
@@ -186,8 +227,10 @@ def collect_scan_result(
         "error": None,
         "scan_stats": scan_stats,
         "rejection_breakdown": normalized_breakdown,
+        "skipped_tickers": skipped_tickers,
+        "warning": warning,
     }
-    _set_scan_phase("Tarama tamamlandi")
+    _set_scan_phase("Tarama tamamlandı")
     return result
 
 
@@ -204,6 +247,8 @@ def apply_scan_result(scan_result: ScanResult) -> None:
     st.session_state.rejection_breakdown = scan_result.get(
         "rejection_breakdown", dict(EMPTY_REJECTION_BREAKDOWN)
     )
+    st.session_state.skipped_tickers = list(scan_result.get("skipped_tickers") or [])
+    st.session_state.scan_warning = scan_result.get("warning")
     st.session_state.scan_in_progress = False
 
 
@@ -221,7 +266,7 @@ def run_scan(force_clear: bool = False) -> None:
     apply_scan_result(result)
 
 
-def run_initial_scan(force_clear: bool = False, limited: bool = True) -> bool:
+def run_initial_scan(force_clear: bool = False, limited: bool = False) -> bool:
     """Run the first scan synchronously so the dashboard does not render empty."""
     if st.session_state.get("all_data"):
         return True
@@ -236,7 +281,7 @@ def run_initial_scan(force_clear: bool = False, limited: bool = True) -> bool:
     st.session_state.scan_in_progress = True
     st.session_state.scan_started_at = datetime.now(TR)
     st.session_state.scan_error = None
-    st.session_state.scan_phase = "Ilk tarama baslatiliyor"
+    st.session_state.scan_phase = "İlk tarama başlatılıyor"
     try:
         result = collect_scan_result(
             fetcher=fetcher,
@@ -263,8 +308,10 @@ def request_scan(force_clear: bool = False) -> bool:
         cooldown_seconds=float(getattr(settings, "STREAMLIT_SCAN_COOLDOWN_SECONDS", 8.0)),
     )
     if not allowed:
-        st.warning(f"Cok sik istek gonderildi, birkac saniye bekleyin. ({remaining:.1f}s)")
+        st.warning(f"Çok sık istek gönderildi, birkaç saniye bekleyin. ({remaining:.1f}s)")
         return False
+    if st.session_state.get("_scan_session_key"):
+        return start_background_scan(force_clear=force_clear, limited=False)
     run_scan(force_clear=force_clear)
     return True
 
@@ -292,8 +339,8 @@ def check_scan_timeout() -> bool:
     )
     st.session_state.scan_in_progress = False
     st.session_state.scan_error = (
-        f"Arka plan taramasi {timeout_seconds} saniye icinde tamamlanamadi. "
-        "Manuel tarama baslatmayi deneyin."
+        f"Arka plan taraması {timeout_seconds} saniye içinde tamamlanamadı. "
+        "Manuel tarama başlatmayı deneyin."
     )
     st.session_state.scan_phase = None
     with SCAN_LOCK:
@@ -317,7 +364,7 @@ def start_background_scan(force_clear: bool = False, limited: bool = False) -> b
     st.session_state.scan_in_progress = True
     st.session_state.scan_started_at = scan_started_at
     st.session_state.scan_error = None
-    st.session_state.scan_phase = "Tarama baslatiliyor"
+    st.session_state.scan_phase = "Tarama başlatılıyor"
 
     limited_tickers = None
     if limited:
@@ -332,13 +379,26 @@ def start_background_scan(force_clear: bool = False, limited: bool = False) -> b
         ticker_count=len(limited_tickers) if limited_tickers else "all",
     )
 
+    from streamlit.runtime.scriptrunner import add_script_run_ctx, get_script_run_ctx
+
+    ctx = get_script_run_ctx()
+
+    def _collect_with_ctx(**kwargs):
+        if ctx:
+            add_script_run_ctx(threading.current_thread(), ctx)
+        return collect_scan_result(**kwargs)
+
     def worker():
+        if ctx:
+            add_script_run_ctx(threading.current_thread(), ctx)
         result = _empty_scan_result(last_scan_time, "scan did not complete")
         timeout_seconds = int(getattr(settings, "STREAMLIT_BACKGROUND_SCAN_TIMEOUT_SECONDS", 45))
+        if not limited:
+            timeout_seconds = max(timeout_seconds, 300)
         try:
             executor = ThreadPoolExecutor(max_workers=1)
             future = executor.submit(
-                collect_scan_result,
+                _collect_with_ctx,
                 fetcher=fetcher,
                 engine=engine,
                 notifier=notifier,
@@ -353,7 +413,7 @@ def start_background_scan(force_clear: bool = False, limited: bool = False) -> b
                 future.cancel()
                 result = _empty_scan_result(
                     last_scan_time,
-                    f"Tarama {timeout_seconds} saniye icinde tamamlanamadi.",
+                    f"Tarama {timeout_seconds} saniye içinde tamamlanamadı.",
                 )
                 logger.warning(
                     "ui_background_scan_worker_timeout",
@@ -376,12 +436,18 @@ def start_background_scan(force_clear: bool = False, limited: bool = False) -> b
                 error=str(exc),
             )
         finally:
-            result["scan_phase"] = st.session_state.get("scan_phase")
+            if threading.current_thread() is threading.main_thread():
+                result["scan_phase"] = st.session_state.get("scan_phase")
+            else:
+                result["scan_phase"] = None
             with SCAN_LOCK:
                 PENDING_SCAN_RESULTS[session_key] = result
                 ACTIVE_SCAN_SESSIONS.discard(session_key)
 
-    threading.Thread(target=worker, daemon=True).start()
+    t = threading.Thread(target=worker, daemon=True)
+    if ctx:
+        add_script_run_ctx(t, ctx)
+    t.start()
     return True
 
 
@@ -399,6 +465,8 @@ def apply_pending_scan_result() -> bool:
     if pending_result.get("error"):
         st.session_state.scan_error = pending_result["error"]
         st.session_state.scan_phase = pending_result.get("scan_phase")
+        st.session_state.skipped_tickers = list(pending_result.get("skipped_tickers") or [])
+        st.session_state.scan_warning = pending_result.get("warning")
         st.session_state.scan_in_progress = False
         return True
     apply_scan_result(pending_result)
@@ -406,11 +474,9 @@ def apply_pending_scan_result() -> bool:
 
 
 def ensure_initial_data() -> None:
-    """Load cached signals without starting first-render scans in the background."""
+    """Load cached signals and start the first BIST100 scan once per session."""
     apply_pending_scan_result()
-    if st.session_state.get("all_data") or st.session_state.signals:
-        return
-    if st.session_state.get("scan_in_progress"):
+    if st.session_state.get("all_data"):
         return
     try:
         from bist_bot.ui.runtime_data import map_cached_signals
@@ -420,4 +486,17 @@ def ensure_initial_data() -> None:
             st.session_state.signals = map_cached_signals(cached)
     except Exception as exc:
         logger.error("ui_initial_scan_failed", error=str(exc))
-        st.error(f"Tarama hatasi: {exc}")
+        st.error(f"Tarama hatası: {exc}")
+
+    if st.session_state.get("scan_in_progress"):
+        return
+    if st.session_state.get("initial_background_scan_started"):
+        return
+
+    st.session_state.initial_background_scan_started = True
+    started = start_background_scan(force_clear=False, limited=False)
+    if not started:
+        logger.warning(
+            "ui_initial_background_scan_not_started",
+            session_key=st.session_state.get("_scan_session_key"),
+        )

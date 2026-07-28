@@ -90,7 +90,7 @@ class StrategyEngine:
         self.risk_manager = risk_manager or RiskManager(
             capital=getattr(settings, "INITIAL_CAPITAL", 8500.0)
         )
-        self.params = params or StrategyParams()
+        self.params = params or StrategyParams.from_settings()
         self.meta_model = meta_model
         self.STRONG_BUY_THRESHOLD = self.params.strong_buy_threshold
         self.BUY_THRESHOLD = self.params.buy_threshold
@@ -235,11 +235,13 @@ class StrategyEngine:
     def _score_momentum(self, last: pd.Series, prev: pd.Series) -> tuple[float, list[str]]:
         return score_momentum(self.params, last, prev)
 
-    def _score_trend(self, last: pd.Series, prev: pd.Series) -> tuple[float, list[str]]:
-        return score_trend(self.params, last, prev)
+    def _score_trend(
+        self, last: pd.Series, prev: pd.Series, df: pd.DataFrame | None = None
+    ) -> tuple[float, list[str]]:
+        return score_trend(self.params, last, prev, df)
 
-    def _score_volume(self, last: pd.Series) -> tuple[float, list[str]]:
-        return score_volume(self.params, last)
+    def _score_volume(self, last: pd.Series, prev: pd.Series) -> tuple[float, list[str]]:
+        return score_volume(self.params, last, prev)
 
     def _score_structure(self, last: pd.Series) -> tuple[float, list[str]]:
         return score_structure(self.params, last)
@@ -301,8 +303,8 @@ class StrategyEngine:
         last: pd.Series,
         prev: pd.Series,
         multi_timeframe: bool,
-    ) -> tuple[float, list[str]] | None:
-        return calculate_score_and_reasons(
+    ) -> tuple[float, list[str], float | None] | None:
+        result = calculate_score_and_reasons(
             self.params,
             ticker,
             df,
@@ -320,9 +322,12 @@ class StrategyEngine:
                 **fields,
             ),
         )
+        return result
 
-    def _classify_signal(self, score: float) -> tuple[SignalType, str]:
-        return classify_signal(self.params, score)
+    def _classify_signal(
+        self, score: float, agreement_ratio: float | None = None
+    ) -> tuple[SignalType, str]:
+        return classify_signal(self.params, score, agreement_ratio)
 
     def _is_buy_signal(self, signal_type: SignalType) -> bool:
         return is_buy_signal(signal_type)
@@ -370,6 +375,7 @@ class StrategyEngine:
         reasons: list[str],
         risk_levels: RiskLevels,
         fallback_confidence: str,
+        agreement_ratio: float | None = None,
     ) -> Signal:
         return Signal(
             ticker=ticker,
@@ -382,11 +388,10 @@ class StrategyEngine:
             position_size=risk_levels.position_size,
             signal_probability=risk_levels.signal_probability,
             kelly_fraction=risk_levels.kelly_fraction,
-            confidence=(
-                risk_levels.confidence
-                if risk_levels.confidence != "confidence.low"
-                else fallback_confidence
-            ),
+            confidence=fallback_confidence,
+            agreement_ratio=agreement_ratio,
+            buy_threshold=self.params.buy_threshold,
+            is_actionable=score >= self.params.buy_threshold,
         )
 
     def _append_signal_reasons(self, signal: Signal, risk_levels: RiskLevels) -> None:
@@ -463,17 +468,17 @@ class StrategyEngine:
             return None
 
         adx = get_valid_adx(self.params, ticker, last)
-        scored = self._calculate_score_and_reasons(
+        _score_result = self._calculate_score_and_reasons(
             ticker,
             df,
             last=last,
             prev=prev,
             multi_timeframe=multi_timeframe,
         )
-        if scored is None:
+        if _score_result is None:
             return None
 
-        score, reasons = scored
+        score, reasons, _agreement = _score_result
         if adx is not None and adx < self.params.adx_threshold:
             score, reasons = apply_low_adx_penalty(self.params, adx, score, reasons)
             if score == 0:
@@ -489,7 +494,7 @@ class StrategyEngine:
                 )
                 return None
 
-        signal_type, confidence = self._classify_signal(score)
+        signal_type, confidence = self._classify_signal(score, _agreement)
         risk_levels = self.risk_manager.calculate(df)
         adjusted_risk_levels = self._apply_buy_side_risk(
             ticker,
@@ -514,6 +519,7 @@ class StrategyEngine:
             reasons=reasons,
             risk_levels=risk_levels,
             fallback_confidence=confidence,
+            agreement_ratio=_agreement,
         )
         self._append_signal_reasons(signal, risk_levels)
 

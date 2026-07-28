@@ -14,21 +14,17 @@ from bist_bot.contracts import (
     SignalRepositoryProtocol,
     StrategyEngineProtocol,
 )
+from bist_bot.observability.logging import log_signal
+from bist_bot.observability.metrics import record_signal
 from bist_bot.risk.circuit_breaker import CircuitBreaker
 from bist_bot.services.execution_service import ExecutionService
 from bist_bot.services.notification_service import NotificationDispatchService
 from bist_bot.services.paper_trade_service import PaperTradeService
+from bist_bot.services.shadow_trade_service import ShadowTradeService
 from bist_bot.services.signal_change_service import SignalChangeService
 from bist_bot.strategy.signal_models import Signal, SignalType
 
 logger = get_logger(__name__, component="scanner")
-EMPTY_REJECTION_BREAKDOWN = {
-    "total_rejections": 0,
-    "by_reason": [],
-    "by_stage": [],
-    "scan_id": "",
-}
-
 EMPTY_REJECTION_BREAKDOWN = {
     "total_rejections": 0,
     "by_reason": [],
@@ -64,6 +60,7 @@ class ScanService:
         execution_service: ExecutionService | None = None,
         paper_trade_service: PaperTradeService | None = None,
         notification_service: NotificationDispatchService | None = None,
+        shadow_trade_service: ShadowTradeService | None = None,
         circuit_breaker: CircuitBreaker | None = None,
     ) -> None:
         """Create a scan service with explicit runtime dependencies."""
@@ -83,6 +80,9 @@ class ScanService:
         self.notification_service = notification_service or NotificationDispatchService(
             notifier, settings=self.settings
         )
+        self.shadow_trade_service = shadow_trade_service or ShadowTradeService(
+            settings=self.settings
+        )
         self.last_scan_stats: dict[str, int] = {
             "scanned": 0,
             "actionable": 0,
@@ -101,6 +101,17 @@ class ScanService:
         """Detect signal changes and dispatch change notifications."""
         self.signal_change_service.check_signal_changes(signals)
 
+    def _process_shadow_trades(self, signals: list[Signal], market_data: dict) -> None:
+        """Run the observation ledger without affecting the live scan path."""
+        try:
+            closed = self.shadow_trade_service.process_scan(signals, market_data)
+            self.shadow_trade_service.maybe_send_daily_summary(
+                self.notifier,
+                closed_this_scan=closed,
+            )
+        except Exception as exc:
+            logger.exception("shadow_trade_processing_failed", error=exc)
+
     def scan_once(self, force_refresh: bool = False) -> list[Signal]:
         """Run one complete scan and return all generated signals.
 
@@ -110,11 +121,33 @@ class ScanService:
         returned to callers for UI and diagnostics.
         """
         started_at = time.perf_counter()
+        watchlist = list(getattr(self.settings, "WATCHLIST", []) or [])
         logger.info(
             "scan_started",
-            scanned_count=len(self.settings.WATCHLIST),
+            scanned_count=len(watchlist),
+            watchlist_source=str(getattr(self.settings, "WATCHLIST_SOURCE", "")),
             component="scanner",
         )
+
+        if not watchlist:
+            logger.warning(
+                "scan_aborted_empty_watchlist",
+                watchlist_source=str(getattr(self.settings, "WATCHLIST_SOURCE", "")),
+            )
+            self.last_scan_stats = {
+                "scanned": 0,
+                "signals": 0,
+                "actionable": 0,
+                "buys": 0,
+                "sells": 0,
+            }
+            return []
+
+        # Keep fetcher universe aligned with active settings watchlist.
+        try:
+            self.fetcher.watchlist = watchlist
+        except Exception:
+            pass
 
         if self.circuit_breaker and not self.circuit_breaker.allow_request():
             logger.warning("scan_aborted_circuit_open")
@@ -132,6 +165,14 @@ class ScanService:
                 trigger_interval=getattr(self.settings, "MTF_TRIGGER_INTERVAL", "15m"),
                 force_refresh=force_refresh,
             )
+            skipped_getter = getattr(self.fetcher, "get_last_skipped_tickers", None)
+            skipped_tickers = list(skipped_getter() or []) if callable(skipped_getter) else []
+            if skipped_tickers:
+                logger.warning(
+                    "scan_tickers_skipped",
+                    skipped_count=len(skipped_tickers),
+                    skipped_tickers=",".join(skipped_tickers[:20]),
+                )
 
             if not all_data:
                 duration_ms = round((time.perf_counter() - started_at) * 1000, 2)
@@ -157,6 +198,7 @@ class ScanService:
                 breakdown if isinstance(breakdown, dict) else dict(EMPTY_REJECTION_BREAKDOWN)
             )
             actionable = self.engine.get_actionable_signals(signals)
+            self._process_shadow_trades(signals, all_data)
             buys = [
                 s
                 for s in actionable
@@ -177,7 +219,16 @@ class ScanService:
 
             self._check_signal_changes(signals)
             self.db.save_signals(signals)
-            self._auto_execute_signals(actionable)
+
+            # BUG-5 fix: skip auto_execute when agent owns entries
+            agent_enabled = bool(getattr(self.settings, "AGENT_ENABLED", False)) or bool(
+                getattr(getattr(self.settings, "agent", None), "AGENT_ENABLED", False)
+            )
+            if agent_enabled:
+                logger.info("agent_owns_entries_skip_auto_execute")
+            else:
+                self._auto_execute_signals(actionable)
+
             if getattr(self.settings, "PAPER_MODE", False):
                 self.last_side_effects["paper_trades_queued"] = bool(
                     self.paper_trade_service.queue_actionable_signals(actionable)
@@ -207,7 +258,7 @@ class ScanService:
 
             logger.info(
                 "scan_summary",
-                requested=len(self.settings.WATCHLIST),
+                requested=len(watchlist),
                 fetched=len(all_data),
                 signals=len(signals),
                 actionable=len(actionable),
@@ -221,6 +272,13 @@ class ScanService:
 
             for signal in signals:
                 if signal.signal_type is not SignalType.HOLD:
+                    record_signal(signal.signal_type.name)
+                    log_signal(
+                        signal.signal_type.name,
+                        ticker=signal.ticker,
+                        score=float(signal.score),
+                        logger=logger,
+                    )
                     logger.debug(
                         "signal_emitted",
                         ticker=signal.ticker,

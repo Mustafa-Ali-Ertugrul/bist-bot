@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 
 from bist_bot.indicators import TechnicalIndicators
@@ -181,6 +182,40 @@ class TestBollingerBands:
 
         bb_width = result["bb_upper"] - result["bb_lower"]
         assert (bb_width > 0).all()
+
+    def test_flat_and_zero_price_do_not_create_uncontrolled_values(self):
+        flat_df = _ohlc_frame(
+            [
+                {
+                    "open": 100.0,
+                    "high": 100.0,
+                    "low": 100.0,
+                    "close": 100.0,
+                    "volume": 1000,
+                }
+                for _ in range(30)
+            ]
+        )
+        zero_df = _ohlc_frame(
+            [
+                {
+                    "open": 0.0,
+                    "high": 0.0,
+                    "low": 0.0,
+                    "close": 0.0,
+                    "volume": 1000,
+                }
+                for _ in range(30)
+            ]
+        )
+
+        for df in (flat_df, zero_df):
+            result = TechnicalIndicators.add_all(df)
+
+            assert np.isfinite(result["stoch_k"].fillna(0)).all()
+            assert result["cci"].isna().all()
+            assert np.isfinite(result["bb_bandwidth"].fillna(0)).all()
+            assert np.isfinite(result["bb_percent"].fillna(0)).all()
 
 
 class TestStochastic:

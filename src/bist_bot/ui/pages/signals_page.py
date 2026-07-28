@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import html
+
 import streamlit as st
 
 from bist_bot.config.settings import settings
@@ -14,15 +16,48 @@ from bist_bot.ui.components.signal_card import render_signal_card
 from bist_bot.ui.runtime import filter_signals
 
 _STRONG_BUY = int(settings.STRONG_BUY_THRESHOLD)
-_BUY = int(settings.BUY_THRESHOLD)
 _WEAK_BUY = int(settings.WEAK_BUY_THRESHOLD)
 _WEAK_SELL = int(settings.WEAK_SELL_THRESHOLD)
 _SELL = int(settings.SELL_THRESHOLD)
 _STRONG_SELL = int(settings.STRONG_SELL_THRESHOLD)
 
 
+def _render_filter_status_html(
+    *, generated_count: int, visible_count: int, filtered_out_count: int
+) -> str:
+    # Enforce strict typing and sanitize to prevent any potential XSS
+    min_score = int(st.session_state.get("min_score_filter", -100))
+    rsi_min = int(st.session_state.get("rsi_min_filter", 0))
+    rsi_max = int(st.session_state.get("rsi_max_filter", 100))
+    vol_ratio = float(st.session_state.get("vol_ratio_filter", 0.0))
+
+    filter_details = (
+        "<div style='margin-top: 8px; font-size: 11px; opacity: 0.85; display: flex; gap: 12px; flex-wrap: wrap;'>"
+        f"<span><strong>Min Skor:</strong> {html.escape(str(min_score))}</span>"
+        f"<span><strong>RSI Aralığı:</strong> {html.escape(str(rsi_min))} - {html.escape(str(rsi_max))}</span>"
+        f"<span><strong>Min Hacim Oranı:</strong> {html.escape(f'{vol_ratio:.2f}')}</span>"
+        "</div>"
+    )
+
+    if filtered_out_count <= 0:
+        return (
+            "<div class='bb-note'>"
+            f"Tüm sinyaller görünür: üretilen {generated_count} sinyalin {visible_count} tanesi "
+            "mevcut filtrelerden geçti."
+            f"{filter_details}"
+            "</div>"
+        )
+    return (
+        "<div class='bb-note'>"
+        f"Üretilen {generated_count} sinyalin {visible_count} tanesi görünür. "
+        f"Skor, RSI veya hacim filtresi nedeniyle {filtered_out_count} sinyal gizlendi."
+        f"{filter_details}"
+        "</div>"
+    )
+
+
 def _render_signal_group(title: str, items, all_data) -> None:
-    render_section_title(title, f"{len(items)} visible signals")
+    render_section_title(title, f"{len(items)} görünür sinyal")
     if not items:
         st.info(f"{title} icin uygun sinyal yok.")
         return
@@ -44,7 +79,9 @@ def render_signals_page() -> None:
         [s for s in signals if s.score >= _STRONG_BUY], key=lambda s: s.score, reverse=True
     )
     buy = sorted(
-        [s for s in signals if _BUY <= s.score < _STRONG_BUY], key=lambda s: s.score, reverse=True
+        [s for s in signals if s.buy_threshold <= s.score < _STRONG_BUY],
+        key=lambda s: s.score,
+        reverse=True,
     )
     hold = sorted(
         [s for s in signals if _WEAK_SELL < s.score < _WEAK_BUY], key=lambda s: abs(s.score)
@@ -57,16 +94,16 @@ def render_signals_page() -> None:
     sell_count = len(weak_sell) + len(sell) + len(strong_sell)
 
     render_page_hero(
-        "Signals",
-        "Algorithmic signal flow with premium card-driven scanning",
-        f"Backend scanned {scanned_count} assets and generated {generated_count} signals. "
-        f"After UI filters: {visible_count} visible, {filtered_out_count} filtered out.",
+        get_message("ui.signals_title"),
+        "Premium kart tabanlı tarama ile algoritmik sinyal akışı",
+        f"Arka plan {scanned_count} varlığı taradı ve {generated_count} sinyal üretti. "
+        f"Arayüz filtrelerinden sonra: {visible_count} görünür, {filtered_out_count} filtrelendi.",
         badges=[
-            f"Scanned {scanned_count}",
-            f"Visible {visible_count}",
-            f"Buy {buy_count}",
-            f"Hold {len(hold)}",
-            f"Sell {sell_count}",
+            f"Taranan {scanned_count}",
+            f"Görünür {visible_count}",
+            f"Al {buy_count}",
+            f"Tut {len(hold)}",
+            f"Sat {sell_count}",
         ],
         accent="secondary",
     )
@@ -74,42 +111,28 @@ def render_signals_page() -> None:
     if filtered_out_count > 0:
         render_html_panel(
             f"<div class='bb-note'>"
-            f"Backend produced {generated_count} signals from {scanned_count} scanned assets. "
-            f"UI filters (score, RSI, volume) hid {filtered_out_count} of them. "
-            f"Adjust filters below to see more."
+            f"Arka plan, taranan {scanned_count} varlıktan {generated_count} sinyal üretti. "
+            f"Arayüz filtreleri (skor, RSI, hacim) bunlardan {filtered_out_count} tanesini gizledi. "
+            f"Daha fazlasını görmek için aşağıdaki filtreleri ayarlayın."
             f"</div>"
         )
 
-    render_section_title("Signal filters", "Refine the live feed")
+    render_section_title("Aktif Filtreler", "Canlı akış filtreleme durum ve eşikleri")
     with st.container():
-        render_html_panel(
-            "<div class='bb-note'>"
-            f"Backend {generated_count} sinyal urettigi halde sadece {visible_count} tanesi mevcut UI filtrelerinden geciyor. "
-            f"Filtre disinda kalan sinyal sayisi: {filtered_out_count}."
-            "</div>"
-        )
-        f1, f2 = st.columns(2)
-        with f1:
-            st.session_state.min_score_filter = st.slider(
-                get_message("ui.min_score"),
-                -100,
-                100,
-                st.session_state.min_score_filter,
+        col_status, col_btn = st.columns([3, 1], gap="medium")
+        with col_status:
+            render_html_panel(
+                _render_filter_status_html(
+                    generated_count=generated_count,
+                    visible_count=visible_count,
+                    filtered_out_count=filtered_out_count,
+                )
             )
-            st.session_state.rsi_min_filter = st.slider(
-                get_message("ui.rsi_min"), 0, 100, st.session_state.rsi_min_filter
-            )
-        with f2:
-            st.session_state.rsi_max_filter = st.slider(
-                get_message("ui.rsi_max"), 0, 100, st.session_state.rsi_max_filter
-            )
-            st.session_state.vol_ratio_filter = st.slider(
-                "Min volume ratio",
-                0.0,
-                5.0,
-                float(st.session_state.vol_ratio_filter),
-                0.1,
-            )
+        with col_btn:
+            st.write("")  # spacing
+            if st.button("Filtreleri Düzenle", use_container_width=True, type="secondary"):
+                st.query_params["page"] = "settings"
+                st.rerun()
 
     buy_tab, neutral_tab, sell_tab = st.tabs(
         [
@@ -119,11 +142,11 @@ def render_signals_page() -> None:
         ]
     )
     with buy_tab:
-        _render_signal_group("High conviction", strong_buy, all_data)
-        _render_signal_group("Momentum continuation", buy, all_data)
+        _render_signal_group("Yüksek Güven", strong_buy, all_data)
+        _render_signal_group("Momentum Devamı", buy, all_data)
     with neutral_tab:
-        _render_signal_group("Hold / Watch", hold, all_data)
+        _render_signal_group("Tut / İzle", hold, all_data)
     with sell_tab:
-        _render_signal_group("Weak sell", weak_sell, all_data)
-        _render_signal_group("Sell", sell, all_data)
-        _render_signal_group("Strong sell", strong_sell, all_data)
+        _render_signal_group("Zayıf Sat", weak_sell, all_data)
+        _render_signal_group("Sat", sell, all_data)
+        _render_signal_group("Güçlü Sat", strong_sell, all_data)

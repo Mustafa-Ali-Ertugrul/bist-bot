@@ -1,4 +1,5 @@
 import json
+import math
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -313,12 +314,18 @@ class WalkForwardResult:
 
 
 def _to_float(value: Any, default: float = 0.0) -> float:
+    if value is None:
+        return default
     try:
         if isinstance(value, (pd.Series, pd.DataFrame, np.ndarray, list, tuple, pd.Index)):  # noqa: UP038, RUF100
             return default
+        if isinstance(value, int | float):
+            numeric_value = float(value)
+            return default if math.isnan(numeric_value) else numeric_value
         if pd.isna(value):
             return default
-        return float(value)
+        numeric_value = float(value)
+        return default if math.isnan(numeric_value) else numeric_value
     except (TypeError, ValueError):
         return default
 

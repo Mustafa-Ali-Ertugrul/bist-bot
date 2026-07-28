@@ -10,7 +10,7 @@ from bist_bot.contracts import StrategyEngineProtocol
 
 try:
     import yfinance as yf
-except ImportError:
+except ImportError:  # pragma: no cover - optional dependency
     yf = None
 
 from bist_bot import strategy as strategy_module

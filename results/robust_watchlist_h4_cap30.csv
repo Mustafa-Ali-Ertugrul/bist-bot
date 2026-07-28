@@ -1,0 +1,6 @@
+ticker,stress_oos_mean_return,stress_oos_max_dd,base_oos_mean_return,edge_decay,has_overfitting_warning,windows,counter_trend_multiplier
+ASTOR.IS,7.9271,-9.2914,8.6286,0.7015,False,7,0.0
+EKGYO.IS,3.8386,-9.0286,4.2186,0.38,False,7,0.0
+PETKM.IS,2.3629,-6.4186,2.7814,0.4185,False,7,0.0
+SISE.IS,2.0971,-6.9471,2.6386,0.5415,False,7,0.0
+SASA.IS,1.6071,-8.6429,2.2257,0.6186,False,7,0.0

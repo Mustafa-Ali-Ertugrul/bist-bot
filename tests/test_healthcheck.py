@@ -1,8 +1,9 @@
-"""Tests for dashboard healthcheck and readiness endpoints."""
+"""Legacy filename for health probes — canonical suite is test_health_check.py."""
 
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
 
 import pytest
@@ -16,6 +17,11 @@ from bist_bot.risk.circuit_breaker import CircuitBreaker, CircuitState
 def mock_db() -> MagicMock:
     db = MagicMock()
     db.ping.return_value = True
+    db.get_latest_scan_log.return_value = {
+        "timestamp": (datetime.now(UTC) - timedelta(minutes=5)).isoformat(),
+        "total_scanned": 10,
+        "signals_generated": 2,
+    }
     return db
 
 
@@ -27,21 +33,31 @@ def mock_circuit() -> MagicMock:
 
 
 @pytest.fixture
-def app(mock_db, mock_circuit) -> Flask:
+def mock_broker() -> MagicMock:
+    broker = MagicMock()
+    broker.authenticate.return_value = True
+    return broker
+
+
+@pytest.fixture
+def app(mock_db, mock_circuit, mock_broker) -> Flask:
     from bist_bot.config.settings import settings
 
-    with settings.override(JWT_SECRET_KEY="test-secret"):
-        fetcher = MagicMock()
-        engine = MagicMock()
-
-        app = create_dashboard_app(
-            fetcher=fetcher,
-            engine=engine,
+    with settings.override(
+        JWT_SECRET_KEY="test-secret",
+        BROKER_MODE="paper",
+        BROKER_PROVIDER="paper",
+        METRICS_PUBLIC=False,
+    ):
+        application = create_dashboard_app(
+            fetcher=MagicMock(),
+            engine=MagicMock(),
             db=mock_db,
+            broker=mock_broker,
             circuit_breaker=mock_circuit,
         )
-        app.config["TESTING"] = True
-        return app
+        application.config["TESTING"] = True
+        return application
 
 
 def test_healthcheck_returns_healthy_when_db_is_up(app, mock_circuit):
@@ -51,8 +67,6 @@ def test_healthcheck_returns_healthy_when_db_is_up(app, mock_circuit):
         data = json.loads(resp.data)
         assert data["status"] == "healthy"
         assert data["database"] == "ok"
-        assert "version" in data
-        assert "timestamp" in data
         assert data["circuit_state"] == "CLOSED"
 
 
@@ -63,6 +77,7 @@ def test_healthcheck_shows_circuit_open_state(app, mock_circuit):
         assert resp.status_code == 200
         data = json.loads(resp.data)
         assert data["circuit_state"] == "OPEN"
+        assert data["status"] == "healthy"
 
 
 def test_healthcheck_returns_degraded_when_db_is_down(app, mock_db):
@@ -81,4 +96,3 @@ def test_readiness_check_returns_ok(app):
         assert resp.status_code == 200
         data = json.loads(resp.data)
         assert data["status"] == "ready"
-        assert "timestamp" in data

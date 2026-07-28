@@ -1,0 +1,11 @@
+ticker,stress_oos_mean_return,stress_oos_max_dd,base_oos_mean_return,edge_decay,has_overfitting_warning,windows,counter_trend_multiplier
+SISE.IS,5.9457,-5.7686,6.3486,0.4029,False,7,0.3
+ASTOR.IS,5.6343,-7.9186,5.9886,0.3543,False,7,0.3
+KRDMD.IS,4.6486,-7.0071,5.11,0.4614,False,7,0.3
+TOASO.IS,3.5786,-4.1386,3.85,0.2714,False,7,0.3
+PETKM.IS,3.2514,-6.1957,3.6714,0.42,False,7,0.3
+TAVHL.IS,1.6871,-6.7257,2.1,0.4129,False,7,0.3
+OYAKC.IS,1.1657,-4.8543,1.5114,0.3457,False,7,0.3
+EREGL.IS,0.66,-9.5129,1.1371,0.4771,False,7,0.3
+ODAS.IS,0.4786,-8.5071,0.8143,0.3357,False,7,0.3
+THYAO.IS,0.43,-7.7757,0.9929,0.5629,False,7,0.3

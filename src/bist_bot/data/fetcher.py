@@ -136,6 +136,7 @@ class BISTDataFetcher:
         self._analysis_cache: dict[str, CacheEntry] = {}
         self._quote_cache: dict[str, CacheEntry] = {}
         self._quote_resolution_meta: dict[str, QuoteResolutionMeta] = {}
+        self._last_skipped_tickers: list[str] = []
         self._max_workers = 8  # Will be updated when watchlist is resolved
         if watchlist is not None:
             self._watchlist: list[str] | None = _clean_ticker_list(watchlist)
@@ -172,7 +173,7 @@ class BISTDataFetcher:
         self._max_workers = min(8, max(2, len(self._watchlist)))
 
     def _cache_key(self, ticker: str, period: str, interval: str) -> tuple[str, str, str]:
-        return (ticker, period, interval)
+        return (normalize_ticker(ticker), period, interval)
 
     def _now(self) -> datetime:
         return datetime.now()
@@ -193,6 +194,45 @@ class BISTDataFetcher:
 
     def _quote_ttl(self) -> timedelta:
         return timedelta(seconds=float(getattr(settings, "REALTIME_QUOTE_CACHE_TTL_SECONDS", 30)))
+
+    def get_last_skipped_tickers(self) -> list[str]:
+        """Return tickers skipped during the most recent multi-timeframe fetch."""
+        return list(self._last_skipped_tickers)
+
+    def _record_skipped_tickers(
+        self,
+        requested: list[str],
+        combined: dict[str, dict[str, pd.DataFrame]],
+        *,
+        trend_data: dict[str, pd.DataFrame],
+        trigger_data: dict[str, pd.DataFrame],
+    ) -> list[str]:
+        skipped: list[str] = []
+        for ticker in requested:
+            normalized = normalize_ticker(ticker)
+            if normalized in combined:
+                continue
+            reason = "missing_timeframe_data"
+            if normalized not in trend_data and normalized not in trigger_data:
+                reason = "provider_timeout_or_rate_limit"
+            elif normalized not in trend_data:
+                reason = "trend_data_missing"
+            elif normalized not in trigger_data:
+                reason = "trigger_data_missing"
+            skipped.append(normalized)
+            logger.warning(
+                "ticker_skipped_during_fetch",
+                ticker=normalized,
+                reason=reason,
+            )
+        self._last_skipped_tickers = skipped
+        if skipped:
+            logger.warning(
+                "fetch_skipped_tickers",
+                skipped_count=len(skipped),
+                skipped_tickers=",".join(skipped[:20]),
+            )
+        return skipped
 
     def _get_valid_cache_entry(
         self, cache: dict[Any, CacheEntry], cache_key: Any, ttl: timedelta
@@ -992,6 +1032,12 @@ class BISTDataFetcher:
             if trend_df is None or trigger_df is None:
                 continue
             combined[ticker] = {"trend": trend_df, "trigger": trigger_df}
+        self._record_skipped_tickers(
+            self.watchlist,
+            combined,
+            trend_data=trend_data,
+            trigger_data=trigger_data,
+        )
         return combined
 
     def fetch_multi_timeframe(
@@ -1033,6 +1079,12 @@ class BISTDataFetcher:
             if trend_df is None or trigger_df is None:
                 continue
             combined[normalized_ticker] = {"trend": trend_df, "trigger": trigger_df}
+        self._record_skipped_tickers(
+            normalized_tickers,
+            combined,
+            trend_data=trend_data,
+            trigger_data=trigger_data,
+        )
         return combined
 
 

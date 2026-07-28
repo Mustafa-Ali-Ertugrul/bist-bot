@@ -13,7 +13,9 @@ REPORTS = [
 
 def render_backtest_page() -> None:
     st.title("Backtest ve Raporlar")
-    st.caption("Look-ahead bias fix sonrasi uretilen markdown raporlari burada goruntulenir.")
+    st.caption(
+        "Look-ahead bias düzeltmesi sonrası üretilen markdown raporları burada görüntülenir."
+    )
 
     for title, path in REPORTS:
         with st.expander(title, expanded=title == "Significant Top 10"):

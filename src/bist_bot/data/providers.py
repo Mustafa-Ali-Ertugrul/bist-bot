@@ -51,25 +51,34 @@ class YFinanceProvider:
         retryable_names = {"YFRateLimitError", "YFDownloadError", "YFTickerError"}
         return type(exc).__name__ in retryable_names
 
+    def _retry_sleep_seconds(self, attempt: int, *, requested: float | None = None) -> float:
+        backoff = float(settings.data.YFINANCE_RETRY_BACKOFF_SECONDS)
+        max_sleep = float(getattr(settings.data, "YFINANCE_MAX_RETRY_SLEEP_SECONDS", 2.0))
+        computed = backoff * (2 ** max(attempt - 1, 0))
+        if requested is not None and requested > 0:
+            computed = max(computed, float(requested))
+        return min(max(computed, 0.0), max_sleep)
+
     def _retry_yfinance_call(self, func, ticker: str, *args, **kwargs) -> Any:
-        max_retries = settings.data.YFINANCE_MAX_RETRIES
-        backoff = settings.data.YFINANCE_RETRY_BACKOFF_SECONDS
-        last_exc = None
+        max_retries = max(1, int(settings.data.YFINANCE_MAX_RETRIES))
+        last_exc: Exception | None = None
         for attempt in range(1, max_retries + 1):
             try:
                 self.rate_limiter.wait_if_needed("yahoo.finance")
                 result = func(*args, **kwargs)
                 if result is None or (isinstance(result, pd.DataFrame) and result.empty):
                     if attempt < max_retries:
+                        wait = self._retry_sleep_seconds(attempt)
                         logger.warning(
                             "yfinance_retry",
                             ticker=ticker,
                             attempt=attempt,
                             max_retries=max_retries,
                             error_type="empty_response",
+                            wait_seconds=wait,
                             final_result="retrying",
                         )
-                        time.sleep(backoff * (2 ** (attempt - 1)))
+                        time.sleep(wait)
                         continue
                 logger.info(
                     "yfinance_fetch_success",
@@ -82,13 +91,14 @@ class YFinanceProvider:
             except (ConnectionError, TimeoutError, OSError) as exc:
                 last_exc = exc
                 if attempt < max_retries:
-                    wait = backoff * (2 ** (attempt - 1))
+                    wait = self._retry_sleep_seconds(attempt)
                     logger.warning(
                         "yfinance_retry",
                         ticker=ticker,
                         attempt=attempt,
                         max_retries=max_retries,
                         error_type=type(exc).__name__,
+                        wait_seconds=wait,
                         final_result="retrying",
                     )
                     time.sleep(wait)
@@ -103,16 +113,17 @@ class YFinanceProvider:
                 )
                 return None
             except Exception as exc:
+                last_exc = exc
                 if self._is_retryable_error(exc):
-                    last_exc = exc
                     if attempt < max_retries:
-                        wait = backoff * (2 ** (attempt - 1))
+                        wait = self._retry_sleep_seconds(attempt)
                         logger.warning(
                             "yfinance_retry",
                             ticker=ticker,
                             attempt=attempt,
                             max_retries=max_retries,
                             error_type=type(exc).__name__,
+                            wait_seconds=wait,
                             final_result="retrying",
                         )
                         time.sleep(wait)
@@ -219,8 +230,9 @@ class YFinanceProvider:
 
         def _fetch():
             stock = yf.Ticker(ticker)
+            single_timeout = float(getattr(settings.data, "PROVIDER_SINGLE_TIMEOUT_SECONDS", 8))
             try:
-                return stock.history(period=period, interval=interval, timeout=12)
+                return stock.history(period=period, interval=interval, timeout=single_timeout)
             except TypeError:
                 return stock.history(period=period, interval=interval)
 
@@ -271,9 +283,8 @@ class YFinanceProvider:
         if not tickers:
             return {}
 
-        max_retries = settings.data.YFINANCE_MAX_RETRIES
-        backoff = settings.data.YFINANCE_RETRY_BACKOFF_SECONDS
-        last_exc = None
+        max_retries = max(1, int(settings.data.YFINANCE_MAX_RETRIES))
+        last_exc: Exception | None = None
         for attempt in range(1, max_retries + 1):
             try:
                 self.rate_limiter.wait_if_needed("yahoo.finance")
@@ -285,19 +296,21 @@ class YFinanceProvider:
                     auto_adjust=False,
                     progress=False,
                     threads=True,
-                    timeout=getattr(settings.data, "PROVIDER_BATCH_TIMEOUT_SECONDS", 60),
+                    timeout=getattr(settings.data, "PROVIDER_BATCH_TIMEOUT_SECONDS", 15),
                 )
                 if raw_data is None or (isinstance(raw_data, pd.DataFrame) and raw_data.empty):
                     if attempt < max_retries:
+                        wait = self._retry_sleep_seconds(attempt)
                         logger.warning(
                             "yfinance_batch_retry",
                             ticker_count=len(tickers),
                             attempt=attempt,
                             max_retries=max_retries,
                             error_type="empty_response",
+                            wait_seconds=wait,
                             final_result="retrying",
                         )
-                        time.sleep(backoff * (2 ** (attempt - 1)))
+                        time.sleep(wait)
                         continue
                     logger.warning("yfinance_batch_empty", ticker_count=len(tickers))
                     return self._fetch_batch_individual(tickers, period, interval)
@@ -322,13 +335,14 @@ class YFinanceProvider:
             except (ConnectionError, TimeoutError, OSError) as exc:
                 last_exc = exc
                 if attempt < max_retries:
-                    wait = backoff * (2 ** (attempt - 1))
+                    wait = self._retry_sleep_seconds(attempt)
                     logger.warning(
                         "yfinance_batch_retry",
                         ticker_count=len(tickers),
                         attempt=attempt,
                         max_retries=max_retries,
                         error_type=type(exc).__name__,
+                        wait_seconds=wait,
                         final_result="retrying",
                     )
                     time.sleep(wait)
@@ -346,13 +360,14 @@ class YFinanceProvider:
                 if self._is_retryable_error(exc):
                     last_exc = exc
                     if attempt < max_retries:
-                        wait = backoff * (2 ** (attempt - 1))
+                        wait = self._retry_sleep_seconds(attempt)
                         logger.warning(
                             "yfinance_batch_retry",
                             ticker_count=len(tickers),
                             attempt=attempt,
                             max_retries=max_retries,
                             error_type=type(exc).__name__,
+                            wait_seconds=wait,
                             final_result="retrying",
                         )
                         time.sleep(wait)
@@ -555,9 +570,10 @@ class BaseOfficialProvider(ABC):
         password: str,
         *,
         rate_limiter: RateLimiterProtocol | None = None,
-        timeout: float = 30.0,
-        max_retries: int = 3,
-        retry_backoff: float = 1.0,
+        timeout: float = 8.0,
+        max_retries: int = 2,
+        retry_backoff: float = 0.5,
+        max_retry_sleep: float = 2.0,
         http_client: OfficialHTTPClientProtocol | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
@@ -565,9 +581,10 @@ class BaseOfficialProvider(ABC):
         self.username = username
         self.password = password
         self.rate_limiter = rate_limiter
-        self.timeout = timeout
-        self.max_retries = max_retries
-        self.retry_backoff = retry_backoff
+        self.timeout = float(timeout)
+        self.max_retries = max(1, int(max_retries))
+        self.retry_backoff = float(retry_backoff)
+        self.max_retry_sleep = max(0.0, float(max_retry_sleep))
         self.http_client = http_client or RequestsOfficialHTTPClient()
         self._session_token: str | None = None
         self._token_expires: datetime | None = None
@@ -599,6 +616,12 @@ class BaseOfficialProvider(ABC):
         if self.rate_limiter is not None:
             self.rate_limiter.wait_if_needed("official.provider")
 
+    def _retry_sleep_seconds(self, attempt: int, *, requested: float | None = None) -> float:
+        computed = self.retry_backoff * (2 ** max(attempt - 1, 0))
+        if requested is not None and requested > 0:
+            computed = max(computed, float(requested))
+        return min(max(computed, 0.0), self.max_retry_sleep)
+
     def _retry_request(
         self,
         method: str,
@@ -613,28 +636,55 @@ class BaseOfficialProvider(ABC):
                 self._ensure_auth()
                 return self._request(method, path, params=params, json_body=json_body)
             except RateLimitError as exc:
-                wait = exc.retry_after or self.retry_backoff * (2**attempt)
-                logger.warning("official_rate_limited", retry_after=wait, actionable_count=attempt)
+                if attempt >= self.max_retries:
+                    logger.warning(
+                        "official_rate_limited_skip",
+                        attempt=attempt,
+                        max_retries=self.max_retries,
+                        retry_after=exc.retry_after,
+                    )
+                    raise
+                wait = self._retry_sleep_seconds(attempt, requested=exc.retry_after)
+                logger.warning(
+                    "official_rate_limited",
+                    retry_after=wait,
+                    attempt=attempt,
+                    max_retries=self.max_retries,
+                )
                 time.sleep(wait)
                 last_exc = exc
             except BadResponseError as exc:
                 if exc.status_code >= 500:
-                    wait = self.retry_backoff * (2**attempt)
+                    if attempt >= self.max_retries:
+                        raise
+                    wait = self._retry_sleep_seconds(attempt)
                     logger.warning(
                         "official_server_error_retry",
                         error_type=str(exc.status_code),
-                        actionable_count=attempt,
+                        attempt=attempt,
+                        max_retries=self.max_retries,
+                        wait_seconds=wait,
                     )
                     time.sleep(wait)
                     last_exc = exc
                 else:
                     raise
             except (ConnectionError, TimeoutError, OSError) as exc:
-                wait = self.retry_backoff * (2**attempt)
+                if attempt >= self.max_retries:
+                    logger.warning(
+                        "official_connection_skip",
+                        error_type=type(exc).__name__,
+                        attempt=attempt,
+                        max_retries=self.max_retries,
+                    )
+                    raise
+                wait = self._retry_sleep_seconds(attempt)
                 logger.warning(
                     "official_connection_retry",
                     error_type=type(exc).__name__,
-                    actionable_count=attempt,
+                    attempt=attempt,
+                    max_retries=self.max_retries,
+                    wait_seconds=wait,
                 )
                 time.sleep(wait)
                 last_exc = exc
@@ -843,9 +893,10 @@ def build_official_provider(
     username: str,
     password: str,
     rate_limiter: RateLimiterProtocol | None = None,
-    timeout: float = 30.0,
-    max_retries: int = 3,
-    retry_backoff: float = 1.0,
+    timeout: float = 8.0,
+    max_retries: int = 2,
+    retry_backoff: float = 0.5,
+    max_retry_sleep: float = 2.0,
     http_client: OfficialHTTPClientProtocol | None = None,
     endpoints: OfficialProviderEndpoints | None = None,
 ) -> OfficialProvider:
@@ -864,6 +915,7 @@ def build_official_provider(
         timeout=timeout,
         max_retries=max_retries,
         retry_backoff=retry_backoff,
+        max_retry_sleep=max_retry_sleep,
         http_client=http_client,
     )
     if endpoints is not None:

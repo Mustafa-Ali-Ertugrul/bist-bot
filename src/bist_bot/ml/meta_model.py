@@ -3,18 +3,20 @@
 from __future__ import annotations
 
 import json
-import pickle
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal, cast
 
+import joblib
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
 from sklearn.isotonic import IsotonicRegression  # type: ignore[import-not-found]
 from sklearn.linear_model import LogisticRegression  # type: ignore[import-not-found]
 from sklearn.model_selection import TimeSeriesSplit  # type: ignore[import-not-found]
+
+from bist_bot.app_logging import get_logger
 
 try:  # pragma: no cover - optional heavy dependency
     from xgboost import XGBClassifier  # type: ignore[import-not-found]
@@ -25,6 +27,7 @@ except ImportError:  # pragma: no cover
 
 
 CalibrationMethod = Literal["none", "platt", "isotonic"]
+logger = get_logger(__name__, component="ml")
 
 
 class ProbabilityCalibrator:
@@ -156,6 +159,9 @@ class SignalMetaModel:
             y_train = targets[train_idx]
             x_test = features.iloc[test_idx]
 
+            if np.unique(y_train).size < 2:
+                continue
+
             fold_model = _build_classifier(self.xgb_params or None)
             fold_model.fit(x_train, y_train)
             oof_predictions[test_idx] = fold_model.predict_proba(x_test)[:, 1]
@@ -209,8 +215,13 @@ class SignalMetaModel:
     ) -> Path:
         path = Path(output_dir)
         path.mkdir(parents=True, exist_ok=True)
-        (path / "meta_model.pkl").write_bytes(pickle.dumps(self.model))
-        (path / "probability_calibrator.pkl").write_bytes(pickle.dumps(self.calibrator))
+        # Model: XGBoost native format (safe) if available, else joblib
+        if _HAS_XGBOOST and hasattr(self.model, "save_model"):
+            self.model.save_model(str(path / "meta_model.ubj"))
+        else:
+            joblib.dump(self.model, path / "meta_model.joblib")
+        # Calibrator: always use joblib (safer than pickle)
+        joblib.dump(self.calibrator, path / "probability_calibrator.joblib")
         (path / "feature_columns.json").write_text(
             json.dumps(self.feature_names, indent=2, ensure_ascii=False),
             encoding="utf-8",
@@ -229,8 +240,39 @@ class SignalMetaModel:
     def load_artifacts(cls, artifact_dir: str | Path) -> SignalMetaModel:
         path = Path(artifact_dir)
         feature_names = json.loads((path / "feature_columns.json").read_text(encoding="utf-8"))
-        model = pickle.loads((path / "meta_model.pkl").read_bytes())
-        calibrator = pickle.loads((path / "probability_calibrator.pkl").read_bytes())
+
+        # Model: try XGBoost native (.ubj), then joblib (.joblib).
+        ubj_path = path / "meta_model.ubj"
+        joblib_path = path / "meta_model.joblib"
+        pkl_path = path / "meta_model.pkl"
+        if ubj_path.exists():
+            if not _HAS_XGBOOST:
+                raise RuntimeError("XGBoost model found but xgboost package is not available")
+            model = _build_classifier()
+            model.load_model(str(ubj_path))
+        elif joblib_path.exists():
+            model = joblib.load(joblib_path)
+        elif pkl_path.exists():
+            logger.warning("pickle_model_rejected", path=str(pkl_path))
+            raise FileNotFoundError(
+                f"Pickle model format is not supported. Convert {pkl_path} to .ubj or .joblib"
+            )
+        else:
+            raise FileNotFoundError(f"No model file (ubj/joblib) found in {path}")
+
+        # Calibrator: joblib only.
+        cal_joblib = path / "probability_calibrator.joblib"
+        cal_pkl = path / "probability_calibrator.pkl"
+        if cal_joblib.exists():
+            calibrator = joblib.load(cal_joblib)
+        elif cal_pkl.exists():
+            logger.warning("pickle_calibrator_rejected", path=str(cal_pkl))
+            raise FileNotFoundError(
+                f"Pickle calibrator format is not supported. Convert {cal_pkl} to .joblib"
+            )
+        else:
+            raise FileNotFoundError(f"No calibrator file (joblib) found in {path}")
+
         instance = cls(getattr(calibrator, "method", "platt"))
         instance.model = model
         instance.calibrator = calibrator

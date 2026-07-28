@@ -46,17 +46,27 @@ class SignalType(Enum):
             return SignalType(value)
         except ValueError:
             pass
+        by_name = SignalType.__members__.get(value.upper())
+        if by_name is not None:
+            return by_name
         for st in SignalType:
             if st.display == value:
                 return st
         raise ValueError(f"Unknown signal type: {value}")
 
 
+def ensure_utc(value: datetime) -> datetime:
+    """Return an aware UTC datetime and reject ambiguous naive values."""
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError("Naive datetime is not allowed; provide an explicit timezone")
+    if value.tzinfo is UTC:
+        return value
+    return value.astimezone(UTC)
+
+
 def _make_expires_at(timestamp: datetime) -> datetime:
     ttl = getattr(settings, "SIGNAL_TTL_MINUTES", 60)
-    if timestamp.tzinfo is None:
-        return timestamp + timedelta(minutes=ttl)
-    return timestamp + timedelta(minutes=ttl)
+    return ensure_utc(timestamp) + timedelta(minutes=ttl)
 
 
 @dataclass
@@ -71,9 +81,12 @@ class Signal:
     position_size: int | None = None
     signal_probability: float | None = None
     kelly_fraction: float | None = None
-    timestamp: datetime = field(default_factory=datetime.now)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
     confidence: str = "confidence.low"
+    agreement_ratio: float | None = field(default=None)
     expires_at: datetime | None = field(default=None)
+    buy_threshold: float = 20.0
+    is_actionable: bool = False
 
     def __post_init__(self) -> None:
         if self.expires_at is None:
@@ -82,14 +95,8 @@ class Signal:
     def is_expired(self, now: datetime | None = None) -> bool:
         if self.expires_at is None:
             return False
-        if now is None:
-            now = datetime.now(UTC)
-        expires = self.expires_at
-        if expires.tzinfo is None and now.tzinfo is not None:
-            expires = expires.replace(tzinfo=UTC)
-        elif expires.tzinfo is not None and now.tzinfo is None:
-            now = now.replace(tzinfo=UTC)
-        return now >= expires
+        current_time = ensure_utc(now or datetime.now(UTC))
+        return current_time >= ensure_utc(self.expires_at)
 
     @property
     def confidence_key(self) -> str:
@@ -113,7 +120,10 @@ class Signal:
             kelly_fraction=self.kelly_fraction,
             timestamp=self.timestamp,
             confidence=self.confidence,
+            agreement_ratio=self.agreement_ratio,
             expires_at=self.expires_at,
+            buy_threshold=self.buy_threshold,
+            is_actionable=self.is_actionable,
         )
 
     def __str__(self) -> str:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
-from datetime import datetime
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -80,7 +80,7 @@ def test_paper_trade_service_queues_actionable_signals(monkeypatch):
         price=100.0,
         stop_loss=95.0,
         target_price=110.0,
-        timestamp=datetime(2025, 1, 1, 10, 0, 0),
+        timestamp=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
     )
 
     service.queue_actionable_signals([signal])
@@ -89,7 +89,7 @@ def test_paper_trade_service_queues_actionable_signals(monkeypatch):
         ticker="THYAO.IS",
         signal_type=SignalType.BUY.value,
         signal_price=100.0,
-        signal_time=datetime(2025, 1, 1, 10, 0, 0),
+        signal_time=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
         stop_loss=95.0,
         target_price=110.0,
         score=25,
