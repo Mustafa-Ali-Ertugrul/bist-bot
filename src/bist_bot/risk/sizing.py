@@ -29,7 +29,7 @@ def apply_position_budget(
     max_position_cap_pct: float = 90.0,
 ) -> None:
     risk_per_share = price - levels.final_stop
-    if risk_per_share <= 0:
+    if price <= 0 or risk_per_share <= 0:
         levels.position_size = 0
         levels.max_loss_tl = 0
         levels.risk_budget_tl = 0
@@ -81,18 +81,43 @@ def apply_probability_sizing(
         levels.position_size = 0
         levels.max_loss_tl = 0.0
         levels.blocked_by_daily_loss = True
+        try:
+            from bist_bot.observability.alerts import AlertLevel, send_alert
+            from bist_bot.observability.logging import log_risk_reject
+
+            log_risk_reject("daily_loss_cap", ticker="")
+            send_alert(
+                "Daily loss cap hit",
+                "Position sizing blocked by daily loss limit",
+                level=AlertLevel.CRITICAL,
+                error="daily_loss_cap",
+            )
+        except Exception:
+            pass
         return levels
 
     if levels.liquidity_value and levels.liquidity_value < min_liquidity_value:
         levels.position_size = 0
         levels.max_loss_tl = 0.0
         levels.blocked_by_liquidity = True
+        try:
+            from bist_bot.observability.logging import log_risk_reject
+
+            log_risk_reject("liquidity", ticker="")
+        except Exception:
+            pass
         return levels
 
     if levels.signal_probability < min_signal_probability:
         levels.position_size = 0
         levels.max_loss_tl = 0.0
         levels.blocked_by_probability = True
+        try:
+            from bist_bot.observability.logging import log_risk_reject
+
+            log_risk_reject("low_probability", ticker="")
+        except Exception:
+            pass
         return levels
 
     risk_per_share = price - levels.final_stop

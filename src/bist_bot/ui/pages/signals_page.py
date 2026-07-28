@@ -16,7 +16,6 @@ from bist_bot.ui.components.signal_card import render_signal_card
 from bist_bot.ui.runtime import filter_signals
 
 _STRONG_BUY = int(settings.STRONG_BUY_THRESHOLD)
-_BUY = int(settings.BUY_THRESHOLD)
 _WEAK_BUY = int(settings.WEAK_BUY_THRESHOLD)
 _WEAK_SELL = int(settings.WEAK_SELL_THRESHOLD)
 _SELL = int(settings.SELL_THRESHOLD)
@@ -80,7 +79,7 @@ def render_signals_page() -> None:
         [s for s in signals if s.score >= _STRONG_BUY], key=lambda s: s.score, reverse=True
     )
     buy = sorted(
-        [s for s in signals if _BUY <= s.score < _STRONG_BUY], key=lambda s: s.score, reverse=True
+        [s for s in signals if s.buy_threshold <= s.score < _STRONG_BUY], key=lambda s: s.score, reverse=True
     )
     hold = sorted(
         [s for s in signals if _WEAK_SELL < s.score < _WEAK_BUY], key=lambda s: abs(s.score)

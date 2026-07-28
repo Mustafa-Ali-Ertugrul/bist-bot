@@ -52,7 +52,34 @@ def apply_buy_side_risk(
 ) -> RiskLevels | None:
     """Apply sector, portfolio, liquidity, and meta-model guards."""
     if not is_buy_signal(signal_type):
-        return RiskLevels(method_used="Long trade plan not generated for non-buy signal")
+        price = float(last["close"])
+        atr_series = df.get("atr")
+        atr_val: float | None = None
+        if atr_series is not None and len(atr_series) > 0:
+            raw_atr = atr_series.iloc[-1]
+            try:
+                atr_val = float(raw_atr) if pd.notna(raw_atr) else None
+            except (TypeError, ValueError):
+                atr_val = None
+        if atr_val is not None and atr_val > 0:
+            stop_mult = float(getattr(risk_manager, "atr_stop_mult", 2.0))
+            target_mult = float(getattr(risk_manager, "atr_target_mult", 3.0))
+            final_stop = round(price + (stop_mult * atr_val), 2)
+            final_target = round(price - (target_mult * atr_val), 2)
+            method_used = (
+                f"Short trade plan: ATR-based (stop=+{stop_mult:.1f}*ATR, "
+                f"target=-{target_mult:.1f}*ATR)"
+            )
+        else:
+            final_stop = round(price * 1.05, 2)
+            final_target = round(price * 0.92, 2)
+            method_used = "Short trade plan: fixed 5% stop / 8% target (ATR missing)"
+        return RiskLevels(
+            final_stop=final_stop,
+            final_target=final_target,
+            position_size=0,
+            method_used=method_used,
+        )
     if enforce_sector_limit and not risk_manager.check_sector_limit(ticker):
         logger.debug("strategy_sector_filtered", ticker=ticker)
         if reject_logger is not None:

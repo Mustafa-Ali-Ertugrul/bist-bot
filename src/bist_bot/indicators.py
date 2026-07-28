@@ -22,8 +22,11 @@ class TechnicalIndicators:
         lookback: int,
         low_threshold: float,
         high_threshold: float,
+        *,
+        in_place: bool = False,
     ) -> pd.DataFrame:
-        df = df.copy()
+        if not in_place:
+            df = df.copy()
         df[output_col] = "NONE"
 
         if len(df) < lookback * 2:
@@ -85,26 +88,27 @@ class TechnicalIndicators:
     @staticmethod
     def add_all(df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
-        df = TechnicalIndicators.add_rsi(df)
-        df = TechnicalIndicators.add_sma(df)
-        df = TechnicalIndicators.add_ema(df)
-        df = TechnicalIndicators.add_macd(df)
-        df = TechnicalIndicators.add_bollinger(df)
-        df = TechnicalIndicators.add_volume_analysis(df)
-        df = TechnicalIndicators.add_atr(df)
-        df = TechnicalIndicators.add_adx(df)
-        df = TechnicalIndicators.add_support_resistance(df)
-        df = TechnicalIndicators.add_stochastic(df)
-        df = TechnicalIndicators.add_obv(df)
-        df = TechnicalIndicators.add_cci(df)
-        df = TechnicalIndicators.add_rsi_divergence(df)
-        df = TechnicalIndicators.add_macd_divergence(df)
+        df = TechnicalIndicators.add_rsi(df, in_place=True)
+        df = TechnicalIndicators.add_sma(df, in_place=True)
+        df = TechnicalIndicators.add_ema(df, in_place=True)
+        df = TechnicalIndicators.add_macd(df, in_place=True)
+        df = TechnicalIndicators.add_bollinger(df, in_place=True)
+        df = TechnicalIndicators.add_volume_analysis(df, in_place=True)
+        df = TechnicalIndicators.add_atr(df, in_place=True)
+        df = TechnicalIndicators.add_adx(df, in_place=True)
+        df = TechnicalIndicators.add_support_resistance(df, in_place=True)
+        df = TechnicalIndicators.add_stochastic(df, in_place=True)
+        df = TechnicalIndicators.add_obv(df, in_place=True)
+        df = TechnicalIndicators.add_cci(df, in_place=True)
+        df = TechnicalIndicators.add_rsi_divergence(df, in_place=True)
+        df = TechnicalIndicators.add_macd_divergence(df, in_place=True)
         return df
 
     @staticmethod
-    def add_rsi(df: pd.DataFrame, period: int | None = None) -> pd.DataFrame:
+    def add_rsi(df: pd.DataFrame, period: int | None = None, *, in_place: bool = False) -> pd.DataFrame:
         period = period or settings.RSI_PERIOD
-        df = df.copy()
+        if not in_place:
+            df = df.copy()
 
         delta = df["close"].diff()
         gain = delta.where(delta > 0, 0)
@@ -128,13 +132,22 @@ class TechnicalIndicators:
         return df
 
     @staticmethod
-    def add_stochastic(df: pd.DataFrame, k_period: int = 14, d_period: int = 3) -> pd.DataFrame:
-        df = df.copy()
+    def add_stochastic(
+        df: pd.DataFrame, k_period: int = 14, d_period: int = 3, *, in_place: bool = False
+    ) -> pd.DataFrame:
+        if not in_place:
+            df = df.copy()
 
         low_min = df["low"].rolling(window=k_period).min()
         high_max = df["high"].rolling(window=k_period).max()
+        denominator = high_max - low_min
 
-        df["stoch_k"] = 100 * (df["close"] - low_min) / (high_max - low_min)
+        stoch_k = pd.Series(0.0, index=df.index, dtype=float)
+        valid_denominator = denominator != 0
+        stoch_k.loc[valid_denominator] = (
+            100 * (df["close"].loc[valid_denominator] - low_min.loc[valid_denominator])
+        ) / denominator.loc[valid_denominator]
+        df["stoch_k"] = stoch_k
         df["stoch_d"] = df["stoch_k"].rolling(window=d_period).mean()
 
         df["stoch_cross"] = "NONE"
@@ -153,10 +166,11 @@ class TechnicalIndicators:
         return df
 
     @staticmethod
-    def add_adx(df: pd.DataFrame, period: int = 14) -> pd.DataFrame:
-        df = df.copy()
+    def add_adx(df: pd.DataFrame, period: int = 14, *, in_place: bool = False) -> pd.DataFrame:
+        if not in_place:
+            df = df.copy()
         if "atr" not in df.columns:
-            df = TechnicalIndicators.add_atr(df, period=period)
+            df = TechnicalIndicators.add_atr(df, period=period, in_place=True)
 
         high_diff = df["high"].diff()
         low_diff = -df["low"].diff()
@@ -202,8 +216,9 @@ class TechnicalIndicators:
         return df
 
     @staticmethod
-    def add_obv(df: pd.DataFrame) -> pd.DataFrame:
-        df = df.copy()
+    def add_obv(df: pd.DataFrame, *, in_place: bool = False) -> pd.DataFrame:
+        if not in_place:
+            df = df.copy()
         close = df["close"].to_numpy()
         volume = df["volume"].to_numpy()
         direction = np.sign(np.diff(close, prepend=close[0]))
@@ -217,8 +232,9 @@ class TechnicalIndicators:
         return df
 
     @staticmethod
-    def add_cci(df: pd.DataFrame, period: int = 20) -> pd.DataFrame:
-        df = df.copy()
+    def add_cci(df: pd.DataFrame, period: int = 20, *, in_place: bool = False) -> pd.DataFrame:
+        if not in_place:
+            df = df.copy()
 
         typical_price = (df["high"] + df["low"] + df["close"]) / 3
         sma_tp = typical_price.rolling(window=period).mean()
@@ -226,7 +242,12 @@ class TechnicalIndicators:
             lambda x: np.abs(x - x.mean()).mean(), raw=True
         )
 
-        df["cci"] = (typical_price - sma_tp) / (0.015 * mean_dev)
+        df["cci"] = pd.Series(np.nan, index=df.index, dtype=float)
+        valid_deviation = mean_dev.replace(0, np.nan).notna()
+        numerator = typical_price - sma_tp
+        df.loc[valid_deviation, "cci"] = numerator.loc[valid_deviation] / (
+            0.015 * mean_dev.loc[valid_deviation]
+        )
 
         df["cci_oversold"] = df["cci"] < -100
         df["cci_overbought"] = df["cci"] > 100
@@ -234,7 +255,9 @@ class TechnicalIndicators:
         return df
 
     @staticmethod
-    def add_rsi_divergence(df: pd.DataFrame, lookback: int = 5) -> pd.DataFrame:
+    def add_rsi_divergence(
+        df: pd.DataFrame, lookback: int = 5, *, in_place: bool = False
+    ) -> pd.DataFrame:
         return TechnicalIndicators._add_min_divergence(
             df=df,
             source_col="rsi",
@@ -242,10 +265,13 @@ class TechnicalIndicators:
             lookback=lookback,
             low_threshold=35,
             high_threshold=65,
+            in_place=in_place,
         )
 
     @staticmethod
-    def add_macd_divergence(df: pd.DataFrame, lookback: int = 5) -> pd.DataFrame:
+    def add_macd_divergence(
+        df: pd.DataFrame, lookback: int = 5, *, in_place: bool = False
+    ) -> pd.DataFrame:
         return TechnicalIndicators._add_min_divergence(
             df=df,
             source_col="macd",
@@ -253,13 +279,21 @@ class TechnicalIndicators:
             lookback=lookback,
             low_threshold=0,
             high_threshold=0,
+            in_place=in_place,
         )
 
     @staticmethod
-    def add_sma(df: pd.DataFrame, fast: int | None = None, slow: int | None = None) -> pd.DataFrame:
+    def add_sma(
+        df: pd.DataFrame,
+        fast: int | None = None,
+        slow: int | None = None,
+        *,
+        in_place: bool = False,
+    ) -> pd.DataFrame:
         fast = fast or settings.SMA_FAST
         slow = slow or settings.SMA_SLOW
-        df = df.copy()
+        if not in_place:
+            df = df.copy()
 
         df[f"sma_{fast}"] = df["close"].rolling(window=fast, min_periods=1).mean()
         df[f"sma_{slow}"] = df["close"].rolling(window=slow, min_periods=1).mean()
@@ -279,13 +313,23 @@ class TechnicalIndicators:
         return df
 
     @staticmethod
-    def add_ema(df: pd.DataFrame, fast: int | None = None, slow: int | None = None) -> pd.DataFrame:
+    def add_ema(
+        df: pd.DataFrame,
+        fast: int | None = None,
+        slow: int | None = None,
+        *,
+        in_place: bool = False,
+        long: int | None = None,
+    ) -> pd.DataFrame:
         fast = fast or settings.EMA_FAST
         slow = slow or settings.EMA_SLOW
-        df = df.copy()
+        long = long or settings.EMA_LONG
+        if not in_place:
+            df = df.copy()
 
         df[f"ema_{fast}"] = df["close"].ewm(span=fast, adjust=False).mean()
         df[f"ema_{slow}"] = df["close"].ewm(span=slow, adjust=False).mean()
+        df[f"ema_{long}"] = df["close"].ewm(span=long, adjust=False).mean()
 
         fast_col = f"ema_{fast}"
         slow_col = f"ema_{slow}"
@@ -299,8 +343,9 @@ class TechnicalIndicators:
         return df
 
     @staticmethod
-    def add_macd(df: pd.DataFrame) -> pd.DataFrame:
-        df = df.copy()
+    def add_macd(df: pd.DataFrame, *, in_place: bool = False) -> pd.DataFrame:
+        if not in_place:
+            df = df.copy()
 
         fast = settings.MACD_FAST
         slow = settings.MACD_SLOW
@@ -328,11 +373,16 @@ class TechnicalIndicators:
 
     @staticmethod
     def add_bollinger(
-        df: pd.DataFrame, period: int | None = None, std: float | None = None
+        df: pd.DataFrame,
+        period: int | None = None,
+        std: float | None = None,
+        *,
+        in_place: bool = False,
     ) -> pd.DataFrame:
         period = period or settings.BOLLINGER_PERIOD
         std = std or settings.BOLLINGER_STD
-        df = df.copy()
+        if not in_place:
+            df = df.copy()
 
         df["bb_middle"] = df["close"].rolling(window=period, min_periods=1).mean()
         rolling_std = (
@@ -340,8 +390,19 @@ class TechnicalIndicators:
         )
         df["bb_upper"] = df["bb_middle"] + (rolling_std * std)
         df["bb_lower"] = df["bb_middle"] - (rolling_std * std)
-        df["bb_bandwidth"] = (df["bb_upper"] - df["bb_lower"]) / df["bb_middle"] * 100
-        df["bb_percent"] = (df["close"] - df["bb_lower"]) / (df["bb_upper"] - df["bb_lower"])
+        bb_width = df["bb_upper"] - df["bb_lower"]
+        bb_middle = df["bb_middle"].replace(0, np.nan)
+        df["bb_bandwidth"] = pd.Series(np.nan, index=df.index, dtype=float)
+        valid_bandwidth = bb_middle.notna() & (bb_width > 0)
+        df.loc[valid_bandwidth, "bb_bandwidth"] = (
+            bb_width.loc[valid_bandwidth] / bb_middle.loc[valid_bandwidth] * 100
+        )
+        bb_percent = pd.Series(0.0, index=df.index, dtype=float)
+        valid_range = bb_width.replace(0, np.nan).notna()
+        bb_percent.loc[valid_range] = (
+            df["close"].loc[valid_range] - df["bb_lower"].loc[valid_range]
+        ) / bb_width.loc[valid_range]
+        df["bb_percent"] = bb_percent
 
         df["bb_position"] = "MIDDLE"
         df.loc[df["close"] <= df["bb_lower"], "bb_position"] = "BELOW_LOWER"
@@ -358,8 +419,9 @@ class TechnicalIndicators:
         return TechnicalIndicators.add_bollinger(df, period=period, std=std)
 
     @staticmethod
-    def add_volume_analysis(df: pd.DataFrame) -> pd.DataFrame:
-        df = df.copy()
+    def add_volume_analysis(df: pd.DataFrame, *, in_place: bool = False) -> pd.DataFrame:
+        if not in_place:
+            df = df.copy()
 
         df["volume_sma_20"] = df["volume"].rolling(window=20, min_periods=1).mean()
         df["volume_ratio"] = (df["volume"] / df["volume_sma_20"]).fillna(0.0)
@@ -405,8 +467,9 @@ class TechnicalIndicators:
         return bool(vol_ratio >= threshold)
 
     @staticmethod
-    def add_atr(df: pd.DataFrame, period: int = 14) -> pd.DataFrame:
-        df = df.copy()
+    def add_atr(df: pd.DataFrame, period: int = 14, *, in_place: bool = False) -> pd.DataFrame:
+        if not in_place:
+            df = df.copy()
 
         high_low = df["high"] - df["low"]
         high_close = abs(df["high"] - df["close"].shift(1))
@@ -419,8 +482,11 @@ class TechnicalIndicators:
         return df
 
     @staticmethod
-    def add_support_resistance(df: pd.DataFrame, lookback: int = 20) -> pd.DataFrame:
-        df = df.copy()
+    def add_support_resistance(
+        df: pd.DataFrame, lookback: int = 20, *, in_place: bool = False
+    ) -> pd.DataFrame:
+        if not in_place:
+            df = df.copy()
 
         df["support"] = df["low"].rolling(window=lookback).min()
         df["resistance"] = df["high"].rolling(window=lookback).max()

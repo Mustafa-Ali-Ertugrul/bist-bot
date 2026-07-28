@@ -54,7 +54,13 @@ def _session_dependencies() -> tuple[Any, Any, Any, Any, datetime | None]:
     )
 
 
-def _empty_scan_result(last_scan_time: datetime | None, error: str) -> ScanResult:
+def _empty_scan_result(
+    last_scan_time: datetime | None,
+    error: str,
+    *,
+    skipped_tickers: list[str] | None = None,
+    warning: str | None = None,
+) -> ScanResult:
     """Build a consistent error payload for failed background scans."""
     empty_stats: ScanStats = {"generated": 0, "actionable": 0, "hold": 0}
     return {
@@ -64,6 +70,8 @@ def _empty_scan_result(last_scan_time: datetime | None, error: str) -> ScanResul
         "error": error,
         "scan_stats": empty_stats,
         "rejection_breakdown": dict(EMPTY_REJECTION_BREAKDOWN),
+        "skipped_tickers": list(skipped_tickers or []),
+        "warning": warning,
     }
 
 
@@ -111,6 +119,26 @@ def collect_scan_result(
             trigger_period=settings.MTF_TRIGGER_PERIOD,
             trigger_interval=settings.MTF_TRIGGER_INTERVAL,
             force_refresh=force_clear,
+        )
+    skipped_tickers: list[str] = []
+    skipped_getter = getattr(fetcher, "get_last_skipped_tickers", None)
+    if callable(skipped_getter):
+        try:
+            skipped_tickers = list(skipped_getter() or [])
+        except Exception as exc:
+            logger.warning(
+                "ui_scan_skipped_tickers_failed",
+                error_type=type(exc).__name__,
+                error=str(exc),
+            )
+    if skipped_tickers:
+        preview = ", ".join(skipped_tickers[:8])
+        more = f" (+{len(skipped_tickers) - 8})" if len(skipped_tickers) > 8 else ""
+        _set_scan_phase(f"{len(skipped_tickers)} sembol atlandı: {preview}{more}")
+        logger.warning(
+            "ui_scan_tickers_skipped",
+            skipped_count=len(skipped_tickers),
+            skipped_tickers=",".join(skipped_tickers[:20]),
         )
     _set_scan_phase(f"{len(timeframe_data)} hisse analiz ediliyor")
     signals = engine.scan_all(timeframe_data)
@@ -183,6 +211,15 @@ def collect_scan_result(
         "hold": hold_count,
     }
 
+    warning = None
+    if skipped_tickers:
+        preview = ", ".join(skipped_tickers[:8])
+        more = f" ve {len(skipped_tickers) - 8} sembol daha" if len(skipped_tickers) > 8 else ""
+        warning = (
+            f"Veri alınamadı, atlandı ({len(skipped_tickers)}): {preview}{more}. "
+            "Rate-limit/timeout sonrası tarama devam etti."
+        )
+
     result: ScanResult = {
         "all_data": all_data,
         "signals": signals,
@@ -190,6 +227,8 @@ def collect_scan_result(
         "error": None,
         "scan_stats": scan_stats,
         "rejection_breakdown": normalized_breakdown,
+        "skipped_tickers": skipped_tickers,
+        "warning": warning,
     }
     _set_scan_phase("Tarama tamamlandı")
     return result
@@ -208,6 +247,8 @@ def apply_scan_result(scan_result: ScanResult) -> None:
     st.session_state.rejection_breakdown = scan_result.get(
         "rejection_breakdown", dict(EMPTY_REJECTION_BREAKDOWN)
     )
+    st.session_state.skipped_tickers = list(scan_result.get("skipped_tickers") or [])
+    st.session_state.scan_warning = scan_result.get("warning")
     st.session_state.scan_in_progress = False
 
 
@@ -424,6 +465,8 @@ def apply_pending_scan_result() -> bool:
     if pending_result.get("error"):
         st.session_state.scan_error = pending_result["error"]
         st.session_state.scan_phase = pending_result.get("scan_phase")
+        st.session_state.skipped_tickers = list(pending_result.get("skipped_tickers") or [])
+        st.session_state.scan_warning = pending_result.get("warning")
         st.session_state.scan_in_progress = False
         return True
     apply_scan_result(pending_result)

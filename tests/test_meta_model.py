@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
 import math
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from bist_bot.ml import ProbabilityCalibrator, SignalMetaModel
 from bist_bot.ml.features import to_float
@@ -50,3 +52,12 @@ def test_to_float_uses_default_for_missing_and_non_finite_values() -> None:
     assert to_float("bad", default=7.0) == 7.0
     assert to_float(3.5, default=7.0) == 3.5
     assert math.isfinite(to_float("3.5", default=7.0))
+
+
+def test_signal_meta_model_rejects_pickle_artifacts(tmp_path) -> None:
+    (tmp_path / "feature_columns.json").write_text(json.dumps(["score"]), encoding="utf-8")
+    (tmp_path / "meta_model.pkl").write_bytes(b"not-a-safe-artifact")
+    (tmp_path / "probability_calibrator.joblib").write_bytes(b"not-used")
+
+    with pytest.raises(FileNotFoundError, match="Pickle model format is not supported"):
+        SignalMetaModel.load_artifacts(tmp_path)

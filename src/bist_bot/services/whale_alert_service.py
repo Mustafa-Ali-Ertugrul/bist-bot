@@ -23,7 +23,7 @@ class WhaleAlert:
     volume_ratio: float
     signal_score: float
     reasons: list[str] = field(default_factory=list)
-    action_note: str = "İzleme listesine al; tek başına alım-satım kararı değildir."
+    action_note: str = "Izleme listesine al; tek basina alim-satim karari degildir."
 
 
 def _to_float(value: Any, default: float = 0.0) -> float:
@@ -48,15 +48,6 @@ def _resolve_frame(raw_data: Any) -> pd.DataFrame | None:
 
 def _signal_map(signals: list[Signal]) -> dict[str, Signal]:
     return {signal.ticker: signal for signal in signals}
-
-
-def _normalize_obv_trend(value: Any) -> str:
-    trend = str(value or "FLAT").upper()
-    if trend in {"UP", "RISING"}:
-        return "RISING"
-    if trend in {"DOWN", "FALLING"}:
-        return "FALLING"
-    return "FLAT"
 
 
 def _classify_direction(signal: Signal | None, change_pct: float, obv_trend: str) -> str:
@@ -123,7 +114,7 @@ def build_whale_alerts(
         adx = _to_float(last.get("adx"), 0.0)
         support = _to_float(last.get("support"), 0.0)
         resistance = _to_float(last.get("resistance"), 0.0)
-        obv_trend = _normalize_obv_trend(last.get("obv_trend", "FLAT"))
+        obv_trend = str(last.get("obv_trend", "FLAT") or "FLAT")
         signal = signals_by_ticker.get(ticker)
         signal_score = float(signal.score) if signal is not None else 0.0
 
@@ -143,35 +134,37 @@ def build_whale_alerts(
         abs_change = abs(change_pct)
         if abs_change >= 5.0:
             score += 25
-            reasons.append(f"Sert fiyat ayrışması: %{change_pct:+.1f}")
+            reasons.append(f"Sert fiyat ayrismasi: %{change_pct:+.1f}")
         elif abs_change >= 3.0:
             score += 18
             reasons.append(f"Belirgin fiyat hareketi: %{change_pct:+.1f}")
         elif abs_change >= 1.8:
             score += 10
-            reasons.append(f"Gün içi hareket dikkat çekiyor: %{change_pct:+.1f}")
+            reasons.append(f"Gun ici hareket dikkat cekiyor: %{change_pct:+.1f}")
 
         if abs(signal_score) >= 60:
             score += 22
-            reasons.append(f"Mevcut model sinyali güçlü: {signal_score:+.0f}")
+            reasons.append(f"Mevcut model sinyali guclu: {signal_score:+.0f}")
         elif abs(signal_score) >= 35:
             score += 14
             reasons.append(f"Mevcut model sinyali destekliyor: {signal_score:+.0f}")
 
         if adx >= 25:
             score += 8
-            reasons.append(f"Trend gücü yüksek: ADX {adx:.1f}")
+            reasons.append(f"Trend gucu yuksek: ADX {adx:.1f}")
 
         if resistance > 0 and close >= resistance * 0.99:
             score += 8
-            reasons.append("Fiyat direnç bölgesine yakın")
+            reasons.append("Fiyat direnc bolgesine yakin")
         elif support > 0 and close <= support * 1.01:
             score += 8
-            reasons.append("Fiyat destek bölgesinde hacimle izlenmeli")
+            reasons.append("Fiyat destek bolgesinde hacimle izlenmeli")
 
-        if obv_trend in {"RISING", "FALLING"}:
+        obv_norm = obv_trend.upper()
+        if obv_norm in {"RISING", "FALLING", "UP", "DOWN"}:
             score += 7
-            reasons.append(f"OBV trendi: {obv_trend.lower()}")
+            obv_label = "rising" if obv_norm in {"RISING", "UP"} else "falling"
+            reasons.append(f"OBV trendi: {obv_label}")
 
         if rsi >= 70 or rsi <= 30:
             score += 5

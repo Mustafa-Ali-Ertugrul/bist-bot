@@ -35,6 +35,7 @@ class RiskManager:
         fixed_stop_pct: float = 5.0,
         fixed_target_pct: float = 8.0,
         position_repository: _HasActivePositions | None = None,
+        daily_price_limit_pct: float = 10.0,
     ):
         if capital is not None and capital <= 0:
             raise ValueError("capital must be greater than zero")
@@ -48,6 +49,7 @@ class RiskManager:
         self.atr_target_mult = atr_target_multiplier
         self.fixed_stop_pct = fixed_stop_pct
         self.fixed_target_pct = fixed_target_pct
+        self.daily_price_limit_pct = daily_price_limit_pct
         self.position_repository = position_repository
         self._sector_signal_counts: dict[str, int] = {}
         self.sector_positions = self._sector_signal_counts
@@ -233,7 +235,9 @@ class RiskManager:
         return stop_helpers.calc_swing_levels(df, price, levels)
 
     def _determine_final_levels(self, price: float, levels: RiskLevels) -> RiskLevels:
-        return stop_helpers.determine_final_levels(price, levels)
+        return stop_helpers.determine_final_levels(
+            price, levels, daily_price_limit_pct=self.daily_price_limit_pct
+        )
 
     def _calc_position_size(self, price: float, levels: RiskLevels) -> RiskLevels:
         return sizing_helpers.calc_position_size(

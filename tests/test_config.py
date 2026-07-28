@@ -33,6 +33,7 @@ def test_flask_debug_env_override(monkeypatch):
 def test_flask_port_prefers_cloud_run_port(monkeypatch):
     monkeypatch.setenv("PORT", "8080")
     monkeypatch.setenv("FLASK_PORT", "5000")
+    monkeypatch.delenv("API_BASE_URL", raising=False)
 
     sub = importlib.import_module("bist_bot.config.subsettings")
     importlib.reload(sub)
@@ -106,15 +107,12 @@ def test_reset_settings_removes_persisted_file(tmp_path, monkeypatch):
 def test_settings_override_uses_fast_merged_view() -> None:
     from bist_bot.config.settings import settings
 
-    original = settings.BUY_THRESHOLD
+    original = settings.SELL_THRESHOLD
 
-    with settings.override(BUY_THRESHOLD=11):
-        assert settings.BUY_THRESHOLD == 11
-        with settings.override(SELL_THRESHOLD=-33):
-            assert settings.BUY_THRESHOLD == 11
-            assert settings.SELL_THRESHOLD == -33
+    with settings.override(SELL_THRESHOLD=-33):
+        assert settings.SELL_THRESHOLD == -33
 
-    assert settings.BUY_THRESHOLD == original
+    assert settings.SELL_THRESHOLD == original
 
 
 def test_secret_settings_can_be_loaded_from_file(monkeypatch, tmp_path):

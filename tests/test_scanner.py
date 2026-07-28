@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
-from datetime import datetime
+from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
 import pytest
@@ -53,7 +53,7 @@ def test_scan_once_orchestrates_side_effect_services():
         signal_type=SignalType.STRONG_BUY,
         score=75,
         price=100.0,
-        timestamp=datetime(2025, 1, 1, 11, 0, 0),
+        timestamp=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
     )
     engine.scan_all.return_value = [signal]
     engine.get_actionable_signals.return_value = [signal]
@@ -281,14 +281,14 @@ def test_scan_once_persists_all_signals_including_hold():
         signal_type=SignalType.HOLD,
         score=3,
         price=150.0,
-        timestamp=datetime(2025, 1, 1, 11, 0, 0),
+        timestamp=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
     )
     buy_signal = Signal(
         ticker="THYAO.IS",
         signal_type=SignalType.BUY,
         score=25,
         price=100.0,
-        timestamp=datetime(2025, 1, 1, 11, 0, 0),
+        timestamp=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
     )
     engine.scan_all.return_value = [hold_signal, buy_signal]
     engine.get_actionable_signals.return_value = [buy_signal]
@@ -315,3 +315,55 @@ def test_scan_once_persists_all_signals_including_hold():
     executed = execution_service.auto_execute_signals.call_args[0][0]
     assert len(executed) == 1
     assert executed[0].ticker == "THYAO.IS"
+
+
+def test_scan_once_skips_auto_execute_when_agent_enabled():
+    """BUG-5: AGENT_ENABLED=True → ScanService auto_execute MUST be skipped."""
+    fetcher = MagicMock()
+    fetcher.fetch_multi_timeframe_all.return_value = {
+        "THYAO.IS": {"trigger": object(), "trend": object()}
+    }
+    engine = MagicMock()
+    notifier = MagicMock()
+    db = MagicMock()
+    db.get_latest_signal.return_value = None
+    engine.get_last_rejection_breakdown.return_value = {
+        "total_rejections": 0,
+        "by_reason": [],
+        "by_stage": [],
+        "scan_id": "scan-agent",
+    }
+    execution_service = MagicMock()
+    notification_service = MagicMock()
+    signal = Signal(
+        ticker="THYAO.IS",
+        signal_type=SignalType.STRONG_BUY,
+        score=80,
+        price=100.0,
+        timestamp=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
+    )
+    engine.scan_all.return_value = [signal]
+    engine.get_actionable_signals.return_value = [signal]
+
+    mock_settings = MagicMock()
+    mock_settings.WATCHLIST = ["THYAO.IS"]
+    mock_settings.WATCHLIST_SOURCE = "test"
+    mock_settings.PAPER_MODE = False
+    mock_settings.AGENT_ENABLED = True
+    mock_settings.agent = MagicMock()
+    mock_settings.agent.AGENT_ENABLED = True
+
+    service = ScanService(
+        fetcher,
+        engine,
+        notifier,
+        db,
+        settings=mock_settings,
+        execution_service=execution_service,
+        notification_service=notification_service,
+    )
+
+    result = service.scan_once()
+
+    assert result == [signal]
+    execution_service.auto_execute_signals.assert_not_called()

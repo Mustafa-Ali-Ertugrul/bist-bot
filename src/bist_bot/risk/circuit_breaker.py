@@ -179,6 +179,22 @@ class CircuitBreaker:
             daily_loss=round(self._daily_loss, 2),
             consecutive_errors=self._consecutive_errors,
         )
+        try:
+            from bist_bot.observability.alerts import AlertLevel, send_alert
+            from bist_bot.observability.metrics import set_daily_pnl
+
+            # daily_loss is positive magnitude of losses; expose as negative PnL.
+            set_daily_pnl(-float(self._daily_loss))
+            send_alert(
+                "Circuit breaker tripped",
+                reason,
+                level=AlertLevel.CRITICAL,
+                error=reason,
+                daily_loss=round(self._daily_loss, 2),
+                consecutive_errors=self._consecutive_errors,
+            )
+        except Exception:
+            pass
 
     def _close(self) -> None:
         """Transition to CLOSED (caller must hold ``_lock``)."""

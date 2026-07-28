@@ -5,7 +5,7 @@ from __future__ import annotations
 import concurrent.futures
 import time
 from collections.abc import Callable
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from typing import Any, cast
 
 from flask import Flask, jsonify, request
@@ -345,21 +345,88 @@ def create_dashboard_app(
 
     @app.route("/health")
     def health_check():
+        """Liveness/readiness probe for Docker/Cloud Run.
+
+        Checks DB connectivity, broker configuration, circuit breaker, and
+        last successful scan timestamp when available.
+        """
         circuit = app.config.get("circuit_breaker")
+        db = get_db()
         db_ok = False
         try:
-            db_ok = get_db().ping()
+            db_ok = bool(db.ping())
         except Exception:
             db_ok = False
+
+        broker = get_broker()
+        broker_mode = str(getattr(settings, "BROKER_MODE", "") or settings.BROKER_PROVIDER).lower()
+        broker_provider = str(getattr(settings, "BROKER_PROVIDER", "paper") or "paper").lower()
+        broker_status = "ok"
+        broker_detail = type(broker).__name__ if broker is not None else "none"
+        if broker is None:
+            broker_status = "unconfigured"
+        else:
+            try:
+                # Prefer lightweight auth probe when available; do not fail hard on paper.
+                auth = getattr(broker, "authenticate", None)
+                if callable(auth) and broker_mode != "paper" and broker_provider not in {
+                    "paper",
+                    "",
+                }:
+                    ok = bool(auth())
+                    broker_status = "ok" if ok else "auth_failed"
+            except NotImplementedError:
+                broker_status = "stub"
+            except Exception as exc:
+                broker_status = "error"
+                broker_detail = f"{type(exc).__name__}"
+
+        last_scan_at: str | None = None
+        last_scan_age_seconds: float | None = None
+        try:
+            if hasattr(db, "get_latest_scan_log"):
+                latest = db.get_latest_scan_log()
+                if latest and latest.get("timestamp"):
+                    last_scan_at = str(latest["timestamp"])
+                    try:
+                        raw_ts = latest["timestamp"]
+                        if isinstance(raw_ts, datetime):
+                            ts = raw_ts
+                        else:
+                            ts = datetime.fromisoformat(str(raw_ts).replace("Z", "+00:00"))
+                        if ts.tzinfo is None:
+                            ts = ts.replace(tzinfo=UTC)
+                        last_scan_age_seconds = round(
+                            (datetime.now(UTC) - ts.astimezone(UTC)).total_seconds(),
+                            1,
+                        )
+                    except (TypeError, ValueError):
+                        last_scan_age_seconds = None
+        except Exception:
+            last_scan_at = None
+
+        circuit_state = str(circuit.state) if circuit else "UNKNOWN"
         health = {
             "status": "healthy",
             "database": "ok" if db_ok else "error",
+            "broker": {
+                "status": broker_status,
+                "mode": broker_mode,
+                "provider": broker_provider,
+                "detail": broker_detail,
+            },
+            "last_scan": {
+                "timestamp": last_scan_at,
+                "age_seconds": last_scan_age_seconds,
+            },
             "version": "1.0.0",
             "timestamp": datetime.now(TR).isoformat(),
-            "circuit_state": str(circuit.state) if circuit else "UNKNOWN",
+            "circuit_state": circuit_state,
         }
-        if not db_ok:
+        if not db_ok or broker_status in {"error", "auth_failed"}:
             health["status"] = "degraded"
+        # Circuit OPEN halts trading but the process is still live — do not fail
+        # Docker/Cloud Run healthchecks (would cause restart loops).
         status_code = 200 if health["status"] == "healthy" else 503
         return jsonify(health), status_code
 
@@ -368,9 +435,18 @@ def create_dashboard_app(
         ready = {"status": "ready", "timestamp": datetime.now(TR).isoformat()}
         return jsonify(ready), 200
 
-    @app.route("/metrics")
-    def metrics():
+    def _metrics_view():
         return app.response_class(render_metrics(), mimetype="text/plain; version=0.0.4")
+
+    if getattr(settings, "METRICS_PUBLIC", False):
+        app.add_url_rule("/metrics", "metrics", _metrics_view, methods=["GET"])
+    else:
+        app.add_url_rule(
+            "/metrics",
+            "metrics",
+            jwt_required()(_metrics_view),
+            methods=["GET"],
+        )
 
     @app.route("/api/auth/login", methods=["POST"])
     @limiter.limit("5 per minute", key_func=_auth_rate_limit_key)
@@ -498,7 +574,7 @@ def create_dashboard_app(
                 duration_ms=round((time.time() - start_time) * 1000, 2),
                 component="dashboard",
             )
-            return jsonify({"status": "error", "message": str(exc)}), 500
+            return jsonify({"status": "error", "message": "scan provider unavailable"}), 500
 
     @app.route("/api/analyze/<ticker>")
     @jwt_required()
@@ -515,7 +591,9 @@ def create_dashboard_app(
                 Callable[..., dict[str, dict[str, Any]]] | None,
                 getattr(runtime_fetcher, "fetch_multi_timeframe", None),
             )
-            use_mtf_analysis = mtf_enabled and callable(fetch_mtf)
+            use_mtf_analysis = (
+                mtf_enabled and _coerce_bool(request.args.get("mtf")) and callable(fetch_mtf)
+            )
             if use_mtf_analysis and fetch_mtf is not None:
                 cache_key = (
                     f"{normalized_ticker}|analyze|mtf|"
@@ -639,7 +717,7 @@ def create_dashboard_app(
                 ticker=ticker,
                 duration_ms=round((time.time() - start_time) * 1000, 2),
             )
-            return jsonify({"status": "error", "message": str(exc)}), 500
+            return jsonify({"status": "error", "message": "indicator calculation failed"}), 500
 
     @app.route("/api/signals/history")
     @jwt_required()

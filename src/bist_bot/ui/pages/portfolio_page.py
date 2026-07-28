@@ -14,7 +14,7 @@ def render_portfolio_page() -> None:
     summary = get_market_summary(signals, all_data)
 
     strong = [s for s in signals if s.score >= settings.STRONG_BUY_THRESHOLD]
-    buy = [s for s in signals if settings.BUY_THRESHOLD <= s.score < settings.STRONG_BUY_THRESHOLD]
+    buy = [s for s in signals if s.buy_threshold <= s.score < settings.STRONG_BUY_THRESHOLD]
     sell = [
         s
         for s in signals

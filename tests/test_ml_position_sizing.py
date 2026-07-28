@@ -27,6 +27,7 @@ def test_probability_sizing_applies_fractional_kelly_cap() -> None:
     manager = RiskManager(capital=10000)
     manager.max_position_cap_pct = 10.0
     manager.kelly_fraction_scale = 0.25
+    manager.min_liquidity_value_tl = 0.0  # bypass liquidity filter for this test
     levels = RiskLevels(
         final_stop=120.0,
         final_target=150.0,
@@ -78,3 +79,49 @@ def test_daily_realized_pnl_resets_when_day_rolls_over() -> None:
 
     assert manager.daily_loss_limit_reached() is False
     assert manager.daily_realized_pnl == 0.0
+
+
+def test_min_liquidity_default_threshold_is_5m_tl(monkeypatch) -> None:
+    """When the override env var is absent, the dataclass default must be 5M.
+
+    Env-level override behavior is exercised by the existing per-test setups
+    that explicitly set ``manager.min_liquidity_value_tl``.
+    """
+    import dataclasses
+    import importlib
+    import sys
+
+    monkeypatch.delenv("MIN_LIQUIDITY_VALUE_TL", raising=False)
+    sys.modules.pop("bist_bot.config.subsettings", None)
+    subsettings = importlib.import_module("bist_bot.config.subsettings")
+    field = next(
+        f for f in dataclasses.fields(subsettings.RiskSettings)
+        if f.name == "MIN_LIQUIDITY_VALUE_TL"
+    )
+    assert field.default == 5_000_000.0
+
+
+def test_min_liquidity_blocks_when_below_5m_tl() -> None:
+    manager = RiskManager(capital=10000)
+    manager.min_liquidity_value_tl = 5_000_000
+    levels = RiskLevels(final_stop=120.0, final_target=150.0, position_size=20)
+
+    adjusted = manager.apply_signal_probability(
+        build_frame(liquidity_multiplier=0.5), 130.0, levels, 0.70
+    )
+
+    assert adjusted.blocked_by_liquidity is True
+    assert adjusted.position_size == 0
+
+
+def test_min_liquidity_passes_when_above_5m_tl() -> None:
+    manager = RiskManager(capital=10000)
+    manager.min_liquidity_value_tl = 5_000_000
+    levels = RiskLevels(final_stop=120.0, final_target=150.0, position_size=20)
+
+    adjusted = manager.apply_signal_probability(
+        build_frame(liquidity_multiplier=5.0), 130.0, levels, 0.70
+    )
+
+    assert adjusted.blocked_by_liquidity is False
+    assert adjusted.position_size > 0
