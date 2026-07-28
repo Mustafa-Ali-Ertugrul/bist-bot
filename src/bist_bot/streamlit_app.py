@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import html as _html
-
 import streamlit as st
 
 from bist_bot.config.settings import settings
@@ -19,13 +17,7 @@ from bist_bot.ui.pages.overview_page import render_overview_page
 from bist_bot.ui.pages.scan_detail_page import render_scan_detail_page
 from bist_bot.ui.pages.settings_page import render_settings_page
 from bist_bot.ui.pages.signals_page import render_signals_page
-
-try:
-    from bist_bot.ui.pages.whale_alerts_page import render_whale_alerts_page
-except ImportError as exc:
-    if exc.name != "bist_bot.ui.pages.whale_alerts_page":
-        raise
-    render_whale_alerts_page = None  # type: ignore[assignment]
+from bist_bot.ui.pages.whale_alerts_page import render_whale_alerts_page
 from bist_bot.ui.runtime import (
     api_request,
     finalize_streamlit_runtime,
@@ -41,34 +33,6 @@ st.set_page_config(
 )
 
 
-def _render_sidebar_news_html(news_items: list[dict]) -> str:
-    """Render the operator sidebar news panel as escaped HTML.
-
-    Defends against untrusted news payloads by escaping title, source, and
-    published_at fields and HTML-escaping the URL (single quotes included).
-    Returns the empty string when no items are provided.
-    """
-    if not news_items:
-        return ""
-    parts = [
-        "<div class='bb-news-panel'>",
-        "<div class='bb-news-header'>BIST100 Haberleri</div>",
-    ]
-    for item in news_items:
-        title = _html.escape(str(item.get("title", "") or ""))
-        source = _html.escape(str(item.get("source", "") or ""))
-        published = _html.escape(str(item.get("published_at", "") or ""))
-        url = _html.escape(str(item.get("url", "") or ""), quote=True)
-        parts.append(
-            "<div class='bb-news-item'>"
-            f"<a class='bb-news-title' href='{url}' target='_blank' rel='noopener noreferrer'>{title}</a>"
-            f"<div class='bb-news-meta'>{source} &middot; {published}</div>"
-            "</div>"
-        )
-    parts.append("</div>")
-    return "".join(parts)
-
-
 def _response_message(response, default: str) -> str:
     """Extract a user-friendly error message from an HTTP response."""
     code = response.status_code
@@ -78,11 +42,11 @@ def _response_message(response, default: str) -> str:
         text = response.text.strip()
         snippet = text[:120] if text else ""
         if code == 429:
-            return "Çok fazla giriş denemesi. Lütfen biraz bekleyip tekrar deneyin."
+            return "Cok fazla giris denemesi. Lutfen biraz bekleyip tekrar deneyin."
         if code == 401:
-            return "Giriş başarısız. E-posta veya şifre hatalı."
+            return "Giris basarisiz. Email veya sifre hatali."
         if code >= 500:
-            return f"API tarafında hata oluştu (HTTP {code}). Lütfen daha sonra tekrar deneyin."
+            return f"API tarafinda hata olustu (HTTP {code}). Lutfen daha sonra tekrar deneyin."
         if snippet:
             return f"HTTP {code}: {snippet}"
         return default
@@ -91,11 +55,11 @@ def _response_message(response, default: str) -> str:
         if msg:
             return str(msg)
     if code == 429:
-        return "Çok fazla giriş denemesi. Lütfen biraz bekleyip tekrar deneyin."
+        return "Cok fazla giris denemesi. Lutfen biraz bekleyip tekrar deneyin."
     if code == 401:
-        return "Giriş başarısız. E-posta veya şifre hatalı."
+        return "Giris basarisiz. Email veya sifre hatali."
     if code >= 500:
-        return f"API tarafında hata oluştu (HTTP {code}). Lütfen daha sonra tekrar deneyin."
+        return f"API tarafinda hata olustu (HTTP {code}). Lutfen daha sonra tekrar deneyin."
     return default or f"HTTP {code}: bilinmeyen hata"
 
 
@@ -203,7 +167,7 @@ def _login_form() -> bool:
             else:
                 st.error("Giris yaniti token icermiyor. Lutfen tekrar deneyin.")
         else:
-            st.error(_response_message(response, "Giriş başarısız. E-posta veya şifre hatalı."))
+            st.error(_response_message(response, "Giris basarisiz. Email veya sifre hatali."))
 
     if not settings.ALLOW_PUBLIC_REGISTRATION:
         st.info("Yeni hesap kaydi kapali. Lutfen tanimli operator hesabi ile giris yapin.")
@@ -305,10 +269,7 @@ def main() -> None:
     elif page == "signals":
         render_signals_page()
     elif page == "whale":
-        if render_whale_alerts_page is None:
-            st.warning("Balina Radar ekranı bu dağıtım paketinde bulunamadı")
-        else:
-            render_whale_alerts_page()
+        render_whale_alerts_page()
     elif page == "analysis":
         render_analyze_page()
     else:

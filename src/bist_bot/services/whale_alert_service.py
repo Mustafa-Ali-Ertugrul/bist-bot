@@ -160,11 +160,9 @@ def build_whale_alerts(
             score += 8
             reasons.append("Fiyat destek bolgesinde hacimle izlenmeli")
 
-        obv_norm = obv_trend.upper()
-        if obv_norm in {"RISING", "FALLING", "UP", "DOWN"}:
+        if obv_trend.upper() in {"RISING", "FALLING"}:
             score += 7
-            obv_label = "rising" if obv_norm in {"RISING", "UP"} else "falling"
-            reasons.append(f"OBV trendi: {obv_label}")
+            reasons.append(f"OBV trendi: {obv_trend.lower()}")
 
         if rsi >= 70 or rsi <= 30:
             score += 5
