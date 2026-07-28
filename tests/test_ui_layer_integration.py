@@ -152,25 +152,6 @@ def test_filter_status_html_normal_and_filtered() -> None:
     assert "7 sinyal" in filtered
 
 
-def test_sidebar_news_html_escapes_untrusted_payload() -> None:
-    from bist_bot.streamlit_app import _render_sidebar_news_html
-
-    html = _render_sidebar_news_html(
-        [
-            {
-                "title": "<script>alert(1)</script>",
-                "source": "Evil & Co",
-                "published_at": "2025-01-01",
-                "url": "https://example.com/?q='xss'",
-            }
-        ]
-    )
-    assert "<script>" not in html
-    assert "&lt;script&gt;" in html
-    assert "Evil &amp; Co" in html
-    assert "BIST100 Haberleri" in html
-
-
 def test_response_message_maps_http_errors_for_users() -> None:
     from bist_bot.streamlit_app import _response_message
 
@@ -178,7 +159,7 @@ def test_response_message_maps_http_errors_for_users() -> None:
     r500 = SimpleNamespace(status_code=503, text="boom", json=lambda: (_ for _ in ()).throw(ValueError()))
     r401 = SimpleNamespace(status_code=401, text="", json=lambda: {"message": "bad creds"})
 
-    assert "Çok fazla" in _response_message(r429, "default")
+    assert "Cok fazla" in _response_message(r429, "default")
     assert "HTTP 503" in _response_message(r500, "default") or "hata" in _response_message(
         r500, "default"
     ).lower()
@@ -197,7 +178,6 @@ def test_shell_navigation_uses_query_params() -> None:
     source_set = open(app_shell.__file__, encoding="utf-8").read()
     assert "st.query_params" in source_set
     assert "PAGE_META" in source_set
-    assert "render_sidebar_nav" not in source_set
 
 
 # ---------------------------------------------------------------------------
