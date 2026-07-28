@@ -85,7 +85,6 @@ class ExitService:
             return False
 
     def process_pending_exits(self) -> None:
-
         try:
             with self.db.manager.engine.connect() as conn:
                 pending = (
