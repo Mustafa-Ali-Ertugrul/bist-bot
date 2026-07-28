@@ -3,14 +3,15 @@ from __future__ import annotations
 import html
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 PAGE_META = {
-    "dashboard": {"label": "İşlem Paneli", "icon": "dashboard"},
-    "scan": {"label": "Tarama Detayı", "icon": "monitoring"},
-    "signals": {"label": "Sinyaller", "icon": "query_stats"},
+    "dashboard": {"label": "Dashboard", "icon": "dashboard"},
+    "scan": {"label": "Scan Detail", "icon": "monitoring"},
+    "signals": {"label": "Signals", "icon": "query_stats"},
     "whale": {"label": "Balina Radar", "icon": "radar"},
-    "analysis": {"label": "Analiz", "icon": "analytics"},
-    "settings": {"label": "Ayarlar", "icon": "settings"},
+    "analysis": {"label": "Analysis", "icon": "analytics"},
+    "settings": {"label": "Settings", "icon": "settings"},
 }
 
 
@@ -33,12 +34,40 @@ def get_active_page(default: str = "dashboard") -> str:
     page = str(st.query_params.get("page", default)).lower().strip()
     if page not in PAGE_META:
         page = default
+    st.query_params["page"] = page
     return page
 
 
-def render_shell(active_page: str, email: str = "") -> None:
+def render_sidebar_nav(active_page: str) -> None:
+    st.sidebar.markdown(
+        (
+            "<div class='bb-sidebar-kicker'>Navigation</div>"
+            "<div class='bb-sidebar-note'>Dashboard ana katman; diger ekranlar alt katmandir.</div>"
+        ),
+        unsafe_allow_html=True,
+    )
+    for page, meta in PAGE_META.items():
+        button_type = "primary" if page == active_page else "secondary"
+        if st.sidebar.button(
+            meta["label"],
+            key=f"nav_{page}",
+            type=button_type,
+            use_container_width=True,
+        ):
+            set_active_page(page)
+    if active_page != "dashboard":
+        st.sidebar.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
+        if st.sidebar.button(
+            "Dashboard'a Don",
+            key="nav_back_dashboard",
+            use_container_width=True,
+        ):
+            set_active_page("dashboard")
+
+
+def render_shell(active_page: str, email: str = "") -> str | None:
     active_label = PAGE_META[active_page]["label"]
-    email_label = html.escape(email or "Misafir Oturumu")
+    email_label = html.escape(email or "Guest Session")
 
     st.markdown(
         (
@@ -53,12 +82,40 @@ def render_shell(active_page: str, email: str = "") -> None:
             "<div class='bb-topbar-actions'>"
             f"<span class='bb-badge bb-badge-positive'>{html.escape(active_label)}</span>"
             f"<span class='bb-session-pill'>{email_label}</span>"
-            "<a class='bb-logout-link' href='?action=logout'>Çıkış</a>"
+            "<a class='bb-logout-link' href='?action=logout'>Logout</a>"
             "</div>"
             "</header>"
         ),
         unsafe_allow_html=True,
     )
+    components.html(
+        """
+        <script>
+        const doc = window.parent.document;
+        let btn = doc.getElementById("bb-sidebar-toggle-client");
+        if (!btn) {
+          btn = doc.createElement("button");
+          btn.id = "bb-sidebar-toggle-client";
+          btn.type = "button";
+          btn.title = "Sidebar ac/kapat";
+          btn.addEventListener("click", () => {
+            doc.body.classList.toggle("bb-sidebar-collapsed");
+            btn.textContent = doc.body.classList.contains("bb-sidebar-collapsed") ? ">>" : "<<";
+          });
+          doc.body.appendChild(btn);
+        }
+        btn.textContent = doc.body.classList.contains("bb-sidebar-collapsed") ? ">>" : "<<";
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
+
+    action: str | None = None
+    nav_action = render_sidebar_nav(active_page)
+    if nav_action:
+        action = nav_action
+    return action
 
 
 def render_page_hero(

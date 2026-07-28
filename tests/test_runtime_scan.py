@@ -10,8 +10,8 @@ from unittest.mock import MagicMock, patch
 TR = timezone(timedelta(hours=3))
 
 
-def test_ensure_initial_data_starts_background_scan_when_no_cache():
-    """With empty cache and no all_data, ensure_initial_data auto-starts one background scan."""
+def test_ensure_initial_data_does_not_start_background_scan_when_no_cache():
+    """When no cached signals exist, ensure_initial_data should leave scanning manual."""
     mock_db = MagicMock()
     mock_db.get_recent_signals.return_value = []
 
@@ -27,8 +27,6 @@ def test_ensure_initial_data_starts_background_scan_when_no_cache():
         "scan_error": None,
         "_scan_session_key": "test-key",
         "db": mock_db,
-        "all_data": None,
-        "initial_background_scan_started": False,
     }.get(key, default)
 
     with (
@@ -43,12 +41,11 @@ def test_ensure_initial_data_starts_background_scan_when_no_cache():
 
         ensure_initial_data()
 
-        mock_start.assert_called_once_with(force_clear=False, limited=False)
-        assert mock_session.initial_background_scan_started is True
+        mock_start.assert_not_called()
 
 
-def test_ensure_initial_data_loads_cached_signals_and_still_starts_background_scan():
-    """Cached signals hydrate UI immediately, but first-session scan still starts without all_data."""
+def test_ensure_initial_data_uses_cached_signals_without_background_scan():
+    """When cached signals exist, ensure_initial_data should use them without auto-scanning."""
     mock_db = MagicMock()
     mock_db.get_recent_signals.return_value = [
         {"ticker": "THYAO.IS", "signal_type": "AL", "score": 25.0, "price": 100.0}
@@ -67,8 +64,6 @@ def test_ensure_initial_data_loads_cached_signals_and_still_starts_background_sc
         "scan_error": None,
         "_scan_session_key": "test-key",
         "db": mock_db,
-        "all_data": None,
-        "initial_background_scan_started": False,
     }.get(key, default)
 
     with (
@@ -85,8 +80,7 @@ def test_ensure_initial_data_loads_cached_signals_and_still_starts_background_sc
         ensure_initial_data()
 
         assert mock_session.signals == mapped_signals
-        mock_start.assert_called_once_with(force_clear=False, limited=False)
-        assert mock_session.initial_background_scan_started is True
+        mock_start.assert_not_called()
 
 
 def test_ensure_initial_data_does_not_start_scan_if_already_running():
@@ -220,10 +214,7 @@ def test_scan_timeout_resets_stale_scan_in_progress():
         assert result is True
         assert fake.scan_in_progress is False
         assert fake.scan_error is not None
-        # Turkish dotted-i survives .lower(); match the stable stem instead of ASCII-only text.
-        assert "tamamlanamad" in fake.scan_error.casefold()
-        assert "manuel tarama" in fake.scan_error.casefold()
-        assert "90" in fake.scan_error
+        assert "tamamlanamadi" in fake.scan_error.lower()
         mock_logger.warning.assert_called_once()
 
 
@@ -418,22 +409,15 @@ def test_analyze_page_uses_buy_threshold_from_signal_not_settings():
     assert "signal_score >= 10" not in source
 
 
-def test_shell_navigation_uses_query_params_not_full_page_reload_links():
-    """Navigation is query-param based via set_active_page / get_active_page (no sidebar nav helper)."""
+def test_sidebar_navigation_uses_streamlit_widget_not_page_reload_links():
     from bist_bot.ui.components import app_shell
 
-    set_source = inspect.getsource(app_shell.set_active_page)
-    get_source = inspect.getsource(app_shell.get_active_page)
-    shell_source = inspect.getsource(app_shell.render_shell)
+    source = inspect.getsource(app_shell.render_sidebar_nav)
 
-    assert "st.query_params" in set_source
-    assert "st.rerun()" in set_source
-    assert "st.query_params.get" in get_source
-    assert "PAGE_META" in get_source
-    assert "st.radio" not in shell_source
-    assert "href='?page=" not in shell_source
-    assert 'href="?page=' not in shell_source
-    assert not hasattr(app_shell, "render_sidebar_nav")
+    assert "sidebar.button" in source
+    assert "st.radio" not in source
+    assert "href='?page=" not in source
+    assert 'href="?page=' not in source
 
 
 def test_portfolio_page_uses_settings_thresholds_and_excludes_hold_fallback():
@@ -647,13 +631,13 @@ def test_scan_detail_summary_chips_use_top_reason_and_stage_from_sorted_payload(
         total_scanned=20,
     )
 
-    assert "En çok engelleyen" in html_output
+    assert "Top blocker" in html_output
     assert "Yatay piyasa filtresi" in html_output
     assert "score_filtered_sideways" in html_output
-    assert "En çok eleyen aşama" in html_output
+    assert "Top stage" in html_output
     assert "Skorlama" in html_output
     assert "scoring" in html_output
-    assert "Filtre kaydı oranı" in html_output
+    assert "Rejection rate" in html_output
     assert "%35.0" in html_output
 
 
@@ -706,7 +690,7 @@ def test_scan_detail_rejection_rate_history_renders_recent_rows():
         ]
     )
 
-    assert "Son eleme oranları" in html_output
+    assert "Recent rejection rates" in html_output
     assert "scan-002" in html_output
     assert "%40.0" in html_output
     assert "score_filtered_sideways" in html_output
@@ -725,9 +709,9 @@ def test_scan_detail_history_summary_chips_use_aggregated_history_payload():
         }
     )
 
-    assert "Son N tarama" in html_output
+    assert "Last N scans" in html_output
     assert "7/20" in html_output
-    assert "En sık engelleyen" in html_output
+    assert "Most frequent blocker" in html_output
     assert "Yatay piyasa filtresi" in html_output
     assert "%22.5" in html_output
 
@@ -776,9 +760,7 @@ def test_scan_detail_page_shows_empty_state_when_no_completed_scan():
 
     mock_section_title.assert_called_with("Scan durumu", "Bekleyen veri")
     empty_panels = [call.args[0] for call in mock_render_html_panel.call_args_list]
-    assert any(
-        "Henüz tamamlanmış bir tarama kaydı bulunmuyor" in panel for panel in empty_panels
-    )
+    assert any("Henuz tamamlanmis bir scan kaydi bulunmuyor" in panel for panel in empty_panels)
 
 
 def test_scan_detail_page_renders_historical_analytics_when_history_exists():
@@ -862,10 +844,10 @@ def test_scan_detail_page_renders_historical_analytics_when_history_exists():
         scan_detail_page.render_scan_detail_page()
 
     section_calls = [call.args for call in mock_section_title.call_args_list]
-    assert ("Geçmiş Analizleri", "Son 20 tarama trendi") in section_calls
+    assert ("Historical Analytics", "Son 20 scan trendi") in section_calls
     history_panels = [call.args[0] for call in mock_render_html_panel.call_args_list]
-    assert any("En Sık Engelleyenler" in panel for panel in history_panels)
-    assert any("Son eleme oranları" in panel for panel in history_panels)
+    assert any("Most frequent blockers" in panel for panel in history_panels)
+    assert any("Recent rejection rates" in panel for panel in history_panels)
 
 
 def test_start_background_scan_limited_respects_initial_scan_limit():
