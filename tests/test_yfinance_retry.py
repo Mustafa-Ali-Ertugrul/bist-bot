@@ -90,7 +90,11 @@ class TestFetchHistoryRetry:
         mock_ticker = MagicMock()
         mock_ticker.history = MagicMock(side_effect=ConnectionError("persistent failure"))
 
-        with patch("bist_bot.data.providers.yf") as mock_yf:
+        with (
+            patch("bist_bot.data.providers.yf") as mock_yf,
+            patch.object(provider, "_fetch_chart_history", return_value=None),
+            patch.object(provider, "_fetch_stockanalysis_history", return_value=None),
+        ):
             mock_yf.Ticker.return_value = mock_ticker
             result = provider.fetch_history("THYAO.IS", "3mo", "1d")
 
@@ -106,7 +110,11 @@ class TestFetchHistoryRetry:
         mock_ticker = MagicMock()
         mock_ticker.history = MagicMock(side_effect=ValueError("bad parameters"))
 
-        with patch("bist_bot.data.providers.yf") as mock_yf:
+        with (
+            patch("bist_bot.data.providers.yf") as mock_yf,
+            patch.object(provider, "_fetch_chart_history", return_value=None),
+            patch.object(provider, "_fetch_stockanalysis_history", return_value=None),
+        ):
             mock_yf.Ticker.return_value = mock_ticker
             result = provider.fetch_history("THYAO.IS", "3mo", "1d")
 

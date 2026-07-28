@@ -14,7 +14,7 @@ def render_portfolio_page() -> None:
     summary = get_market_summary(signals, all_data)
 
     strong = [s for s in signals if s.score >= settings.STRONG_BUY_THRESHOLD]
-    buy = [s for s in signals if settings.BUY_THRESHOLD <= s.score < settings.STRONG_BUY_THRESHOLD]
+    buy = [s for s in signals if s.buy_threshold <= s.score < settings.STRONG_BUY_THRESHOLD]
     sell = [
         s
         for s in signals
@@ -23,28 +23,28 @@ def render_portfolio_page() -> None:
     total = len(signals)
     pos_rate = round(len(strong + buy) / len(signals) * 100) if signals else 0
 
-    st.title("Portfoy ve Piyasa Ozeti")
+    st.title("Portföy ve Piyasa Özeti")
     st.caption(
-        f"Son guncelleme: {st.session_state.last_scan_time.strftime('%d.%m.%Y %H:%M') if st.session_state.last_scan_time else '-'}"
+        f"Son güncelleme: {st.session_state.last_scan_time.strftime('%d.%m.%Y %H:%M') if st.session_state.last_scan_time else '-'}"
     )
 
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-        render_metric_block("Guclu Al", str(len(strong)), "Yuksek guvenli")
+        render_metric_block("Güçlü Al", str(len(strong)), "Yüksek güvenli")
     with c2:
-        render_metric_block("Al Akisi", str(len(buy)), "Pozitif momentum")
+        render_metric_block("Al Akışı", str(len(buy)), "Pozitif momentum")
     with c3:
-        render_metric_block("Sat Baskisi", str(len(sell)), "Dikkat gereken")
+        render_metric_block("Sat Baskısı", str(len(sell)), "Dikkat gereken")
     with c4:
         render_metric_block("Pozitif Oran", f"{pos_rate}%", f"{total} toplam sinyal")
 
     left, right = st.columns([1.6, 1], gap="large")
     with left:
-        st.subheader("Portfolio Pulse")
+        st.subheader("Portföy Nabzı")
         actionable = [s for s in signals if s.signal_type != SignalType.HOLD]
         top = strong[:5] if strong else sorted(actionable, key=lambda x: x.score, reverse=True)[:5]
         if not top:
-            st.info("Dashboard verisi icin once tarama yapin.")
+            st.info("İşlem paneli verisi için önce tarama yapın.")
         else:
             for signal in top:
                 name = settings.TICKER_NAMES.get(signal.ticker, signal.ticker)

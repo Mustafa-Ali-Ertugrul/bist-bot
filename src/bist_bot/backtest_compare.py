@@ -151,7 +151,7 @@ def run(tickers: list[str], period: str = "1y") -> list[CompareRow]:
     fetcher = BISTDataFetcher()
     old_bt = Backtester(
         initial_capital=getattr(settings, "INITIAL_CAPITAL", 8500.0),
-        buy_threshold=settings.BUY_THRESHOLD,
+        buy_threshold=None,
         sell_threshold=settings.SELL_THRESHOLD,
     )
     new_bt = StrategyBacktester(

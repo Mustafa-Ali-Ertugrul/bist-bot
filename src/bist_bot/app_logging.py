@@ -15,8 +15,6 @@ try:
 except ImportError:  # pragma: no cover - optional dependency
     _structlog = None
 
-from bist_bot.config.settings import settings
-
 _DEFAULT_COMPONENT = "app"
 
 _correlation_id_ctx: ContextVar[str | None] = ContextVar("correlation_id", default=None)
@@ -31,11 +29,15 @@ def set_correlation_id(cid: str | None) -> None:
 
 
 def _normalize_level(level: str | None = None) -> int:
+    from bist_bot.config.settings import settings
+
     raw_level = str(level or getattr(settings, "LOG_LEVEL", "INFO") or "INFO")
     return getattr(logging, raw_level.upper(), logging.INFO)
 
 
 def _json_enabled() -> bool:
+    from bist_bot.config.settings import settings
+
     return str(getattr(settings, "LOG_FORMAT", "console")).strip().lower() == "json"
 
 
@@ -70,7 +72,7 @@ def configure_logging(
             formatter = jsonlogger.JsonFormatter(
                 fmt or "%(asctime)s %(levelname)s %(name)s %(component)s %(message)s"
             )
-        except ImportError:
+        except ImportError:  # pragma: no cover - optional dependency
             formatter = logging.Formatter(fmt or "%(message)s")
     else:
         formatter = logging.Formatter(fmt or "%(message)s")
@@ -89,6 +91,8 @@ def configure_logging(
 
 
 def _configure_sentry() -> None:
+    from bist_bot.config.settings import settings
+
     sentry_dsn = getattr(settings, "SENTRY_DSN", None)
     if sentry_dsn:
         try:
@@ -101,7 +105,7 @@ def _configure_sentry() -> None:
                 environment=getattr(settings, "ENVIRONMENT", "production"),
                 traces_sample_rate=0.1,
             )
-        except ImportError:
+        except ImportError:  # pragma: no cover - optional dependency
             pass
 
 

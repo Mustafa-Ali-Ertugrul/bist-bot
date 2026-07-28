@@ -1,39 +1,62 @@
-FROM python:3.11-slim as builder
+# syntax=docker/dockerfile:1.7
 
-# Force rebuild 20260427142314
-ARG CACHE_BUST
-RUN echo "cache-bust=${CACHE_BUST}"
+# ---- builder: install deps into a venv ----
+FROM python:3.11-slim AS builder
 
 WORKDIR /app
+
 ENV VIRTUAL_ENV=/opt/venv
-ENV PATH="$VIRTUAL_ENV/bin:$PATH"
-RUN apt-get update && apt-get install -y --no-install-recommends     curl     && rm -rf /var/lib/apt/lists/*
+ENV PATH="${VIRTUAL_ENV}/bin:${PATH}"
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1
+ENV PIP_NO_CACHE_DIR=1
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends build-essential curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && python -m venv "${VIRTUAL_ENV}" \
+    && pip install --upgrade pip
 
 COPY requirements.txt .
-RUN python -m venv "$VIRTUAL_ENV"     && pip install --no-cache-dir -r requirements.txt
+RUN pip install -r requirements.txt
 
-FROM python:3.11-slim
+# ---- runtime: slim image without build tools ----
+FROM python:3.11-slim AS runtime
 
 WORKDIR /app
 
 ENV VIRTUAL_ENV=/opt/venv
-ENV PATH="$VIRTUAL_ENV/bin:$PATH"
-COPY --from=builder /opt/venv /opt/venv
+ENV PATH="${VIRTUAL_ENV}/bin:${PATH}"
 ENV PYTHONPATH=/app/src
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+# Do not set PORT globally: settings prefer PORT over FLASK_PORT (Cloud Run).
+# API compose sets PORT/FLASK_PORT=5000; Streamlit CMD sets --server.port.
+ENV FLASK_PORT=5000
 
-RUN apt-get update && apt-get install -y --no-install-recommends     curl     && rm -rf /var/lib/apt/lists/*
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --create-home --uid 1000 --shell /usr/sbin/nologin appuser \
+    && mkdir -p /app/data \
+    && chown -R appuser:appuser /app
 
-RUN useradd -m -u 1000 appuser
+COPY --from=builder /opt/venv /opt/venv
 
-COPY --chown=appuser:appuser . .
-
-RUN mkdir -p /app/data && chown appuser:appuser /app/data
+# Application source only (see .dockerignore)
+COPY --chown=appuser:appuser pyproject.toml requirements.txt alembic.ini ./
+COPY --chown=appuser:appuser alembic ./alembic
+COPY --chown=appuser:appuser src ./src
+COPY --chown=appuser:appuser results ./results
+COPY --chown=appuser:appuser main.py dashboard.py streamlit_app.py ./
 
 USER appuser
 
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
+EXPOSE 5000 8501
 
-EXPOSE 8501 5000
+# Default: Streamlit UI (Cloud Run / generic). Override in compose for API/worker.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+    CMD curl -fsS "http://127.0.0.1:${PORT}/_stcore/health" || exit 1
 
 CMD ["sh", "-c", "streamlit run streamlit_app.py --server.port=${PORT:-8501} --server.address=0.0.0.0"]

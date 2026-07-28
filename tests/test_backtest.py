@@ -6,6 +6,7 @@ import os
 import sys
 from datetime import datetime
 
+import numpy as np
 import pandas as pd
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -13,6 +14,7 @@ if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
 from bist_bot.backtest import Backtester  # noqa: E402
+from bist_bot.backtest.models import _to_float  # noqa: E402
 from bist_bot.config.settings import settings  # noqa: E402
 
 
@@ -64,6 +66,14 @@ def build_price_frame() -> pd.DataFrame:
             }
         )
     return pd.DataFrame(rows).set_index("date")
+
+
+def test_backtest_to_float_uses_default_for_non_scalar_missing_values():
+    assert _to_float(None, default=9.0) == 9.0
+    assert _to_float(np.nan, default=9.0) == 9.0
+    assert _to_float(pd.Series([1.0]), default=9.0) == 9.0
+    assert _to_float("bad", default=9.0) == 9.0
+    assert _to_float("3.25", default=9.0) == 3.25
 
 
 def test_backtester_enters_on_next_bar_open():

@@ -17,6 +17,7 @@ from bist_bot.ui.runtime import (
     fetch_index_data,
     filter_signals,
     get_market_summary,
+    request_scan,
 )
 
 
@@ -42,6 +43,12 @@ def _to_int(value: object, default: int = 0) -> int:
         return default if value is None else int(str(value))
     except (TypeError, ValueError):
         return default
+
+
+def _candidate_rejection_count(scanned: int, generated: int) -> int:
+    if scanned <= 0:
+        return 0
+    return max(scanned - max(generated, 0), 0)
 
 
 def _resolve_scan_metrics(
@@ -73,6 +80,7 @@ def _rejection_label(reason_code: str) -> str:
         "portfolio_risk_blocked": "Portföy risk limiti",
         "meta_model_blocked": "Meta-model elemesi",
         "mtf_confluence_blocked": "MTF uyumsuzluğu",
+        "confluence_failed": "Uyum filtresi",
         "hold_neutral_zone": "Nötr bölge (beklemede)",
     }
     return labels.get(reason_code, reason_code.replace("_", " ").title())
@@ -86,6 +94,7 @@ def _stage_label(stage: str) -> str:
         "classification": "Sınıflandırma",
         "risk": "Risk",
         "mtf": "MTF",
+        "confluence": "Uyum",
     }
     return labels.get(stage, stage)
 
@@ -125,8 +134,8 @@ def _render_rejection_breakdown(
     scanned: int = 0,
     generated: int = 0,
 ) -> str:
-    total_rejections = _to_int(breakdown.get("total_rejections", 0))
-    if total_rejections <= 0:
+    blocker_events = _to_int(breakdown.get("total_rejections", 0))
+    if blocker_events <= 0:
         return ""
     raw_rows = breakdown.get("by_reason", [])
     rows = raw_rows if isinstance(raw_rows, list) else []
@@ -155,7 +164,8 @@ def _render_rejection_breakdown(
     # Outcome accounting
     outcome_html = ""
     if scanned > 0:
-        accounted = generated + total_rejections
+        candidate_rejections = _candidate_rejection_count(scanned, generated)
+        accounted = generated + candidate_rejections
         invariant_held = accounted == scanned
         invariant_color = "positive" if invariant_held else "danger"
         invariant_icon = "✓" if invariant_held else "✗"
@@ -167,14 +177,14 @@ def _render_rejection_breakdown(
         outcome_html = (
             "<div style='margin-top:8px;'>"
             f"<div class='bb-text-{invariant_color}' style='font-size:0.85em;'>{invariant_text}</div>"
-            f"<div class='bb-list-row-subtitle'>Üretilen: {generated} • Elenen: {total_rejections}</div>"
+            f"<div class='bb-list-row-subtitle'>Üretilen: {generated} • Elenen aday: {candidate_rejections} • Filtre kaydı: {blocker_events}</div>"
             "</div>"
         )
 
     return (
         "<div style='height:14px;'></div>"
         "<div class='bb-list-row'>"
-        f"<div><div class='bb-label'>En yaygın blokajlar</div><div class='bb-list-row-subtitle'>{total_rejections} aday elendi</div></div>"
+        f"<div><div class='bb-label'>En yaygın blokajlar</div><div class='bb-list-row-subtitle'>{blocker_events} filtre kaydı; tekil elenen aday taranan eksi üretilendir</div></div>"
         "</div>"
         f"<div class='bb-list'>{''.join(items)}</div>"
         f"{stage_summary}"
@@ -214,9 +224,11 @@ def render_overview_page() -> None:
         latest_scan=latest_scan,
         all_data=all_data,
     )
-    profitable = int(stats.get("profitable", 0) or 0)
-    win_rate = float(stats.get("win_rate", 0.0) or 0.0)
-    avg_profit = float(stats.get("avg_profit_pct", 0.0) or 0.0)
+    scan_stats = session_scan_stats if isinstance(session_scan_stats, dict) else {}
+    generated_signals = _to_int(
+        scan_stats.get("generated", latest_scan.get("signals_generated", 0))
+    )
+    rejected_candidates = _candidate_rejection_count(scanned_assets, generated_signals)
     active_signals = [s for s in signals if getattr(s.signal_type, "name", "") != "HOLD"]
     strong = sorted(
         [s for s in active_signals if s.score >= settings.STRONG_BUY_THRESHOLD],
@@ -235,18 +247,33 @@ def render_overview_page() -> None:
         "Canlı performans, radar fırsatları ve son sinyaller.",
         badges=[
             f"{actionable_signals} pozitif sinyal",
-            f"Kazanma oranı %{win_rate:.1f}",
-            f"Ortalama kâr %{avg_profit:.1f}",
+            f"{generated_signals} toplam sinyal",
+            f"{rejected_candidates} elenen aday",
         ],
         accent="secondary",
     )
+    if not st.session_state.get("scan_in_progress"):
+        if st.button("BIST100 taramasını başlat", type="primary", use_container_width=True):
+            if request_scan(force_clear=True):
+                st.info("BIST100 taraması arka planda başlatıldı.")
+                st.rerun()
+            else:
+                st.info("Tarama şu an başlatılamadı. Birkaç saniye sonra tekrar deneyin.")
     if st.session_state.get("scan_in_progress"):
-        phase = st.session_state.get("scan_phase") or "Tarama baslatiliyor"
-        st.info(f"Arka plan taramasi suruyor: {phase}")
+        phase = st.session_state.get("scan_phase") or "Tarama başlatılıyor"
+        st.info(f"Arka plan taraması sürüyor: {phase}")
     elif st.session_state.get("scan_error"):
         phase = st.session_state.get("scan_phase")
-        detail = f" Son asama: {phase}" if phase else ""
-        st.warning(f"Tarama tamamlanamadi: {st.session_state.scan_error}.{detail}")
+        detail = f" Son aşama: {phase}" if phase else ""
+        st.warning(f"Tarama tamamlanamadı: {st.session_state.scan_error}.{detail}")
+    scan_warning = st.session_state.get("scan_warning")
+    skipped_tickers = st.session_state.get("skipped_tickers") or []
+    if scan_warning:
+        st.warning(str(scan_warning))
+    elif skipped_tickers:
+        preview = ", ".join(str(t) for t in skipped_tickers[:8])
+        more = f" ve {len(skipped_tickers) - 8} sembol daha" if len(skipped_tickers) > 8 else ""
+        st.warning(f"Veri alınamadı, atlanıyor ({len(skipped_tickers)}): {preview}{more}.")
 
     k1, k2, k3, k4 = st.columns(4)
     with k1:
@@ -259,17 +286,16 @@ def render_overview_page() -> None:
         )
     with k3:
         render_metric_block(
-            "Kârlı kapanışlar",
-            str(profitable),
-            "Kârla kapanan işlemler",
-            accent="positive",
+            "Üretilen sinyaller",
+            str(generated_signals),
+            "HOLD dahil toplam sinyal",
         )
     with k4:
         render_metric_block(
-            "Kazanma oranı",
-            f"%{win_rate:.1f}",
-            f"Ort. kâr %{avg_profit:.1f}",
-            accent="positive" if win_rate >= 50 else "danger",
+            "Elenen adaylar",
+            str(rejected_candidates),
+            "BIST100 içinde sinyale dönüşmeyen tekil varlık",
+            accent="danger" if rejected_candidates else "positive",
         )
 
     left, right = st.columns([1.35, 1], gap="large")
@@ -348,9 +374,9 @@ def render_overview_page() -> None:
                 "<div class='bb-list-row'>"
                 "<div><div class='bb-label'>Piyasa dağılımı</div><div class='bb-list-row-subtitle'>Aşırı satım / nötr / aşırı alım dağılımı</div></div>"
                 "<div style='display:flex;gap:8px;flex-wrap:wrap;'>"
-                + _badge(f"Aşırı Satım {tone.get('Asiri Satim', 0)}")
+                + _badge(f"Aşırı Satım {tone.get('Aşırı Satım', tone.get('Asiri Satim', 0))}")
                 + _badge(f"Nötr {tone.get('Notr', 0)}", positive=False)
-                + _badge(f"Aşırı Alım {tone.get('Asiri Alim', 0)}")
+                + _badge(f"Aşırı Alım {tone.get('Aşırı Alım', tone.get('Asiri Alim', 0))}")
                 + "</div></div>"
             )
         else:
@@ -363,7 +389,7 @@ def render_overview_page() -> None:
             _render_rejection_breakdown(
                 rejection_breakdown,
                 scanned=scanned_assets,
-                generated=actionable_signals,
+                generated=generated_signals,
             )
             if isinstance(rejection_breakdown, dict)
             else ""
@@ -416,7 +442,11 @@ def render_overview_page() -> None:
     rows: list[str] = []
     for sig in recent_signals[:10]:
         score = float(sig.get("score", 0) or 0)
-        outcome = html.escape(str(sig.get("outcome", get_message("ui.pending"))))
+        raw_outcome = str(sig.get("outcome", get_message("ui.pending")) or "")
+        outcome_label = (
+            get_message("ui.pending") if raw_outcome.upper() == "PENDING" else raw_outcome
+        )
+        outcome = html.escape(outcome_label)
         rows.append(
             "<tr>"
             f"<td><code>{html.escape(str(sig.get('ticker', '')).replace('.IS', ''))}</code></td>"

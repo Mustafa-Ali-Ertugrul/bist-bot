@@ -9,6 +9,7 @@ import streamlit as st
 
 from bist_bot.config.settings import settings
 from bist_bot.ui.runtime_data import (
+    fetch_bist100_news,
     fetch_index_data,
     fetch_stock_news,
     filter_signals,
@@ -63,6 +64,7 @@ __all__ = [
     "api_request",
     "apply_pending_scan_result",
     "ensure_initial_data",
+    "fetch_bist100_news",
     "fetch_index_data",
     "fetch_stock_news",
     "filter_signals",

@@ -1,0 +1,7 @@
+ticker,stress_oos_mean_return,stress_oos_max_dd,base_oos_mean_return,edge_decay,has_overfitting_warning,buy_threshold,total_oos_trades,windows,counter_trend_multiplier
+PETKM.IS,5.8271,-7.4243,6.1514,0.3243,False,22.0,8,7,0.0
+TUPRS.IS,5.2029,-7.2029,5.71,0.5071,False,22.0,13,7,0.0
+AKBNK.IS,2.67,-5.84,2.94,0.27,False,22.0,7,7,0.0
+ASTOR.IS,1.8657,-9.0986,2.3671,0.5014,False,22.0,13,7,0.0
+SISE.IS,0.4343,-8.1343,0.9171,0.4828,False,22.0,13,7,0.0
+ARCLK.IS,0.0671,-4.9657,0.29,0.2229,False,22.0,6,7,0.0

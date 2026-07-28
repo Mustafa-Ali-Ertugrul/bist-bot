@@ -1,0 +1,12 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: bist-bot-api
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["bot:5000"]
+        labels:
+          service: bot
+    # Local compose sets METRICS_PUBLIC=true so scrape needs no JWT.

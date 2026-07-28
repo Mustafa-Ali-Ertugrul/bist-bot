@@ -29,7 +29,7 @@ gcloud run deploy $ApiServiceName `
     --allow-unauthenticated `
     --command python `
     --args dashboard.py `
-    --set-env-vars PYTHONPATH=/app/src,DB_PATH=/tmp/bist_signals.db,RATE_LIMIT_STORAGE_URI=memory:// `
+    --set-env-vars "PYTHONPATH=/app/src,DB_PATH=/tmp/bist_signals.db,RATE_LIMIT_STORAGE_URI=memory://" `
     --set-secrets JWT_SECRET_KEY=${JwtSecretKey}:latest
 
 $apiUrl = (gcloud run services describe $ApiServiceName --project $ProjectId --region $Region --format "value(status.url)").Trim()
@@ -39,7 +39,7 @@ gcloud run deploy $UiServiceName `
     --region $Region `
     --image $image `
     --allow-unauthenticated `
-    --set-env-vars PYTHONPATH=/app/src,DB_PATH=/tmp/bist_signals.db,API_BASE_URL=$apiUrl `
+    --set-env-vars "PYTHONPATH=/app/src,DB_PATH=/tmp/bist_signals.db,API_BASE_URL=$apiUrl" `
     --session-affinity
 
 $uiUrl = (gcloud run services describe $UiServiceName --project $ProjectId --region $Region --format "value(status.url)").Trim()

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import threading
 from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime, timedelta, timezone
 from typing import Protocol, cast
 
@@ -33,6 +35,7 @@ class RiskManager:
         fixed_stop_pct: float = 5.0,
         fixed_target_pct: float = 8.0,
         position_repository: _HasActivePositions | None = None,
+        daily_price_limit_pct: float = 10.0,
     ):
         if capital is not None and capital <= 0:
             raise ValueError("capital must be greater than zero")
@@ -46,10 +49,16 @@ class RiskManager:
         self.atr_target_mult = atr_target_multiplier
         self.fixed_stop_pct = fixed_stop_pct
         self.fixed_target_pct = fixed_target_pct
+        self.daily_price_limit_pct = daily_price_limit_pct
         self.position_repository = position_repository
         self._sector_signal_counts: dict[str, int] = {}
         self.sector_positions = self._sector_signal_counts
+        self._active_sector_signal_counts: ContextVar[dict[str, int] | None] = ContextVar(
+            "active_sector_signal_counts", default=None
+        )
+        self._sector_lock = threading.RLock()
         self._portfolio_history: dict[str, pd.DataFrame] = {}
+        self._portfolio_history_limit = int(getattr(settings, "PORTFOLIO_HISTORY_LIMIT", 100))
         self._global_corr_cache: pd.DataFrame | None = None
         self.correlation_threshold = float(getattr(settings, "CORRELATION_THRESHOLD", 0.70))
         self.correlation_risk_step = float(getattr(settings, "CORRELATION_RISK_STEP", 0.35))
@@ -81,30 +90,37 @@ class RiskManager:
             self.daily_realized_pnl = 0.0
             self._daily_realized_pnl_date = today
 
+    def _current_sector_signal_counts(self) -> dict[str, int]:
+        active_counts = self._active_sector_signal_counts.get()
+        return active_counts if active_counts is not None else self._sector_signal_counts
+
     def check_sector_limit(self, ticker: str) -> bool:
         sector = getattr(settings, "SECTOR_MAP", {}).get(ticker)
         if not sector:
             return True
         sector_limit = int(max(1, self.max_sector_cap_pct / self.max_position_cap_pct))
-        current = self._sector_signal_counts.get(sector, 0)
-        if current >= sector_limit:
-            logger.warning(
-                "sector_limit_reached", sector=sector, current=current, limit=sector_limit
-            )
-            return False
-        self._sector_signal_counts[sector] = current + 1
-        return True
+        with self._sector_lock:
+            sector_signal_counts = self._current_sector_signal_counts()
+            current = sector_signal_counts.get(sector, 0)
+            if current >= sector_limit:
+                logger.warning(
+                    "sector_limit_reached", sector=sector, current=current, limit=sector_limit
+                )
+                return False
+            sector_signal_counts[sector] = current + 1
+            return True
 
     def reset_sectors(self):
-        self._sector_signal_counts.clear()
+        with self._sector_lock:
+            self._current_sector_signal_counts().clear()
 
     @contextmanager
     def sector_scan(self):
-        self.reset_sectors()
+        token = self._active_sector_signal_counts.set({})
         try:
             yield self
         finally:
-            self.reset_sectors()
+            self._active_sector_signal_counts.reset(token)
 
     def reset_portfolio(self) -> None:
         self._portfolio_history.clear()
@@ -135,6 +151,14 @@ class RiskManager:
             df[[c for c in ["close", "high", "low", "atr"] if c in df.columns]].copy(),
         )
         self._portfolio_history[ticker] = history_slice
+        self._enforce_portfolio_history_limit()
+
+    def _enforce_portfolio_history_limit(self) -> None:
+        if self._portfolio_history_limit <= 0:
+            return
+        while len(self._portfolio_history) > self._portfolio_history_limit:
+            oldest_ticker = next(iter(self._portfolio_history))
+            self._portfolio_history.pop(oldest_ticker)
 
     def _restore_persisted_positions(self, data: dict) -> None:
         if self.position_repository is None or not hasattr(
@@ -211,7 +235,9 @@ class RiskManager:
         return stop_helpers.calc_swing_levels(df, price, levels)
 
     def _determine_final_levels(self, price: float, levels: RiskLevels) -> RiskLevels:
-        return stop_helpers.determine_final_levels(price, levels)
+        return stop_helpers.determine_final_levels(
+            price, levels, daily_price_limit_pct=self.daily_price_limit_pct
+        )
 
     def _calc_position_size(self, price: float, levels: RiskLevels) -> RiskLevels:
         return sizing_helpers.calc_position_size(

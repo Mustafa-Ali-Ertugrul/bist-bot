@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
-from datetime import datetime
+from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -36,7 +36,7 @@ def test_signal_database_saves_and_reads_signal(tmp_path):
         stop_loss=118.0,
         target_price=135.0,
         confidence="ORTA",
-        timestamp=datetime(2025, 1, 1, 10, 0, 0),
+        timestamp=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
     )
 
     db.save_signal(signal)
@@ -56,7 +56,7 @@ def test_database_manager_uses_database_url_for_non_sqlite_backends():
     mock_session_factory = MagicMock()
 
     with patch(
-        "bist_bot.db.database.create_engine", return_value=mock_engine
+        "bist_bot.db.connection.create_engine", return_value=mock_engine
     ) as create_engine_mock:
         with patch("bist_bot.db.database.scoped_session", return_value=mock_session_factory):
             with patch.object(DatabaseManager, "initialize", return_value=None):
@@ -68,6 +68,8 @@ def test_database_manager_uses_database_url_for_non_sqlite_backends():
     engine_kwargs = create_engine_mock.call_args.kwargs
     assert engine_url == "postgresql+psycopg2://user:pass@host/db"
     assert engine_kwargs["pool_pre_ping"] is True
+    assert engine_kwargs["pool_size"] == 10
+    assert engine_kwargs["max_overflow"] == 20
     assert "connect_args" not in engine_kwargs
 
 

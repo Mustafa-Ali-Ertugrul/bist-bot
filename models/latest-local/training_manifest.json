@@ -1,0 +1,47 @@
+{
+  "generated_at": "2026-06-08T09:11:44Z",
+  "train_range": {
+    "start": "2025-06-10",
+    "end": "2026-01-06"
+  },
+  "validation_range": {
+    "start": "2026-01-07",
+    "end": "2026-02-26"
+  },
+  "calibration_range": {
+    "start": "2026-02-27",
+    "end": "2026-04-02"
+  },
+  "test_range": {
+    "start": "2026-04-03",
+    "end": "2026-06-01"
+  },
+  "label_definition": {
+    "horizon_bars": 5,
+    "return_threshold": 0.02
+  },
+  "horizon": 5,
+  "threshold": 0.02,
+  "calibration_method": "platt",
+  "feature_list": [
+    "score",
+    "adx",
+    "rsi",
+    "volume_ratio",
+    "atr_pct",
+    "risk_reward_ratio",
+    "volatility_scale",
+    "correlation_scale",
+    "trend_bias",
+    "close_vs_ema_long"
+  ],
+  "feature_schema_path": "feature_columns.json",
+  "commit": "a3d25e6842a1af3e8bb2fb3c1aa080d3e20e98f5",
+  "version": 1,
+  "row_counts": {
+    "train": 296,
+    "validation": 74,
+    "calibration": 48,
+    "test": 78
+  }
+}

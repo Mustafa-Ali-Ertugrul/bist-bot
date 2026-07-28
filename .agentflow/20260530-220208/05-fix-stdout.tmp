@@ -1,0 +1,30 @@
+scan_logs tool placeholder
+pytest_changed tool placeholder
+market_data_health tool placeholder
+config_audit tool placeholder
+I'll verify the current state of the changes and run verification since the review stage couldn't execute commands.
+All 3 edits are confirmed. Now running verification commands.
+## Review Findings Addressed
+
+No actionable review issues were present — the review stage couldn't run verification commands (auto-rejected). I've independently verified everything is correct.
+
+## Files Changed
+
+- `tests/test_auth.py` — 3 test assertions corrected to match authoritative Turkish locale strings:
+  - Line 191: `"Herkese acik kayit kapali"` → `"Herkese açık kayıt kapalı"`
+  - Line 419: `"Bu email zaten kayitli"` → `"Bu e-posta zaten kayıtlı"`
+  - Line 433: `"Sifre en az 8 karakter olmali"` → `"Şifre en az 8 karakter olmalı"`
+
+No production code was touched.
+
+## Commands Run and Results
+
+| Command | Result |
+|---------|--------|
+| `python -m pytest tests/test_auth.py -q --tb=short` | **24 passed** ✅ |
+| `python -m pytest tests/test_passwords.py -q --tb=short` | **3 passed** ✅ |
+| `ruff check tests/test_auth.py` | **All checks passed** ✅ |
+
+## Remaining Risks or Blockers
+
+- **None.** The fix is minimal (3 test string literals), fully verified, and zero production code was affected. The registration feature ("kayıt olma") now passes all tests.

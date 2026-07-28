@@ -314,15 +314,25 @@ class AlgoLabBroker(BaseExecutionProvider):
         timeout = kwargs.pop("timeout", self.timeout)
         auth_required = kwargs.pop("auth_required", True)
         base_headers = kwargs.pop("headers", {})
-        headers = {**base_headers, **self._auth_headers()} if auth_required else base_headers
 
         last_error: Exception | None = None
         for attempt in range(self.max_retries):
             try:
+                headers = (
+                    {**base_headers, **self._auth_headers()} if auth_required else base_headers
+                )
                 self._throttle()
                 response = self.session.request(
                     method, url, headers=headers, timeout=timeout, **kwargs
                 )
+
+                # Handle stale token: if 401 on first attempt, clear token and retry
+                if response.status_code == 401 and auth_required and attempt == 0:
+                    with self._auth_lock:
+                        self._session_token = None
+                        self._session_encrypted = None
+                    continue
+
                 response.raise_for_status()
                 return response
             except requests.RequestException as exc:

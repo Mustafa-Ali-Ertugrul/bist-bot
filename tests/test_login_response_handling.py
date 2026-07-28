@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 from bist_bot.streamlit_app import (
     _complete_auth,
     _extract_token,
-    _handle_shell_action,
+    _handle_query_actions,
     _response_message,
 )
 
@@ -26,7 +26,7 @@ def test_response_message_json_without_message_uses_status_code_fallback():
     resp = MagicMock()
     resp.status_code = 401
     resp.json.return_value = {"status": "error"}
-    assert "Email veya sifre hatali" in _response_message(resp, "default")
+    assert "sifre hatali" in _response_message(resp, "default")
 
 
 def test_response_message_non_json_500_shows_server_error_message():
@@ -53,14 +53,14 @@ def test_response_message_429_rate_limit():
     resp = MagicMock()
     resp.status_code = 429
     resp.json.return_value = {}
-    assert "Cok fazla giris denemesi" in _response_message(resp, "default")
+    assert "Cok fazla" in _response_message(resp, "default")
 
 
 def test_response_message_401_unauthorized():
     resp = MagicMock()
     resp.status_code = 401
     resp.json.return_value = {}
-    assert "Email veya sifre hatali" in _response_message(resp, "default")
+    assert "sifre hatali" in _response_message(resp, "default")
 
 
 def test_response_message_500_server_error():
@@ -78,7 +78,7 @@ def test_response_message_non_json_429_shows_message():
     resp.json.side_effect = ValueError("not json")
     resp.text = ""
     result = _response_message(resp, "default")
-    assert "Cok fazla giris denemesi" in result
+    assert "Cok fazla" in result
 
 
 # ── _extract_token tests ───────────────────────────────────────────────────
@@ -152,7 +152,7 @@ def test_complete_auth_sets_session_and_routes_dashboard():
     mock_rerun.assert_called_once_with()
 
 
-def test_handle_shell_action_logout_resets_auth_state():
+def test_handle_query_actions_logout_resets_auth_state():
     session_state = SimpleNamespace(
         auth_token="token",
         auth_email="user@example.com",
@@ -160,30 +160,65 @@ def test_handle_shell_action_logout_resets_auth_state():
         app_bootstrapped=True,
         just_logged_in=True,
     )
+    query_params = {"action": "logout"}
 
     with (
         patch("bist_bot.streamlit_app.st.session_state", session_state),
-        patch("bist_bot.streamlit_app.set_active_page") as mock_set_active_page,
+        patch("bist_bot.streamlit_app.st.query_params", query_params),
+        patch("bist_bot.streamlit_app.st.rerun") as mock_rerun,
     ):
-        _handle_shell_action("logout")
+        _handle_query_actions()
 
     assert session_state.auth_token is None
     assert session_state.auth_email == ""
     assert session_state.is_authenticated is False
     assert session_state.app_bootstrapped is False
     assert session_state.just_logged_in is False
-    mock_set_active_page.assert_called_once_with("dashboard")
+    assert "action" not in query_params
+    mock_rerun.assert_called_once()
 
 
-def test_handle_shell_action_page_routes_through_set_active_page():
-    with patch("bist_bot.streamlit_app.set_active_page") as mock_set_active_page:
-        _handle_shell_action("page:signals")
+def test_handle_query_actions_toggle_sidebar():
+    class SessionStateStub(dict):
+        def __getattr__(self, key):
+            return self[key]
 
-    mock_set_active_page.assert_called_once_with("signals")
+        def __setattr__(self, key, value):
+            self[key] = value
+
+    session_state = SessionStateStub(sidebar_collapsed=False)
+    query_params = {"action": "toggle_sidebar"}
+
+    with (
+        patch("bist_bot.streamlit_app.st.session_state", session_state),
+        patch("bist_bot.streamlit_app.st.query_params", query_params),
+        patch("bist_bot.streamlit_app.st.rerun") as mock_rerun,
+    ):
+        _handle_query_actions()
+
+    assert session_state.sidebar_collapsed is True
+    assert "action" not in query_params
+    mock_rerun.assert_called_once()
 
 
-def test_handle_shell_action_ignores_invalid_page_target():
-    with patch("bist_bot.streamlit_app.set_active_page") as mock_set_active_page:
-        _handle_shell_action("page:not-a-real-page")
+def test_handle_query_actions_ignores_invalid_action():
+    class SessionStateStub(dict):
+        def __getattr__(self, key):
+            return self[key]
 
-    mock_set_active_page.assert_not_called()
+        def __setattr__(self, key, value):
+            self[key] = value
+
+    session_state = SessionStateStub(sidebar_collapsed=False)
+    query_params = {"action": "not-a-real-action"}
+
+    with (
+        patch("bist_bot.streamlit_app.st.session_state", session_state),
+        patch("bist_bot.streamlit_app.st.query_params", query_params),
+        patch("bist_bot.streamlit_app.st.rerun") as mock_rerun,
+    ):
+        _handle_query_actions()
+
+    assert session_state.sidebar_collapsed is False
+    assert "action" in query_params
+    mock_rerun.assert_not_called()

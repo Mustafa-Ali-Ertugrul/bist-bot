@@ -1,0 +1,46 @@
+{
+    "task":  "kayıt olmayı ekle",
+    "workflow":  "C:\\Users\\Ali\\.config\\opencode\\agentflow\\workflow.default.json",
+    "workspace":  "C:\\Users\\Ali\\OneDrive\\Masaüstü\\bist_bot",
+    "runDir":  "C:\\Users\\Ali\\OneDrive\\Masaüstü\\bist_bot\\.agentflow\\20260530-085238",
+    "started":  "2026-05-30T08:52:38.2347963+03:00",
+    "dryRun":  true,
+    "steps":  [
+                  {
+                      "name":  "01-plan",
+                      "agent":  "plan",
+                      "model":  "nvidia/kimi-k2.6",
+                      "output":  "C:\\Users\\Ali\\OneDrive\\Masaüstü\\bist_bot\\.agentflow\\20260530-085238\\01-plan.md",
+                      "exitCode":  0
+                  },
+                  {
+                      "name":  "02-code",
+                      "agent":  "build",
+                      "model":  "freemodel/gpt-5.3-codex",
+                      "output":  "C:\\Users\\Ali\\OneDrive\\Masaüstü\\bist_bot\\.agentflow\\20260530-085238\\02-code.md",
+                      "exitCode":  0
+                  },
+                  {
+                      "name":  "03-test",
+                      "agent":  "test-runner",
+                      "model":  "9router/gemini-cli-pro-preview",
+                      "output":  "C:\\Users\\Ali\\OneDrive\\Masaüstü\\bist_bot\\.agentflow\\20260530-085238\\03-test.md",
+                      "exitCode":  0
+                  },
+                  {
+                      "name":  "04-review",
+                      "agent":  "reviewer",
+                      "model":  "9router/antigravity-claude-sonnet-4-6",
+                      "output":  "C:\\Users\\Ali\\OneDrive\\Masaüstü\\bist_bot\\.agentflow\\20260530-085238\\04-review.md",
+                      "exitCode":  0
+                  },
+                  {
+                      "name":  "05-fix",
+                      "agent":  "build",
+                      "model":  "freemodel/gpt-5.3-codex",
+                      "output":  "C:\\Users\\Ali\\OneDrive\\Masaüstü\\bist_bot\\.agentflow\\20260530-085238\\05-fix.md",
+                      "exitCode":  0
+                  }
+              ],
+    "completed":  "2026-05-30T08:52:38.3807323+03:00"
+}

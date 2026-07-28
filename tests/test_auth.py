@@ -188,7 +188,7 @@ def test_register_returns_403_when_public_registration_disabled(tmp_path):
     assert response.status_code == 403
     payload = response.get_json()
     assert payload is not None
-    assert payload["message"] == "Herkese acik kayit kapali"
+    assert payload["message"] == "Herkese açık kayıt kapalı"
 
     with manager.engine.begin() as conn:
         stored_count = conn.execute(
@@ -416,7 +416,7 @@ def test_register_rejects_duplicate_email(tmp_path):
     assert response.status_code == 400
     payload = response.get_json()
     assert payload is not None
-    assert payload["message"] == "Bu email zaten kayitli"
+    assert payload["message"] == "Bu e-posta zaten kayıtlı"
 
 
 def test_register_rejects_short_password(tmp_path):
@@ -430,7 +430,7 @@ def test_register_rejects_short_password(tmp_path):
     assert response.status_code == 400
     payload = response.get_json()
     assert payload is not None
-    assert payload["message"] == "Sifre en az 8 karakter olmali"
+    assert payload["message"] == "Şifre en az 12 karakter olmalı"
 
 
 def test_login_rate_limit_returns_429(tmp_path):

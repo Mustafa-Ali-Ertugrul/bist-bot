@@ -1,0 +1,134 @@
+{
+  "train": {
+    "count": 296,
+    "positive_rate": 0.3649,
+    "brier_score": 0.2312,
+    "log_loss": 0.6552,
+    "roc_auc": 0.9965,
+    "probability_buckets": [
+      {
+        "bucket": "0.50-0.55",
+        "count": 0,
+        "avg_probability": 0.0,
+        "realized_rate": 0.0
+      },
+      {
+        "bucket": "0.55-0.60",
+        "count": 0,
+        "avg_probability": 0.0,
+        "realized_rate": 0.0
+      },
+      {
+        "bucket": "0.60-0.65",
+        "count": 0,
+        "avg_probability": 0.0,
+        "realized_rate": 0.0
+      },
+      {
+        "bucket": "0.65-1.00",
+        "count": 0,
+        "avg_probability": 0.0,
+        "realized_rate": 0.0
+      }
+    ]
+  },
+  "validation": {
+    "count": 74,
+    "positive_rate": 0.4595,
+    "brier_score": 0.251,
+    "log_loss": 0.6952,
+    "roc_auc": 0.3824,
+    "probability_buckets": [
+      {
+        "bucket": "0.50-0.55",
+        "count": 0,
+        "avg_probability": 0.0,
+        "realized_rate": 0.0
+      },
+      {
+        "bucket": "0.55-0.60",
+        "count": 0,
+        "avg_probability": 0.0,
+        "realized_rate": 0.0
+      },
+      {
+        "bucket": "0.60-0.65",
+        "count": 0,
+        "avg_probability": 0.0,
+        "realized_rate": 0.0
+      },
+      {
+        "bucket": "0.65-1.00",
+        "count": 0,
+        "avg_probability": 0.0,
+        "realized_rate": 0.0
+      }
+    ]
+  },
+  "calibration": {
+    "count": 48,
+    "positive_rate": 0.4167,
+    "brier_score": 0.243,
+    "log_loss": 0.6791,
+    "roc_auc": 0.5411,
+    "probability_buckets": [
+      {
+        "bucket": "0.50-0.55",
+        "count": 0,
+        "avg_probability": 0.0,
+        "realized_rate": 0.0
+      },
+      {
+        "bucket": "0.55-0.60",
+        "count": 0,
+        "avg_probability": 0.0,
+        "realized_rate": 0.0
+      },
+      {
+        "bucket": "0.60-0.65",
+        "count": 0,
+        "avg_probability": 0.0,
+        "realized_rate": 0.0
+      },
+      {
+        "bucket": "0.65-1.00",
+        "count": 0,
+        "avg_probability": 0.0,
+        "realized_rate": 0.0
+      }
+    ]
+  },
+  "test": {
+    "count": 78,
+    "positive_rate": 0.2564,
+    "brier_score": 0.2161,
+    "log_loss": 0.6248,
+    "roc_auc": 0.4707,
+    "probability_buckets": [
+      {
+        "bucket": "0.50-0.55",
+        "count": 0,
+        "avg_probability": 0.0,
+        "realized_rate": 0.0
+      },
+      {
+        "bucket": "0.55-0.60",
+        "count": 0,
+        "avg_probability": 0.0,
+        "realized_rate": 0.0
+      },
+      {
+        "bucket": "0.60-0.65",
+        "count": 0,
+        "avg_probability": 0.0,
+        "realized_rate": 0.0
+      },
+      {
+        "bucket": "0.65-1.00",
+        "count": 0,
+        "avg_probability": 0.0,
+        "realized_rate": 0.0
+      }
+    ]
+  }
+}

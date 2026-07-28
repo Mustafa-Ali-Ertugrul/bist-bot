@@ -60,7 +60,12 @@ def detect_regime(df: pd.DataFrame, lookback: int = 20) -> MarketRegime:
 
 
 def get_trend_bias(indicators, df: pd.DataFrame) -> TrendBias:
-    """Determine higher-timeframe directional bias for MTF confluence."""
+    """Determine higher-timeframe directional bias for MTF confluence.
+
+    H6: When SMA20 slope and EMA200 slope point in opposite directions, the
+    HTF bias is internally contradictory → return NEUTRAL (whipsaw guard).
+    Uses H2's slope_lookback from settings (default 40).
+    """
     if df is None or len(df) < 30:
         return TrendBias.NEUTRAL
 
@@ -71,6 +76,28 @@ def get_trend_bias(indicators, df: pd.DataFrame) -> TrendBias:
     ema_long = last.get(f"ema_{settings.EMA_LONG}")
     plus_di = last.get("plus_di", 0)
     minus_di = last.get("minus_di", 0)
+
+    # H6: SMA20/EMA200 slope contradiction → NEUTRAL (no new params)
+    mtf_block_enabled = getattr(settings, "MTF_CONFLUENCE_BLOCK_ENABLED", True)
+    slope_lookback = getattr(settings, "SLOPE_LOOKBACK", 40)
+    if (
+        mtf_block_enabled
+        and "sma_20" in enriched.columns
+        and f"ema_{settings.EMA_LONG}" in enriched.columns
+        and len(enriched) >= slope_lookback + 1
+    ):
+        sma_20_series = enriched["sma_20"]
+        ema_long_series = enriched[f"ema_{settings.EMA_LONG}"]
+        sma_20_slope = float(sma_20_series.iloc[-1]) - float(
+            sma_20_series.iloc[-1 - slope_lookback]
+        )
+        ema_200_slope = float(ema_long_series.iloc[-1]) - float(
+            ema_long_series.iloc[-1 - slope_lookback]
+        )
+        sma_20_dir = 1 if sma_20_slope > 0 else (-1 if sma_20_slope < 0 else 0)
+        ema_200_dir = 1 if ema_200_slope > 0 else (-1 if ema_200_slope < 0 else 0)
+        if sma_20_dir != 0 and ema_200_dir != 0 and sma_20_dir != ema_200_dir:
+            return TrendBias.NEUTRAL
 
     if (
         regime == MarketRegime.BULL

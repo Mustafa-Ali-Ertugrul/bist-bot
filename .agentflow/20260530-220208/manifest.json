@@ -1,0 +1,46 @@
+{
+    "task":  "kayit olmayi ekle",
+    "workflow":  "C:\\Users\\Ali\\.config\\opencode\\agentflow\\workflow.opencode-free.json",
+    "workspace":  "C:\\Users\\Ali\\OneDrive\\Masaüstü\\bist_bot",
+    "runDir":  "C:\\Users\\Ali\\OneDrive\\Masaüstü\\bist_bot\\.agentflow\\20260530-220208",
+    "started":  "2026-05-30T22:02:08.6176950+03:00",
+    "dryRun":  false,
+    "steps":  [
+                  {
+                      "name":  "01-plan",
+                      "agent":  "plan",
+                      "model":  "opencode/deepseek-v4-flash-free",
+                      "output":  "C:\\Users\\Ali\\OneDrive\\Masaüstü\\bist_bot\\.agentflow\\20260530-220208\\01-plan.md",
+                      "exitCode":  0
+                  },
+                  {
+                      "name":  "02-code",
+                      "agent":  "build",
+                      "model":  "opencode/deepseek-v4-flash-free",
+                      "output":  "C:\\Users\\Ali\\OneDrive\\Masaüstü\\bist_bot\\.agentflow\\20260530-220208\\02-code.md",
+                      "exitCode":  0
+                  },
+                  {
+                      "name":  "03-test",
+                      "agent":  "flow-tester",
+                      "model":  "opencode/deepseek-v4-flash-free",
+                      "output":  "C:\\Users\\Ali\\OneDrive\\Masaüstü\\bist_bot\\.agentflow\\20260530-220208\\03-test.md",
+                      "exitCode":  0
+                  },
+                  {
+                      "name":  "04-review",
+                      "agent":  "flow-reviewer",
+                      "model":  "opencode/deepseek-v4-flash-free",
+                      "output":  "C:\\Users\\Ali\\OneDrive\\Masaüstü\\bist_bot\\.agentflow\\20260530-220208\\04-review.md",
+                      "exitCode":  0
+                  },
+                  {
+                      "name":  "05-fix",
+                      "agent":  "build",
+                      "model":  "opencode/deepseek-v4-flash-free",
+                      "output":  "C:\\Users\\Ali\\OneDrive\\Masaüstü\\bist_bot\\.agentflow\\20260530-220208\\05-fix.md",
+                      "exitCode":  0
+                  }
+              ],
+    "completed":  "2026-05-30T22:07:32.2578134+03:00"
+}

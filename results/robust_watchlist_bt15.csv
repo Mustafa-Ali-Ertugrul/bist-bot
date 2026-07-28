@@ -1,0 +1,2 @@
+ticker,stress_oos_mean_return,stress_oos_max_dd,base_oos_mean_return,edge_decay,has_overfitting_warning,buy_threshold,total_oos_trades,windows,counter_trend_multiplier
+PETKM.IS,4.9743,-9.6457,5.5571,0.5828,False,15.0,15,7,0.0

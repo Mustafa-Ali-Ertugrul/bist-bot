@@ -40,6 +40,35 @@ This document summarizes the test coverage improvements made to the BIST-Bot rep
 - Handling when both realtime and Yahoo fallback fail
 - Behavior when realtime scraping is disabled in settings
 
+### 6. Agent P0 Regression Tests (`tests/test_agent.py`)
+- BUG-1: Rejected order must not open a position
+- BUG-1b: ExecutionAttempt.accepted=False → no position
+- BUG-2: STRONG_SELL must not trigger long entry (long-only)
+- BUG-3: Paper mode exit must call close_position on success
+- BUG-6: Emergency stop uses fetched market price, not entry_price
+- BUG-6b: Emergency stop skips with log when no price available
+- P1: Entry order_id comes from ExecutionAttempt, not 0
+- P1: Pause timer uses _resume_generation counter (non-blocking)
+
+### 7. ExecutionService Tests (`tests/test_execution_service.py`)
+- execute_signal returns ExecutionAttempt on success
+- execute_signal returns rejected ExecutionAttempt on error
+- Handles REJECTED state from broker
+- Returns None when broker is None
+- auto_execute_signals returns list of ExecutionAttempts
+
+### 8. Phase 3 Architecture Tests (`tests/test_phase3_architecture.py`)
+- Container wires TradingAgent when AGENT_ENABLED=True
+- Container returns trading_agent=None when AGENT_ENABLED=False
+- main() passes container.trading_agent to MarketScheduler
+- Strategy engine plugin registry (register, unregister)
+
+### 9. Scanner Agent-Owner Tests (`tests/test_scanner.py`)
+- scan_once skips auto_execute when AGENT_ENABLED=True
+
+### 10. Scheduler Retry Tests (`tests/test_scheduler.py`)
+- Retry success calls trading_agent.on_scan_completed
+
 ## Running Tests
 
 To run all tests:

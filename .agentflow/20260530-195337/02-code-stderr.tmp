@@ -1,0 +1,576 @@
+[0m
+> build · gpt-5.5
+[0m
+[0m→ [0mSkill "web-app-development"
+[0m
+[0m# [0mTodos
+[•] Inspect existing auth registration UI/API/config
+[ ] Implement minimal registration enablement/fix
+[ ] Run targeted verification
+[0m
+[0m✱ [0mGlob "**/*auth*"[90m in . · 1 match[0m
+[0m✱ [0mGlob "tests/**/*.py"[90m in . · 59 matches[0m
+[0m✱ [0mGrep "register|ALLOW_PUBLIC_REGISTRATION|auth/register"[90m in src/bist_bot · 37 matches[0m
+[0m→ [0mRead .env.example[90m [limit=160, offset=1][0m
+[0m→ [0mRead src/bist_bot/streamlit_app.py[90m [limit=180, offset=100][0m
+[0m→ [0mRead src/bist_bot/dashboard.py[90m [limit=260, offset=250][0m
+[0m→ [0mRead src/bist_bot/config/subsettings.py[90m [limit=80, offset=270][0m
+[0m→ [0mRead tests/test_auth.py[90m [limit=260, offset=1][0m
+[0m✱ [0mGrep "^ALLOW_PUBLIC_REGISTRATION="[90m in . · 1 match[0m
+[0m✱ [0mGrep "ALLOW_PUBLIC_REGISTRATION|registration_disabled|register_tab|Kayıt Ol"[90m in tests · 4 matches[0m
+[0m
+[0m$ [0mgit status --short
+M .env.example
+ M .gitignore
+ M cloudrun/deploy.ps1
+ M opencode.json
+ D pytest_err.txt
+ D pytest_risk_err.txt
+ D ruff_err.txt
+ M src/bist_bot/data/bist100.py
+ M src/bist_bot/data/quotes.py
+ M src/bist_bot/locales/tr.py
+ M src/bist_bot/services/whale_alert_service.py
+ M src/bist_bot/state/session_state.py
+ M src/bist_bot/strategy/engine_meta.py
+ M src/bist_bot/strategy/scoring.py
+ M src/bist_bot/streamlit_app.py
+ M src/bist_bot/ui/components/app_shell.py
+ M src/bist_bot/ui/components/signal_card.py
+ M src/bist_bot/ui/pages/analyze_page.py
+ M src/bist_bot/ui/pages/backtest_page.py
+ M src/bist_bot/ui/pages/overview_page.py
+ M src/bist_bot/ui/pages/portfolio_page.py
+ M src/bist_bot/ui/pages/scan_detail_page.py
+ M src/bist_bot/ui/pages/settings_page.py
+ M src/bist_bot/ui/pages/signals_page.py
+ M src/bist_bot/ui/pages/whale_alerts_page.py
+ M src/bist_bot/ui/runtime_data.py
+ M src/bist_bot/ui/runtime_refresh.py
+ M src/bist_bot/ui/runtime_scan.py
+ M src/bist_bot/ui/runtime_styles.css
+ D test_out.txt
+ D test_output.txt
+ M tests/test_data_fetcher.py
+ M tests/test_data_fetcher_bist.py
+ M tests/test_integration_flows.py
+ M tests/test_login_response_handling.py
+ M tests/test_runtime_scan.py
+ M tests/test_strategy.py
+ M tests/test_whale_alert_service.py
+ M tests/test_yfinance_retry.py
+ M validate_live.py
+?? .agentflow/
+?? get-pip.py
+?? opencode.json.legacy-20260530-085104.bak
+[0m
+[0m✱ [0mGrep "registration_disabled|Yeni hesap kaydı kapalı|Herkese acik kayit"[90m in . · 7 matches[0m
+[0m✱ [0mGrep "ALLOW_PUBLIC_REGISTRATION|Kayıt Ol|register"[90m in . · 19 matches[0m
+[0m→ [0mRead .agentflow/20260530-091630/05-fix.md[90m [limit=120, offset=1][0m
+[0m
+[0m# [0mTodos
+[✓] Inspect existing auth registration UI/API/config
+[•] Implement minimal registration enablement/fix
+[ ] Run targeted verification
+[0m
+[0m# [0mTodos
+[✓] Inspect existing auth registration UI/API/config
+[✓] Implement minimal registration enablement/fix
+[•] Run targeted verification
+[0m
+[0m$ [0mpytest tests/test_auth.py -k "register or login_successful"
+============================= test session starts =============================
+platform win32 -- Python 3.13.13, pytest-9.0.3, pluggy-1.6.0
+rootdir: C:\Users\Ali\OneDrive\Masa�st�\bist_bot
+configfile: pyproject.toml
+plugins: anyio-4.13.0, base-url-2.1.0, cov-7.1.0, playwright-0.8.0
+collected 24 items / 19 deselected / 5 selected
+
+tests\test_auth.py ..FFF                                                 [100%]
+
+================================== FAILURES ===================================
+_________ test_register_returns_403_when_public_registration_disabled _________
+tests\test_auth.py:191: in test_register_returns_403_when_public_registration_disabled
+    assert payload["message"] == "Herkese acik kayit kapali"
+E   AssertionError: assert 'Herkese a\xe7\u0131k kay\u0131t kapal\u0131' == 'Herkese acik kayit kapali'
+E     
+E     - Herkese acik kayit kapali
+E     ?          ^^     ^       ^
+E     + Herkese a\xe7\u0131k kay\u0131t kapal\u0131
+E     ?          ^^     ^       ^
+------------------------------ Captured log call ------------------------------
+WARNING  bist_bot.db.database:app_logging.py:133 event=no_users_and_registration_disabled component=database message=Users table is empty and public registration is off. Set ADMIN_BOOTSTRAP_EMAIL and ADMIN_BOOTSTRAP_PASSWORD_HASH to seed an admin user. timestamp=2026-05-30T16:58:55.157046+00:00
+____________________ test_register_rejects_duplicate_email ____________________
+tests\test_auth.py:419: in test_register_rejects_duplicate_email
+    assert payload["message"] == "Bu email zaten kayitli"
+E   AssertionError: assert 'Bu e-posta zaten kay\u0131tl\u0131' == 'Bu email zaten kayitli'
+E     
+E     - Bu email zaten kayitli
+E     + Bu e-posta zaten kay\u0131tl\u0131
+____________________ test_register_rejects_short_password _____________________
+tests\test_auth.py:433: in test_register_rejects_short_password
+    assert payload["message"] == "Sifre en az 8 karakter olmali"
+E   AssertionError: assert '\u015eifre en az ...rakter olmal\u0131' == 'Sifre en az ...rakter olmali'
+E     
+E     - Sifre en az 8 karakter olmali
+E     ? ^                           ^
+E     + \u015eifre en az 8 karakter olmal\u0131
+E     ? ^                           ^
+=========================== short test summary info ===========================
+FAILED tests/test_auth.py::test_register_returns_403_when_public_registration_disabled
+FAILED tests/test_auth.py::test_register_rejects_duplicate_email - AssertionE...
+FAILED tests/test_auth.py::test_register_rejects_short_password - AssertionEr...
+================= 3 failed, 2 passed, 19 deselected in 23.10s =================
+[0m
+[0m→ [0mRead tests/test_auth.py[90m [limit=80, offset=390][0m
+[0m→ [0mRead src/bist_bot/locales/tr.py[90m [limit=90, offset=1][0m
+[0m
+[0m$ [0mgit diff -- src/bist_bot/locales/tr.py tests/test_auth.py .env.example
+warning: in the working copy of '.env.example', LF will be replaced by CRLF the next time Git touches it
+diff --git a/.env.example b/.env.example
+index 72d80f0..adea0b3 100644
+--- a/.env.example
++++ b/.env.example
+@@ -5,59 +5,67 @@
+ # --- Telegram (Notification)
+ TELEGRAM_BOT_TOKEN="your_bot_token_here" # Telegram bot token
+ TELEGRAM_CHAT_ID="your_chat_id_here" # Telegram kanalı veya kullanıcı ID'si
+-TELEGRAM_MIN_SCORE=48 # Telegram'a gidecek sinyaller için minimum skor (STRONG_BUY_THRESHOLD ile eşleşmeli)
++TELEGRAM_MIN_SCORE=48 # Telegram'a gidecek sinyaller için minimum skor
+ NOTIFICATION_MAX_RETRIES=3 # Telegram gönderim hata deneme sayısı
+-NOTIFICATION_RETRY_DELAY=5 # Telegram gönderim hata deneme arası bekleme (sn)
+-SIGNAL_TTL_MINUTES=60 # Sinyal geçerlilik süresi (dakika). Bu süreden eski sinyaller expired olarak işaretlenir.
++NOTIFICATION_RETRY_DELAY=5 # Telegram gönderim hata denemeleri arası bekleme (sn)
++SIGNAL_TTL_MINUTES=60 # Sinyal geçerlilik süresi (dakika)
+ 
+ # --- Database
+-DATABASE_URL="sqlite:///bist_signals.db" # SQLAlchemy DB bağlantı dizesi
+-DB_PATH="bist_signals.db" # Veritabanı dosya yolu
++DATABASE_URL="sqlite:///bist_signals.db" # SQLAlchemy bağlantı dizesi
++DB_PATH="bist_signals.db" # Lokal SQLite dosya yolu
+ 
+ # --- Market Hours (Server)
+ MARKET_OPEN_HOUR=9 # BIST açılış saati
+ MARKET_CLOSE_HOUR=18 # BIST kapanış saati
+ MARKET_WARMUP_MINUTES=15 # Açılış sonrası bekleme süresi
+-MARKET_HALF_DAY_HOUR=13 # Yarım gün (tatil öncesi) kapanış saati
++MARKET_HALF_DAY_HOUR=13 # Yarım gün kapanış saati
+ SCAN_INTERVAL_MINUTES=15 # Tarama sıklığı (dakika)
+ 
+ # --- Indicators (Trading)
+ RSI_PERIOD=14 # RSI periyodu
+ RSI_OVERSOLD=30 # RSI aşırı satım sınırı
+ RSI_OVERBOUGHT=70 # RSI aşırı alım sınırı
+-SMA_FAST=5 # Hızlı SMA (Basit Hareketli Ortalama)
++SMA_FAST=5 # Hızlı SMA
+ SMA_SLOW=20 # Yavaş SMA
+-EMA_FAST=12 # Hızlı EMA (Üstel Hareketli Ortalama)
++EMA_FAST=12 # Hızlı EMA
+ EMA_SLOW=26 # Yavaş EMA
+-EMA_LONG=200 # Uzun EMA (Trend belirleyici)
+-MACD_FAST=12 # MACD Hızlı
+-MACD_SLOW=26 # MACD Yavaş
+-MACD_SIGNAL=9 # MACD Sinyal periyodu
++EMA_LONG=200 # Uzun EMA
++MACD_FAST=12 # MACD hızlı periyot
++MACD_SLOW=26 # MACD yavaş periyot
++MACD_SIGNAL=9 # MACD sinyal periyodu
+ BOLLINGER_PERIOD=20 # Bollinger bant periyodu
+ BOLLINGER_STD=2.0 # Bollinger standart sapması
+-ADX_THRESHOLD=20 # Trend gücü (ADX) için min sınır
+-VOLUME_CONFIRM_MULTIPLIER=1.5 # Hacim onayı için ortalamanın kaç katı olmalı
++ADX_THRESHOLD=20 # Trend gücü için minimum ADX
++VOLUME_CONFIRM_MULTIPLIER=1.5 # Hacim onayı için ortalama katı
+ VOLUME_SPIKE_MULTIPLIER=1.5 # Hacim patlaması eşiği
+ 
+ # --- Data Provider (Data)
+-DATA_PROVIDER="yfinance" # Veri sağlayıcı: 'yfinance', 'official', vb.
++DATA_PROVIDER="yfinance" # Veri sağlayıcı: yfinance, official vb.
+ DATA_PERIOD="3mo" # Çekilecek geçmiş veri süresi
+-DATA_INTERVAL="1d" # Mum periyodu (örn: 1d, 1h, 15m)
++DATA_INTERVAL="1d" # Mum periyodu
+ RATE_LIMIT_SECONDS=2.0 # İstekler arası bekleme süresi
+-ENABLE_REALTIME_SCRAPING=true # BIST canlı fiyatlarını çekmeyi aç/kapat
+-OFFICIAL_VENDOR="generic" # Resmi sağlayıcı adı (matriks, finnet, vb)
++ENABLE_REALTIME_SCRAPING=true # BIST canlı fiyat scraping aktif/pasif
++OFFICIAL_VENDOR="generic" # Resmi sağlayıcı adı
+ OFFICIAL_API_BASE_URL="" # Resmi API base URL
+-OFFICIAL_API_KEY="" # Resmi API Key
++OFFICIAL_API_KEY="" # Resmi API key
+ OFFICIAL_USERNAME="" # Resmi API kullanıcı adı
+ OFFICIAL_PASSWORD="" # Resmi API şifresi
+-OFFICIAL_TIMEOUT=30.0 # Resmi API zaman aşımı (saniye)
+-OFFICIAL_MAX_RETRIES=3 # Resmi API max hata tekrarı
++OFFICIAL_TIMEOUT=30.0 # Resmi API zaman aşımı (sn)
++OFFICIAL_MAX_RETRIES=3 # Resmi API maksimum hata tekrarı
+ OFFICIAL_RETRY_BACKOFF_SECONDS=1.0 # Resmi API hata bekleme payı
+-OFFICIAL_AUTH_ENDPOINT="" # Resmi API Auth Endpoint
+-OFFICIAL_HISTORY_ENDPOINT="" # Resmi API Tarihçe Endpoint
+-OFFICIAL_BATCH_ENDPOINT="" # Resmi API Çoklu data endpoint
+-OFFICIAL_QUOTE_ENDPOINT="" # Resmi API Fiyat endpoint
+-OFFICIAL_UNIVERSE_ENDPOINT="" # Resmi API Sembol listesi endpoint
++OFFICIAL_AUTH_ENDPOINT="" # Resmi API auth endpoint
++OFFICIAL_HISTORY_ENDPOINT="" # Resmi API tarihçe endpoint
++OFFICIAL_BATCH_ENDPOINT="" # Resmi API çoklu data endpoint
++OFFICIAL_QUOTE_ENDPOINT="" # Resmi API fiyat endpoint
++OFFICIAL_UNIVERSE_ENDPOINT="" # Resmi API sembol listesi endpoint
++DATA_PROVIDER_FALLBACK_ORDER="" # Virgülle ayrılmış provider fallback sırası
++FAILOVER_FAILURE_THRESHOLD=3 # Failover için hata eşiği
++FAILOVER_COOLDOWN_SECONDS=60.0 # Failover bekleme süresi
++SCRAPER_REQUEST_TIMEOUT_SECONDS=10 # Scraper istek zaman aşımı
++PROVIDER_BATCH_TIMEOUT_SECONDS=60 # Toplu provider zaman aşımı
++PROVIDER_SINGLE_TIMEOUT_SECONDS=10 # Tekil provider zaman aşımı
++YFINANCE_MAX_RETRIES=3 # yfinance maksimum hata tekrarı
++YFINANCE_RETRY_BACKOFF_SECONDS=1.0 # yfinance retry bekleme süresi
+ 
+ # --- MTF (Multi-Timeframe)
+ MTF_ENABLED=true # Çoklu zaman dilimi onayı aktif/pasif
+@@ -67,19 +75,19 @@ MTF_TRIGGER_PERIOD="1mo" # İşlem tetikleyici veri süresi
+ MTF_TRIGGER_INTERVAL="15m" # Sinyal tetikleyici mum periyodu
+ 
+ # --- Risk
+-CORRELATION_THRESHOLD=0.70 # Sepetteki hisseler arası max korelasyon
+-CORRELATION_RISK_STEP=0.35 # Korele hisse gelirse risk düşürme katsayısı
+-CORRELATION_MIN_SCALE=0.25 # Korelasyondan dolayı düşülecek min risk sırı
+-CORRELATION_MAX_CLUSTER=2 # Aynı anda tutulabilecek max korele hisse
++CORRELATION_THRESHOLD=0.70 # Sepetteki hisseler arası maksimum korelasyon
++CORRELATION_RISK_STEP=0.35 # Korelasyonda risk düşürme katsayısı
++CORRELATION_MIN_SCALE=0.25 # Korelasyonda minimum risk ölçeği
++CORRELATION_MAX_CLUSTER=2 # Aynı anda tutulabilecek maksimum korele hisse
+ ATR_BASELINE_PCT=0.025 # ATR stop referans yüzdesi
+-ATR_MIN_RISK_SCALE=0.35 # ATR yüksekse riski düşürme katsayısı
+-MAX_POSITION_CAP_PCT=5.0 # Tek hisseye girilecek max bakiye %
+-MAX_SECTOR_CAP_PCT=20.0 # Aynı sektöre girilecek max bakiye %
+-MAX_TOTAL_RISK_PCT=2.0 # Tek işlemde riske edilen max ana para %
++ATR_MIN_RISK_SCALE=0.35 # Yüksek ATR'de minimum risk ölçeği
++MAX_POSITION_CAP_PCT=5.0 # Tek hisseye ayrılabilecek maksimum bakiye %
++MAX_SECTOR_CAP_PCT=20.0 # Aynı sektöre ayrılabilecek maksimum bakiye %
++MAX_TOTAL_RISK_PCT=2.0 # Tek işlemde riske edilen maksimum ana para %
+ KELLY_FRACTION_SCALE=0.25 # Kelly kriteri uygulama oranı
+-MIN_SIGNAL_PROBABILITY=0.50 # İşleme girmek için min. olasılık
+-MIN_LIQUIDITY_VALUE_TL=0.0 # Hacim/Likidite filtresi (TL)
+-DAILY_LOSS_CAP_PCT=3.0 # Günlük max kayıp limiti (%)
++MIN_SIGNAL_PROBABILITY=0.50 # İşleme girmek için minimum olasılık
++MIN_LIQUIDITY_VALUE_TL=0.0 # Hacim/likidite filtresi (TL)
++DAILY_LOSS_CAP_PCT=3.0 # Günlük maksimum kayıp limiti (%)
+ 
+ # --- Cache
+ FETCH_CACHE_TTL_SECONDS=900.0 # Standart veri önbellek ömrü
+@@ -88,45 +96,46 @@ ANALYSIS_CACHE_TTL_SECONDS=180.0 # Analiz sonuçları önbellek ömrü
+ REALTIME_QUOTE_CACHE_TTL_SECONDS=30.0 # Canlı fiyat önbellek ömrü
+ 
+ # --- Flask/JWT (Server & Auth)
+-PORT=5000 # veya FLASK_PORT
++PORT=5000 # FLASK_PORT için varsayılan kaynak
+ FLASK_DEBUG=false # Debug modu
+-LOG_FORMAT="console" # Log formatı (console veya json)
+-LOG_LEVEL="INFO" # Log seviyesi (DEBUG, INFO, WARNING, ERROR)
+-API_BASE_URL="http://localhost:5000" # Dışarıdan erişim URL'i
+-RATE_LIMIT_STORAGE_URI="memory://" # Flask-Limiter veritabanı url (redis vb)
+-SENTRY_DSN="" # Hata izleme (Sentry) URL
+-ENVIRONMENT="production" # Ortam (development, staging, production)
+-STREAMLIT_SCAN_COOLDOWN_SECONDS=8.0 # Web UI tarama butonu bekleme süresi
+-STREAMLIT_ANALYZE_COOLDOWN_SECONDS=4.0 # Web UI analiz bekleme süresi
+-STREAMLIT_BACKGROUND_SCAN_TIMEOUT_SECONDS=180 # Arka plan initial/full scan timeout suresi
+-API_REQUEST_TIMEOUT_SECONDS=45 # UI -> API istek timeout suresi
+-ALLOW_PUBLIC_REGISTRATION=false # Herkese açık üyelik
+-CORS_ORIGINS="*" # İzin verilen CORS adresleri virgülle ayırarak
+-# Generate a long random secret and provide it via environment variables or a secret manager in production.
+-JWT_SECRET_KEY=
++LOG_FORMAT="console" # Log formatı: console veya json
++LOG_LEVEL="INFO" # Log seviyesi
++API_BASE_URL="http://localhost:5000" # UI tarafından kullanılacak API URL'i
++RATE_LIMIT_STORAGE_URI="memory://" # Flask-Limiter storage URI
++SENTRY_DSN="" # Sentry hata izleme DSN
++ENVIRONMENT="production" # Ortam adı
++SCAN_TIMEOUT_SECONDS=30 # API scan zaman aşımı
++SCAN_API_TIMEOUT_SECONDS=60.0 # Scan API çağrı zaman aşımı
++STREAMLIT_SCAN_COOLDOWN_SECONDS=8.0 # Web UI tarama cooldown süresi
++STREAMLIT_ANALYZE_COOLDOWN_SECONDS=4.0 # Web UI analiz cooldown süresi
++STREAMLIT_BACKGROUND_SCAN_TIMEOUT_SECONDS=180 # Arka plan scan timeout süresi
++API_REQUEST_TIMEOUT_SECONDS=30 # UI -> API istek timeout süresi
++ALLOW_PUBLIC_REGISTRATION=false # Herkese açık üyelik aktif/pasif
++CORS_ORIGINS="*" # Virgülle ayrılmış CORS origin listesi
++JWT_SECRET_KEY="CHANGE_ME_LONG_RANDOM_SECRET" # Production'da secret manager kullanın
+ 
+ # --- Auth Bootstrap
+-ADMIN_BOOTSTRAP_EMAIL="admin@bistbot.com" # Boot sırasında yaratılacak admin emaili
+-# IMPORTANT: This must be a bcrypt hash, NOT a plain-text password.
+-# Generate with: python -c "from bcrypt import hashpw, gensalt; print(hashpw(b'your_password', gensalt()).decode())"
+-# Never ship a default plain-text password in production.
+-ADMIN_BOOTSTRAP_PASSWORD_HASH="replace_with_bcrypt_hash" # Admin bcrypt hash
++ADMIN_BOOTSTRAP_EMAIL="admin@bistbot.com" # İlk admin kullanıcısı emaili
++# IMPORTANT: Bu değer plain-text şifre değil, bcrypt/scrypt hash olmalıdır.
++# Generate with: python -c "from bist_bot.auth.passwords import hash_password; print(hash_password('your_password'))"
++ADMIN_BOOTSTRAP_PASSWORD_HASH="CHANGE_ME_PASSWORD_HASH" # İlk admin şifre hash'i
++ADMIN_BOOTSTRAP_UPDATE_EXISTING=false # true ise mevcut admin hash'i bootstrap ile güncellenir
+ 
+ # --- Capital & Broker (Trading & Broker)
+ INITIAL_CAPITAL=100000.0 # Analiz başlangıç bakiyesi
+-BROKER_PROVIDER="paper" # Broker entegrasyonu ('paper', 'algolab' vb)
++BROKER_PROVIDER="paper" # Broker entegrasyonu: paper, algolab vb.
+ ALGOLAB_API_KEY="" # Algolab API key
+-ALGOLAB_USERNAME="" # Algolab Kullanıcı adı
+-ALGOLAB_PASSWORD="" # Algolab Şifre
+-ALGOLAB_OTP_CODE="" # Algolab kalıcı OTP (varsa)
+-ALGOLAB_DRY_RUN=true # Dry run (emirler borsaya gitmez)
+-AUTO_EXECUTE=false # Sinyalleri otomatik işle (algolab)
+-CONFIRM_LIVE_TRADING=false # Canlı işlemi onaylıyorum flag'i
+-AUTO_EXECUTE_WARN_MAX_QUANTITY=100000 # Çok yüksek lot gelirse uyar
++ALGOLAB_USERNAME="" # Algolab kullanıcı adı
++ALGOLAB_PASSWORD="" # Algolab şifre
++ALGOLAB_OTP_CODE="" # Algolab kalıcı OTP varsa
++ALGOLAB_DRY_RUN=true # Dry-run emir modu
++AUTO_EXECUTE=false # Sinyalleri otomatik işle
++CONFIRM_LIVE_TRADING=false # Canlı işlem onayı
++AUTO_EXECUTE_WARN_MAX_QUANTITY=100000 # Yüksek adet uyarı eşiği
+ 
+ # --- ML (Machine Learning)
+-ML_SEQUENCE_LENGTH=60 # LSTM gibi modeller için sıra boyu (mum)
+-ML_EPOCHS=50 # Eğitim devir sayısı
++ML_SEQUENCE_LENGTH=60 # LSTM benzeri modeller için sıra boyu
++ML_EPOCHS=50 # Eğitim epoch sayısı
+ ML_BATCH_SIZE=32 # Eğitim batch boyutu
+ ML_MODEL_PATH="models" # Model kayıt dizini
+ 
+@@ -135,33 +144,35 @@ BENCHMARK_TICKER="^XU100" # Kıyaslama endeksi
+ BENCHMARK_TICKER_ALT="XRXIST.IS" # Alternatif endeks ticker
+ 
+ # --- Transaction Costs & Slippage (Trading)
+-COMMISSION_BUY=0.0002 # Alım komisyonu (binde 2 = 0.0002)
++COMMISSION_BUY=0.0002 # Alım komisyonu
+ COMMISSION_SELL=0.0002 # Satım komisyonu
+-BSMV=0.0005 # BSMV (binde 5 v.s.)
+-SLIPPAGE=0.001 # Fiyat kayması miktarı default
+-SLIPPAGE_PCT=0.001 # Fiyat kayması %
++BSMV=0.0005 # BSMV
++STAMP_TAX=0.00093 # Damga vergisi
++EXCHANGE_FEE=0.0005 # Borsa ücreti
++SLIPPAGE=0.001 # Fiyat kayması miktarı
++SLIPPAGE_PCT=0.001 # Fiyat kayması yüzdesi
+ SLIPPAGE_PENALTY_RATIO=0.15 # Backtest kayma cezası katsayısı
+-SLIPPAGE_MAX_CAP=0.02 # Fiyat kayması için maksimum tavan %
++SLIPPAGE_MAX_CAP=0.02 # Fiyat kayması maksimum tavanı
+ 
+ # --- Score Thresholds (Trading)
+-STRONG_BUY_THRESHOLD=48 # Güçlü Al için min skor
+-BUY_THRESHOLD=20 # Al için min skor
+-WEAK_BUY_THRESHOLD=8 # Zayıf Al min skor
+-WEAK_SELL_THRESHOLD=-8 # Zayıf sat eşiği
+-SELL_THRESHOLD=-20 # Sat eşiği
+-STRONG_SELL_THRESHOLD=-48 # Güçlü Sat eşiği
++STRONG_BUY_THRESHOLD=48 # Güçlü al için minimum skor
++BUY_THRESHOLD=20 # Al için minimum skor
++WEAK_BUY_THRESHOLD=8 # Zayıf al için minimum skor
++WEAK_SELL_THRESHOLD=-8 # Zayıf sat için eşik
++SELL_THRESHOLD=-20 # Sat için eşik
++STRONG_SELL_THRESHOLD=-48 # Güçlü sat için eşik
+ SIDEWAYS_EXTRA_THRESHOLD=5.0 # Yatay piyasada marj payı
+-MOMENTUM_CONFIRMATION_THRESHOLD=4.0 # Momentum sinyali kırılımı onayı
++MOMENTUM_CONFIRMATION_THRESHOLD=4.0 # Momentum onay eşiği
+ 
+ # --- Walkforward (Trading)
+-WALKFORWARD_TRAIN_DAYS=180 # Walkforward analiz eğitim boyutu (gün)
+-WALKFORWARD_TEST_DAYS=30 # Walkforward analiz test boyutu (gün)
++WALKFORWARD_TRAIN_DAYS=180 # Walkforward eğitim penceresi
++WALKFORWARD_TEST_DAYS=30 # Walkforward test penceresi
+ 
+ # --- Sector (Trading)
+-SECTOR_LIMIT=2 # Aynı anda portföye girebilecek aynı sektör hissesi
++SECTOR_LIMIT=2 # Portföyde aynı sektörden maksimum hisse
+ 
+ # --- Paper (Trading)
+-PAPER_MODE=false # Sanal portföyü etkinleştir/devre dışı bırak
++PAPER_MODE=false # Sanal portföy modu
+ PAPER_TRADES_TABLE="paper_trades" # Sanal işlem DB tablosu
+ 
+ # --- Backtest Costs (Backtest)
+diff --git a/src/bist_bot/locales/tr.py b/src/bist_bot/locales/tr.py
+index e790fc0..7f37431 100644
+--- a/src/bist_bot/locales/tr.py
++++ b/src/bist_bot/locales/tr.py
+@@ -17,34 +17,34 @@ tr = {
+     "ui.lot": "Lot",
+     "ui.total_signals": "Toplam Sinyal",
+     "ui.signals_over_time": "Tarih boyunca",
+-    "ui.trades_completed": "Islem Tamamlandi",
+-    "ui.trade_result_known": "Sonuc belli",
+-    "ui.profitable": "Karli",
++    "ui.trades_completed": "İşlem Tamamlandı",
++    "ui.trade_result_known": "Sonuç belli",
++    "ui.profitable": "Karlı",
+     "ui.profit_made": "Kar elde eden",
+     "ui.win_rate": "Win Rate",
+     "ui.avg_profit": "Ort. kar",
+     "ui.recent_signals": "Son Sinyaller",
+-    "ui.no_signals_yet": "Henuz sinyal kaydedilmemis. Varliklari analiz etmek icin bir tarama baslatin.",
+-    "ui.ticker": "Ticker",
++    "ui.no_signals_yet": "Henüz sinyal kaydedilmemiş. Varlıkları analiz etmek için bir tarama başlatın.",
++    "ui.ticker": "Sembol",
+     "ui.type": "Tip",
+     "ui.status": "Durum",
+     "ui.date": "Tarih",
+-    "ui.pending": "PENDING",
+-    "ui.strong_buy_tab": "Strong Buy",
+-    "ui.buy_tab": "Buy",
+-    "ui.sell_neutral_tab": "Sell / Neutral",
+-    "ui.buy_side_tab": "Buy Side",
+-    "ui.neutral_tab": "Neutral",
+-    "ui.sell_side_tab": "Sell Side",
+-    "ui.no_strong_buy": "Guclu alim sinyali yok.",
+-    "ui.no_buy": "Alim sinyali yok.",
+-    "ui.no_sell": "Satis sinyali yok.",
++    "ui.pending": "Beklemede",
++    "ui.strong_buy_tab": "Güçlü Al",
++    "ui.buy_tab": "Al",
++    "ui.sell_neutral_tab": "Sat / Nötr",
++    "ui.buy_side_tab": "Alış Tarafı",
++    "ui.neutral_tab": "Nötr",
++    "ui.sell_side_tab": "Satış Tarafı",
++    "ui.no_strong_buy": "Güçlü alım sinyali yok.",
++    "ui.no_buy": "Alım sinyali yok.",
++    "ui.no_sell": "Satış sinyali yok.",
+     "ui.min_score": "Min skor",
+     "ui.rsi_min": "RSI min",
+     "ui.rsi_max": "RSI max",
+-    "ui.overview_title": "Genel Bakis",
++    "ui.overview_title": "Genel Bakış",
+     "ui.signals_title": "Sinyaller",
+-    "ui.api_data_failed": "API verileri alinamadi",
++    "ui.api_data_failed": "API verileri alınamadı",
+     "log.scan_starting": "BIST BOT — TARAMA BAŞLIYOR",
+     "log.scanning_stocks": "Watchlist: {count} hisse",
+     "log.scan_time": "Saat: {time}",
+@@ -55,14 +55,14 @@ tr = {
+     "log.buy_signal": "Alım sinyali",
+     "log.sell_signal": "Satış sinyali",
+     "log.actionable": "Aksiyon gerekli",
+-    "api.invalid_credentials": "Gecersiz kimlik bilgileri",
+-    "api.invalid_email": "Gecersiz email adresi",
+-    "api.password_too_short": "Sifre en az 8 karakter olmali",
+-    "api.email_already_exists": "Bu email zaten kayitli",
+-    "api.register_error": "Kayit olusturulamadi",
+-    "api.registration_disabled": "Herkese acik kayit kapali",
+-    "api.data_not_found": "Veri bulunamadi",
+-    "api.scan_error": "Tarama hatasi",
+-    "api.analyze_error": "Analiz hatasi",
++    "api.invalid_credentials": "Geçersiz kimlik bilgileri",
++    "api.invalid_email": "Geçersiz e-posta adresi",
++    "api.password_too_short": "Şifre en az 8 karakter olmalı",
++    "api.email_already_exists": "Bu e-posta zaten kayıtlı",
++    "api.register_error": "Kayıt oluşturulamadı",
++    "api.registration_disabled": "Herkese açık kayıt kapalı",
++    "api.data_not_found": "Veri bulunamadı",
++    "api.scan_error": "Tarama hatası",
++    "api.analyze_error": "Analiz hatası",
+     "signal.change": "Sinyal değişikliği: {ticker} {old} → {new}",
+ }
+warning: in the working copy of 'src/bist_bot/locales/tr.py', LF will be replaced by CRLF the next time Git touches it
+[0m
+[0m✱ [0mGrep "def get_message|get_message"[90m in src/bist_bot · 36 matches[0m
+[0m→ [0mRead src/bist_bot/locales/__init__.py[90m [limit=80, offset=1][0m
+[0m
+[0m$ [0mruff check .
+E402 Module level import not at top of file
+  --> get-pip.py:37:1
+   |
+37 | import os.path
+   | ^^^^^^^^^^^^^^
+38 | import pkgutil
+39 | import shutil
+   |
+
+I001 [*] Import block is un-sorted or un-formatted
+  --> get-pip.py:37:1
+   |
+37 | / import os.path
+38 | | import pkgutil
+39 | | import shutil
+40 | | import tempfile
+41 | | import argparse
+42 | | import importlib
+43 | | from base64 import b85decode
+   | |____________________________^
+   |
+help: Organize imports
+
+E402 Module level import not at top of file
+  --> get-pip.py:38:1
+   |
+37 | import os.path
+38 | import pkgutil
+   | ^^^^^^^^^^^^^^
+39 | import shutil
+40 | import tempfile
+   |
+
+E402 Module level import not at top of file
+  --> get-pip.py:39:1
+   |
+37 | import os.path
+38 | import pkgutil
+39 | import shutil
+   | ^^^^^^^^^^^^^
+40 | import tempfile
+41 | import argparse
+   |
+
+E402 Module level import not at top of file
+  --> get-pip.py:40:1
+   |
+38 | import pkgutil
+39 | import shutil
+40 | import tempfile
+   | ^^^^^^^^^^^^^^^
+41 | import argparse
+42 | import importlib
+   |
+
+E402 Module level import not at top of file
+  --> get-pip.py:41:1
+   |
+39 | import shutil
+40 | import tempfile
+41 | import argparse
+   | ^^^^^^^^^^^^^^^
+42 | import importlib
+43 | from base64 import b85decode
+   |
+
+E402 Module level import not at top of file
+  --> get-pip.py:42:1
+   |
+40 | import tempfile
+41 | import argparse
+42 | import importlib
+   | ^^^^^^^^^^^^^^^^
+43 | from base64 import b85decode
+   |
+
+E402 Module level import not at top of file
+  --> get-pip.py:43:1
+   |
+41 | import argparse
+42 | import importlib
+43 | from base64 import b85decode
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+
+RUF005 Consider iterable unpacking instead of concatenation
+  --> get-pip.py:82:12
+   |
+80 |         args.append("wheel")
+81 |
+82 |     return ["install", "--upgrade", "--force-reinstall"] + args
+   |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+help: Replace with iterable unpacking
+
+Found 9 errors.
+[*] 1 fixable with the `--fix` option (1 hidden fix can be enabled with the `--unsafe-fixes` option).
+[0m
+[0m# [0mTodos
+[✓] Inspect existing auth registration UI/API/config
+[✓] Implement minimal registration enablement/fix
+[✓] Run targeted verification
+[0m

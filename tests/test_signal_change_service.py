@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
-from datetime import datetime
+from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -28,7 +28,7 @@ def test_signal_change_service_sends_notification_on_change():
         "target_price": 110.0,
         "position_size": 5,
         "confidence": "ORTA",
-        "timestamp": datetime(2025, 1, 1, 10, 0, 0).isoformat(),
+        "timestamp": datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC).isoformat(),
     }
     service = SignalChangeService(db, notifier, sleeper=sleeper)
     signal = Signal(
@@ -36,7 +36,7 @@ def test_signal_change_service_sends_notification_on_change():
         signal_type=SignalType.SELL,
         score=-20,
         price=99.0,
-        timestamp=datetime(2025, 1, 1, 11, 0, 0),
+        timestamp=datetime(2025, 1, 1, 11, 0, 0, tzinfo=UTC),
     )
 
     service.check_signal_changes([signal])
@@ -54,7 +54,7 @@ def test_signal_change_service_skips_when_signal_is_same():
         "signal_type": SignalType.BUY.value,
         "score": 20,
         "price": 100.0,
-        "timestamp": datetime(2025, 1, 1, 10, 0, 0).isoformat(),
+        "timestamp": datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC).isoformat(),
     }
     service = SignalChangeService(db, notifier, sleeper=sleeper)
     signal = Signal(ticker="THYAO.IS", signal_type=SignalType.BUY, score=25, price=101.0)
