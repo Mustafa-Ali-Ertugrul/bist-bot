@@ -1,0 +1,4 @@
+ticker,status,windows,oos_mean_return,oos_median_return,oos_max_dd,oos_mean_sharpe,is_mean_return,has_overfitting_warning,buy_threshold,total_oos_trades,counter_trend_multiplier,obv_divergence_cap,gates,rows
+AKBNK.IS,OK,7,1.5857,0.0,-5.7014,0.0,-12.0729,False,25.0,5,1.0,15.0,ON,753
+ARCLK.IS,OK,7,-1.7014,0.0,-2.3786,0.0,0.2743,True,25.0,2,1.0,15.0,ON,753
+ASELS.IS,OK,7,10.9329,10.96,-4.8714,13.55,23.7671,True,25.0,7,1.0,15.0,ON,753

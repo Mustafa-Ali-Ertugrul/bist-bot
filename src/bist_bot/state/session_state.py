@@ -45,7 +45,15 @@ def init_session_state(container=None) -> None:
         "app_bootstrapped": False,
         "just_logged_in": False,
         "current_view": "portfolio",
-        "selected_ticker": settings.WATCHLIST[0],
+        "selected_ticker": (
+            settings.WATCHLIST[0]
+            if getattr(settings, "WATCHLIST", None)
+            else (
+                settings.DEFAULT_BIST100_WATCHLIST[0]
+                if settings.DEFAULT_BIST100_WATCHLIST
+                else "THYAO.IS"
+            )
+        ),
         "analysis_period": "6mo",
         "_scan_session_key": uuid.uuid4().hex,
     }

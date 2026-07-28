@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pytest
 
@@ -46,7 +46,7 @@ def sample_signal():
         reasons=["RSI low", "MACD bullish"],
         stop_loss=95.0,
         target_price=110.0,
-        timestamp=datetime(2025, 1, 1, 10, 0, 0),
+        timestamp=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
     )
 
 
@@ -127,7 +127,7 @@ def test_save_signal_persists_position_size(signals_repo):
         stop_loss=95.0,
         target_price=110.0,
         position_size=10,
-        timestamp=datetime(2025, 1, 1, 10, 0, 0),
+        timestamp=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
     )
 
     signals_repo.save_signal(signal)
@@ -156,7 +156,7 @@ def test_get_signals_with_ticker_filter(signals_repo):
         reasons=["RSI low"],
         stop_loss=95.0,
         target_price=110.0,
-        timestamp=datetime(2025, 1, 1, 10, 0, 0),
+        timestamp=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
     )
     signals_repo.save_signal(signal1)
 
@@ -169,7 +169,7 @@ def test_get_signals_with_ticker_filter(signals_repo):
         reasons=["MACD bullish"],
         stop_loss=190.0,
         target_price=220.0,
-        timestamp=datetime(2025, 1, 1, 10, 0, 0),
+        timestamp=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
     )
     signals_repo.save_signal(signal2)
 
@@ -331,7 +331,7 @@ def test_get_performance_stats(signals_repo):
         reasons=["RSI low"],
         stop_loss=95.0,
         target_price=110.0,
-        timestamp=datetime(2025, 1, 1, 10, 0, 0),
+        timestamp=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
     )
     signals_repo.save_signal(signal)
 

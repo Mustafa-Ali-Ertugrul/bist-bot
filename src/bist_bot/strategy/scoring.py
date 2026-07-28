@@ -74,12 +74,25 @@ def score_momentum(params, last, _prev) -> tuple[float, list[str]]:
             score -= params.score_cci_normal
             reasons.append(f"CCI yüksek ({cci:.0f})")
 
-    MAX_MOMENTUM_SCORE = 25
+    # Theorik max: rsi_extreme(18) + stoch_cross(8) + stoch_extreme(6) + stoch_trend(3) + cci_extreme(8) = 43
+    MAX_MOMENTUM_SCORE = 45
     score = max(-MAX_MOMENTUM_SCORE, min(MAX_MOMENTUM_SCORE, score))
     return score, reasons
 
 
-def score_trend(params, last, prev) -> tuple[float, list[str]]:
+def _compute_ema_slope(df: pd.DataFrame, slope_lookback: int) -> float | None:
+    """Return the direction of the EMA200 series over the last slope_lookback bars.
+
+    Returns None when there is insufficient data.
+    """
+    ema_col = f"ema_{settings.EMA_LONG}"
+    if ema_col not in df.columns or len(df) < slope_lookback + 1:
+        return None
+    series = df[ema_col]
+    return series.iloc[-1] - series.iloc[-1 - slope_lookback]
+
+
+def score_trend(params, last, prev, df=None) -> tuple[float, list[str]]:
     score = 0.0
     reasons: list[str] = []
 
@@ -89,25 +102,52 @@ def score_trend(params, last, prev) -> tuple[float, list[str]]:
         price = last["close"]
         above_ema = price > ema_long
         last_above_ema = prev["close"] > prev.get(f"ema_{settings.EMA_LONG}", ema_long)
+
+        slope_lookback_val = getattr(params, "slope_lookback", 40)
+        slope = _compute_ema_slope(df, slope_lookback_val) if df is not None else float("nan")
+
         if above_ema and not last_above_ema:
-            reasons.append(f"Fiyat EMA{settings.EMA_LONG}'i kesti (yukarı)")
+            score += params.score_ema_initial_cross
+            reasons.append(f"Fiyat EMA{settings.EMA_LONG}'i kesti (yukarı) → yeni trend başlangıcı")
         elif above_ema:
-            if pd.notna(adx) and adx >= params.adx_threshold:
-                score += params.score_ema_cross
-                reasons.append(f"yükseliş trendi (EMA{settings.EMA_LONG} üzerinde)")
+            if pd.notna(slope) and slope > 0:
+                if pd.notna(adx) and adx >= params.adx_threshold:
+                    score += params.score_ema_cross
+                    reasons.append(
+                        f"yükseliş trendi (EMA{settings.EMA_LONG} üzerinde + eğim pozitif)"
+                    )
+            elif pd.notna(slope) and slope <= 0:
+                reasons.append(
+                    f"EMA{settings.EMA_LONG} üzerinde ama eğim negatif → trend teyit yok (sahte dönüş filtresi)"
+                )
+            else:
+                if pd.notna(adx) and adx >= params.adx_threshold:
+                    score += params.score_ema_cross
+                    reasons.append(f"yükseliş trendi (EMA{settings.EMA_LONG} üzerinde)")
         elif not above_ema and last_above_ema:
-            reasons.append(f"Fiyat EMA{settings.EMA_LONG}'i kesti (aşağı)")
+            score -= params.score_ema_initial_cross
+            reasons.append(f"Fiyat EMA{settings.EMA_LONG}'i kesti (aşağı) → trend kırılması")
         elif not above_ema:
-            if pd.notna(adx) and adx >= params.adx_threshold:
-                score -= params.score_ema_cross / 2
-                reasons.append(f"düşüş trendi (EMA{settings.EMA_LONG} altında)")
+            if pd.notna(slope) and slope < 0:
+                if pd.notna(adx) and adx >= params.adx_threshold:
+                    score -= params.score_ema_cross / 2
+                    reasons.append(f"düşüş teyiti (EMA{settings.EMA_LONG} altında + eğim negatif)")
+            elif pd.notna(slope) and slope >= 0:
+                pass
+            else:
+                if pd.notna(adx) and adx >= params.adx_threshold:
+                    score -= params.score_ema_cross / 2
+                    reasons.append(f"düşüş trendi (EMA{settings.EMA_LONG} altında)")
+
+        if pd.isna(slope) and df is not None:
+            reasons.append("slope yetersiz veri")
 
     sma_cross = last.get("sma_cross", "NONE")
     if sma_cross == "GOLDEN_CROSS":
         score += params.score_sma_golden_cross
         reasons.append("SMA Golden Cross ✨ → Yükseliş sinyali")
     elif sma_cross == "DEATH_CROSS":
-        score -= params.score_sma_golden_cross
+        score -= params.score_sma_death_cross
         reasons.append("SMA Death Cross 💀 → Düşüş sinyali")
     else:
         sma_fast = last.get(f"sma_{settings.SMA_FAST}")
@@ -179,12 +219,13 @@ def score_trend(params, last, prev) -> tuple[float, list[str]]:
         score -= params.score_di_cross
         reasons.append("+DI/-DI Bearish Cross")
 
-    MAX_TREND_SCORE = 25
+    # Theorik max: ema_cross(10) + ema_initial_cross(10) + sma_golden(12) + macd_cross(12) + macd_hist_strong(5) + adx_strong(8) + di_cross(6) = 63
+    MAX_TREND_SCORE = 70
     score = max(-MAX_TREND_SCORE, min(MAX_TREND_SCORE, score))
     return score, reasons
 
 
-def score_volume(params, last) -> tuple[float, list[str]]:
+def score_volume(params, last, prev) -> tuple[float, list[str]]:
     score = 0.0
     reasons: list[str] = []
 
@@ -204,11 +245,16 @@ def score_volume(params, last) -> tuple[float, list[str]]:
     vol_trend = last.get("volume_trend", "FLAT")
 
     if vol_spike:
-        price_change = last["close"] - last.get("_prev_close_for_scoring", last["close"])
+        prev_close = prev.get("close") if isinstance(prev, pd.Series) else None
+        current_close = last.get("close")
+        if pd.notna(current_close) and pd.notna(prev_close):
+            price_change = float(current_close) - float(prev_close)
+        else:
+            price_change = 0.0
         if price_change > 0:
             score += params.score_volume_spike
             reasons.append(f"Hacim patlaması + yükseliş ({vol_ratio:.1f}x)")
-        else:
+        elif price_change < 0:
             score -= params.score_volume_spike
             reasons.append(f"Hacim patlaması + düşüş ({vol_ratio:.1f}x)")
 
@@ -236,7 +282,8 @@ def score_volume(params, last) -> tuple[float, list[str]]:
         score -= params.score_obv_trend
         reasons.append("OBV düşüş trendi → Çıkış var")
 
-    MAX_VOLUME_SCORE = 15
+    # Theorik max: vol_confirm(8) + vol_spike(8) + pv_confirm(2) + vol_trend(2) + obv_trend(4) = 24
+    MAX_VOLUME_SCORE = 26
     score = max(-MAX_VOLUME_SCORE, min(MAX_VOLUME_SCORE, score))
     return score, reasons
 
@@ -292,6 +339,7 @@ def score_structure(params, last) -> tuple[float, list[str]]:
         score -= params.score_macd_divergence
         reasons.append("🔥 MACD Bearish Divergence → Güçlü dönüş sinyali")
 
-    MAX_STRUCTURE_SCORE = 20
+    # Theorik max: bb_extreme(10) + bb_percent(5) + sr_distance(6) + rsi_divergence(15) + macd_divergence(12) = 48
+    MAX_STRUCTURE_SCORE = 50
     score = max(-MAX_STRUCTURE_SCORE, min(MAX_STRUCTURE_SCORE, score))
     return score, reasons

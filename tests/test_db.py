@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy.exc import OperationalError
@@ -29,7 +29,7 @@ def sample_signal():
         reasons=["RSI low", "MACD bullish"],
         stop_loss=95.0,
         target_price=110.0,
-        timestamp=datetime(2025, 1, 1, 10, 0, 0),
+        timestamp=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
     )
 
 

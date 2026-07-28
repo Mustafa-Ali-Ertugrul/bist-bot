@@ -70,6 +70,8 @@ bist_bot/
 ## Kurulum
 
 ```bash
+git clone https://github.com/Mustafa-Ali-Ertugrul/docmind-ai.git
+cd docmind-ai
 pip install -r requirements.txt
 ```
 
@@ -216,7 +218,7 @@ gcloud run services update bist-bot-api \
   --add-cloudsql-instances YOUR_PROJECT:YOUR_REGION:YOUR_INSTANCE \
   --set-secrets DATABASE_URL=database-url:latest,JWT_SECRET_KEY=jwt-secret-key:latest
 
-gcloud run services update bist-bot \
+gcloud run services update bist-bot-ui \
   --region YOUR_REGION \
   --add-cloudsql-instances YOUR_PROJECT:YOUR_REGION:YOUR_INSTANCE \
   --set-secrets DATABASE_URL=database-url:latest \
@@ -328,6 +330,7 @@ Legacy shim dosyalari kaldirildi. Asagidaki eski importleri yeni pathlere tasiyi
 - `ADMIN_BOOTSTRAP_EMAIL` ve `ADMIN_BOOTSTRAP_PASSWORD_HASH` verilirse bunlar sadece bootstrap icin kullanilir: uygulama ilk acilista `users` tablosu bossa ilk admin kullanicisi olusturulur.
 - `users` tablosunda en az bir kullanici varsa env bootstrap ayarlari yok sayilir; mevcut DB kullanicilari source of truth olmaya devam eder.
 - CORS sadece `CORS_ORIGINS` whitelist'inden gelen origin'lere izin verir; `*` varsayilan olarak kullanilmaz.
+- Flask-Limiter varsayilan olarak `memory://` kullanir. Uretimde ve multi-worker deployment'larda `RATE_LIMIT_STORAGE_URI=redis://...` gibi paylasimli bir backend kullanin.
 - Uretimde `.env` dosyasini repoya eklemeyin; hassas ayarlar ortam degiskenleri veya lokal `.env` ile saglanmalidir.
 - Secret-bearing env'ler icin mumkunse dogrudan `*_FILE` kullanin; ornek: `JWT_SECRET_KEY_FILE`, `TELEGRAM_BOT_TOKEN_FILE`, `ALGOLAB_PASSWORD_FILE`, `OFFICIAL_PASSWORD_FILE`.
 - Lokal depoda gercek token/anahtar varsa bunlari rotate etmek en guvenli secenektir; `.gitignore` tek basina daha once izlenmis secret'lari korumaz.
@@ -342,7 +345,7 @@ Migration note:
 
 - `LOG_FORMAT=json` ayari ile loglar JSON olarak akar; varsayilan `console` modu lokal gelistirmede daha okunaklidir.
 - `LOG_LEVEL=INFO` veya `DEBUG` ile detay seviyesi ayarlanabilir.
-- Flask API `GET /metrics` endpoint'i uzerinden Prometheus text format metrikler sunar.
+- Flask API `GET /metrics` endpoint'i uzerinden JWT auth ile Prometheus text format metrikler sunar.
 - Metrik katmani thread-safe tutulur; `prometheus_client` mevcutsa resmi registry/exporter kullanilir, degilse uyumlu fallback registry devreye girer.
 
 ## Streamlit Cooldown
@@ -357,7 +360,7 @@ Ornek:
 
 ```bash
 LOG_FORMAT=json python main.py --worker
-curl http://localhost:5000/metrics
+curl -H "Authorization: Bearer <token>" http://localhost:5000/metrics
 ```
 
 ## Live Trading (Experimental)

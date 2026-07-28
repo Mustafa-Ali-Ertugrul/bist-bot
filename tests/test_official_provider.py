@@ -326,6 +326,32 @@ class TestOfficialProviderRetry:
 
         provider._retry_request("GET", "/api/test")
 
+    def test_rate_limit_retry_after_is_capped(self, monkeypatch):
+        provider = _make_provider(max_retries=2, retry_backoff=0.5, max_retry_sleep=1.5)
+        provider._session_token = "tok"
+        provider._token_expires = datetime(2099, 1, 1)
+        provider._request = MagicMock(side_effect=[RateLimitError(retry_after=30.0), {"data": []}])
+        sleeps: list[float] = []
+        monkeypatch.setattr(
+            "bist_bot.data.providers.time.sleep", lambda seconds: sleeps.append(float(seconds))
+        )
+
+        provider._retry_request("GET", "/api/test")
+
+        assert sleeps == [1.5]
+        assert provider._request.call_count == 2
+
+    def test_rate_limit_gives_up_after_max_retries(self, monkeypatch):
+        provider = _make_provider(max_retries=2, retry_backoff=0.01, max_retry_sleep=0.01)
+        provider._session_token = "tok"
+        provider._token_expires = datetime(2099, 1, 1)
+        provider._request = MagicMock(side_effect=RateLimitError(retry_after=0.01))
+        monkeypatch.setattr("bist_bot.data.providers.time.sleep", lambda _seconds: None)
+
+        with pytest.raises(RateLimitError):
+            provider._retry_request("GET", "/api/test")
+        assert provider._request.call_count == 2
+
     def test_raises_after_max_retries(self):
         provider = _make_provider(max_retries=2, retry_backoff=0.01)
         provider._session_token = "tok"

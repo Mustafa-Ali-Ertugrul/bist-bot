@@ -169,7 +169,6 @@ SECTOR_MAP = {
 @dataclass(frozen=True)
 class TradingSettings:
     STRONG_BUY_THRESHOLD: int = _get_int_env("STRONG_BUY_THRESHOLD", 48)
-    BUY_THRESHOLD: int = _get_int_env("BUY_THRESHOLD", 20)
     WEAK_BUY_THRESHOLD: int = _get_int_env("WEAK_BUY_THRESHOLD", 8)
     WEAK_SELL_THRESHOLD: int = _get_int_env("WEAK_SELL_THRESHOLD", -8)
     SELL_THRESHOLD: int = _get_int_env("SELL_THRESHOLD", -20)
@@ -208,6 +207,9 @@ class TradingSettings:
     INITIAL_CAPITAL: float = _get_float_env("INITIAL_CAPITAL", 100000.0)
     PAPER_MODE: bool = _get_bool_env("PAPER_MODE", False)
     PAPER_TRADES_TABLE: str = _get_str_env("PAPER_TRADES_TABLE", "paper_trades")
+    SHADOW_ENABLED: bool = _get_bool_env("SHADOW_ENABLED", True)
+    SHADOW_HOLDING_DAYS: int = _get_int_env("SHADOW_HOLDING_DAYS", 5)
+    SHADOW_ONLY_ROBUST: bool = _get_bool_env("SHADOW_ONLY_ROBUST", True)
     COMMISSION_BUY: float = _get_float_env("COMMISSION_BUY", 0.0002)
     COMMISSION_SELL: float = _get_float_env("COMMISSION_SELL", 0.0002)
     BSMV: float = _get_float_env("BSMV", 0.0005)
@@ -230,7 +232,7 @@ class RiskSettings:
     MAX_TOTAL_RISK_PCT: float = _get_float_env("MAX_TOTAL_RISK_PCT", 2.0)
     KELLY_FRACTION_SCALE: float = _get_float_env("KELLY_FRACTION_SCALE", 0.25)
     MIN_SIGNAL_PROBABILITY: float = _get_float_env("MIN_SIGNAL_PROBABILITY", 0.50)
-    MIN_LIQUIDITY_VALUE_TL: float = _get_float_env("MIN_LIQUIDITY_VALUE_TL", 0.0)
+    MIN_LIQUIDITY_VALUE_TL: float = _get_float_env("MIN_LIQUIDITY_VALUE_TL", 5_000_000.0)
     DAILY_LOSS_CAP_PCT: float = _get_float_env("DAILY_LOSS_CAP_PCT", 3.0)
 
 
@@ -262,6 +264,9 @@ class DataSettings:
     OFFICIAL_TIMEOUT: float = _get_float_env("OFFICIAL_TIMEOUT", 30.0)
     OFFICIAL_MAX_RETRIES: int = _get_int_env("OFFICIAL_MAX_RETRIES", 3)
     OFFICIAL_RETRY_BACKOFF_SECONDS: float = _get_float_env("OFFICIAL_RETRY_BACKOFF_SECONDS", 1.0)
+    OFFICIAL_MAX_RETRY_SLEEP_SECONDS: float = _get_float_env(
+        "OFFICIAL_MAX_RETRY_SLEEP_SECONDS", 2.0
+    )
     OFFICIAL_AUTH_ENDPOINT: str = _get_str_env("OFFICIAL_AUTH_ENDPOINT")
     OFFICIAL_HISTORY_ENDPOINT: str = _get_str_env("OFFICIAL_HISTORY_ENDPOINT")
     OFFICIAL_BATCH_ENDPOINT: str = _get_str_env("OFFICIAL_BATCH_ENDPOINT")
@@ -279,6 +284,9 @@ class DataSettings:
     PROVIDER_SINGLE_TIMEOUT_SECONDS: int = _get_int_env("PROVIDER_SINGLE_TIMEOUT_SECONDS", 10)
     YFINANCE_MAX_RETRIES: int = _get_int_env("YFINANCE_MAX_RETRIES", 3)
     YFINANCE_RETRY_BACKOFF_SECONDS: float = _get_float_env("YFINANCE_RETRY_BACKOFF_SECONDS", 1.0)
+    YFINANCE_MAX_RETRY_SLEEP_SECONDS: float = _get_float_env(
+        "YFINANCE_MAX_RETRY_SLEEP_SECONDS", 2.0
+    )
 
 
 @dataclass(frozen=True)
@@ -303,6 +311,7 @@ class ServerSettings:
     FLASK_DEBUG: bool = _get_bool_env("FLASK_DEBUG", False)
     LOG_FORMAT: str = _get_str_env("LOG_FORMAT", "console")
     LOG_LEVEL: str = _get_str_env("LOG_LEVEL", "INFO")
+    METRICS_PUBLIC: bool = _get_bool_env("METRICS_PUBLIC", False)
     API_BASE_URL: str = _get_str_env("API_BASE_URL", f"http://localhost:{DEFAULT_FLASK_PORT}")
     RATE_LIMIT_STORAGE_URI: str = _get_str_env("RATE_LIMIT_STORAGE_URI", "memory://")
     SENTRY_DSN: str | None = _get_str_env("SENTRY_DSN") or None
@@ -322,17 +331,31 @@ class ServerSettings:
     MARKET_CLOSE_HOUR: int = _get_int_env("MARKET_CLOSE_HOUR", 18)
     MARKET_WARMUP_MINUTES: int = _get_int_env("MARKET_WARMUP_MINUTES", 15)
     MARKET_HALF_DAY_HOUR: int = _get_int_env("MARKET_HALF_DAY_HOUR", 13)
+    METRICS_ALLOWED_IPS: tuple[str, ...] = field(
+        default_factory=lambda: _get_csv_env("METRICS_ALLOWED_IPS")
+    )
 
 
 @dataclass(frozen=True)
 class BrokerSettings:
+    BROKER_MODE: str = _get_str_env("BROKER_MODE", "paper").lower()
     BROKER_PROVIDER: str = _get_str_env("BROKER_PROVIDER", "paper").lower()
+    WATCHLIST_SOURCE: str = _get_str_env("WATCHLIST_SOURCE", "robust")
     ALGOLAB_API_KEY: str = _get_str_env("ALGOLAB_API_KEY")
     ALGOLAB_USERNAME: str = _get_str_env("ALGOLAB_USERNAME")
     ALGOLAB_PASSWORD: str = _get_str_env("ALGOLAB_PASSWORD")
     ALGOLAB_OTP_CODE: str = _get_str_env("ALGOLAB_OTP_CODE")
     ALGOLAB_DRY_RUN: bool = _get_bool_env("ALGOLAB_DRY_RUN", True)
+    ALPACA_API_KEY: str = _get_str_env("ALPACA_API_KEY")
+    ALPACA_SECRET_KEY: str = _get_str_env("ALPACA_SECRET_KEY")
+    ALPACA_PAPER: bool = _get_bool_env("ALPACA_PAPER", True)
+    ALPACA_DRY_RUN: bool = _get_bool_env("ALPACA_DRY_RUN", False)
+    MAX_OPEN_POSITIONS: int = _get_int_env("MAX_OPEN_POSITIONS", 5)
+    MAX_POSITION_SIZE: float = _get_float_env("MAX_POSITION_SIZE", 0.20)
+    MAX_DAILY_LOSS: float = _get_float_env("MAX_DAILY_LOSS", 0.03)
+    MAX_ACCOUNT_DRAWDOWN: float = _get_float_env("MAX_ACCOUNT_DRAWDOWN", 0.15)
     AUTO_EXECUTE: bool = _get_bool_env("AUTO_EXECUTE", False)
+    STRATEGY_PROFILE: str = _get_str_env("STRATEGY_PROFILE", "conservative")
     CONFIRM_LIVE_TRADING: bool = _get_bool_env("CONFIRM_LIVE_TRADING", False)
     AUTO_EXECUTE_WARN_MAX_QUANTITY: int = _get_int_env("AUTO_EXECUTE_WARN_MAX_QUANTITY", 100000)
 
@@ -358,11 +381,37 @@ class MLSettings:
 
 
 @dataclass(frozen=True)
+class AgentSettings:
+    AGENT_ENABLED: bool = _get_bool_env("AGENT_ENABLED", False)
+    EMERGENCY_CLOSE_ON_HALT: bool = _get_bool_env("EMERGENCY_CLOSE_ON_HALT", False)
+    MAX_OPEN_POSITIONS: int = _get_int_env("MAX_OPEN_POSITIONS", 5)
+    MAX_DAILY_TRADES: int = _get_int_env("MAX_DAILY_TRADES", 10)
+    POSITION_MONITOR_ENABLED: bool = _get_bool_env("POSITION_MONITOR_ENABLED", False)
+    POSITION_CHECK_INTERVAL_SECONDS: int = _get_int_env("POSITION_CHECK_INTERVAL_SECONDS", 60)
+    TRAILING_STOP_ENABLED: bool = _get_bool_env("TRAILING_STOP_ENABLED", False)
+    TRAILING_STOP_PCT: float = _get_float_env("TRAILING_STOP_PCT", 2.0)
+    MAX_HOLDING_DAYS: int = _get_int_env("MAX_HOLDING_DAYS", 5)
+    RESTART_RECOVERY_ENABLED: bool = _get_bool_env("RESTART_RECOVERY_ENABLED", False)
+    EXIT_ORDER_TYPE: str = _get_str_env("EXIT_ORDER_TYPE", "MARKET")
+    AUDIT_LOG_ENABLED: bool = _get_bool_env("AUDIT_LOG_ENABLED", False)
+
+
+@dataclass(frozen=True)
 class NotificationSettings:
     TELEGRAM_BOT_TOKEN: str = _get_str_env("TELEGRAM_BOT_TOKEN")
     TELEGRAM_CHAT_ID: str = _get_str_env("TELEGRAM_CHAT_ID")
-    TELEGRAM_MIN_SCORE: int = _get_int_env("TELEGRAM_MIN_SCORE", 40)
+    TELEGRAM_MIN_SCORE: int = _get_int_env(
+        "TELEGRAM_MIN_SCORE", _get_int_env("STRONG_BUY_THRESHOLD", 48)
+    )
+    TELEGRAM_GROUP_CHAT_ID: str = _get_str_env("TELEGRAM_GROUP_CHAT_ID")
+    TELEGRAM_GROUP_MIN_SCORE: int = _get_int_env(
+        "TELEGRAM_GROUP_MIN_SCORE", _get_int_env("STRONG_BUY_THRESHOLD", 48)
+    )
+    # Deprecated: score-based group threshold is no longer used for dispatch.
+    # Group routing now uses robust-watchlist membership (load_watchlist("robust")).
+    # Kept for backward compatibility only.
     NOTIFICATION_MAX_RETRIES: int = _get_int_env("NOTIFICATION_MAX_RETRIES", 3)
+    TELEGRAM_GROUP_BATCH_THRESHOLD: int = _get_int_env("TELEGRAM_GROUP_BATCH_THRESHOLD", 5)
     NOTIFICATION_RETRY_DELAY: int = _get_int_env("NOTIFICATION_RETRY_DELAY", 5)
     # How long a generated signal remains fresh/actionable (minutes).
     # Signals older than this are marked expired and skipped for notifications.

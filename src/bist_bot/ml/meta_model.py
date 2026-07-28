@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import pickle
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -17,6 +16,8 @@ from sklearn.isotonic import IsotonicRegression  # type: ignore[import-not-found
 from sklearn.linear_model import LogisticRegression  # type: ignore[import-not-found]
 from sklearn.model_selection import TimeSeriesSplit  # type: ignore[import-not-found]
 
+from bist_bot.app_logging import get_logger
+
 try:  # pragma: no cover - optional heavy dependency
     from xgboost import XGBClassifier  # type: ignore[import-not-found]
 
@@ -26,6 +27,7 @@ except ImportError:  # pragma: no cover
 
 
 CalibrationMethod = Literal["none", "platt", "isotonic"]
+logger = get_logger(__name__, component="ml")
 
 
 class ProbabilityCalibrator:
@@ -157,6 +159,9 @@ class SignalMetaModel:
             y_train = targets[train_idx]
             x_test = features.iloc[test_idx]
 
+            if np.unique(y_train).size < 2:
+                continue
+
             fold_model = _build_classifier(self.xgb_params or None)
             fold_model.fit(x_train, y_train)
             oof_predictions[test_idx] = fold_model.predict_proba(x_test)[:, 1]
@@ -236,7 +241,7 @@ class SignalMetaModel:
         path = Path(artifact_dir)
         feature_names = json.loads((path / "feature_columns.json").read_text(encoding="utf-8"))
 
-        # Model: try XGBoost native (.ubj) → joblib (.joblib) → pickle (.pkl, backward compat)
+        # Model: try XGBoost native (.ubj), then joblib (.joblib).
         ubj_path = path / "meta_model.ubj"
         joblib_path = path / "meta_model.joblib"
         pkl_path = path / "meta_model.pkl"
@@ -248,19 +253,25 @@ class SignalMetaModel:
         elif joblib_path.exists():
             model = joblib.load(joblib_path)
         elif pkl_path.exists():
-            model = pickle.loads(pkl_path.read_bytes())
+            logger.warning("pickle_model_rejected", path=str(pkl_path))
+            raise FileNotFoundError(
+                f"Pickle model format is not supported. Convert {pkl_path} to .ubj or .joblib"
+            )
         else:
-            raise FileNotFoundError(f"No model file (ubj/joblib/pkl) found in {path}")
+            raise FileNotFoundError(f"No model file (ubj/joblib) found in {path}")
 
-        # Calibrator: try joblib → pickle (backward compat)
+        # Calibrator: joblib only.
         cal_joblib = path / "probability_calibrator.joblib"
         cal_pkl = path / "probability_calibrator.pkl"
         if cal_joblib.exists():
             calibrator = joblib.load(cal_joblib)
         elif cal_pkl.exists():
-            calibrator = pickle.loads(cal_pkl.read_bytes())
+            logger.warning("pickle_calibrator_rejected", path=str(cal_pkl))
+            raise FileNotFoundError(
+                f"Pickle calibrator format is not supported. Convert {cal_pkl} to .joblib"
+            )
         else:
-            raise FileNotFoundError(f"No calibrator file (joblib/pkl) found in {path}")
+            raise FileNotFoundError(f"No calibrator file (joblib) found in {path}")
 
         instance = cls(getattr(calibrator, "method", "platt"))
         instance.model = model

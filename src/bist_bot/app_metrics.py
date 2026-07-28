@@ -135,4 +135,16 @@ def set_gauge(name: str, value: float) -> None:
 
 
 def render_metrics() -> str:
-    return _REGISTRY.render()
+    """Render app metrics plus observability trading metrics."""
+    base = _REGISTRY.render()
+    try:
+        from bist_bot.observability.metrics import render_observability_metrics
+
+        extra = render_observability_metrics()
+    except Exception:
+        return base
+    if not extra:
+        return base
+    if base.endswith("\n") and extra.startswith("#"):
+        return base + extra
+    return base.rstrip("\n") + "\n" + extra

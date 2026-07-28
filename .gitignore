@@ -35,13 +35,6 @@ NUL
 .pip-audit-tmp/
 .coverage
 htmlcov/
-pytest_tmp_*/
-tmppytest-bist-bot/
-ruff_err.txt
-pytest_err.txt
-pytest_risk_err.txt
-test_out.txt
-test_output.txt
 
 # Streamlit secrets
 .streamlit/secrets.toml
@@ -57,6 +50,9 @@ Thumbs.db
 dist/
 build/
 *.egg-info/
+
+# Agent workflow artifacts
+.agentflow/
 
 # Model and temp files
 models/*.pkl

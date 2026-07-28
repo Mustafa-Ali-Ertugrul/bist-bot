@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import datetime
+from datetime import UTC, datetime
 from time import sleep as default_sleep
 
 from bist_bot.app_logging import get_logger
@@ -24,6 +24,14 @@ class SignalChangeService:
             if not previous or previous["signal_type"] == signal.signal_type.value:
                 continue
 
+            try:
+                dt_parsed = datetime.fromisoformat(previous["timestamp"])
+            except ValueError:
+                # Fallback for ISO format with Z or other mismatches
+                dt_parsed = datetime.fromisoformat(previous["timestamp"].replace("Z", "+00:00"))
+            if dt_parsed.tzinfo is None:
+                dt_parsed = dt_parsed.replace(tzinfo=UTC)
+
             old_signal = Signal(
                 ticker=previous["ticker"],
                 signal_type=SignalType(previous["signal_type"]),
@@ -33,7 +41,7 @@ class SignalChangeService:
                 target_price=previous.get("target_price", 0) or 0,
                 position_size=previous.get("position_size"),
                 confidence=previous.get("confidence", "confidence.low") or "confidence.low",
-                timestamp=datetime.fromisoformat(previous["timestamp"]),
+                timestamp=dt_parsed,
             )
             self.notifier.send_signal_change(signal.ticker, old_signal, signal)
             logger.info(

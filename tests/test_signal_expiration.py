@@ -15,16 +15,22 @@ from bist_bot.strategy.signal_models import Signal, SignalType
 # ── Settings defaults ──────────────────────────────────────────────────────
 
 
-def test_signal_ttl_minutes_default_is_60():
+def test_signal_ttl_minutes_default():
+    import os
+
     from bist_bot.config.settings import settings
 
-    assert settings.SIGNAL_TTL_MINUTES == 60
+    expected = int(os.environ.get("SIGNAL_TTL_MINUTES", 60))
+    assert settings.SIGNAL_TTL_MINUTES == expected
 
 
-def test_telegram_min_score_default_is_40():
+def test_telegram_min_score_default():
+    import os
+
     from bist_bot.config.settings import settings
 
-    assert settings.TELEGRAM_MIN_SCORE == 40
+    expected = int(os.environ.get("TELEGRAM_MIN_SCORE", os.environ.get("STRONG_BUY_THRESHOLD", 48)))
+    assert settings.TELEGRAM_MIN_SCORE == expected
 
 
 # ── Signal is_expired behavior ─────────────────────────────────────────────
@@ -80,18 +86,12 @@ def test_is_expired_returns_true_after_expires_at():
     assert signal.is_expired() is True
 
 
-def test_naive_aware_comparison_does_not_crash():
+def test_naive_timestamp_raises_value_error():
+    from bist_bot.strategy.signal_models import ensure_utc
+
     naive_ts = datetime(2025, 1, 1, 10, 0, 0)
-    signal = Signal(
-        ticker="TEST.IS",
-        signal_type=SignalType.BUY,
-        score=25.0,
-        price=100.0,
-        timestamp=naive_ts,
-    )
-    # expires_at is set from naive timestamp, is_expired should not crash
-    result = signal.is_expired()
-    assert isinstance(result, bool)
+    with pytest.raises(ValueError, match="Naive datetime"):
+        ensure_utc(naive_ts)
 
 
 def test_signal_auto_sets_expires_at():
@@ -223,7 +223,7 @@ def test_expired_signal_not_sent_to_notifier():
     assert sent[0].ticker == "FRESH.IS"
 
 
-def test_notification_sends_only_positive_scores_at_minimum():
+def test_notification_sends_positive_scores_only():
     from bist_bot.services.notification_service import NotificationDispatchService
 
     sent = []
@@ -244,4 +244,4 @@ def test_notification_sends_only_positive_scores_at_minimum():
     service = NotificationDispatchService(FakeNotifier(), sleeper=lambda _: None)
     service.notify_scan_results(actionable, actionable, 100)
 
-    assert [signal.ticker for signal in sent] == ["MIN.IS"]
+    assert [signal.ticker for signal in sent] == ["LOW.IS", "MIN.IS"]

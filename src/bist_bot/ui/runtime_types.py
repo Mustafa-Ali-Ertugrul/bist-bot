@@ -24,3 +24,5 @@ class ScanResult(TypedDict):
     scan_stats: ScanStats
     rejection_breakdown: NotRequired[dict[str, object]]
     scan_phase: NotRequired[str | None]
+    skipped_tickers: NotRequired[list[str]]
+    warning: NotRequired[str | None]

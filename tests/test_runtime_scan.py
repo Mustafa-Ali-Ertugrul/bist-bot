@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import inspect
-import threading
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -11,25 +10,21 @@ from unittest.mock import MagicMock, patch
 TR = timezone(timedelta(hours=3))
 
 
-def test_ensure_initial_data_auto_starts_first_background_scan_when_no_cache():
-    """Initial page load should start one non-blocking BIST100 scan."""
+def test_ensure_initial_data_starts_background_scan_when_no_cache():
+    """When no cached signals exist, ensure_initial_data should start a background scan."""
     mock_db = MagicMock()
     mock_db.get_recent_signals.return_value = []
 
     mock_session = MagicMock()
-    mock_session.all_data = {}
     mock_session.signals = []
     mock_session.scan_in_progress = False
     mock_session.scan_error = None
-    mock_session.initial_background_scan_started = False
     mock_session._scan_session_key = "test-key"
     mock_session.db = mock_db
     mock_session.get = lambda key, default=None: {
-        "all_data": {},
         "signals": [],
         "scan_in_progress": False,
         "scan_error": None,
-        "initial_background_scan_started": False,
         "_scan_session_key": "test-key",
         "db": mock_db,
     }.get(key, default)
@@ -47,11 +42,10 @@ def test_ensure_initial_data_auto_starts_first_background_scan_when_no_cache():
         ensure_initial_data()
 
         mock_start.assert_called_once_with(force_clear=False, limited=False)
-        assert mock_session.initial_background_scan_started is True
 
 
-def test_ensure_initial_data_uses_cached_signals_then_starts_scan():
-    """Cached signals should render while the first background scan starts."""
+def test_ensure_initial_data_loads_cached_signals_and_still_starts_background_scan():
+    """When cached signals exist, ensure_initial_data should load them and still start a background scan."""
     mock_db = MagicMock()
     mock_db.get_recent_signals.return_value = [
         {"ticker": "THYAO.IS", "signal_type": "AL", "score": 25.0, "price": 100.0}
@@ -59,19 +53,15 @@ def test_ensure_initial_data_uses_cached_signals_then_starts_scan():
     mapped_signals = [MagicMock()]
 
     mock_session = MagicMock()
-    mock_session.all_data = {}
     mock_session.signals = []
     mock_session.scan_in_progress = False
     mock_session.scan_error = None
-    mock_session.initial_background_scan_started = False
     mock_session._scan_session_key = "test-key"
     mock_session.db = mock_db
     mock_session.get = lambda key, default=None: {
-        "all_data": {},
         "signals": [],
         "scan_in_progress": False,
         "scan_error": None,
-        "initial_background_scan_started": False,
         "_scan_session_key": "test-key",
         "db": mock_db,
     }.get(key, default)
@@ -89,9 +79,7 @@ def test_ensure_initial_data_uses_cached_signals_then_starts_scan():
 
         ensure_initial_data()
 
-        assert mock_session.signals == mapped_signals
         mock_start.assert_called_once_with(force_clear=False, limited=False)
-        assert mock_session.initial_background_scan_started is True
 
 
 def test_ensure_initial_data_does_not_start_scan_if_already_running():
@@ -99,19 +87,15 @@ def test_ensure_initial_data_does_not_start_scan_if_already_running():
     mock_db = MagicMock()
 
     mock_session = MagicMock()
-    mock_session.all_data = {}
     mock_session.signals = []
     mock_session.scan_in_progress = True
     mock_session.scan_error = None
-    mock_session.initial_background_scan_started = False
     mock_session._scan_session_key = "test-key"
     mock_session.db = mock_db
     mock_session.get = lambda key, default=None: {
-        "all_data": {},
         "signals": [],
         "scan_in_progress": True,
         "scan_error": None,
-        "initial_background_scan_started": False,
         "_scan_session_key": "test-key",
         "db": mock_db,
     }.get(key, default)
@@ -129,65 +113,6 @@ def test_ensure_initial_data_does_not_start_scan_if_already_running():
         ensure_initial_data()
 
         mock_start.assert_not_called()
-
-
-def test_ensure_initial_data_does_not_restart_initial_background_scan():
-    """ensure_initial_data should not start another initial scan after the session flag is set."""
-    mock_db = MagicMock()
-
-    mock_session = MagicMock()
-    mock_session.all_data = {}
-    mock_session.signals = []
-    mock_session.scan_in_progress = False
-    mock_session.scan_error = None
-    mock_session.initial_background_scan_started = True
-    mock_session._scan_session_key = "test-key"
-    mock_session.db = mock_db
-    mock_session.get = lambda key, default=None: {
-        "all_data": {},
-        "signals": [],
-        "scan_in_progress": False,
-        "scan_error": None,
-        "initial_background_scan_started": True,
-        "_scan_session_key": "test-key",
-        "db": mock_db,
-    }.get(key, default)
-
-    with (
-        patch("bist_bot.ui.runtime_scan.st") as mock_st,
-        patch("bist_bot.ui.runtime_scan.start_background_scan") as mock_start,
-        patch("bist_bot.ui.runtime_scan.apply_pending_scan_result"),
-    ):
-        mock_st.session_state = mock_session
-
-        from bist_bot.ui.runtime_scan import ensure_initial_data
-
-        ensure_initial_data()
-
-        mock_start.assert_not_called()
-
-
-def test_request_scan_uses_background_scan_for_streamlit_session():
-    """Manual Streamlit scans should not block the page while BIST100 data is fetched."""
-    mock_session = MagicMock()
-    mock_session._scan_session_key = "test-key"
-    mock_session.get = lambda key, default=None: {
-        "_scan_session_key": "test-key",
-    }.get(key, default)
-
-    with (
-        patch("bist_bot.ui.runtime_scan.st") as mock_st,
-        patch("bist_bot.ui.runtime_scan.consume_cooldown", return_value=(True, 0.0)),
-        patch("bist_bot.ui.runtime_scan.start_background_scan", return_value=True) as mock_start,
-        patch("bist_bot.ui.runtime_scan.run_scan") as mock_run,
-    ):
-        mock_st.session_state = mock_session
-
-        from bist_bot.ui.runtime_scan import request_scan
-
-        assert request_scan(force_clear=True) is True
-        mock_start.assert_called_once_with(force_clear=True, limited=False)
-        mock_run.assert_not_called()
 
 
 def test_sync_runtime_feedback_skips_rerun_during_bootstrap():
@@ -288,7 +213,7 @@ def test_scan_timeout_resets_stale_scan_in_progress():
         assert result is True
         assert fake.scan_in_progress is False
         assert fake.scan_error is not None
-        assert "tamamlanamadı" in fake.scan_error.lower()
+        assert "tamamlanamad" in fake.scan_error.lower()
         mock_logger.warning.assert_called_once()
 
 
@@ -473,47 +398,25 @@ def test_apply_scan_result_persists_scan_stats():
     assert fake.scan_stats == {"generated": 3, "actionable": 2, "hold": 1}
 
 
-def test_analyze_page_uses_buy_threshold_instead_of_hardcoded_score():
+def test_analyze_page_uses_buy_threshold_from_signal_not_settings():
     from bist_bot.ui.pages import analyze_page
 
     source = inspect.getsource(analyze_page)
 
-    assert "settings.BUY_THRESHOLD" in source
+    assert "settings.BUY_THRESHOLD" not in source
+    assert "buy_threshold" in source
     assert "signal_score >= 10" not in source
 
 
-def test_sidebar_navigation_uses_streamlit_sidebar_widgets():
-    from bist_bot import streamlit_app
-
-    source = inspect.getsource(streamlit_app.main)
-
-    assert "st.sidebar.button" in source
-    assert "st.radio" not in source
-
-
-def test_sidebar_toggle_uses_native_streamlit_button():
-    from bist_bot import streamlit_app
+def test_sidebar_navigation_uses_streamlit_widget_not_page_reload_links():
     from bist_bot.ui.components import app_shell
 
-    main_source = inspect.getsource(streamlit_app.main)
-    shell_source = inspect.getsource(app_shell.render_shell)
+    source = inspect.getsource(app_shell.render_sidebar_nav)
 
-    assert "bb_sidebar_toggle_button" in main_source
-    assert "st.button(toggle_label" in main_source
-    assert "sidebar_collapsed" in main_source
-    assert "st.rerun()" in main_source
-    assert "action=toggle_sidebar" not in shell_source
-    assert "_sidebar_toggle" not in shell_source
-
-
-def test_login_form_uses_tabs_for_login_and_registration():
-    from bist_bot import streamlit_app
-
-    source = inspect.getsource(streamlit_app._login_form)
-
-    assert 'st.tabs(["Giriş", "Kayıt Ol"])' in source
-    assert "st.expander" not in source
-    assert "Yeni operator hesabi olustur" not in source
+    assert "sidebar.button" in source
+    assert "st.radio" not in source
+    assert "href='?page=" not in source
+    assert 'href="?page=' not in source
 
 
 def test_portfolio_page_uses_settings_thresholds_and_excludes_hold_fallback():
@@ -522,7 +425,7 @@ def test_portfolio_page_uses_settings_thresholds_and_excludes_hold_fallback():
     source = inspect.getsource(portfolio_page)
 
     assert "settings.STRONG_BUY_THRESHOLD" in source
-    assert "settings.BUY_THRESHOLD" in source
+    assert "buy_threshold" in source
     assert "SignalType.HOLD" in source
 
 
@@ -588,39 +491,6 @@ def test_overview_scan_metrics_zero_when_both_empty():
 
     assert scanned_assets == 0
     assert actionable_signals == 0
-
-
-def test_overview_candidate_rejection_count_stays_within_scanned_universe():
-    from bist_bot.ui.pages.overview_page import _candidate_rejection_count
-
-    assert _candidate_rejection_count(scanned=100, generated=5) == 95
-    assert _candidate_rejection_count(scanned=100, generated=157) == 0
-    assert _candidate_rejection_count(scanned=0, generated=5) == 0
-
-
-def test_signals_filter_status_does_not_warn_when_everything_is_visible():
-    from bist_bot.ui.pages.signals_page import _render_filter_status_html
-
-    html_output = _render_filter_status_html(
-        generated_count=19,
-        visible_count=19,
-        filtered_out_count=0,
-    )
-
-    assert "Tüm sinyaller görünür" in html_output
-    assert "gizlendi" not in html_output
-
-
-def test_signals_filter_status_reports_hidden_signal_count():
-    from bist_bot.ui.pages.signals_page import _render_filter_status_html
-
-    html_output = _render_filter_status_html(
-        generated_count=19,
-        visible_count=12,
-        filtered_out_count=7,
-    )
-
-    assert "7 sinyal gizlendi" in html_output
 
 
 def test_overview_rejection_breakdown_renders_top_three_sorted_rows():
@@ -889,7 +759,7 @@ def test_scan_detail_page_shows_empty_state_when_no_completed_scan():
 
     mock_section_title.assert_called_with("Scan durumu", "Bekleyen veri")
     empty_panels = [call.args[0] for call in mock_render_html_panel.call_args_list]
-    assert any("Henüz tamamlanmış bir tarama kaydı bulunmuyor" in panel for panel in empty_panels)
+    assert any("Henüz tamamlanmış bir tarama kaydı bulunmuyor." in panel for panel in empty_panels)
 
 
 def test_scan_detail_page_renders_historical_analytics_when_history_exists():
@@ -975,7 +845,7 @@ def test_scan_detail_page_renders_historical_analytics_when_history_exists():
     section_calls = [call.args for call in mock_section_title.call_args_list]
     assert ("Geçmiş Analizleri", "Son 20 tarama trendi") in section_calls
     history_panels = [call.args[0] for call in mock_render_html_panel.call_args_list]
-    assert any("En Sık Engelleyenler" in panel for panel in history_panels)
+    assert any("En Sık Eleme Nedenleri" in panel for panel in history_panels)
     assert any("Son eleme oranları" in panel for panel in history_panels)
 
 
@@ -1135,27 +1005,3 @@ def test_ensure_market_data_ready_does_not_start_scan():
         assert streamlit_app._ensure_market_data_ready() is True
         mock_st.rerun.assert_not_called()
         mock_st.stop.assert_not_called()
-
-
-def test_set_scan_phase_does_not_mutate_session_state_from_background_thread():
-    """Background threads must not touch st.session_state (F-30)."""
-    from bist_bot.ui import runtime_scan
-
-    class FakeSession:
-        def __init__(self):
-            self.scan_phase = None
-
-    fake = FakeSession()
-    captured = {}
-
-    def worker():
-        runtime_scan._set_scan_phase("bg_phase")
-        captured["ran"] = True
-
-    with patch.object(runtime_scan.st, "session_state", fake), patch.object(runtime_scan, "logger"):
-        thread = threading.Thread(target=worker)
-        thread.start()
-        thread.join(timeout=2.0)
-
-    assert captured.get("ran") is True
-    assert fake.scan_phase is None

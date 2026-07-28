@@ -266,6 +266,14 @@ def render_overview_page() -> None:
         phase = st.session_state.get("scan_phase")
         detail = f" Son aşama: {phase}" if phase else ""
         st.warning(f"Tarama tamamlanamadı: {st.session_state.scan_error}.{detail}")
+    scan_warning = st.session_state.get("scan_warning")
+    skipped_tickers = st.session_state.get("skipped_tickers") or []
+    if scan_warning:
+        st.warning(str(scan_warning))
+    elif skipped_tickers:
+        preview = ", ".join(str(t) for t in skipped_tickers[:8])
+        more = f" ve {len(skipped_tickers) - 8} sembol daha" if len(skipped_tickers) > 8 else ""
+        st.warning(f"Veri alınamadı, atlanıyor ({len(skipped_tickers)}): {preview}{more}.")
 
     k1, k2, k3, k4 = st.columns(4)
     with k1:

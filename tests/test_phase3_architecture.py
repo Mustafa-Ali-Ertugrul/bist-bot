@@ -285,3 +285,120 @@ def test_risk_profile_constraint_violation():
     """Values outside allowed range should raise ValidationError."""
     with pytest.raises(ValidationError):
         RiskProfile(max_risk_pct=200.0)  # exceeds le=100
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BUG-4 / BUG-5: Container wiring + scanner owner
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestAgentWiring:
+    """Container wiring: AGENT_ENABLED → trading_agent must be non-None."""
+
+    def test_container_wires_agent_when_enabled(self):
+        """build_app_container must create TradingAgent when AGENT_ENABLED=True."""
+        from unittest.mock import MagicMock, patch
+
+        from bist_bot.dependencies import build_app_container
+
+        mock_settings = MagicMock()
+        mock_settings.enforce_preflight_validation = MagicMock()
+        mock_settings.validate_all.return_value = []
+        mock_settings.validate_broker_config = MagicMock()
+        mock_settings.validate_data_provider_config = MagicMock()
+        mock_settings.WATCHLIST = ["TEST.IS"]
+        mock_settings.agent = MagicMock()
+        mock_settings.agent.AGENT_ENABLED = True
+        mock_settings.BROKER_PROVIDER = "paper"
+        mock_settings.INITIAL_CAPITAL = 8500.0
+
+        with (
+            patch("bist_bot.dependencies.settings", mock_settings),
+            patch("bist_bot.dependencies._build_data_provider"),
+            patch("bist_bot.dependencies._build_rate_limiter"),
+            patch("bist_bot.dependencies._build_broker"),
+            patch("bist_bot.dependencies.BISTDataFetcher"),
+            patch("bist_bot.dependencies.TelegramNotifier"),
+            patch("bist_bot.dependencies.DataAccess"),
+            patch("bist_bot.dependencies.StrategyEngine"),
+            patch("bist_bot.dependencies.RiskManager"),
+            patch("bist_bot.dependencies.CircuitBreaker"),
+            patch("bist_bot.agent.position_manager.PositionManager"),
+            patch("bist_bot.agent.exit_service.ExitService"),
+            patch("bist_bot.services.execution_service.ExecutionService"),
+            patch("bist_bot.agent.trading_agent.TradingAgent") as mock_agent_cls,
+        ):
+            mock_agent_cls.return_value = MagicMock()
+            container = build_app_container()
+
+            assert container.trading_agent is not None
+
+    def test_container_no_agent_when_disabled(self):
+        """build_app_container must return trading_agent=None when AGENT_ENABLED=False."""
+        from unittest.mock import MagicMock, patch
+
+        from bist_bot.dependencies import build_app_container
+
+        mock_settings = MagicMock()
+        mock_settings.enforce_preflight_validation = MagicMock()
+        mock_settings.validate_all.return_value = []
+        mock_settings.validate_broker_config = MagicMock()
+        mock_settings.validate_data_provider_config = MagicMock()
+        mock_settings.WATCHLIST = ["TEST.IS"]
+        mock_settings.agent = MagicMock()
+        mock_settings.agent.AGENT_ENABLED = False
+        mock_settings.AGENT_ENABLED = False
+        mock_settings.BROKER_PROVIDER = "paper"
+        mock_settings.INITIAL_CAPITAL = 8500.0
+
+        with (
+            patch("bist_bot.dependencies.settings", mock_settings),
+            patch("bist_bot.dependencies._build_data_provider"),
+            patch("bist_bot.dependencies._build_rate_limiter"),
+            patch("bist_bot.dependencies._build_broker"),
+            patch("bist_bot.dependencies.BISTDataFetcher"),
+            patch("bist_bot.dependencies.TelegramNotifier"),
+            patch("bist_bot.dependencies.DataAccess"),
+            patch("bist_bot.dependencies.StrategyEngine"),
+            patch("bist_bot.dependencies.RiskManager"),
+            patch("bist_bot.dependencies.CircuitBreaker"),
+        ):
+            container = build_app_container()
+            assert container.trading_agent is None
+
+    def test_main_passes_agent_to_scheduler(self):
+        """main() must pass container.trading_agent to MarketScheduler."""
+        import importlib
+        import sys as _sys
+        from unittest.mock import MagicMock, patch
+
+        main_mod = importlib.import_module("bist_bot.main")
+
+        mock_container = MagicMock()
+        mock_container.trading_agent = MagicMock()
+        mock_container.notifier = MagicMock()
+
+        mock_scheduler_cls = MagicMock()
+
+        old_argv = _sys.argv[:]
+        _sys.argv = ["main.py", "--once"]
+        try:
+            with (
+                patch("bist_bot.dependencies.get_default_container", return_value=mock_container),
+                patch("bist_bot.dependencies.build_scan_service") as mock_build_scan,
+                patch("bist_bot.scheduler.MarketScheduler", mock_scheduler_cls),
+                patch("bist_bot.execution.order_tracker.OrderTracker"),
+                patch("bist_bot.app_logging.configure_logging"),
+                patch("signal.signal"),
+            ):
+                mock_build_scan.return_value = MagicMock()
+                with patch.dict("sys.modules", {"bist_bot.dashboard": MagicMock()}):
+                    main_mod.main()
+
+            mock_scheduler_cls.assert_called_once()
+            call_kwargs = mock_scheduler_cls.call_args
+            assert call_kwargs.kwargs.get("trading_agent") is mock_container.trading_agent or (
+                len(call_kwargs.args) >= 3 and call_kwargs.kwargs.get("trading_agent") is not None
+            )
+        finally:
+            _sys.argv = old_argv
