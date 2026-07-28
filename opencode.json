@@ -22,8 +22,7 @@
   "provider": {
     "freemodel": {
       "options": {
-        "baseURL": "https://api.freemodel.dev/v1",
-        "apiKey": "fe_oa_bdda32fcddaa98a9fc53e09b9d6dc9e8bf2b631bda665a1b"
+        "baseURL": "https://api.freemodel.dev/v1"
       }
     }
   }
