@@ -330,9 +330,7 @@ class TestOfficialProviderRetry:
         provider = _make_provider(max_retries=2, retry_backoff=0.5, max_retry_sleep=1.5)
         provider._session_token = "tok"
         provider._token_expires = datetime(2099, 1, 1)
-        provider._request = MagicMock(
-            side_effect=[RateLimitError(retry_after=30.0), {"data": []}]
-        )
+        provider._request = MagicMock(side_effect=[RateLimitError(retry_after=30.0), {"data": []}])
         sleeps: list[float] = []
         monkeypatch.setattr(
             "bist_bot.data.providers.time.sleep", lambda seconds: sleeps.append(float(seconds))

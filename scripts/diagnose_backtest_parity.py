@@ -123,6 +123,7 @@ def _vec_scores(df: pd.DataFrame) -> np.ndarray:
 def _live_scores(df: pd.DataFrame) -> list[float | None]:
     """Return per-row calculate_score_and_reasons result (H1/H3 ON)."""
     params = StrategyParams()
+
     # calculate_score_and_reasons expects trend_scorer(last, prev, df) and other scorers
     # / (last:) — i.e. params already bound, matching StrategyEngine._score_*.
     def momentum_scorer(last, prev):

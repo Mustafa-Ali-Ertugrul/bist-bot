@@ -273,9 +273,7 @@ def render_overview_page() -> None:
     elif skipped_tickers:
         preview = ", ".join(str(t) for t in skipped_tickers[:8])
         more = f" ve {len(skipped_tickers) - 8} sembol daha" if len(skipped_tickers) > 8 else ""
-        st.warning(
-            f"Veri alınamadı, atlanıyor ({len(skipped_tickers)}): {preview}{more}."
-        )
+        st.warning(f"Veri alınamadı, atlanıyor ({len(skipped_tickers)}): {preview}{more}.")
 
     k1, k2, k3, k4 = st.columns(4)
     with k1:

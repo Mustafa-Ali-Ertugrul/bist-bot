@@ -136,9 +136,7 @@ class TelegramNotifier:
             "Hacim divergence",
             "bastırıldı",
         ]
-        gate_reasons = [
-            r for r in signal.reasons if any(kw in r for kw in gate_keywords)
-        ]
+        gate_reasons = [r for r in signal.reasons if any(kw in r for kw in gate_keywords)]
         if gate_reasons:
             lines.append("  🛡️ Uygulanan korumalar:")
             for gr in gate_reasons:
@@ -212,9 +210,7 @@ class TelegramNotifier:
         sells = [s for s in signals if s.score < 0]
         holds = [s for s in signals if s.score == 0]
 
-        top_opportunities = sorted(
-            [*buys, *radars], key=lambda s: s.score, reverse=True
-        )[:3]
+        top_opportunities = sorted([*buys, *radars], key=lambda s: s.score, reverse=True)[:3]
         top_sells = sorted(sells, key=lambda s: s.score)[:3]
 
         top_opportunities_text = (

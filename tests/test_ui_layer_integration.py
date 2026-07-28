@@ -155,14 +155,19 @@ def test_filter_status_html_normal_and_filtered() -> None:
 def test_response_message_maps_http_errors_for_users() -> None:
     from bist_bot.streamlit_app import _response_message
 
-    r429 = SimpleNamespace(status_code=429, text="", json=lambda: (_ for _ in ()).throw(ValueError()))
-    r500 = SimpleNamespace(status_code=503, text="boom", json=lambda: (_ for _ in ()).throw(ValueError()))
+    r429 = SimpleNamespace(
+        status_code=429, text="", json=lambda: (_ for _ in ()).throw(ValueError())
+    )
+    r500 = SimpleNamespace(
+        status_code=503, text="boom", json=lambda: (_ for _ in ()).throw(ValueError())
+    )
     r401 = SimpleNamespace(status_code=401, text="", json=lambda: {"message": "bad creds"})
 
     assert "Cok fazla" in _response_message(r429, "default")
-    assert "HTTP 503" in _response_message(r500, "default") or "hata" in _response_message(
-        r500, "default"
-    ).lower()
+    assert (
+        "HTTP 503" in _response_message(r500, "default")
+        or "hata" in _response_message(r500, "default").lower()
+    )
     assert _response_message(r401, "default") == "bad creds"
 
 
@@ -364,7 +369,11 @@ def test_overview_shows_skipped_tickers_warning() -> None:
         patch.object(overview_page, "st") as mock_st,
         patch.object(overview_page, "api_request", side_effect=[api_stats, api_signals]),
         patch.object(overview_page, "fetch_index_data", return_value={}),
-        patch.object(overview_page, "get_market_summary", return_value={"avg_rsi": 50.0, "avg_vol_ratio": 1.0}),
+        patch.object(
+            overview_page,
+            "get_market_summary",
+            return_value={"avg_rsi": 50.0, "avg_vol_ratio": 1.0},
+        ),
         patch.object(overview_page, "filter_signals", side_effect=lambda s, d: s),
         patch.object(overview_page, "render_page_hero"),
         patch.object(overview_page, "render_section_title"),

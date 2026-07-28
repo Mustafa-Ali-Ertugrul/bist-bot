@@ -4,6 +4,7 @@ Heavy dependencies (engine, regime, params) are loaded lazily so that lighter
 modules such as :mod:`bist_bot.strategy.signal_models` can be imported even
 when optional ML dependencies (e.g. scikit-learn) are not installed.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
@@ -37,4 +38,3 @@ def __getattr__(name: str) -> Any:
     value = getattr(module, name)
     globals()[name] = value
     return value
-

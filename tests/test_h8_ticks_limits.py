@@ -149,11 +149,11 @@ def test_inconsistent_pair_falls_back_to_atr():
     """
     price = 100.0
     levels = RiskLevels(
-        stop_atr=90.0,       # ATR stop: 10% below
-        target_atr=120.0,    # ATR target: 20% above
+        stop_atr=90.0,  # ATR stop: 10% below
+        target_atr=120.0,  # ATR target: 20% above
         stop_fibonacci=99.5,  # Fib stop: çok dar (0.5%) → reasonable filtresinden çıkar
         target_fibonacci=150.0,  # Fib target: 50% above
-        stop_percent=95.0,   # Yüzdelik stop: 5% below → seçilir (max reasonable)
+        stop_percent=95.0,  # Yüzdelik stop: 5% below → seçilir (max reasonable)
         target_percent=108.0,
     )
     # daily_price_limit_pct=20 → max_target=120, clamp yok

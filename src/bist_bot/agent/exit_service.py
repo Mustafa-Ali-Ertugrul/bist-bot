@@ -88,11 +88,15 @@ class ExitService:
 
         try:
             with self.db.manager.engine.connect() as conn:
-                pending = conn.execute(
-                    __import__("sqlalchemy").text(
-                        "SELECT * FROM orders WHERE purpose='EXIT' AND state IN ('CREATED','SENT','PARTIAL')"
+                pending = (
+                    conn.execute(
+                        __import__("sqlalchemy").text(
+                            "SELECT * FROM orders WHERE purpose='EXIT' AND state IN ('CREATED','SENT','PARTIAL')"
+                        )
                     )
-                ).mappings().all()
+                    .mappings()
+                    .all()
+                )
 
             for order in pending:
                 broker_order_id = str(order.get("broker_order_id", ""))

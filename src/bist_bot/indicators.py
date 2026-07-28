@@ -105,7 +105,9 @@ class TechnicalIndicators:
         return df
 
     @staticmethod
-    def add_rsi(df: pd.DataFrame, period: int | None = None, *, in_place: bool = False) -> pd.DataFrame:
+    def add_rsi(
+        df: pd.DataFrame, period: int | None = None, *, in_place: bool = False
+    ) -> pd.DataFrame:
         period = period or settings.RSI_PERIOD
         if not in_place:
             df = df.copy()

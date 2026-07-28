@@ -59,9 +59,7 @@ class TestScoreFilter:
         from bist_bot.agent.trading_agent import TradingAgent
 
         pm, es, cb, db, notifier, settings = mock_components
-        agent = TradingAgent(
-            pm, es, cb, db, notifier, settings, execution_service=es
-        )
+        agent = TradingAgent(pm, es, cb, db, notifier, settings, execution_service=es)
 
         # Skor 50 olan sinyal (40'ın üstünde)
         signal = MagicMock()

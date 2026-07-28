@@ -79,7 +79,9 @@ def render_signals_page() -> None:
         [s for s in signals if s.score >= _STRONG_BUY], key=lambda s: s.score, reverse=True
     )
     buy = sorted(
-        [s for s in signals if s.buy_threshold <= s.score < _STRONG_BUY], key=lambda s: s.score, reverse=True
+        [s for s in signals if s.buy_threshold <= s.score < _STRONG_BUY],
+        key=lambda s: s.score,
+        reverse=True,
     )
     hold = sorted(
         [s for s in signals if _WEAK_SELL < s.score < _WEAK_BUY], key=lambda s: abs(s.score)

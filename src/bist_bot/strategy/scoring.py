@@ -80,8 +80,6 @@ def score_momentum(params, last, _prev) -> tuple[float, list[str]]:
     return score, reasons
 
 
-
-
 def _compute_ema_slope(df: pd.DataFrame, slope_lookback: int) -> float | None:
     """Return the direction of the EMA200 series over the last slope_lookback bars.
 
@@ -92,6 +90,7 @@ def _compute_ema_slope(df: pd.DataFrame, slope_lookback: int) -> float | None:
         return None
     series = df[ema_col]
     return series.iloc[-1] - series.iloc[-1 - slope_lookback]
+
 
 def score_trend(params, last, prev, df=None) -> tuple[float, list[str]]:
     score = 0.0

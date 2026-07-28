@@ -48,7 +48,11 @@ def init_session_state(container=None) -> None:
         "selected_ticker": (
             settings.WATCHLIST[0]
             if getattr(settings, "WATCHLIST", None)
-            else (settings.DEFAULT_BIST100_WATCHLIST[0] if settings.DEFAULT_BIST100_WATCHLIST else "THYAO.IS")
+            else (
+                settings.DEFAULT_BIST100_WATCHLIST[0]
+                if settings.DEFAULT_BIST100_WATCHLIST
+                else "THYAO.IS"
+            )
         ),
         "analysis_period": "6mo",
         "_scan_session_key": uuid.uuid4().hex,

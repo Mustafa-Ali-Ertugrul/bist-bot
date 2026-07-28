@@ -69,7 +69,7 @@ def load_watchlist(name: str = "robust") -> list[str]:
     Otherwise, loads f"{name}_watchlist.csv" from the results directory.
     """
     base = Path(__file__).resolve().parent.parent.parent.parent
-    
+
     if name.lower().startswith("file:"):
         path_str = name[5:].strip()
         path = Path(path_str)
@@ -86,6 +86,7 @@ def load_watchlist(name: str = "robust") -> list[str]:
         # Fallback to static list if file is missing
         if name == "bist100":
             from bist_bot.data.bist100 import BIST100_TICKERS
+
             return list(BIST100_TICKERS)
         if name == "bist30":
             return list(BIST30_TICKERS)
@@ -97,12 +98,9 @@ def load_watchlist(name: str = "robust") -> list[str]:
         header = next(reader, None)
         if header is None:
             return []
-        
+
         first_header = header[0].strip().lower() if header else ""
-        is_single_column = (
-            first_header == "ticker"
-            and len(header) == 1
-        )
+        is_single_column = first_header == "ticker" and len(header) == 1
 
         for row in reader:
             if not row:

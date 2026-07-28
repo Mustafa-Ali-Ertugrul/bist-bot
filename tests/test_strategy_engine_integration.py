@@ -375,7 +375,9 @@ def test_analyze_strong_buy_bull_high_adx() -> None:
     assert not any("ADX düşük" in reason for reason in signal.reasons)
     # Component reason chain still present
     assert any("RSI" in reason for reason in signal.reasons)
-    assert any("MACD" in reason or "Golden Cross" in reason or "EMA" in reason for reason in signal.reasons)
+    assert any(
+        "MACD" in reason or "Golden Cross" in reason or "EMA" in reason for reason in signal.reasons
+    )
 
 
 def test_analyze_weak_penalized_sideways_low_adx_pipeline_order() -> None:

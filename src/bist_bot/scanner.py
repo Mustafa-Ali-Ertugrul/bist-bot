@@ -221,9 +221,7 @@ class ScanService:
             self.db.save_signals(signals)
 
             # BUG-5 fix: skip auto_execute when agent owns entries
-            agent_enabled = bool(
-                getattr(self.settings, "AGENT_ENABLED", False)
-            ) or bool(
+            agent_enabled = bool(getattr(self.settings, "AGENT_ENABLED", False)) or bool(
                 getattr(getattr(self.settings, "agent", None), "AGENT_ENABLED", False)
             )
             if agent_enabled:

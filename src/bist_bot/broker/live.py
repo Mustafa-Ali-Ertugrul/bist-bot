@@ -30,10 +30,7 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__, component="broker")
 
-_UNSUPPORTED_MSG = (
-    "BROKER_PROVIDER={provider!r} is not supported by LiveBroker. "
-    "Use 'algolab'."
-)
+_UNSUPPORTED_MSG = "BROKER_PROVIDER={provider!r} is not supported by LiveBroker. Use 'algolab'."
 
 
 def _resolve_venue(provider: str, settings: Settings) -> BaseExecutionProvider:

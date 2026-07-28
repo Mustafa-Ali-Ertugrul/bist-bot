@@ -42,16 +42,10 @@ def _has_mtf_slope_contradiction(params: StrategyParams, df: pd.DataFrame) -> bo
         return False
     ema_column = f"ema_{settings.EMA_LONG}"
     lookback = max(int(params.slope_lookback), 1)
-    if (
-        len(df) < lookback + 1
-        or "sma_20" not in df.columns
-        or ema_column not in df.columns
-    ):
+    if len(df) < lookback + 1 or "sma_20" not in df.columns or ema_column not in df.columns:
         return False
     sma_slope = float(df["sma_20"].iloc[-1]) - float(df["sma_20"].iloc[-1 - lookback])
-    ema_slope = float(df[ema_column].iloc[-1]) - float(
-        df[ema_column].iloc[-1 - lookback]
-    )
+    ema_slope = float(df[ema_column].iloc[-1]) - float(df[ema_column].iloc[-1 - lookback])
     sma_dir = component_direction(sma_slope)
     ema_dir = component_direction(ema_slope)
     return sma_dir != 0 and ema_dir != 0 and sma_dir != ema_dir
@@ -82,23 +76,13 @@ def _apply_chase_cap(
         return score
     adx = float(last.get("adx", 0.0) or 0.0)
     score_dir = component_direction(score)
-    strong_trend_ride = (
-        adx >= 30.0
-        and trend_dir == score_dir
-        and momentum_dir == score_dir
-    )
-    cap = (
-        params.chase_strong_trend_cap
-        if strong_trend_ride
-        else params.chase_blocked_score_cap
-    )
+    strong_trend_ride = adx >= 30.0 and trend_dir == score_dir and momentum_dir == score_dir
+    cap = params.chase_strong_trend_cap if strong_trend_ride else params.chase_blocked_score_cap
     capped = min(score, cap) if score > 0 else max(score, -cap)
     if strong_trend_ride:
         reasons.append(f"Güçlü trend ride → skor {cap:g} ile sınırlandı")
     direction = "uzun" if score > 0 else "kısa"
-    reasons.append(
-        f"Aşırı uzama chase koruması → {direction} skor {cap:g} ile sınırlandı"
-    )
+    reasons.append(f"Aşırı uzama chase koruması → {direction} skor {cap:g} ile sınırlandı")
     return capped
 
 
@@ -327,10 +311,7 @@ def calculate_score_and_reasons(
                 )
             score = capped
 
-    if (
-        params.agreement_gate_enabled
-        and agreement_ratio < params.agreement_gate_threshold
-    ):
+    if params.agreement_gate_enabled and agreement_ratio < params.agreement_gate_threshold:
         cap = float(params.agreement_low_cap)
         capped = max(-cap, min(cap, score))
         if capped != score:

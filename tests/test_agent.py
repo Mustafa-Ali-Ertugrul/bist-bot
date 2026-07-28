@@ -167,8 +167,12 @@ class TestP0Regression:
         pm, es, cb, db, notifier, settings = mock_components
 
         es.execute_signal.return_value = ExecutionAttempt(
-            ticker="TEST.IS", side="BUY", accepted=False,
-            order_db_id=None, broker_order_id=None, state="REJECTED",
+            ticker="TEST.IS",
+            side="BUY",
+            accepted=False,
+            order_db_id=None,
+            broker_order_id=None,
+            state="REJECTED",
             error="broker_rejected",
         )
         agent = TradingAgent(pm, es, cb, db, notifier, settings, execution_service=es)
@@ -301,8 +305,12 @@ class TestP0Regression:
 
         pm, es, cb, db, notifier, settings = mock_components
         es.execute_signal.return_value = ExecutionAttempt(
-            ticker="TEST.IS", side="BUY", accepted=True,
-            order_db_id=42, broker_order_id="BRK-42", state="FILLED",
+            ticker="TEST.IS",
+            side="BUY",
+            accepted=True,
+            order_db_id=42,
+            broker_order_id="BRK-42",
+            state="FILLED",
             fill_price=10.5,
         )
         agent = TradingAgent(pm, es, cb, db, notifier, settings, execution_service=es)

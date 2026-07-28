@@ -432,29 +432,45 @@ def main(argv: list[str] | None = None) -> int:
     watchlist_path = Path(args.watchlist_csv)
     if args.buy_threshold is not None:
         if args.stress_csv == str(DEFAULT_STRESS_CSV):
-            stress_path = REPO_ROOT / "results" / f"walk_forward_bist30_cost_stress_bt{int(args.buy_threshold)}.csv"
+            stress_path = (
+                REPO_ROOT
+                / "results"
+                / f"walk_forward_bist30_cost_stress_bt{int(args.buy_threshold)}.csv"
+            )
         if args.watchlist_csv == str(DEFAULT_WATCHLIST_CSV):
-            watchlist_path = REPO_ROOT / "results" / f"robust_watchlist_bt{int(args.buy_threshold)}.csv"
+            watchlist_path = (
+                REPO_ROOT / "results" / f"robust_watchlist_bt{int(args.buy_threshold)}.csv"
+            )
     else:
         if args.no_gates and args.stress_csv == str(DEFAULT_STRESS_CSV):
             stress_path = REPO_ROOT / "results" / "walk_forward_bist30_cost_stress_gates_OFF.csv"
         elif args.obv_divergence_cap is not None and args.stress_csv == str(DEFAULT_STRESS_CSV):
-            stress_path = REPO_ROOT / "results" / f"walk_forward_bist30_cost_stress_h4_cap{int(args.obv_divergence_cap)}.csv"
+            stress_path = (
+                REPO_ROOT
+                / "results"
+                / f"walk_forward_bist30_cost_stress_h4_cap{int(args.obv_divergence_cap)}.csv"
+            )
         elif args.slope_lookback is not None and args.stress_csv == str(DEFAULT_STRESS_CSV):
-            stress_path = REPO_ROOT / "results" / f"walk_forward_bist30_cost_stress_h2_sl{args.slope_lookback}.csv"
-        elif (
-            args.mtf_confluence_block_enabled is False
-            and args.stress_csv == str(DEFAULT_STRESS_CSV)
+            stress_path = (
+                REPO_ROOT
+                / "results"
+                / f"walk_forward_bist30_cost_stress_h2_sl{args.slope_lookback}.csv"
+            )
+        elif args.mtf_confluence_block_enabled is False and args.stress_csv == str(
+            DEFAULT_STRESS_CSV
         ):
             stress_path = REPO_ROOT / "results" / "walk_forward_bist30_cost_stress_h6_off.csv"
 
         if args.no_gates and args.watchlist_csv == str(DEFAULT_WATCHLIST_CSV):
             watchlist_path = REPO_ROOT / "results" / "robust_watchlist_gates_OFF.csv"
-        elif args.obv_divergence_cap is not None and args.watchlist_csv == str(DEFAULT_WATCHLIST_CSV):
-            watchlist_path = REPO_ROOT / "results" / f"robust_watchlist_h4_cap{int(args.obv_divergence_cap)}.csv"
-        elif (
-            args.mtf_confluence_block_enabled is False
-            and args.watchlist_csv == str(DEFAULT_WATCHLIST_CSV)
+        elif args.obv_divergence_cap is not None and args.watchlist_csv == str(
+            DEFAULT_WATCHLIST_CSV
+        ):
+            watchlist_path = (
+                REPO_ROOT / "results" / f"robust_watchlist_h4_cap{int(args.obv_divergence_cap)}.csv"
+            )
+        elif args.mtf_confluence_block_enabled is False and args.watchlist_csv == str(
+            DEFAULT_WATCHLIST_CSV
         ):
             watchlist_path = REPO_ROOT / "results" / "robust_watchlist_h6_off.csv"
     wf = WalkForwardValidator(
@@ -469,9 +485,7 @@ def main(argv: list[str] | None = None) -> int:
     cache_dir = Path(args.cache_dir)
 
     print("BIST30 cost-stress walk-forward")
-    print(
-        f"  stress costs: commission_bps={wf.commission_bps} slippage_bps={wf.slippage_bps}"
-    )
+    print(f"  stress costs: commission_bps={wf.commission_bps} slippage_bps={wf.slippage_bps}")
     print(
         f"  profile=conservative buy={params.buy_threshold} sell={params.sell_threshold} "
         f"sideways={params.sideways_score_multiplier} ctm={params.counter_trend_multiplier} "
@@ -564,7 +578,9 @@ def main(argv: list[str] | None = None) -> int:
             "h4_short_fired": int(stress.get("h4_short_fired") or 0),
             "h6_confluence_total": int(stress.get("h6_confluence_total") or 0),
             "h6_confluence_neutralized": int(stress.get("h6_confluence_neutralized") or 0),
-            "obv_divergence_cap": float(stress.get("obv_divergence_cap") or params.obv_divergence_cap),
+            "obv_divergence_cap": float(
+                stress.get("obv_divergence_cap") or params.obv_divergence_cap
+            ),
             "mtf_confluence_block_enabled": bool(params.mtf_confluence_block_enabled),
             "buy_threshold": float(stress.get("buy_threshold") or params.buy_threshold),
             "total_oos_trades": int(stress.get("total_oos_trades") or 0),
@@ -662,7 +678,9 @@ def main(argv: list[str] | None = None) -> int:
     if decays:
         print(f"  mean edge decay (pp)    : {statistics.mean(decays):.2f}")
         print(f"  median edge decay (pp)  : {statistics.median(decays):.2f}")
-    print(f"  overfitting share       : {100.0 * overfit_n / max(len(ok), 1):.1f}% ({overfit_n}/{len(ok)})")
+    print(
+        f"  overfitting share       : {100.0 * overfit_n / max(len(ok), 1):.1f}% ({overfit_n}/{len(ok)})"
+    )
     print(
         f"  robust survivors        : {len(robust_sorted)} "
         f"(stress_oos>0, no overfit, dd>{args.max_dd})"
@@ -671,8 +689,7 @@ def main(argv: list[str] | None = None) -> int:
         print(
             "  robust list             : "
             + ", ".join(
-                f"{r['ticker']}({float(r['stress_oos_mean_return']):.1f}%)"
-                for r in robust_sorted
+                f"{r['ticker']}({float(r['stress_oos_mean_return']):.1f}%)" for r in robust_sorted
             )
         )
     else:

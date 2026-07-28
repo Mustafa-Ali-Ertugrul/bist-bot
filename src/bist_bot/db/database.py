@@ -165,8 +165,6 @@ class OrderRecord(Base):
     metadata_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
-
-
 class LivePositionRecord(Base):
     __tablename__ = "live_positions"
 
@@ -176,7 +174,9 @@ class LivePositionRecord(Base):
     entry_order_id: Mapped[int] = mapped_column(Integer, nullable=False)
     entry_price: Mapped[float] = mapped_column(Float, nullable=False)
     quantity: Mapped[float] = mapped_column(Float, nullable=False)
-    entry_time: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    entry_time: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+    )
     stop_loss: Mapped[float] = mapped_column(Float, nullable=False)
     target_price: Mapped[float] = mapped_column(Float, nullable=False)
     risk_reward_ratio: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -193,15 +193,21 @@ class LivePositionRecord(Base):
     signal_type: Mapped[str] = mapped_column(String, nullable=False)
     signal_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     regime: Mapped[str | None] = mapped_column(String, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
-    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+    )
 
 
 class AuditRecord(Base):
     __tablename__ = "audit_trail"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    timestamp: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC), index=True)
+    timestamp: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(UTC), index=True
+    )
     event_type: Mapped[str] = mapped_column(String, nullable=False, index=True)
     ticker: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     position_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
@@ -209,7 +215,9 @@ class AuditRecord(Base):
     agent_state: Mapped[str] = mapped_column(String, nullable=False)
     details: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     trigger_source: Mapped[str | None] = mapped_column(String, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+    )
 
 
 _T = TypeVar("_T")
@@ -391,7 +399,9 @@ class DatabaseManager:
 
     def _migrate_agent_schema(self, conn) -> None:
         """Migrate agent-related tables and order columns."""
-        order_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(orders)")).fetchall()}
+        order_columns = {
+            row[1] for row in conn.execute(text("PRAGMA table_info(orders)")).fetchall()
+        }
         order_migrations = [
             ("position_id", "ALTER TABLE orders ADD COLUMN position_id INTEGER"),
             ("purpose", "ALTER TABLE orders ADD COLUMN purpose TEXT NOT NULL DEFAULT 'ENTRY'"),

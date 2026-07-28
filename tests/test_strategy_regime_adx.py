@@ -100,9 +100,7 @@ def _fixed_component_scorers(
     def momentum_scorer(_last: pd.Series, _prev: pd.Series) -> tuple[float, list[str]]:
         return m, ["mock momentum"]
 
-    def trend_scorer(
-        _last: pd.Series, _prev: pd.Series, _df=None
-    ) -> tuple[float, list[str]]:
+    def trend_scorer(_last: pd.Series, _prev: pd.Series, _df=None) -> tuple[float, list[str]]:
         return t, ["mock trend"]
 
     def volume_scorer(_last: pd.Series, _prev: pd.Series) -> tuple[float, list[str]]:

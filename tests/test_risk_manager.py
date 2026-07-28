@@ -117,4 +117,3 @@ def test_zero_price_position_budget_returns_zero_loss():
     assert levels.position_size == 0
     assert levels.max_loss_tl == 0
     assert levels.risk_budget_tl == 0
-

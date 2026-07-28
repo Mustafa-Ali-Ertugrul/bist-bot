@@ -177,9 +177,7 @@ def test_stop_and_target_close_shadow_position(tmp_path, close, expected_hit):
     service = _service(tmp_path)
     service.process_scan([_signal()], now=ENTRY_TIME)
 
-    closed = service.process_scan(
-        [], _market_close(close), now=ENTRY_TIME + timedelta(hours=1)
-    )
+    closed = service.process_scan([], _market_close(close), now=ENTRY_TIME + timedelta(hours=1))
 
     assert closed[0]["hit"] == expected_hit
 
@@ -207,9 +205,7 @@ def test_daily_summary_sent_once_and_only_after_close(tmp_path):
     notifier = MagicMock()
     notifier.send_message.return_value = True
     service.process_scan([_signal()], now=ENTRY_TIME)
-    closed = service.process_scan(
-        [], _market_close(105.0), now=ENTRY_TIME + timedelta(days=5)
-    )
+    closed = service.process_scan([], _market_close(105.0), now=ENTRY_TIME + timedelta(days=5))
 
     assert service.maybe_send_daily_summary(
         notifier, now=ENTRY_TIME + timedelta(days=5), closed_this_scan=closed

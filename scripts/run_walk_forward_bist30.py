@@ -272,12 +272,14 @@ def print_summary(rows: list[dict[str, object]]) -> None:
     print(f"  overfitting share   : {100.0 * overfit / n:.1f}% ({overfit}/{n})")
     # Top / bottom 5 by OOS mean
     ranked = sorted(ok_rows, key=lambda r: float(r["oos_mean_return"] or 0.0), reverse=True)
-    print("  top OOS             : " + ", ".join(
-        f"{r['ticker']}({float(r['oos_mean_return']):.1f}%)" for r in ranked[:5]
-    ))
-    print("  bottom OOS          : " + ", ".join(
-        f"{r['ticker']}({float(r['oos_mean_return']):.1f}%)" for r in ranked[-5:]
-    ))
+    print(
+        "  top OOS             : "
+        + ", ".join(f"{r['ticker']}({float(r['oos_mean_return']):.1f}%)" for r in ranked[:5])
+    )
+    print(
+        "  bottom OOS          : "
+        + ", ".join(f"{r['ticker']}({float(r['oos_mean_return']):.1f}%)" for r in ranked[-5:])
+    )
 
 
 def write_csv(rows: list[dict[str, object]], path: Path) -> None:
@@ -333,10 +335,7 @@ def diagnose_chase_for_window(
     ema_col = f"ema_{settings.EMA_LONG}"
 
     def _slope(row_idx: int, col: str) -> tuple[int, float]:
-        if (
-            col not in enriched_full.columns
-            or row_idx < slope_lookback
-        ):
+        if col not in enriched_full.columns or row_idx < slope_lookback:
             return 0, 0.0
         cur = enriched_full[col].iloc[row_idx]
         prev = enriched_full[col].iloc[row_idx - slope_lookback]
@@ -367,17 +366,12 @@ def diagnose_chase_for_window(
         cci_raw = row.get("cci")
         cci_val = float(cci_raw) if pd.notna(cci_raw) else None
         dist_resist_raw = row.get("dist_to_resistance_pct")
-        dist_resist = (
-            float(dist_resist_raw) if pd.notna(dist_resist_raw) else None
-        )
+        dist_resist = float(dist_resist_raw) if pd.notna(dist_resist_raw) else None
 
         overextended_long = (
             bb_pos == "ABOVE_UPPER"
             or (cci_val is not None and cci_val > params.chase_cci_threshold)
-            or (
-                dist_resist is not None
-                and dist_resist < params.chase_resist_pct
-            )
+            or (dist_resist is not None and dist_resist < params.chase_resist_pct)
         )
 
         df_so_far = enriched_full.iloc[: row_idx + 1]
@@ -394,11 +388,7 @@ def diagnose_chase_for_window(
         # would have forced regime → SIDEWAYS.
         sma20_dir, sma20_diff = _slope(row_idx, "sma_20")
         ema_dir, _ema_diff = _slope(row_idx, ema_col)
-        h6_contradiction = (
-            sma20_dir != 0
-            and ema_dir != 0
-            and sma20_dir != ema_dir
-        )
+        h6_contradiction = sma20_dir != 0 and ema_dir != 0 and sma20_dir != ema_dir
         if h6_contradiction:
             h6_confluence_total += 1
             if params.mtf_confluence_block_enabled:
@@ -410,16 +400,24 @@ def diagnose_chase_for_window(
         params_off = copy.deepcopy(params)
         params_off.obv_divergence_block_enabled = False
 
-        def score_mom_off(lst: pd.Series, pr: pd.Series, df: pd.DataFrame = None, params_off=params_off) -> tuple[float, list[str]]:
+        def score_mom_off(
+            lst: pd.Series, pr: pd.Series, df: pd.DataFrame = None, params_off=params_off
+        ) -> tuple[float, list[str]]:
             return score_momentum(params_off, lst, pr)
 
-        def score_tr_off(lst: pd.Series, pr: pd.Series, df: pd.DataFrame = None, params_off=params_off) -> tuple[float, list[str]]:
+        def score_tr_off(
+            lst: pd.Series, pr: pd.Series, df: pd.DataFrame = None, params_off=params_off
+        ) -> tuple[float, list[str]]:
             return score_trend(params_off, lst, pr, df)
 
-        def score_vol_off(lst: pd.Series, pr: pd.Series, df: pd.DataFrame = None, params_off=params_off) -> tuple[float, list[str]]:
+        def score_vol_off(
+            lst: pd.Series, pr: pd.Series, df: pd.DataFrame = None, params_off=params_off
+        ) -> tuple[float, list[str]]:
             return score_volume(params_off, lst, pr)
 
-        def score_struct_off(lst: pd.Series, df: pd.DataFrame = None, params_off=params_off) -> tuple[float, list[str]]:
+        def score_struct_off(
+            lst: pd.Series, df: pd.DataFrame = None, params_off=params_off
+        ) -> tuple[float, list[str]]:
             return score_structure(params_off, lst)
 
         res_off = calculate_score_and_reasons(
@@ -470,16 +468,24 @@ def diagnose_chase_for_window(
         params_on = copy.deepcopy(params)
         params_on.chase_block_enabled = True
 
-        def score_mom_on(lst: pd.Series, pr: pd.Series, df: pd.DataFrame = None, params_on=params_on) -> tuple[float, list[str]]:
+        def score_mom_on(
+            lst: pd.Series, pr: pd.Series, df: pd.DataFrame = None, params_on=params_on
+        ) -> tuple[float, list[str]]:
             return score_momentum(params_on, lst, pr)
 
-        def score_tr_on(lst: pd.Series, pr: pd.Series, df: pd.DataFrame = None, params_on=params_on) -> tuple[float, list[str]]:
+        def score_tr_on(
+            lst: pd.Series, pr: pd.Series, df: pd.DataFrame = None, params_on=params_on
+        ) -> tuple[float, list[str]]:
             return score_trend(params_on, lst, pr, df)
 
-        def score_vol_on(lst: pd.Series, pr: pd.Series, df: pd.DataFrame = None, params_on=params_on) -> tuple[float, list[str]]:
+        def score_vol_on(
+            lst: pd.Series, pr: pd.Series, df: pd.DataFrame = None, params_on=params_on
+        ) -> tuple[float, list[str]]:
             return score_volume(params_on, lst, pr)
 
-        def score_struct_on(lst: pd.Series, df: pd.DataFrame = None, params_on=params_on) -> tuple[float, list[str]]:
+        def score_struct_on(
+            lst: pd.Series, df: pd.DataFrame = None, params_on=params_on
+        ) -> tuple[float, list[str]]:
             return score_structure(params_on, lst)
 
         res_on = calculate_score_and_reasons(
@@ -510,9 +516,7 @@ def diagnose_chase_for_window(
                 "date": str(last.name),
                 "bb_position": str(bb_pos),
                 "cci": float(cci_val) if cci_val is not None else None,
-                "dist_to_resistance_pct": (
-                    float(dist_resist) if dist_resist is not None else None
-                ),
+                "dist_to_resistance_pct": (float(dist_resist) if dist_resist is not None else None),
                 "raw_score": float(raw_score),
                 "capped_score": float(capped_score),
                 "capped": "YES" if capped_score < raw_score else "no",
@@ -539,9 +543,7 @@ def diagnose_chase_for_window(
     )
 
 
-def write_chase_diagnose_csv(
-    rows: list[dict[str, object]], path: Path
-) -> None:
+def write_chase_diagnose_csv(rows: list[dict[str, object]], path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fieldnames = [
         "ticker",
@@ -684,17 +686,20 @@ def main(argv: list[str] | None = None) -> int:
         params.chase_block_enabled = False
     output_path = Path(args.output)
     if args.buy_threshold is not None and args.output == str(DEFAULT_RESULTS_CSV):
-        output_path = REPO_ROOT / "results" / f"walk_forward_bist30_conservative_bt{int(args.buy_threshold)}.csv"
+        output_path = (
+            REPO_ROOT
+            / "results"
+            / f"walk_forward_bist30_conservative_bt{int(args.buy_threshold)}.csv"
+        )
     elif args.no_gates and args.output == str(DEFAULT_RESULTS_CSV):
         output_path = REPO_ROOT / "results" / "walk_forward_bist30_conservative_gates_OFF.csv"
     elif args.obv_divergence_cap is not None and args.output == str(DEFAULT_RESULTS_CSV):
-        output_path = REPO_ROOT / "results" / f"walk_forward_bist30_h4_cap{int(args.obv_divergence_cap)}.csv"
+        output_path = (
+            REPO_ROOT / "results" / f"walk_forward_bist30_h4_cap{int(args.obv_divergence_cap)}.csv"
+        )
     elif args.slope_lookback is not None and args.output == str(DEFAULT_RESULTS_CSV):
         output_path = REPO_ROOT / "results" / f"walk_forward_bist30_h2_sl{args.slope_lookback}.csv"
-    elif (
-        args.mtf_confluence_block_enabled is False
-        and args.output == str(DEFAULT_RESULTS_CSV)
-    ):
+    elif args.mtf_confluence_block_enabled is False and args.output == str(DEFAULT_RESULTS_CSV):
         output_path = REPO_ROOT / "results" / "walk_forward_bist30_h6_off.csv"
     cache_dir = Path(args.cache_dir)
     wf = WalkForwardValidator(
@@ -798,10 +803,15 @@ def main(argv: list[str] | None = None) -> int:
             windows = wf.build_windows(df)
             for w_idx, (train_df, test_df) in enumerate(windows, start=1):
                 (
-                    c, h, cap, obv_nn, h4f, h4sf, h6n, h6t,
-                ) = diagnose_chase_for_window(
-                    ticker, w_idx, train_df, test_df, params, chase_rows
-                )
+                    c,
+                    h,
+                    cap,
+                    obv_nn,
+                    h4f,
+                    h4sf,
+                    h6n,
+                    h6t,
+                ) = diagnose_chase_for_window(ticker, w_idx, train_df, test_df, params, chase_rows)
                 t_candidates += c
                 t_high += h
                 t_capped += cap
@@ -844,7 +854,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Total h6_contradiction_rows           : {tot_h6_total}")
         print(f"Total h6_confluence_neutralized        : {tot_h6_neutralized}")
         if tot_h6_total > 0 and tot_h6_neutralized == 0:
-            print("DECISION H6: WF verisinde celiski VAR ama notr'e dusurulmedi - gate kapali olabilir.")
+            print(
+                "DECISION H6: WF verisinde celiski VAR ama notr'e dusurulmedi - gate kapali olabilir."
+            )
         elif tot_h6_neutralized > 0:
             print(
                 f"DECISION H6: {tot_h6_neutralized}/{tot_h6_total} celiskili satir "
@@ -852,7 +864,9 @@ def main(argv: list[str] | None = None) -> int:
             )
         print("-" * 100)
         if tot_candidates == 0:
-            print("DECISION: KOK (3) veya (2): WF verisinde chase olayi YOK. Birim test sahte-pozitif.")
+            print(
+                "DECISION: KOK (3) veya (2): WF verisinde chase olayi YOK. Birim test sahte-pozitif."
+            )
             if last_processed_df is not None:
                 enriched_sample = TechnicalIndicators.add_all(last_processed_df.head(55))
                 print("\nSample Enriched Columns:")
@@ -860,11 +874,17 @@ def main(argv: list[str] | None = None) -> int:
                 print("\nSample Row values (last row of enriched):")
                 print(enriched_sample.iloc[-1].to_dict())
         elif tot_candidates > 0 and tot_high == 0:
-            print("DECISION: KOK (1): chase var ama conservative esigi (25) onu zaten eliyor; H3 redundant. H3 kapatilabilir, zararsiz.")
+            print(
+                "DECISION: KOK (1): chase var ama conservative esigi (25) onu zaten eliyor; H3 redundant. H3 kapatilabilir, zararsiz."
+            )
         elif tot_high > 0 and tot_capped == 0:
-            print("DECISION: KOK (3): chase+yuksek skor var ama H3 cap'lemiyor -> alan adi / kosul uyusmazligi, H3 entegrasyonda OLU.")
+            print(
+                "DECISION: KOK (3): chase+yuksek skor var ama H3 cap'lemiyor -> alan adi / kosul uyusmazligi, H3 entegrasyonda OLU."
+            )
         elif tot_capped > 0:
-            print("DECISION: H3 cap'liyor ama OOS degismedi -> H3 cap'liyor ama o pencereler zaten trade edilmiyordu / aggregate'e girmiyordu; o zaman gercekten redundant, H3 kapatilabilir.")
+            print(
+                "DECISION: H3 cap'liyor ama OOS degismedi -> H3 cap'liyor ama o pencereler zaten trade edilmiyordu / aggregate'e girmiyordu; o zaman gercekten redundant, H3 kapatilabilir."
+            )
         print("=" * 100)
         print(f"Chase diagnose CSV written: {args.chase_diagnose_csv}")
 

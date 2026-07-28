@@ -51,9 +51,7 @@ def _make_frame_with_slope_divergence(
 
     if not sma_20_rising:
         # Patch the last 20 bars to drive SMA20 downwards at the tail.
-        closes[-20:] = np.linspace(
-            closes[-20], closes[-1 - slope_lookback] - 2.0, 20
-        )
+        closes[-20:] = np.linspace(closes[-20], closes[-1 - slope_lookback] - 2.0, 20)
     else:
         closes[-20:] = np.linspace(closes[-20], closes[-1] + 5.0, 20)
 
@@ -88,9 +86,7 @@ def _force_slope_divergence(
     `add_all` recomputes these from closes, so for deterministic tests we patch
     the tail windows to satisfy the slope direction we want at the last bar.
     """
-    slope_lookback = max(
-        slope_lookback, int(getattr(settings, "SLOPE_LOOKBACK", 40))
-    )
+    slope_lookback = max(slope_lookback, int(getattr(settings, "SLOPE_LOOKBACK", 40)))
     if len(df) < slope_lookback + 1:
         return df
     sma_col = df["sma_20"].astype(float).copy()
@@ -113,37 +109,25 @@ class TestGetTrendBiasH6Contradiction:
     """get_trend_bias returns NEUTRAL when SMA20/EMA200 slopes oppose."""
 
     def test_rising_sma_falling_ema_returns_neutral(self) -> None:
-        df = _make_frame_with_slope_divergence(
-            sma_20_rising=True, ema_200_rising=False
-        )
+        df = _make_frame_with_slope_divergence(sma_20_rising=True, ema_200_rising=False)
         bias = get_trend_bias(TechnicalIndicators(), df)
         assert bias is TrendBias.NEUTRAL
 
     def test_falling_sma_rising_ema_returns_neutral(self) -> None:
-        df = _make_frame_with_slope_divergence(
-            sma_20_rising=False, ema_200_rising=True
-        )
+        df = _make_frame_with_slope_divergence(sma_20_rising=False, ema_200_rising=True)
         bias = get_trend_bias(TechnicalIndicators(), df)
         assert bias is TrendBias.NEUTRAL
 
-    def test_kill_switch_disables_neutralization(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setattr(
-            type(settings), "MTF_CONFLUENCE_BLOCK_ENABLED", False, raising=False
-        )
+    def test_kill_switch_disables_neutralization(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(type(settings), "MTF_CONFLUENCE_BLOCK_ENABLED", False, raising=False)
         try:
-            df = _make_frame_with_slope_divergence(
-                sma_20_rising=True, ema_200_rising=False
-            )
+            df = _make_frame_with_slope_divergence(sma_20_rising=True, ema_200_rising=False)
             # With kill switch off, get_trend_bias may return non-NEUTRAL.
             # We only assert it doesn't enforce NEUTRAL via the H6 path.
             bias = get_trend_bias(TechnicalIndicators(), df)
             assert bias in {TrendBias.LONG, TrendBias.SHORT, TrendBias.NEUTRAL}
         finally:
-            monkeypatch.setattr(
-                type(settings), "MTF_CONFLUENCE_BLOCK_ENABLED", True, raising=False
-            )
+            monkeypatch.setattr(type(settings), "MTF_CONFLUENCE_BLOCK_ENABLED", True, raising=False)
 
 
 def _fixed_component_scorers(raw_total: float):
@@ -175,8 +159,8 @@ def _run_score(
 ) -> tuple[float, list[str], float] | None:
     from bist_bot.strategy.engine_filters import calculate_score_and_reasons
 
-    momentum_scorer, trend_scorer, volume_scorer, structure_scorer = (
-        _fixed_component_scorers(raw_total)
+    momentum_scorer, trend_scorer, volume_scorer, structure_scorer = _fixed_component_scorers(
+        raw_total
     )
     last = df.iloc[-1]
     prev = df.iloc[-2]
@@ -197,15 +181,9 @@ def _run_score(
 class TestCalculateScoreH6ContradictionSideways:
     """calculate_score_and_reasons forces SIDEWAYS + labels H6 reason."""
 
-    def test_contradiction_adds_h6_reason_and_damps(
-        self, params: StrategyParams
-    ) -> None:
+    def test_contradiction_adds_h6_reason_and_damps(self, params: StrategyParams) -> None:
         df = _force_slope_divergence(
-            _enrich(
-                _make_frame_with_slope_divergence(
-                    sma_20_rising=True, ema_200_rising=False
-                )
-            ),
+            _enrich(_make_frame_with_slope_divergence(sma_20_rising=True, ema_200_rising=False)),
             sma_20_rising=True,
             ema_200_rising=False,
         )
@@ -221,17 +199,13 @@ class TestCalculateScoreH6ContradictionSideways:
         # Score damped below raw via sideways multiplier.
         assert score <= raw
 
-    def test_kill_switch_disables_damping(
-        self, params: StrategyParams
-    ) -> None:
+    def test_kill_switch_disables_damping(self, params: StrategyParams) -> None:
         original = params.mtf_confluence_block_enabled
         params.mtf_confluence_block_enabled = False
         try:
             df = _force_slope_divergence(
                 _enrich(
-                    _make_frame_with_slope_divergence(
-                        sma_20_rising=True, ema_200_rising=False
-                    )
+                    _make_frame_with_slope_divergence(sma_20_rising=True, ema_200_rising=False)
                 ),
                 sma_20_rising=True,
                 ema_200_rising=False,

@@ -25,12 +25,8 @@ class NotificationDispatchService:
         self.sleeper = sleeper
         # Load robust watchlist once at startup; membership check is O(1).
         self._robust_set: set[str] = set(load_watchlist("robust"))
-        self._group_chat_id = (
-            getattr(self.settings, "TELEGRAM_GROUP_CHAT_ID", "") or None
-        )
-        self._batch_threshold = getattr(
-            self.settings, "TELEGRAM_GROUP_BATCH_THRESHOLD", 5
-        )
+        self._group_chat_id = getattr(self.settings, "TELEGRAM_GROUP_CHAT_ID", "") or None
+        self._batch_threshold = getattr(self.settings, "TELEGRAM_GROUP_BATCH_THRESHOLD", 5)
 
     def _is_robust_member(self, signal) -> bool:
         return signal.ticker in self._robust_set
@@ -66,10 +62,7 @@ class NotificationDispatchService:
             return
 
         # Gather all positive-score signals that are robust members.
-        robust_positive = [
-            s for s in signals
-            if s.score > 0 and self._is_robust_member(s)
-        ]
+        robust_positive = [s for s in signals if s.score > 0 and self._is_robust_member(s)]
 
         if not robust_positive:
             return
@@ -85,19 +78,10 @@ class NotificationDispatchService:
                     if signal.is_actionable
                     else "👁️ İZLE (robust üye, eşik altı)"
                 )
-                stop = (
-                    f" | Stop: ₺{signal.stop_loss:.2f}"
-                    if signal.stop_loss
-                    else ""
-                )
-                target = (
-                    f" | Hedef: ₺{signal.target_price:.2f}"
-                    if signal.target_price
-                    else ""
-                )
+                stop = f" | Stop: ₺{signal.stop_loss:.2f}" if signal.stop_loss else ""
+                target = f" | Hedef: ₺{signal.target_price:.2f}" if signal.target_price else ""
                 self.notifier.send_to_group(
-                    f"{label} — {signal.ticker} "
-                    f"(Skor: {signal.score:+.0f}{stop}{target})"
+                    f"{label} — {signal.ticker} (Skor: {signal.score:+.0f}{stop}{target})"
                 )
                 self.sleeper(1)
 
@@ -106,12 +90,6 @@ class NotificationDispatchService:
             f"🔔 <b>Grup Özet — {len(signals)} sinyal</b>",
         ]
         for s in signals:
-            label = (
-                "🟢 AL"
-                if s.is_actionable
-                else "👁️ İZLE"
-            )
-            lines.append(
-                f"  {label} {s.ticker} (Skor: {s.score:+.0f})"
-            )
+            label = "🟢 AL" if s.is_actionable else "👁️ İZLE"
+            lines.append(f"  {label} {s.ticker} (Skor: {s.score:+.0f})")
         self.notifier.send_to_group("\n".join(lines))

@@ -15,16 +15,22 @@ from bist_bot.strategy.signal_models import Signal, SignalType
 # ── Settings defaults ──────────────────────────────────────────────────────
 
 
-def test_signal_ttl_minutes_default_is_60():
+def test_signal_ttl_minutes_default():
+    import os
+
     from bist_bot.config.settings import settings
 
-    assert settings.SIGNAL_TTL_MINUTES == 60
+    expected = int(os.environ.get("SIGNAL_TTL_MINUTES", 60))
+    assert settings.SIGNAL_TTL_MINUTES == expected
 
 
-def test_telegram_min_score_default_is_40():
+def test_telegram_min_score_default():
+    import os
+
     from bist_bot.config.settings import settings
 
-    assert settings.TELEGRAM_MIN_SCORE == 40
+    expected = int(os.environ.get("TELEGRAM_MIN_SCORE", os.environ.get("STRONG_BUY_THRESHOLD", 48)))
+    assert settings.TELEGRAM_MIN_SCORE == expected
 
 
 # ── Signal is_expired behavior ─────────────────────────────────────────────

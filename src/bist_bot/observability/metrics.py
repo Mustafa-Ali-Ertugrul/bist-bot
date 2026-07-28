@@ -140,9 +140,7 @@ class _ObservabilityMetrics:
                 lines.append('bist_bot_signals_total{signal_type="NONE"} 0.0')
             lines.append("# TYPE bist_bot_orders_total counter")
             for (side, status), value in sorted(self._orders.items()):
-                lines.append(
-                    f'bist_bot_orders_total{{side="{side}",status="{status}"}} {value}'
-                )
+                lines.append(f'bist_bot_orders_total{{side="{side}",status="{status}"}} {value}')
             if not self._orders:
                 lines.append('bist_bot_orders_total{side="NONE",status="NONE"} 0.0')
             lines.append("# TYPE bist_bot_positions_current gauge")
@@ -153,9 +151,7 @@ class _ObservabilityMetrics:
             cumulative = 0.0
             for bound in sorted(self._latency_buckets):
                 cumulative += self._latency_buckets[bound]
-                lines.append(
-                    f'bist_bot_order_latency_seconds_bucket{{le="{bound}"}} {cumulative}'
-                )
+                lines.append(f'bist_bot_order_latency_seconds_bucket{{le="{bound}"}} {cumulative}')
             lines.append(
                 f'bist_bot_order_latency_seconds_bucket{{le="+Inf"}} {self._latency_count}'
             )

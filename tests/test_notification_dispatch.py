@@ -74,9 +74,7 @@ def _make_notifier_with_fake_sender() -> tuple[TelegramNotifier, list[str]]:
 
 def test_scan_summary_distinguishes_actionable_buys_from_radars():
     notifier, captured = _make_notifier_with_fake_sender()
-    actionable = _make_signal(
-        ticker="ASTOR.IS", score=30.0, price=120.0, is_actionable=True
-    )
+    actionable = _make_signal(ticker="ASTOR.IS", score=30.0, price=120.0, is_actionable=True)
     radar = _make_signal(ticker="ODAS.IS", score=11.0, price=8.66)
 
     assert notifier.send_scan_summary([actionable, radar], total_scanned=2)
@@ -152,9 +150,7 @@ def test_load_watchlist_matches_csv_file_contents():
                 csv_tickers.append(row[0].strip())
 
     loaded = load_watchlist("robust")
-    assert loaded == csv_tickers, (
-        f"load_watchlist returned {loaded}, CSV has {csv_tickers}"
-    )
+    assert loaded == csv_tickers, f"load_watchlist returned {loaded}, CSV has {csv_tickers}"
 
 
 def test_load_watchlist_handles_missing_file(tmp_path, monkeypatch):
@@ -280,9 +276,7 @@ def test_overfit_names_never_reach_group():
     svc.notify_scan_results(signals, signals, 10)
 
     group_msgs = [m for m in captured if "Grup" in m]
-    assert len(group_msgs) == 0, (
-        f"Overfit names leaked to group: {group_msgs}"
-    )
+    assert len(group_msgs) == 0, f"Overfit names leaked to group: {group_msgs}"
 
 
 # ============================================================================
@@ -392,8 +386,7 @@ def test_header_uses_agreement_not_score_for_confidence() -> None:
 
     detail_msg = captured[1]
     assert "confidence.medium" in detail_msg, (
-        "Header must use signal.confidence (agreement-based MEDIUM), "
-        "not score-based HIGH"
+        "Header must use signal.confidence (agreement-based MEDIUM), not score-based HIGH"
     )
     assert "confidence.high" not in detail_msg, (
         "score >= buy_threshold must never make the header show HIGH "

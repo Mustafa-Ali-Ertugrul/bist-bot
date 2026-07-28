@@ -95,7 +95,8 @@ def test_min_liquidity_default_threshold_is_5m_tl(monkeypatch) -> None:
     sys.modules.pop("bist_bot.config.subsettings", None)
     subsettings = importlib.import_module("bist_bot.config.subsettings")
     field = next(
-        f for f in dataclasses.fields(subsettings.RiskSettings)
+        f
+        for f in dataclasses.fields(subsettings.RiskSettings)
         if f.name == "MIN_LIQUIDITY_VALUE_TL"
     )
     assert field.default == 5_000_000.0

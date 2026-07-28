@@ -317,9 +317,7 @@ def test_alert_manager_skips_without_webhook():
     reset_alert_manager()
     manager = AlertManager(webhook_url="", transport=MagicMock(return_value=True))
     reset_alert_manager(manager)
-    ok = manager.send(
-        Alert(title="x", message="y", level=AlertLevel.WARNING, ticker="A.IS")
-    )
+    ok = manager.send(Alert(title="x", message="y", level=AlertLevel.WARNING, ticker="A.IS"))
     assert ok is False
     assert manager.sent_count == 0
 

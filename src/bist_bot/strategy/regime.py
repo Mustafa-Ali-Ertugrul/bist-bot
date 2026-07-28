@@ -88,21 +88,15 @@ def get_trend_bias(indicators, df: pd.DataFrame) -> TrendBias:
     ):
         sma_20_series = enriched["sma_20"]
         ema_long_series = enriched[f"ema_{settings.EMA_LONG}"]
-        sma_20_slope = (
-            float(sma_20_series.iloc[-1])
-            - float(sma_20_series.iloc[-1 - slope_lookback])
+        sma_20_slope = float(sma_20_series.iloc[-1]) - float(
+            sma_20_series.iloc[-1 - slope_lookback]
         )
-        ema_200_slope = (
-            float(ema_long_series.iloc[-1])
-            - float(ema_long_series.iloc[-1 - slope_lookback])
+        ema_200_slope = float(ema_long_series.iloc[-1]) - float(
+            ema_long_series.iloc[-1 - slope_lookback]
         )
         sma_20_dir = 1 if sma_20_slope > 0 else (-1 if sma_20_slope < 0 else 0)
         ema_200_dir = 1 if ema_200_slope > 0 else (-1 if ema_200_slope < 0 else 0)
-        if (
-            sma_20_dir != 0
-            and ema_200_dir != 0
-            and sma_20_dir != ema_200_dir
-        ):
+        if sma_20_dir != 0 and ema_200_dir != 0 and sma_20_dir != ema_200_dir:
             return TrendBias.NEUTRAL
 
     if (

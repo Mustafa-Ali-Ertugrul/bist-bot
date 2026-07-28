@@ -47,9 +47,7 @@ def test_paper_broker_sell_reduces_position() -> None:
 
 def test_paper_broker_cancel_open_limit_order() -> None:
     broker = PaperBroker(initial_cash=50_000.0, manual_confirm=True)
-    result = broker.submit_order(
-        "GARAN.IS", "BUY", 10, OrderType.LIMIT, price=80.0
-    )
+    result = broker.submit_order("GARAN.IS", "BUY", 10, OrderType.LIMIT, price=80.0)
     assert result.state is OrderState.CREATED
     assert broker.cancel_order(result.order_id) is True
     status = broker.get_order_status(result.order_id)
@@ -144,11 +142,15 @@ def test_order_executor_propagates_venue_failure() -> None:
     mock_settings.ALGOLAB_DRY_RUN = True
 
     mock_venue = MagicMock()
-    mock_venue.place_order.return_value = MagicMock(accepted=False, state=OrderState.REJECTED, order_id="", message="API down")
+    mock_venue.place_order.return_value = MagicMock(
+        accepted=False, state=OrderState.REJECTED, order_id="", message="API down"
+    )
     live = LiveBroker(provider="algolab", settings=mock_settings)
     live._venue = mock_venue  # inject mock venue
 
-    executor = OrderExecutor(live, settings=MagicMock(AUTO_EXECUTE=True, AUTO_EXECUTE_WARN_MAX_QUANTITY=100_000))
+    executor = OrderExecutor(
+        live, settings=MagicMock(AUTO_EXECUTE=True, AUTO_EXECUTE_WARN_MAX_QUANTITY=100_000)
+    )
     signal = Signal(
         ticker="THYAO.IS",
         signal_type=SignalType.STRONG_BUY,

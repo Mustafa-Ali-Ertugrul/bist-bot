@@ -264,7 +264,9 @@ class DataSettings:
     OFFICIAL_TIMEOUT: float = _get_float_env("OFFICIAL_TIMEOUT", 30.0)
     OFFICIAL_MAX_RETRIES: int = _get_int_env("OFFICIAL_MAX_RETRIES", 3)
     OFFICIAL_RETRY_BACKOFF_SECONDS: float = _get_float_env("OFFICIAL_RETRY_BACKOFF_SECONDS", 1.0)
-    OFFICIAL_MAX_RETRY_SLEEP_SECONDS: float = _get_float_env("OFFICIAL_MAX_RETRY_SLEEP_SECONDS", 2.0)
+    OFFICIAL_MAX_RETRY_SLEEP_SECONDS: float = _get_float_env(
+        "OFFICIAL_MAX_RETRY_SLEEP_SECONDS", 2.0
+    )
     OFFICIAL_AUTH_ENDPOINT: str = _get_str_env("OFFICIAL_AUTH_ENDPOINT")
     OFFICIAL_HISTORY_ENDPOINT: str = _get_str_env("OFFICIAL_HISTORY_ENDPOINT")
     OFFICIAL_BATCH_ENDPOINT: str = _get_str_env("OFFICIAL_BATCH_ENDPOINT")
@@ -282,7 +284,9 @@ class DataSettings:
     PROVIDER_SINGLE_TIMEOUT_SECONDS: int = _get_int_env("PROVIDER_SINGLE_TIMEOUT_SECONDS", 10)
     YFINANCE_MAX_RETRIES: int = _get_int_env("YFINANCE_MAX_RETRIES", 3)
     YFINANCE_RETRY_BACKOFF_SECONDS: float = _get_float_env("YFINANCE_RETRY_BACKOFF_SECONDS", 1.0)
-    YFINANCE_MAX_RETRY_SLEEP_SECONDS: float = _get_float_env("YFINANCE_MAX_RETRY_SLEEP_SECONDS", 2.0)
+    YFINANCE_MAX_RETRY_SLEEP_SECONDS: float = _get_float_env(
+        "YFINANCE_MAX_RETRY_SLEEP_SECONDS", 2.0
+    )
 
 
 @dataclass(frozen=True)
@@ -407,9 +411,7 @@ class NotificationSettings:
     # Group routing now uses robust-watchlist membership (load_watchlist("robust")).
     # Kept for backward compatibility only.
     NOTIFICATION_MAX_RETRIES: int = _get_int_env("NOTIFICATION_MAX_RETRIES", 3)
-    TELEGRAM_GROUP_BATCH_THRESHOLD: int = _get_int_env(
-        "TELEGRAM_GROUP_BATCH_THRESHOLD", 5
-    )
+    TELEGRAM_GROUP_BATCH_THRESHOLD: int = _get_int_env("TELEGRAM_GROUP_BATCH_THRESHOLD", 5)
     NOTIFICATION_RETRY_DELAY: int = _get_int_env("NOTIFICATION_RETRY_DELAY", 5)
     # How long a generated signal remains fresh/actionable (minutes).
     # Signals older than this are marked expired and skipped for notifications.
