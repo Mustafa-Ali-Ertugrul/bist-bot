@@ -81,6 +81,30 @@ def test_scheduler_closed_market_uses_idle_poll(monkeypatch) -> None:
     assert slept == [60]
 
 
+def test_scheduler_keeps_normal_interval_after_13_on_full_day(monkeypatch) -> None:
+    scanner = DummyScanner()
+    scheduler = MarketScheduler(scanner, DummyNotifier(), settings=DummySettings())
+    slept = []
+
+    def fake_sleep(seconds: float) -> None:
+        slept.append(seconds)
+        scheduler.running = False
+
+    class FakeDateTime:
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 7, 28, 13, 4, tzinfo=tz)
+
+    monkeypatch.setattr("bist_bot.scheduler.datetime", FakeDateTime)
+    monkeypatch.setattr("bist_bot.scheduler.is_bist_open", lambda _date: True)
+    monkeypatch.setattr("bist_bot.scheduler.sleep", fake_sleep)
+
+    scheduler.run_loop()
+
+    assert scanner.calls == 1
+    assert slept == [10]
+
+
 class RetryScanner:
     """Scanner that fails first time, succeeds on retry."""
 

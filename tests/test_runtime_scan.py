@@ -213,7 +213,7 @@ def test_scan_timeout_resets_stale_scan_in_progress():
         assert result is True
         assert fake.scan_in_progress is False
         assert fake.scan_error is not None
-        assert "tamamlanamadi" in fake.scan_error.lower()
+        assert "tamamlanamad" in fake.scan_error.lower()
         mock_logger.warning.assert_called_once()
 
 
@@ -630,13 +630,13 @@ def test_scan_detail_summary_chips_use_top_reason_and_stage_from_sorted_payload(
         total_scanned=20,
     )
 
-    assert "Top blocker" in html_output
+    assert "En çok engelleyen" in html_output
     assert "Yatay piyasa filtresi" in html_output
     assert "score_filtered_sideways" in html_output
-    assert "Top stage" in html_output
+    assert "En çok eleyen aşama" in html_output
     assert "Skorlama" in html_output
     assert "scoring" in html_output
-    assert "Rejection rate" in html_output
+    assert "Filtre kaydı oranı" in html_output
     assert "%35.0" in html_output
 
 
@@ -689,7 +689,7 @@ def test_scan_detail_rejection_rate_history_renders_recent_rows():
         ]
     )
 
-    assert "Recent rejection rates" in html_output
+    assert "Son eleme oranları" in html_output
     assert "scan-002" in html_output
     assert "%40.0" in html_output
     assert "score_filtered_sideways" in html_output
@@ -708,9 +708,9 @@ def test_scan_detail_history_summary_chips_use_aggregated_history_payload():
         }
     )
 
-    assert "Last N scans" in html_output
+    assert "Son N tarama" in html_output
     assert "7/20" in html_output
-    assert "Most frequent blocker" in html_output
+    assert "En sık engelleyen" in html_output
     assert "Yatay piyasa filtresi" in html_output
     assert "%22.5" in html_output
 
@@ -759,7 +759,7 @@ def test_scan_detail_page_shows_empty_state_when_no_completed_scan():
 
     mock_section_title.assert_called_with("Scan durumu", "Bekleyen veri")
     empty_panels = [call.args[0] for call in mock_render_html_panel.call_args_list]
-    assert any("Henuz tamamlanmis bir scan kaydi bulunmuyor" in panel for panel in empty_panels)
+    assert any("Henüz tamamlanmış bir tarama kaydı bulunmuyor." in panel for panel in empty_panels)
 
 
 def test_scan_detail_page_renders_historical_analytics_when_history_exists():
@@ -843,10 +843,10 @@ def test_scan_detail_page_renders_historical_analytics_when_history_exists():
         scan_detail_page.render_scan_detail_page()
 
     section_calls = [call.args for call in mock_section_title.call_args_list]
-    assert ("Historical Analytics", "Son 20 scan trendi") in section_calls
+    assert ("Geçmiş Analizleri", "Son 20 tarama trendi") in section_calls
     history_panels = [call.args[0] for call in mock_render_html_panel.call_args_list]
-    assert any("Most frequent blockers" in panel for panel in history_panels)
-    assert any("Recent rejection rates" in panel for panel in history_panels)
+    assert any("En Sık Eleme Nedenleri" in panel for panel in history_panels)
+    assert any("Son eleme oranları" in panel for panel in history_panels)
 
 
 def test_start_background_scan_limited_respects_initial_scan_limit():

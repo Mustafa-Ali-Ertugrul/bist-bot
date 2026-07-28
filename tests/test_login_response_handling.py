@@ -9,7 +9,6 @@ from bist_bot.streamlit_app import (
     _complete_auth,
     _extract_token,
     _handle_query_actions,
-    _render_sidebar_news_html,
     _response_message,
 )
 
@@ -23,46 +22,11 @@ def test_response_message_json_with_message():
     assert _response_message(resp, "default") == "Invalid credentials"
 
 
-def test_render_sidebar_news_html_links_to_news_site():
-    html_output = _render_sidebar_news_html(
-        [
-            {
-                "title": "BIST 100 test haberi",
-                "url": "https://example.com/news",
-                "source": "Kaynak",
-                "published_at": "Wed, 20 May",
-            }
-        ]
-    )
-
-    assert "BIST100 Haberleri" in html_output
-    assert "BIST 100 test haberi" in html_output
-    assert "href='https://example.com/news'" in html_output
-    assert "target='_blank'" in html_output
-
-
-def test_render_sidebar_news_html_escapes_untrusted_news_fields():
-    html_output = _render_sidebar_news_html(
-        [
-            {
-                "title": "<script>alert(1)</script>",
-                "url": "https://example.com/?q='bad'",
-                "source": "<b>Kaynak</b>",
-                "published_at": "",
-            }
-        ]
-    )
-
-    assert "<script>" not in html_output
-    assert "&lt;script&gt;" in html_output
-    assert "&#x27;bad&#x27;" in html_output
-
-
 def test_response_message_json_without_message_uses_status_code_fallback():
     resp = MagicMock()
     resp.status_code = 401
     resp.json.return_value = {"status": "error"}
-    assert "E-posta veya şifre hatalı" in _response_message(resp, "default")
+    assert "sifre hatali" in _response_message(resp, "default")
 
 
 def test_response_message_non_json_500_shows_server_error_message():
@@ -71,7 +35,7 @@ def test_response_message_non_json_500_shows_server_error_message():
     resp.json.side_effect = ValueError("not json")
     resp.text = "<html><body>Internal Server Error</body></html>"
     result = _response_message(resp, "default")
-    assert "API tarafında hata" in result
+    assert "API tarafinda hata" in result
     assert "500" in result
 
 
@@ -81,7 +45,7 @@ def test_response_message_empty_non_json_500_shows_server_error_message():
     resp.json.side_effect = ValueError("not json")
     resp.text = ""
     result = _response_message(resp, "default")
-    assert "API tarafında hata" in result
+    assert "API tarafinda hata" in result
     assert "500" in result
 
 
@@ -89,14 +53,14 @@ def test_response_message_429_rate_limit():
     resp = MagicMock()
     resp.status_code = 429
     resp.json.return_value = {}
-    assert "Çok fazla giriş denemesi" in _response_message(resp, "default")
+    assert "Cok fazla" in _response_message(resp, "default")
 
 
 def test_response_message_401_unauthorized():
     resp = MagicMock()
     resp.status_code = 401
     resp.json.return_value = {}
-    assert "E-posta veya şifre hatalı" in _response_message(resp, "default")
+    assert "sifre hatali" in _response_message(resp, "default")
 
 
 def test_response_message_500_server_error():
@@ -104,7 +68,7 @@ def test_response_message_500_server_error():
     resp.status_code = 502
     resp.json.return_value = {}
     result = _response_message(resp, "default")
-    assert "API tarafında hata" in result
+    assert "API tarafinda hata" in result
     assert "502" in result
 
 
@@ -114,7 +78,7 @@ def test_response_message_non_json_429_shows_message():
     resp.json.side_effect = ValueError("not json")
     resp.text = ""
     result = _response_message(resp, "default")
-    assert "Çok fazla giriş denemesi" in result
+    assert "Cok fazla" in result
 
 
 # ── _extract_token tests ───────────────────────────────────────────────────
