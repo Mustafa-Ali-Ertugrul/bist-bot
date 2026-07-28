@@ -9,9 +9,9 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
-import pytest
+import pytest  # noqa: E402
 
-from bist_bot.risk.ticks import get_tick_size, round_to_tick
+from bist_bot.risk.ticks import get_tick_size, round_to_tick  # noqa: E402
 
 
 @pytest.mark.parametrize(

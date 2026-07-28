@@ -312,7 +312,6 @@ def test_dependencies_selects_configured_data_provider():
 
 
 def test_fetch_single_uses_cache_until_ttl_expires(monkeypatch):
-    from bist_bot.config.settings import settings
     from bist_bot.data.fetcher import BISTDataFetcher
 
     class CountingProvider:
