@@ -1,62 +1,187 @@
-version: "3.8"
-
-x-bist-bot-common: &bist-bot-common
-  build: .
-  environment:
-    TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
-    TELEGRAM_BOT_TOKEN_FILE: ${TELEGRAM_BOT_TOKEN_FILE:-/run/secrets/telegram_bot_token}
-    TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
-    JWT_SECRET_KEY: ${JWT_SECRET_KEY:-}
-    JWT_SECRET_KEY_FILE: ${JWT_SECRET_KEY_FILE:-/run/secrets/jwt_secret_key}
-    FLASK_DEBUG: "False"
-    API_BASE_URL: http://flask-api:5000
-    DB_PATH: /app/data/bist_signals.db
-    PYTHONPATH: /app/src
-  volumes:
-    - ./data:/app/data
-    - ./secrets:/run/secrets:ro
-  restart: unless-stopped
-
 services:
-  flask-api:
-    <<: *bist-bot-common
+  # Primary API / health / metrics entrypoint (task name: bot)
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
     container_name: bist-bot-api
     command: ["python", "dashboard.py"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      PYTHONPATH: /app/src
+      # settings.FLASK_PORT reads PORT first (Cloud Run convention)
+      PORT: "5000"
+      FLASK_PORT: "5000"
+      FLASK_DEBUG: "False"
+      API_BASE_URL: http://bot:5000
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://bist:bist@postgres:5432/bist_bot}
+      DB_PATH: /app/data/bist_signals.db
+      METRICS_PUBLIC: ${METRICS_PUBLIC:-true}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-only-change-me}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      BROKER_MODE: ${BROKER_MODE:-paper}
+      BROKER_PROVIDER: ${BROKER_PROVIDER:-paper}
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
     ports:
       - "5000:5000"
+    volumes:
+      - bot-data:/app/data
+      - ./results:/app/results
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:5000/health || exit 1"]
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:5000/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: 20s
+    restart: unless-stopped
 
   streamlit-ui:
-    <<: *bist-bot-common
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
     container_name: bist-bot-ui
-    command: ["streamlit", "run", "streamlit_app.py", "--server.port=8501", "--server.address=0.0.0.0"]
-    depends_on:
-      flask-api:
-        condition: service_healthy
+    command:
+      [
+        "streamlit",
+        "run",
+        "streamlit_app.py",
+        "--server.port=8501",
+        "--server.address=0.0.0.0",
+      ]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      PYTHONPATH: /app/src
+      PORT: "8501"
+      API_BASE_URL: http://bot:5000
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://bist:bist@postgres:5432/bist_bot}
+      DB_PATH: /app/data/bist_signals.db
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-only-change-me}
     ports:
       - "8501:8501"
+    volumes:
+      - bot-data:/app/data
+      - ./results:/app/results
+    depends_on:
+      bot:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8501/_stcore/health || exit 1"]
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8501/_stcore/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 15s
+      start_period: 25s
+    restart: unless-stopped
 
   scanner-worker:
-    <<: *bist-bot-common
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
     container_name: bist-bot-worker
     command: ["python", "main.py", "--worker"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      PYTHONPATH: /app/src
+      API_BASE_URL: http://bot:5000
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://bist:bist@postgres:5432/bist_bot}
+      DB_PATH: /app/data/bist_signals.db
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+      BROKER_MODE: ${BROKER_MODE:-paper}
+      BROKER_PROVIDER: ${BROKER_PROVIDER:-paper}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-only-change-me}
+      MTF_ENABLED: "false"
+    volumes:
+      - bot-data:/app/data
+      - ./results:/app/results
     depends_on:
-      flask-api:
+      bot:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 1g
     healthcheck:
       test: ["CMD-SHELL", "kill -0 1 || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 15s
+      start_period: 20s
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: bist-bot-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-bist}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bist}
+      POSTGRES_DB: ${POSTGRES_DB:-bist_bot}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: bist-bot-prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+    volumes:
+      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    depends_on:
+      bot:
+        condition: service_healthy
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: bist-bot-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+volumes:
+  bot-data:
+  postgres-data:
+  prometheus-data:
+  grafana-data:

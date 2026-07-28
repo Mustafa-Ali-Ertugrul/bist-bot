@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from typing import Any, cast
 
@@ -23,8 +24,16 @@ class OrdersRepository:
         broker_order_id: str | None = None,
         filled_qty: float = 0.0,
         avg_fill_price: float | None = None,
+        position_id: int | None = None,
+        purpose: str = "ENTRY",
+        metadata_json: str | dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         now = self.manager.now_utc()
+        metadata_payload = (
+            json.dumps(metadata_json, ensure_ascii=False, default=str)
+            if isinstance(metadata_json, dict)
+            else metadata_json
+        )
 
         def _write(session):
             row = OrderRecord(
@@ -39,6 +48,9 @@ class OrdersRepository:
                 updated_at=now,
                 filled_qty=filled_qty,
                 avg_fill_price=avg_fill_price,
+                position_id=position_id,
+                purpose=purpose,
+                metadata_json=metadata_payload,
             )
             session.add(row)
             session.flush()
@@ -54,7 +66,14 @@ class OrdersRepository:
         broker_order_id: str | None = None,
         filled_qty: float | None = None,
         avg_fill_price: float | None = None,
+        metadata_json: str | dict[str, Any] | None = None,
     ) -> dict[str, Any] | None:
+        metadata_payload = (
+            json.dumps(metadata_json, ensure_ascii=False, default=str)
+            if isinstance(metadata_json, dict)
+            else metadata_json
+        )
+
         def _write(session) -> dict[str, Any] | None:
             row = session.get(OrderRecord, order_id)
             if row is None:
@@ -67,6 +86,8 @@ class OrdersRepository:
                 row.filled_qty = filled_qty
             if avg_fill_price is not None:
                 row.avg_fill_price = avg_fill_price
+            if metadata_payload is not None:
+                row.metadata_json = metadata_payload
             row.updated_at = self.manager.now_utc()
             session.flush()
             return self._to_dict(row)
@@ -129,4 +150,7 @@ class OrdersRepository:
             else row.updated_at,
             "filled_qty": row.filled_qty,
             "avg_fill_price": row.avg_fill_price,
+            "position_id": row.position_id,
+            "purpose": row.purpose,
+            "metadata_json": row.metadata_json,
         }

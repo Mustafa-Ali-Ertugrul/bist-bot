@@ -13,6 +13,7 @@ if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
 from bist_bot.risk import RiskLevels, RiskManager  # noqa: E402
+from bist_bot.risk.sizing import apply_position_budget  # noqa: E402
 
 
 def build_frame(scale: float = 1.0, atr: float = 2.0) -> pd.DataFrame:
@@ -106,3 +107,14 @@ def test_stop_loss_is_below_entry_price():
 def test_zero_capital_raises_error():
     with pytest.raises(ValueError):
         RiskManager(capital=0)
+
+
+def test_zero_price_position_budget_returns_zero_loss():
+    levels = RiskLevels(final_stop=-1.0, volatility_scale=1.0, correlation_scale=1.0)
+
+    apply_position_budget(price=0.0, levels=levels, capital=10000.0, max_risk_pct=2.0)
+
+    assert levels.position_size == 0
+    assert levels.max_loss_tl == 0
+    assert levels.risk_budget_tl == 0
+

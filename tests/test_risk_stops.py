@@ -185,8 +185,10 @@ class TestDetermineFinalLevels:
         levels = RiskLevels()
         result = determine_final_levels(price=100.0, levels=levels)
 
-        assert result.final_stop == levels.stop_percent
-        assert result.final_target == levels.target_percent
+        # H8: daily_price_limit_pct=10 default → stop clamp to 90 (0 < 90)
+        # target stays 0.0 (0 is not > 110, so no upward clamp)
+        assert result.final_stop == 0.0
+        assert result.final_target == 0.0
 
     def test_confidence_high_with_low_std(self):
         levels = RiskLevels(

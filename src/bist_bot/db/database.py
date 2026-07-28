@@ -8,7 +8,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import TypeVar
 
 from sqlalchemy import (
     DateTime,
@@ -16,7 +16,6 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
-    create_engine,
     event,
     text,
 )
@@ -161,6 +160,56 @@ class OrderRecord(Base):
     )
     filled_qty: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     avg_fill_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    position_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    purpose: Mapped[str] = mapped_column(String, nullable=False, default="ENTRY")
+    metadata_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+
+
+class LivePositionRecord(Base):
+    __tablename__ = "live_positions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    ticker: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    side: Mapped[str] = mapped_column(String, nullable=False, default="LONG")
+    entry_order_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    entry_price: Mapped[float] = mapped_column(Float, nullable=False)
+    quantity: Mapped[float] = mapped_column(Float, nullable=False)
+    entry_time: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    stop_loss: Mapped[float] = mapped_column(Float, nullable=False)
+    target_price: Mapped[float] = mapped_column(Float, nullable=False)
+    risk_reward_ratio: Mapped[float | None] = mapped_column(Float, nullable=True)
+    position_size_method: Mapped[str | None] = mapped_column(String, nullable=True)
+    exit_order_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    exit_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    exit_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    exit_reason: Mapped[str | None] = mapped_column(String, nullable=True)
+    realized_pnl: Mapped[float | None] = mapped_column(Float, nullable=True)
+    realized_pnl_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    fees_paid: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    settlement_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    state: Mapped[str] = mapped_column(String, nullable=False, default="ENTRY_ORDERED", index=True)
+    signal_type: Mapped[str] = mapped_column(String, nullable=False)
+    signal_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    regime: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+
+
+class AuditRecord(Base):
+    __tablename__ = "audit_trail"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC), index=True)
+    event_type: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    ticker: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    position_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    order_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    agent_state: Mapped[str] = mapped_column(String, nullable=False)
+    details: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    trigger_source: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
 
 
 _T = TypeVar("_T")
@@ -172,45 +221,57 @@ class DatabaseManager:
         self,
         database_url: str | None = None,
         sqlite_path: str | None = None,
-        pool_size: int = 5,
-        max_overflow: int = 10,
-        pool_timeout: int = 30,
-        busy_timeout_ms: int = 200,
+        pool_size: int | None = None,
+        max_overflow: int | None = None,
+        pool_timeout: int | None = None,
+        busy_timeout_ms: int | None = None,
         write_retry_attempts: int = 3,
         write_retry_backoff_seconds: float = 0.05,
     ) -> None:
-        self.sqlite_path = sqlite_path or settings.DB_PATH or "/tmp/bist_signals.db"
+        from bist_bot.db.connection import create_db_engine, resolve_database_url
+
+        # Prefer explicit constructor args, else settings/env via connection resolver.
+        settings_url = (getattr(settings, "DATABASE_URL", "") or "").strip()
+        settings_path = getattr(settings, "DB_PATH", None) or "bist_signals.db"
         if database_url is None and sqlite_path is not None:
             # sqlite_path explicitly given, database_url not given → use sqlite_path
-            self.database_url = ""
+            cfg = resolve_database_url(database_url="", sqlite_path=sqlite_path)
         else:
-            self.database_url = (
-                database_url if database_url is not None else (settings.DATABASE_URL or "").strip()
-            ).strip()
-        self._is_sqlite = not self.database_url or self.database_url.startswith("sqlite")
+            cfg = resolve_database_url(
+                database_url=database_url if database_url is not None else settings_url,
+                sqlite_path=sqlite_path if sqlite_path is not None else settings_path,
+            )
+
+        # Allow pool overrides from settings when not passed explicitly.
+        if pool_size is None:
+            pool_size = int(getattr(settings, "DB_POOL_SIZE", cfg.pool_size))
+        if max_overflow is None:
+            max_overflow = int(getattr(settings, "DB_MAX_OVERFLOW", cfg.max_overflow))
+        if pool_timeout is None:
+            pool_timeout = int(getattr(settings, "DB_POOL_TIMEOUT", cfg.pool_timeout))
+        if busy_timeout_ms is None:
+            busy_timeout_ms = int(getattr(settings, "DB_BUSY_TIMEOUT_MS", cfg.busy_timeout_ms))
+
+        from dataclasses import replace as dc_replace
+
+        cfg = dc_replace(
+            cfg,
+            pool_size=max(int(pool_size), 1),
+            max_overflow=max(int(max_overflow), 0),
+            pool_timeout=max(int(pool_timeout), 1),
+            busy_timeout_ms=max(int(busy_timeout_ms), 0),
+        )
+
+        self.sqlite_path = cfg.sqlite_path or settings_path
+        self.database_url = "" if cfg.is_sqlite else cfg.url
+        self._is_sqlite = cfg.is_sqlite
+        self._engine_config = cfg
         if self._is_sqlite:
             self._ensure_sqlite_parent_dir()
-        self.busy_timeout_ms = busy_timeout_ms
+        self.busy_timeout_ms = cfg.busy_timeout_ms
         self.write_retry_attempts = max(int(write_retry_attempts), 1)
         self.write_retry_backoff_seconds = max(float(write_retry_backoff_seconds), 0.0)
-        engine_url = self.database_url or f"sqlite:///{Path(self.sqlite_path)}"
-        engine_kwargs: dict[str, Any] = {
-            "future": True,
-            "pool_pre_ping": True,
-        }
-        if self._is_sqlite:
-            from sqlalchemy.pool import NullPool
-
-            engine_kwargs["poolclass"] = NullPool
-            engine_kwargs["connect_args"] = {
-                "check_same_thread": False,
-                "timeout": busy_timeout_ms / 1000,
-            }
-        else:
-            engine_kwargs["pool_size"] = pool_size
-            engine_kwargs["max_overflow"] = max_overflow
-            engine_kwargs["pool_timeout"] = pool_timeout
-        self.engine = create_engine(engine_url, **engine_kwargs)
+        self.engine = create_db_engine(cfg)
         if self._is_sqlite:
             self._register_pragmas()
         self.session_factory = scoped_session(
@@ -328,6 +389,27 @@ class DatabaseManager:
         for sql in indexes:
             conn.execute(text(sql))
 
+    def _migrate_agent_schema(self, conn) -> None:
+        """Migrate agent-related tables and order columns."""
+        order_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(orders)")).fetchall()}
+        order_migrations = [
+            ("position_id", "ALTER TABLE orders ADD COLUMN position_id INTEGER"),
+            ("purpose", "ALTER TABLE orders ADD COLUMN purpose TEXT NOT NULL DEFAULT 'ENTRY'"),
+            ("metadata_json", "ALTER TABLE orders ADD COLUMN metadata_json TEXT"),
+        ]
+        for column, sql in order_migrations:
+            if column not in order_columns:
+                conn.execute(text(sql))
+        agent_indexes = [
+            "CREATE INDEX IF NOT EXISTS idx_live_positions_state ON live_positions(state)",
+            "CREATE INDEX IF NOT EXISTS idx_live_positions_ticker ON live_positions(ticker)",
+            "CREATE INDEX IF NOT EXISTS idx_audit_trail_event_type ON audit_trail(event_type)",
+            "CREATE INDEX IF NOT EXISTS idx_audit_trail_timestamp ON audit_trail(timestamp DESC)",
+            "CREATE INDEX IF NOT EXISTS idx_orders_position_id ON orders(position_id)",
+        ]
+        for sql in agent_indexes:
+            conn.execute(text(sql))
+
     def _migrate_legacy_schema(self) -> None:
         if not self._is_sqlite:
             return
@@ -336,6 +418,7 @@ class DatabaseManager:
             self._migrate_scan_log_table(conn)
             self._migrate_paper_trades_table(conn)
             self._normalize_timestamp_columns(conn)
+            self._migrate_agent_schema(conn)
             self._create_indexes(conn)
 
     def _normalize_timestamp_columns(self, conn) -> None:

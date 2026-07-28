@@ -314,24 +314,37 @@ class SignalsRepository:
         is_expired = False
         if row.expires_at is not None:
             expires_at_iso = (
-                row.expires_at.isoformat()
-                if isinstance(row.expires_at, datetime)
-                else row.expires_at
+                row.expires_at.replace(tzinfo=UTC).isoformat()
+                if isinstance(row.expires_at, datetime) and row.expires_at.tzinfo is None
+                else (row.expires_at.isoformat() if isinstance(row.expires_at, datetime) else row.expires_at)
             )
             now = datetime.now(UTC)
             expires = row.expires_at
+            # SQLite strips tzinfo; our stored UTC times come back naive.
+            # Treat them as UTC explicitly (documented DB boundary assumption).
             if expires.tzinfo is None:
                 expires = expires.replace(tzinfo=UTC)
             is_expired = now >= expires
 
+        ts = row.timestamp
+        if isinstance(ts, datetime) and ts.tzinfo is None:
+            ts = ts.replace(tzinfo=UTC)
+
+        ca = row.created_at
+        if isinstance(ca, datetime) and ca.tzinfo is None:
+            ca = ca.replace(tzinfo=UTC)
+
+        od_iso = None
+        if row.outcome_date is not None:
+            od = row.outcome_date
+            if isinstance(od, datetime) and od.tzinfo is None:
+                od = od.replace(tzinfo=UTC)
+            od_iso = od.isoformat() if isinstance(od, datetime) else od
+
         return {
             "id": row.id,
-            "timestamp": row.timestamp.isoformat()
-            if isinstance(row.timestamp, datetime)
-            else row.timestamp,
-            "created_at": row.created_at.isoformat()
-            if isinstance(row.created_at, datetime)
-            else row.created_at,
+            "timestamp": ts.isoformat() if isinstance(ts, datetime) else ts,
+            "created_at": ca.isoformat() if isinstance(ca, datetime) else ca,
             "ticker": row.ticker,
             "signal_type": row.signal_type,
             "score": row.score,
@@ -343,9 +356,7 @@ class SignalsRepository:
             "reasons": _deserialize_reasons(row.conditions) or _deserialize_reasons(row.reasons),
             "outcome": row.outcome,
             "outcome_price": row.outcome_price,
-            "outcome_date": row.outcome_date.isoformat()
-            if isinstance(row.outcome_date, datetime)
-            else row.outcome_date,
+            "outcome_date": od_iso,
             "profit_pct": row.profit_pct,
             "conditions": _deserialize_reasons(row.conditions),
             "expires_at": expires_at_iso,

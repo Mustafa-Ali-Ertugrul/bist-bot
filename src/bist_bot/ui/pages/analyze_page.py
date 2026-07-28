@@ -26,8 +26,8 @@ from bist_bot.ui.runtime import api_request
 from bist_bot.ui.session_cooldown import consume_cooldown
 
 
-def _signal_tone(score: float) -> str:
-    if score >= settings.BUY_THRESHOLD:
+def _signal_tone(score: float, buy_threshold: float = 20.0) -> str:
+    if score >= buy_threshold:
         return "positive"
     if score >= settings.WEAK_BUY_THRESHOLD:
         return "positive"
@@ -268,7 +268,7 @@ def render_analyze_page() -> None:
     signal_score = float(signal.get("score", 0) or 0)
     signal_type = str(signal.get("type", "N/A"))
     trend = str(snapshot.get("trend", "N/A"))
-    signal_tone = _signal_tone(signal_score)
+    signal_tone = _signal_tone(signal_score, buy_threshold=float(signal.get("buy_threshold", 20.0)))
     verdict_badge = _badge_class_for_tone(signal_tone)
 
     headline_html = (

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pandas as pd
 
@@ -38,7 +38,7 @@ def test_risk_manager_restores_open_paper_position_state_after_restart(tmp_path)
         ticker="XBANK.IS",
         signal_type="BUY",
         signal_price=100.0,
-        signal_time=datetime(2025, 1, 1, 10, 0, 0),
+        signal_time=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
         stop_loss=95.0,
         target_price=110.0,
         score=20,

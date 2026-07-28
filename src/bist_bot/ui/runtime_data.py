@@ -26,11 +26,13 @@ def map_cached_signals(rows: list[dict]) -> list[Signal]:
         raw_conditions = row.get("conditions", [])
         reasons = raw_conditions if isinstance(raw_conditions, list) else [str(raw_conditions)]
         try:
-            signal_type = SignalType(row["signal_type"])
+            signal_type = SignalType.from_value(row["signal_type"])
         except Exception:
             signal_type = SignalType.HOLD
         try:
             timestamp = datetime.fromisoformat(row["created_at"])
+            if timestamp.tzinfo is None:
+                timestamp = timestamp.replace(tzinfo=UTC)
         except Exception:
             timestamp = datetime.now(TR)
         mapped.append(

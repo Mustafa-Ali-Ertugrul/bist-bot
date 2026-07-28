@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import html
+import html as _html
 
 import streamlit as st
 
@@ -12,31 +12,26 @@ from bist_bot.ui.components.app_shell import (
     PAGE_META,
     get_active_page,
     render_shell,
+    set_active_page,
 )
 from bist_bot.ui.pages.analyze_page import render_analyze_page
 from bist_bot.ui.pages.overview_page import render_overview_page
 from bist_bot.ui.pages.scan_detail_page import render_scan_detail_page
 from bist_bot.ui.pages.settings_page import render_settings_page
 from bist_bot.ui.pages.signals_page import render_signals_page
+
+try:
+    from bist_bot.ui.pages.whale_alerts_page import render_whale_alerts_page
+except ImportError as exc:
+    if exc.name != "bist_bot.ui.pages.whale_alerts_page":
+        raise
+    render_whale_alerts_page = None  # type: ignore[assignment]
 from bist_bot.ui.runtime import (
     api_request,
-    fetch_bist100_news,
     finalize_streamlit_runtime,
     prepare_streamlit_runtime,
 )
 from bist_bot.ui.runtime_styles import inject_styles
-
-try:
-    from bist_bot.ui.pages.whale_alerts_page import render_whale_alerts_page
-except ModuleNotFoundError as exc:
-    if exc.name != "bist_bot.ui.pages.whale_alerts_page":
-        raise
-
-    def render_whale_alerts_page() -> None:
-        st.warning(
-            "Balina Radar ekranı bu dağıtım paketinde bulunamadı. Lütfen deployment artefactını yenileyin."
-        )
-
 
 st.set_page_config(
     page_title="BIST Bot",
@@ -44,6 +39,34 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+
+def _render_sidebar_news_html(news_items: list[dict]) -> str:
+    """Render the operator sidebar news panel as escaped HTML.
+
+    Defends against untrusted news payloads by escaping title, source, and
+    published_at fields and HTML-escaping the URL (single quotes included).
+    Returns the empty string when no items are provided.
+    """
+    if not news_items:
+        return ""
+    parts = [
+        "<div class='bb-news-panel'>",
+        "<div class='bb-news-header'>BIST100 Haberleri</div>",
+    ]
+    for item in news_items:
+        title = _html.escape(str(item.get("title", "") or ""))
+        source = _html.escape(str(item.get("source", "") or ""))
+        published = _html.escape(str(item.get("published_at", "") or ""))
+        url = _html.escape(str(item.get("url", "") or ""), quote=True)
+        parts.append(
+            "<div class='bb-news-item'>"
+            f"<a class='bb-news-title' href='{url}' target='_blank' rel='noopener noreferrer'>{title}</a>"
+            f"<div class='bb-news-meta'>{source} &middot; {published}</div>"
+            "</div>"
+        )
+    parts.append("</div>")
+    return "".join(parts)
 
 
 def _response_message(response, default: str) -> str:
@@ -62,6 +85,7 @@ def _response_message(response, default: str) -> str:
             return f"API tarafında hata oluştu (HTTP {code}). Lütfen daha sonra tekrar deneyin."
         if snippet:
             return f"HTTP {code}: {snippet}"
+        return default
     if isinstance(payload, dict):
         msg = payload.get("message", "")
         if msg:
@@ -73,43 +97,6 @@ def _response_message(response, default: str) -> str:
     if code >= 500:
         return f"API tarafında hata oluştu (HTTP {code}). Lütfen daha sonra tekrar deneyin."
     return default or f"HTTP {code}: bilinmeyen hata"
-
-
-def _render_sidebar_news_html(news_items: list[dict[str, str]]) -> str:
-    if not news_items:
-        return (
-            "<div class='bb-sidebar-news'>"
-            "<div class='bb-sidebar-kicker'>BIST100 Haberleri</div>"
-            "<div class='bb-sidebar-note'>Güncel haberler şu an alınamadı.</div>"
-            "</div>"
-        )
-
-    rows = []
-    for item in news_items[:5]:
-        title = html.escape(str(item.get("title", "") or "Haber başlığı yok"))
-        url = html.escape(str(item.get("url", "") or "#"), quote=True)
-        source = html.escape(str(item.get("source", "") or "Haber"))
-        published_at = html.escape(str(item.get("published_at", "") or ""))
-        meta = f"{source} · {published_at}" if published_at else source
-        rows.append(
-            "<a class='bb-sidebar-news-link' "
-            f"href='{url}' target='_blank' rel='noopener noreferrer'>"
-            f"<span class='bb-sidebar-news-title'>{title}</span>"
-            f"<span class='bb-sidebar-news-meta'>{meta}</span>"
-            "</a>"
-        )
-
-    return (
-        "<div class='bb-sidebar-news'>"
-        "<div class='bb-sidebar-kicker'>BIST100 Haberleri</div>"
-        "<div class='bb-sidebar-news-list'>" + "".join(rows) + "</div>"
-        "</div>"
-    )
-
-
-def _render_sidebar_news() -> None:
-    news_items = fetch_bist100_news(max_results=5)
-    st.sidebar.markdown(_render_sidebar_news_html(news_items), unsafe_allow_html=True)
 
 
 def _extract_token(response) -> str | None:
@@ -128,24 +115,28 @@ def _extract_token(response) -> str | None:
 
 def _handle_query_actions() -> None:
     action = str(st.query_params.get("action", "")).lower().strip()
-    if action == "logout":
-        st.session_state.auth_token = None
-        st.session_state.auth_email = ""
-        st.session_state.is_authenticated = False
-        st.session_state.app_bootstrapped = False
-        st.session_state.just_logged_in = False
+    if action == "toggle_sidebar":
+        st.session_state.sidebar_collapsed = not bool(
+            st.session_state.get("sidebar_collapsed", False)
+        )
         try:
             del st.query_params["action"]
         except KeyError:
             pass
         st.rerun()
-    elif action == "toggle_sidebar":
-        st.session_state.sidebar_collapsed = not st.session_state.get("sidebar_collapsed", False)
-        try:
-            del st.query_params["action"]
-        except KeyError:
-            pass
-        st.rerun()
+        return
+    if action != "logout":
+        return
+    st.session_state.auth_token = None
+    st.session_state.auth_email = ""
+    st.session_state.is_authenticated = False
+    st.session_state.app_bootstrapped = False
+    st.session_state.just_logged_in = False
+    try:
+        del st.query_params["action"]
+    except KeyError:
+        pass
+    st.rerun()
 
 
 def _complete_auth(email: str, token: str) -> None:
@@ -179,54 +170,51 @@ def _login_form() -> bool:
     st.markdown(
         """
         <section class="bb-hero bb-hero-secondary">
-          <div class="bb-kicker">BIST Bot Girişi</div>
-          <div class="bb-title">Premium trading konsolu için operatör kimlik doğrulaması</div>
-          <div class="bb-subtitle">Koyu fintech arayüzü giriş ekranında da devam ediyor. Hesabınızla oturum açıp işlem paneli, sinyaller, analiz ve ayarlar ekranlarına erişebilirsiniz.</div>
+          <div class="bb-kicker">BIST Bot Access</div>
+          <div class="bb-title">Operator authentication for the premium trading console</div>
+          <div class="bb-subtitle">Neon dark fintech arayuzu artik giris ekraninda da devam ediyor. Hesabinizla oturum acip dashboard, signals, analysis ve settings yuzeylerine erisebilirsiniz.</div>
           <div class="bb-chip-row">
-            <span class="bb-chip">Güvenli JWT Erişimi</span>
-            <span class="bb-chip bb-chip-secondary">Mobil Öncelikli Arayüz</span>
+            <span class="bb-chip">Secure JWT Access</span>
+            <span class="bb-chip bb-chip-secondary">Mobile-first UI</span>
           </div>
         </section>
         """,
         unsafe_allow_html=True,
     )
-    login_tab, register_tab = st.tabs(["Giriş", "Kayıt Ol"])
+    with st.form("login_form"):
+        email = st.text_input("Email", value=st.session_state.get("auth_email", ""))
+        password = st.text_input("Sifre", type="password")
+        submitted = st.form_submit_button("Giris yap", use_container_width=True, type="primary")
 
-    with login_tab:
-        with st.form("login_form"):
-            email = st.text_input("E-posta", value=st.session_state.get("auth_email", ""))
-            password = st.text_input("Şifre", type="password")
-            submitted = st.form_submit_button("Giriş yap", use_container_width=True, type="primary")
-
-        if submitted:
-            try:
-                response = api_request(
-                    "POST",
-                    "/api/auth/login",
-                    json={"email": email, "password": password},
-                )
-            except Exception as exc:
-                st.error(f"API erişimi başarısız: {exc}")
-                return False
-            if response.ok:
-                token = _extract_token(response)
-                if token:
-                    _complete_auth(str(email), token)
-                else:
-                    st.error("Giriş yanıtı token içermiyor. Lütfen tekrar deneyin.")
-            else:
-                st.error(_response_message(response, "Giriş başarısız. E-posta veya şifre hatalı."))
-
-    with register_tab:
-        if not settings.ALLOW_PUBLIC_REGISTRATION:
-            st.info("Yeni hesap kaydı kapalı. Lütfen tanımlı operatör hesabı ile giriş yapın.")
+    if submitted:
+        try:
+            response = api_request(
+                "POST",
+                "/api/auth/login",
+                json={"email": email, "password": password},
+            )
+        except Exception as exc:
+            st.error(f"API erisimi basarisiz: {exc}")
             return False
+        if response.ok:
+            token = _extract_token(response)
+            if token:
+                _complete_auth(str(email), token)
+            else:
+                st.error("Giris yaniti token icermiyor. Lutfen tekrar deneyin.")
+        else:
+            st.error(_response_message(response, "Giriş başarısız. E-posta veya şifre hatalı."))
 
+    if not settings.ALLOW_PUBLIC_REGISTRATION:
+        st.info("Yeni hesap kaydi kapali. Lutfen tanimli operator hesabi ile giris yapin.")
+        return False
+
+    with st.expander("Yeni operator hesabi olustur"):
         with st.form("register_form"):
-            register_email = st.text_input("E-posta", key="register_email")
-            register_password = st.text_input("Şifre", type="password", key="register_password")
+            register_email = st.text_input("Email", key="register_email")
+            register_password = st.text_input("Sifre", type="password", key="register_password")
             register_password_confirm = st.text_input(
-                "Şifre tekrar", type="password", key="register_password_confirm"
+                "Sifre tekrar", type="password", key="register_password_confirm"
             )
             register_submitted = st.form_submit_button(
                 "Kaydol", use_container_width=True, type="primary"
@@ -234,7 +222,7 @@ def _login_form() -> bool:
 
         if register_submitted:
             if register_password != register_password_confirm:
-                st.error("Şifreler eşleşmiyor.")
+                st.error("Sifreler eslesmiyor.")
                 return False
             try:
                 response = api_request(
@@ -243,17 +231,34 @@ def _login_form() -> bool:
                     json={"email": register_email, "password": register_password},
                 )
             except Exception as exc:
-                st.error(f"API erişimi başarısız: {exc}")
+                st.error(f"API erisimi basarisiz: {exc}")
                 return False
             if response.ok:
                 token = _extract_token(response)
                 if token:
                     _complete_auth(str(register_email), token)
                 else:
-                    st.error("Kayıt yanıtı token içermiyor. Lütfen tekrar deneyin.")
+                    st.error("Kayit yaniti token icermiyor. Lutfen tekrar deneyin.")
             else:
-                st.error(_response_message(response, "Kayıt başarısız."))
+                st.error(_response_message(response, "Kayit basarisiz."))
     return False
+
+
+def _handle_shell_action(action: str | None) -> None:
+    if not action:
+        return
+    if action == "logout":
+        st.session_state.auth_token = None
+        st.session_state.auth_email = ""
+        st.session_state.is_authenticated = False
+        st.session_state.app_bootstrapped = False
+        st.session_state.just_logged_in = False
+        set_active_page("dashboard")
+        return
+    if action.startswith("page:"):
+        target = action.split(":", 1)[1].strip().lower()
+        if target in PAGE_META:
+            set_active_page(target)
 
 
 def _bootstrap_authenticated_app() -> None:
@@ -278,6 +283,7 @@ def main() -> None:
         _login_form()
         return
 
+    inject_styles()
     _bootstrap_authenticated_app()
     if st.session_state.get("just_logged_in"):
         return
@@ -286,36 +292,11 @@ def main() -> None:
     prepare_streamlit_runtime()
     st.session_state.app_bootstrapped = True
 
-    sidebar_collapsed = st.session_state.get("sidebar_collapsed", False)
-    inject_styles(sidebar_collapsed=sidebar_collapsed)
+    inject_styles()
 
     page = get_active_page()
-
-    toggle_label = "›" if sidebar_collapsed else "‹"
-    st.markdown("<span class='bb-sidebar-toggle-host'></span>", unsafe_allow_html=True)
-    if st.button(toggle_label, key="bb_sidebar_toggle_button", help="Sidebar ac/kapat"):
-        st.session_state.sidebar_collapsed = not sidebar_collapsed
-        st.rerun()
-
-    # Sidebar navigation — always rendered
-    st.sidebar.markdown(
-        "<div class='bb-sidebar-kicker'>Navigasyon</div>"
-        "<div class='bb-sidebar-note'>İşlem paneli ana katmandır; diğer ekranlar alt katmandır.</div>",
-        unsafe_allow_html=True,
-    )
-    for p, meta in PAGE_META.items():
-        if st.sidebar.button(
-            meta["label"],
-            key=f"nav_{p}",
-            type="primary" if p == page else "secondary",
-            use_container_width=True,
-        ):
-            st.query_params["page"] = p
-            st.rerun()
-
-    _render_sidebar_news()
-
-    render_shell(page, email=st.session_state.get("auth_email", ""))
+    shell_action = render_shell(page, email=st.session_state.get("auth_email", ""))
+    _handle_shell_action(shell_action)
 
     if page == "dashboard":
         render_overview_page()
@@ -324,7 +305,10 @@ def main() -> None:
     elif page == "signals":
         render_signals_page()
     elif page == "whale":
-        render_whale_alerts_page()
+        if render_whale_alerts_page is None:
+            st.warning("Balina Radar ekranı bu dağıtım paketinde bulunamadı")
+        else:
+            render_whale_alerts_page()
     elif page == "analysis":
         render_analyze_page()
     else:

@@ -42,5 +42,4 @@ def prepare_analysis_frame(
     )
     last = analysis_df.iloc[-1].copy()
     prev = analysis_df.iloc[-2]
-    last["_prev_close_for_scoring"] = prev["close"]
     return analysis_df, trend_bias, last, prev

@@ -20,6 +20,7 @@ from bist_bot.strategy import (  # noqa: E402
     StrategyEngine,
     TrendBias,
 )
+from bist_bot.strategy.engine_filters import calculate_score_and_reasons  # noqa: E402
 from bist_bot.strategy.engine_meta import append_signal_reasons, apply_buy_side_risk  # noqa: E402
 from bist_bot.strategy.params import StrategyParams  # noqa: E402
 from bist_bot.strategy.scoring import score_momentum, score_volume  # noqa: E402
@@ -203,10 +204,11 @@ def test_engine_thresholds_match_config():
     engine = StrategyEngine()
 
     assert engine.STRONG_BUY_THRESHOLD == settings.STRONG_BUY_THRESHOLD == 48
-    assert engine.BUY_THRESHOLD == settings.BUY_THRESHOLD == 20
+    assert engine.BUY_THRESHOLD == engine.params.buy_threshold
     assert engine.WEAK_BUY_THRESHOLD == settings.WEAK_BUY_THRESHOLD == 8
     assert engine.WEAK_SELL_THRESHOLD == settings.WEAK_SELL_THRESHOLD == -8
-    assert engine.SELL_THRESHOLD == settings.SELL_THRESHOLD == -20
+    assert engine.SELL_THRESHOLD == -25
+    assert settings.SELL_THRESHOLD == -20
     assert engine.STRONG_SELL_THRESHOLD == settings.STRONG_SELL_THRESHOLD == -48
 
 
@@ -218,7 +220,29 @@ def test_engine_uses_configured_sideways_and_momentum_thresholds():
     assert engine.MOMENTUM_CONFIRMATION == 6.5
     assert engine.params.adx_threshold == settings.ADX_THRESHOLD
     assert engine.params.min_trigger_candles == 30
-    assert engine.params.sideways_score_multiplier == 0.6
+    assert engine.params.sideways_score_multiplier == 0.4
+
+
+def test_negative_score_requires_momentum_confirmation():
+    params = StrategyParams()
+    df = pd.DataFrame({"close": [100.0] * 20})
+    last = pd.Series({"close": 100.0})
+    prev = pd.Series({"close": 100.0})
+
+    result = calculate_score_and_reasons(
+        params,
+        "TEST.IS",
+        df,
+        last=last,
+        prev=prev,
+        momentum_scorer=lambda _last, _prev: (-55.0, ["bearish momentum"]),
+        trend_scorer=lambda _last, _prev, _df=None: (0.0, []),
+        volume_scorer=lambda _last, _prev: (0.0, []),
+        structure_scorer=lambda _last: (0.0, []),
+        momentum_checker=lambda _df, _threshold: False,
+    )
+
+    assert result is None
 
 
 def test_non_buy_signal_does_not_expose_long_trade_plan():
@@ -244,9 +268,11 @@ def test_non_buy_signal_does_not_expose_long_trade_plan():
     )
 
     assert adjusted is not None
-    assert adjusted.final_stop == 0.0
-    assert adjusted.final_target == 0.0
+    # SHORT yönü için stop fiyatın üstünde, target altında olmalı
+    assert adjusted.final_stop > 100.0
+    assert adjusted.final_target < 100.0
     assert adjusted.position_size == 0
+    assert "Short trade plan" in adjusted.method_used
 
     signal = Signal(
         ticker="TEST.IS",
@@ -269,17 +295,23 @@ def test_volume_price_confirmation_scores_directionally():
         "volume_trend": "FLAT",
         "obv_trend": "FLAT",
         "close": 100.0,
-        "_prev_close_for_scoring": 99.0,
     }
+    prev = pd.Series({"close": 99.0})
 
     bullish_score, bullish_reasons = score_volume(
-        params, pd.Series({**base, "price_volume_direction": "BULLISH_CONFIRMATION"})
+        params,
+        pd.Series({**base, "price_volume_direction": "BULLISH_CONFIRMATION"}),
+        prev,
     )
     bearish_score, bearish_reasons = score_volume(
-        params, pd.Series({**base, "price_volume_direction": "BEARISH_CONFIRMATION"})
+        params,
+        pd.Series({**base, "price_volume_direction": "BEARISH_CONFIRMATION"}),
+        prev,
     )
     pullback_score, pullback_reasons = score_volume(
-        params, pd.Series({**base, "price_volume_direction": "LOW_VOLUME_PULLBACK"})
+        params,
+        pd.Series({**base, "price_volume_direction": "LOW_VOLUME_PULLBACK"}),
+        prev,
     )
 
     assert bullish_score == params.score_price_volume_confirm
@@ -342,8 +374,8 @@ def test_score_classification_full_range():
         (50, "STRONG_BUY"),
         (48, "STRONG_BUY"),
         (47, "BUY"),
-        (20, "BUY"),
-        (19, "WEAK_BUY"),
+        (25, "BUY"),
+        (24, "WEAK_BUY"),
         (8.1, "WEAK_BUY"),
         (8, "WEAK_BUY"),
         (7, "HOLD"),
@@ -352,7 +384,7 @@ def test_score_classification_full_range():
         (-8, "WEAK_SELL"),
         (-8.1, "WEAK_SELL"),
         (-19, "WEAK_SELL"),
-        (-20, "SELL"),
+        (-25, "SELL"),
         (-47, "SELL"),
         (-48, "STRONG_SELL"),
         (-49, "STRONG_SELL"),
@@ -404,7 +436,7 @@ def test_rsi_high_and_macd_bearish_returns_sell_signal(bearish_frame):
     signal = engine.analyze("TEST.IS", {"trend": bearish_frame, "trigger": bearish_frame})
 
     assert signal is not None
-    assert signal.signal_type.value in {"🔴 SAT", "🚨 GÜÇLÜ SAT"}
+    assert signal.signal_type.value in {"🟠 ZAYIF SAT", "🔴 SAT", "🚨 GÜÇLÜ SAT"}
 
 
 def test_empty_dataframe_does_not_crash():
