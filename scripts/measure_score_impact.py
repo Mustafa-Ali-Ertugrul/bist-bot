@@ -20,19 +20,19 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from bist_bot.indicators import TechnicalIndicators
-from bist_bot.risk.manager import RiskManager
-from bist_bot.strategy.engine_filters import classify_signal
-from bist_bot.strategy.engine_meta import apply_buy_side_risk
-from bist_bot.strategy.params import StrategyParams
-from bist_bot.strategy.regime import TrendBias
-from bist_bot.strategy.scoring import (
+from bist_bot.indicators import TechnicalIndicators  # noqa: E402
+from bist_bot.risk.manager import RiskManager  # noqa: E402
+from bist_bot.strategy.engine_filters import classify_signal  # noqa: E402
+from bist_bot.strategy.engine_meta import apply_buy_side_risk  # noqa: E402
+from bist_bot.strategy.params import StrategyParams  # noqa: E402
+from bist_bot.strategy.regime import TrendBias  # noqa: E402
+from bist_bot.strategy.scoring import (  # noqa: E402
     score_momentum,
     score_structure,
     score_trend,
     score_volume,
 )
-from bist_bot.strategy.signal_models import SignalType
+from bist_bot.strategy.signal_models import SignalType  # noqa: E402
 
 
 def _safe_score_volume(params, last, prev):
@@ -125,7 +125,7 @@ def compute_metrics(symbols, *, n_bars: int, n_symbols: int, seed: int) -> dict:
     sell_stop_above_price = 0
     sell_target_below_price = 0
 
-    for ticker, df, regime in symbols:
+    for ticker, df, regime in symbols:  # noqa: B007
         if len(df) < 60:
             continue
         try:

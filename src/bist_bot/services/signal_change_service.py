@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import datetime
+from datetime import UTC, datetime
 from time import sleep as default_sleep
 
 from bist_bot.app_logging import get_logger

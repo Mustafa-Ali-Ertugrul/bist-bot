@@ -30,8 +30,8 @@ def _line(label, old_v, new_v, fmt="{:>8.2f}"):
     except (TypeError, ValueError):
         delta = ""
     try:
-        ov = fmt.format(float(old_v)) if isinstance(old_v, (int, float)) else str(old_v)
-        nv = fmt.format(float(new_v)) if isinstance(new_v, (int, float)) else str(new_v)
+        ov = fmt.format(float(old_v)) if isinstance(old_v, int | float) else str(old_v)
+        nv = fmt.format(float(new_v)) if isinstance(new_v, int | float) else str(new_v)
     except (TypeError, ValueError):
         ov, nv = str(old_v), str(new_v)
     return f"  {label:<32} old={ov:>8}  new={nv:>8}{delta}"
@@ -66,7 +66,7 @@ def _stats_block(label, o, n):
             d = nv - ov
             line = f"  {label}.{k:<6} old={ov:>10.3f}  new={nv:>10.3f}  DELTA {d:+.3f}"
         else:
-            line = f"  {label}.{k:<6} old={str(ov):>10}  new={str(nv):>10}"
+            line = f"  {label}.{k:<6} old={ov!s:>10}  new={nv!s:>10}"
         print(line)
 
 
