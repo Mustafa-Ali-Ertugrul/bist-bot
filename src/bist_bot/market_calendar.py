@@ -19,7 +19,7 @@ except AttributeError:
 TR = timezone(timedelta(hours=3))
 
 _MARKET_OPEN = timedelta(hours=10, minutes=0)
-_MARKET_CLOSE = timedelta(hours=17, minutes=30)
+_MARKET_CLOSE = timedelta(hours=18, minutes=0)
 _HALF_DAY_CLOSE = timedelta(hours=12, minutes=30)
 
 _HALF_DAY_DATES: set[date] = set()
