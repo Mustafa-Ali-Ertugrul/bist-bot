@@ -45,7 +45,6 @@ class MarketScheduler:
 
                 minute = now.minute
                 warmup_minutes = getattr(self.settings, "MARKET_WARMUP_MINUTES", 15)
-                half_day_hour = getattr(self.settings, "MARKET_HALF_DAY_HOUR", 13)
 
                 if minute < warmup_minutes and now.hour == self.settings.MARKET_OPEN_HOUR:
                     logger.info(
@@ -53,12 +52,6 @@ class MarketScheduler:
                         warmup_minutes=warmup_minutes,
                     )
                     sleep(60)
-                    continue
-
-                if now.hour >= half_day_hour and now.hour < self.settings.MARKET_CLOSE_HOUR:
-                    logger.info("scheduler_half_day_scan_window")
-                    self._scan_once()
-                    sleep(3600 * (self.settings.MARKET_CLOSE_HOUR - half_day_hour))
                     continue
 
                 try:
