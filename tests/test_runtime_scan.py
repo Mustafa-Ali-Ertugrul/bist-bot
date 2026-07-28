@@ -10,8 +10,8 @@ from unittest.mock import MagicMock, patch
 TR = timezone(timedelta(hours=3))
 
 
-def test_ensure_initial_data_does_not_start_background_scan_when_no_cache():
-    """When no cached signals exist, ensure_initial_data should leave scanning manual."""
+def test_ensure_initial_data_starts_background_scan_when_no_cache():
+    """When no cached signals exist, ensure_initial_data should start a background scan."""
     mock_db = MagicMock()
     mock_db.get_recent_signals.return_value = []
 
@@ -41,11 +41,11 @@ def test_ensure_initial_data_does_not_start_background_scan_when_no_cache():
 
         ensure_initial_data()
 
-        mock_start.assert_not_called()
+        mock_start.assert_called_once_with(force_clear=False, limited=False)
 
 
-def test_ensure_initial_data_uses_cached_signals_without_background_scan():
-    """When cached signals exist, ensure_initial_data should use them without auto-scanning."""
+def test_ensure_initial_data_loads_cached_signals_and_still_starts_background_scan():
+    """When cached signals exist, ensure_initial_data should load them and still start a background scan."""
     mock_db = MagicMock()
     mock_db.get_recent_signals.return_value = [
         {"ticker": "THYAO.IS", "signal_type": "AL", "score": 25.0, "price": 100.0}
@@ -79,8 +79,7 @@ def test_ensure_initial_data_uses_cached_signals_without_background_scan():
 
         ensure_initial_data()
 
-        assert mock_session.signals == mapped_signals
-        mock_start.assert_not_called()
+        mock_start.assert_called_once_with(force_clear=False, limited=False)
 
 
 def test_ensure_initial_data_does_not_start_scan_if_already_running():
