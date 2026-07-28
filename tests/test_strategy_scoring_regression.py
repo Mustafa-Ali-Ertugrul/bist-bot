@@ -282,9 +282,7 @@ def scoring_universe() -> list[ScoringFixture]:
     ]
 
 
-def _score_fixture(
-    params: StrategyParams, fixture: ScoringFixture
-) -> dict[str, float]:
+def _score_fixture(params: StrategyParams, fixture: ScoringFixture) -> dict[str, float]:
     momentum, _ = score_momentum(params, fixture.last, fixture.prev)
     trend, _ = score_trend(params, fixture.last, fixture.prev)
     volume, _ = score_volume(params, fixture.last, fixture.prev)

@@ -312,20 +312,22 @@ class TestAgentWiring:
         mock_settings.BROKER_PROVIDER = "paper"
         mock_settings.INITIAL_CAPITAL = 8500.0
 
-        with patch("bist_bot.dependencies.settings", mock_settings), \
-             patch("bist_bot.dependencies._build_data_provider"), \
-             patch("bist_bot.dependencies._build_rate_limiter"), \
-             patch("bist_bot.dependencies._build_broker"), \
-             patch("bist_bot.dependencies.BISTDataFetcher"), \
-             patch("bist_bot.dependencies.TelegramNotifier"), \
-             patch("bist_bot.dependencies.DataAccess"), \
-             patch("bist_bot.dependencies.StrategyEngine"), \
-             patch("bist_bot.dependencies.RiskManager"), \
-             patch("bist_bot.dependencies.CircuitBreaker"), \
-             patch("bist_bot.agent.position_manager.PositionManager"), \
-             patch("bist_bot.agent.exit_service.ExitService"), \
-             patch("bist_bot.services.execution_service.ExecutionService"), \
-             patch("bist_bot.agent.trading_agent.TradingAgent") as mock_agent_cls:
+        with (
+            patch("bist_bot.dependencies.settings", mock_settings),
+            patch("bist_bot.dependencies._build_data_provider"),
+            patch("bist_bot.dependencies._build_rate_limiter"),
+            patch("bist_bot.dependencies._build_broker"),
+            patch("bist_bot.dependencies.BISTDataFetcher"),
+            patch("bist_bot.dependencies.TelegramNotifier"),
+            patch("bist_bot.dependencies.DataAccess"),
+            patch("bist_bot.dependencies.StrategyEngine"),
+            patch("bist_bot.dependencies.RiskManager"),
+            patch("bist_bot.dependencies.CircuitBreaker"),
+            patch("bist_bot.agent.position_manager.PositionManager"),
+            patch("bist_bot.agent.exit_service.ExitService"),
+            patch("bist_bot.services.execution_service.ExecutionService"),
+            patch("bist_bot.agent.trading_agent.TradingAgent") as mock_agent_cls,
+        ):
             mock_agent_cls.return_value = MagicMock()
             container = build_app_container()
 
@@ -349,16 +351,18 @@ class TestAgentWiring:
         mock_settings.BROKER_PROVIDER = "paper"
         mock_settings.INITIAL_CAPITAL = 8500.0
 
-        with patch("bist_bot.dependencies.settings", mock_settings), \
-             patch("bist_bot.dependencies._build_data_provider"), \
-             patch("bist_bot.dependencies._build_rate_limiter"), \
-             patch("bist_bot.dependencies._build_broker"), \
-             patch("bist_bot.dependencies.BISTDataFetcher"), \
-             patch("bist_bot.dependencies.TelegramNotifier"), \
-             patch("bist_bot.dependencies.DataAccess"), \
-             patch("bist_bot.dependencies.StrategyEngine"), \
-             patch("bist_bot.dependencies.RiskManager"), \
-             patch("bist_bot.dependencies.CircuitBreaker"):
+        with (
+            patch("bist_bot.dependencies.settings", mock_settings),
+            patch("bist_bot.dependencies._build_data_provider"),
+            patch("bist_bot.dependencies._build_rate_limiter"),
+            patch("bist_bot.dependencies._build_broker"),
+            patch("bist_bot.dependencies.BISTDataFetcher"),
+            patch("bist_bot.dependencies.TelegramNotifier"),
+            patch("bist_bot.dependencies.DataAccess"),
+            patch("bist_bot.dependencies.StrategyEngine"),
+            patch("bist_bot.dependencies.RiskManager"),
+            patch("bist_bot.dependencies.CircuitBreaker"),
+        ):
             container = build_app_container()
             assert container.trading_agent is None
 
@@ -379,19 +383,22 @@ class TestAgentWiring:
         old_argv = _sys.argv[:]
         _sys.argv = ["main.py", "--once"]
         try:
-            with patch("bist_bot.dependencies.get_default_container", return_value=mock_container), \
-                 patch("bist_bot.dependencies.build_scan_service") as mock_build_scan, \
-                 patch("bist_bot.scheduler.MarketScheduler", mock_scheduler_cls), \
-                 patch("bist_bot.execution.order_tracker.OrderTracker"), \
-                 patch("bist_bot.app_logging.configure_logging"), \
-                 patch("signal.signal"):
+            with (
+                patch("bist_bot.dependencies.get_default_container", return_value=mock_container),
+                patch("bist_bot.dependencies.build_scan_service") as mock_build_scan,
+                patch("bist_bot.scheduler.MarketScheduler", mock_scheduler_cls),
+                patch("bist_bot.execution.order_tracker.OrderTracker"),
+                patch("bist_bot.app_logging.configure_logging"),
+                patch("signal.signal"),
+            ):
                 mock_build_scan.return_value = MagicMock()
                 with patch.dict("sys.modules", {"bist_bot.dashboard": MagicMock()}):
                     main_mod.main()
 
             mock_scheduler_cls.assert_called_once()
             call_kwargs = mock_scheduler_cls.call_args
-            assert call_kwargs.kwargs.get("trading_agent") is mock_container.trading_agent or \
-                   (len(call_kwargs.args) >= 3 and call_kwargs.kwargs.get("trading_agent") is not None)
+            assert call_kwargs.kwargs.get("trading_agent") is mock_container.trading_agent or (
+                len(call_kwargs.args) >= 3 and call_kwargs.kwargs.get("trading_agent") is not None
+            )
         finally:
             _sys.argv = old_argv

@@ -82,7 +82,9 @@ class PositionManager:
                         "regime": regime,
                     },
                 )
-            logger.info("position_opened", ticker=ticker, quantity=quantity, entry_price=entry_price)
+            logger.info(
+                "position_opened", ticker=ticker, quantity=quantity, entry_price=entry_price
+            )
             write_audit(
                 self.db.manager.engine,
                 event_type="POSITION_OPENED",
@@ -114,17 +116,23 @@ class PositionManager:
         exit_time = datetime.now(UTC)
         try:
             with self.db.manager.engine.begin() as conn:
-                row = conn.execute(
-                    text("SELECT entry_price, quantity FROM live_positions WHERE id = :id"),
-                    {"id": position_id},
-                ).mappings().first()
+                row = (
+                    conn.execute(
+                        text("SELECT entry_price, quantity FROM live_positions WHERE id = :id"),
+                        {"id": position_id},
+                    )
+                    .mappings()
+                    .first()
+                )
                 if row is None:
                     logger.warning("position_close_not_found", position_id=position_id)
                     return
                 entry_price = float(row["entry_price"])
                 quantity = float(row["quantity"])
                 realized_pnl = (exit_price - entry_price) * quantity - fees_paid
-                realized_pnl_pct = ((exit_price - entry_price) / entry_price * 100) if entry_price else 0.0
+                realized_pnl_pct = (
+                    ((exit_price - entry_price) / entry_price * 100) if entry_price else 0.0
+                )
 
                 conn.execute(
                     text(
@@ -172,12 +180,16 @@ class PositionManager:
     def get_open_positions(self) -> list[dict[str, Any]]:
         try:
             with self.db.manager.engine.connect() as conn:
-                rows = conn.execute(
-                    text(
-                        "SELECT * FROM live_positions WHERE state = :state ORDER BY entry_time DESC"
-                    ),
-                    {"state": PositionState.POSITION_OPEN.value},
-                ).mappings().all()
+                rows = (
+                    conn.execute(
+                        text(
+                            "SELECT * FROM live_positions WHERE state = :state ORDER BY entry_time DESC"
+                        ),
+                        {"state": PositionState.POSITION_OPEN.value},
+                    )
+                    .mappings()
+                    .all()
+                )
             return [dict(r) for r in rows]
         except Exception:
             logger.exception("get_open_positions_failed")
@@ -186,18 +198,22 @@ class PositionManager:
     def get_position(self, ticker: str) -> dict[str, Any] | None:
         try:
             with self.db.manager.engine.connect() as conn:
-                row = conn.execute(
-                    text("SELECT * FROM live_positions WHERE ticker=:ticker AND state=:state LIMIT 1"),
-                    {"ticker": ticker, "state": PositionState.POSITION_OPEN.value},
-                ).mappings().first()
+                row = (
+                    conn.execute(
+                        text(
+                            "SELECT * FROM live_positions WHERE ticker=:ticker AND state=:state LIMIT 1"
+                        ),
+                        {"ticker": ticker, "state": PositionState.POSITION_OPEN.value},
+                    )
+                    .mappings()
+                    .first()
+                )
             return dict(row) if row else None
         except Exception:
             logger.exception("get_position_failed", ticker=ticker)
             return None
 
-    def check_exit_conditions(
-        self, prices: dict[str, float]
-    ) -> list[dict[str, Any]]:
+    def check_exit_conditions(self, prices: dict[str, float]) -> list[dict[str, Any]]:
         open_positions = self.get_open_positions()
         triggers: list[dict[str, Any]] = []
 
@@ -217,10 +233,12 @@ class PositionManager:
             elif current_price >= target_price:
                 reason = ExitReason.TARGET_HIT
             elif self.settings.agent.TRAILING_STOP_ENABLED and pos.get("exit_price"):
-                trailing_stop = float(pos["exit_price"]) * (1 - self.settings.agent.TRAILING_STOP_PCT / 100)
+                trailing_stop = float(pos["exit_price"]) * (
+                    1 - self.settings.agent.TRAILING_STOP_PCT / 100
+                )
                 if current_price <= trailing_stop:
                     reason = ExitReason.TRAILING_STOP
-            
+
             # 3 gün kuralı: MAX_HOLDING_DAYS (varsayılan 3) gün sonra otomatik kapat
             if reason is None and pos.get("entry_time"):
                 try:
@@ -240,15 +258,19 @@ class PositionManager:
                     pass
 
             if reason:
-                triggers.append({
-                    "position_id": pos["id"],
-                    "ticker": ticker,
-                    "exit_reason": reason.value,
-                    "current_price": current_price,
-                    "entry_price": entry_price,
-                    "quantity": pos["quantity"],
-                    "pnl_pct": round((current_price - entry_price) / entry_price * 100, 2) if entry_price else 0,
-                })
+                triggers.append(
+                    {
+                        "position_id": pos["id"],
+                        "ticker": ticker,
+                        "exit_reason": reason.value,
+                        "current_price": current_price,
+                        "entry_price": entry_price,
+                        "quantity": pos["quantity"],
+                        "pnl_pct": round((current_price - entry_price) / entry_price * 100, 2)
+                        if entry_price
+                        else 0,
+                    }
+                )
 
         return triggers
 
@@ -273,7 +295,11 @@ class PositionManager:
                         trigger_source="SYSTEM_RECOVERY",
                     )
 
-            logger.info("recovery_complete", db_positions=len(db_positions), broker_positions=len(broker_positions))
+            logger.info(
+                "recovery_complete",
+                db_positions=len(db_positions),
+                broker_positions=len(broker_positions),
+            )
         except Exception:
             logger.exception("recovery_failed")
 
@@ -282,9 +308,7 @@ class PositionManager:
         try:
             with self.db.manager.engine.connect() as conn:
                 count = conn.execute(
-                    text(
-                        "SELECT COUNT(*) FROM live_positions WHERE date(entry_time) = :today"
-                    ),
+                    text("SELECT COUNT(*) FROM live_positions WHERE date(entry_time) = :today"),
                     {"today": today.isoformat()},
                 ).scalar_one()
             return int(count)

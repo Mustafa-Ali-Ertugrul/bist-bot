@@ -20,7 +20,9 @@ from bist_bot.db.repositories.signals_repository import SignalsRepository
 from bist_bot.strategy.signal_models import Signal, SignalType
 
 
-def test_resolve_database_url_defaults_to_sqlite(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_resolve_database_url_defaults_to_sqlite(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.delenv("BIST_BOT_DATABASE_URL", raising=False)
     db_file = tmp_path / "local.db"
@@ -115,7 +117,9 @@ def test_database_manager_uses_connection_factory_for_postgres() -> None:
     mock_session_factory = MagicMock()
 
     with (
-        patch("bist_bot.db.connection.create_engine", return_value=mock_engine) as create_engine_mock,
+        patch(
+            "bist_bot.db.connection.create_engine", return_value=mock_engine
+        ) as create_engine_mock,
         patch("bist_bot.db.database.scoped_session", return_value=mock_session_factory),
         patch.object(DatabaseManager, "initialize", return_value=None),
     ):
@@ -144,7 +148,10 @@ def test_alembic_initial_revision_file_exists() -> None:
     assert "signals" in text
     assert "scan_log" in text
     assert "paper_trades" in text
-    assert "revision: str = \"0001_initial_schema\"" in text or 'revision: str = "0001_initial_schema"' in text
+    assert (
+        'revision: str = "0001_initial_schema"' in text
+        or 'revision: str = "0001_initial_schema"' in text
+    )
 
 
 @pytest.mark.integration

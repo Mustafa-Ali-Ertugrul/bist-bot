@@ -267,7 +267,9 @@ def test_corrupt_provider_payload_returns_none() -> None:
     assert result is None
 
 
-def test_official_provider_rate_limit_exhaustion_returns_none(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_official_provider_rate_limit_exhaustion_returns_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """OfficialProvider 429 + max retries → fetch_history returns None (graceful)."""
     session = _FakeSession(
         [

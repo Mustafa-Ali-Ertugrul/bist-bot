@@ -46,6 +46,7 @@ def _default_watchlist_source() -> str:
 def _default_watchlist() -> list[str]:
     return load_watchlist(_default_watchlist_source())
 
+
 _SETTINGS_MERGED_OVERRIDE: ContextVar[dict[str, Any] | None] = ContextVar(
     "settings_merged_override",
     default=None,
@@ -258,8 +259,7 @@ class Settings:
                 errors.append(f"{name} cannot exceed max score bound ±{max_score:g}")
         if not (strong_buy > weak_buy > 0):
             errors.append(
-                "Buy thresholds must satisfy STRONG_BUY_THRESHOLD > "
-                "WEAK_BUY_THRESHOLD > 0"
+                "Buy thresholds must satisfy STRONG_BUY_THRESHOLD > WEAK_BUY_THRESHOLD > 0"
             )
         if not (strong_sell < sell < weak_sell < 0):
             errors.append(

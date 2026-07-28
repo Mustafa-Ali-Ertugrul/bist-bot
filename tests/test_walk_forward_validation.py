@@ -225,7 +225,9 @@ def test_overfitting_warning_when_oos_much_worse_than_is() -> None:
     assert result is not None
     assert result.has_overfitting_warning
     assert "OVERFITTING_WARNING" in result.flags
-    assert result.is_aggregate["mean_total_return_pct"] > result.oos_aggregate["mean_total_return_pct"]
+    assert (
+        result.is_aggregate["mean_total_return_pct"] > result.oos_aggregate["mean_total_return_pct"]
+    )
 
 
 def test_transaction_costs_reduce_returns() -> None:

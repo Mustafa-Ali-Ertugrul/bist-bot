@@ -23,6 +23,7 @@ from bist_bot.execution.base import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_settings(**overrides) -> MagicMock:
     defaults = dict(
         ALGOLAB_API_KEY="key",
@@ -105,6 +106,7 @@ class MockVenue(BaseExecutionProvider):
 # Tests
 # ---------------------------------------------------------------------------
 
+
 class TestResolveVenue:
     def test_algolab_returns_algolab_broker(self) -> None:
         from bist_bot.execution.algolab_broker import AlgoLabBroker
@@ -143,7 +145,9 @@ class TestLiveBrokerDelegation:
 
     def test_get_positions_delegates(self) -> None:
         broker, venue = self._make_broker()
-        venue.positions = [Position(ticker="X.IS", quantity=10, average_price=5.0, market_value=50.0)]
+        venue.positions = [
+            Position(ticker="X.IS", quantity=10, average_price=5.0, market_value=50.0)
+        ]
         pos = broker.get_positions()
         assert len(pos) == 1
         assert pos[0].ticker == "X.IS"

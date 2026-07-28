@@ -72,14 +72,20 @@ def test_execute_signal_returns_attempt_on_success():
     broker = MagicMock()
     broker.authenticate.return_value = True
     broker.place_order.return_value = MagicMock(
-        state=MagicMock(value="FILLED"), broker_order_id="BRK-1", order_id="ORD-1",
-        accepted=True, average_fill_price=100.5,
+        state=MagicMock(value="FILLED"),
+        broker_order_id="BRK-1",
+        order_id="ORD-1",
+        accepted=True,
+        average_fill_price=100.5,
     )
     db.create_order.return_value = {"id": 11}
     service = ExecutionService(db, broker=broker, settings=settings)
     signal = Signal(
-        ticker="THYAO.IS", signal_type=SignalType.STRONG_BUY, score=80,
-        price=100.0, position_size=10,
+        ticker="THYAO.IS",
+        signal_type=SignalType.STRONG_BUY,
+        score=80,
+        price=100.0,
+        position_size=10,
     )
 
     attempt = service.execute_signal(signal, force=True, require_fill=True)
@@ -100,8 +106,11 @@ def test_execute_signal_returns_rejected_on_broker_error():
     db.create_order.return_value = {"id": 22}
     service = ExecutionService(db, broker=broker, settings=settings)
     signal = Signal(
-        ticker="THYAO.IS", signal_type=SignalType.STRONG_BUY, score=80,
-        price=100.0, position_size=10,
+        ticker="THYAO.IS",
+        signal_type=SignalType.STRONG_BUY,
+        score=80,
+        price=100.0,
+        position_size=10,
     )
 
     attempt = service.execute_signal(signal, force=True, require_fill=True)
@@ -119,14 +128,20 @@ def test_execute_signal_rejected_state_returns_not_accepted():
     broker = MagicMock()
     broker.authenticate.return_value = True
     broker.place_order.return_value = MagicMock(
-        state=MagicMock(value="REJECTED"), broker_order_id=None, order_id="ORD-2",
-        accepted=False, average_fill_price=None,
+        state=MagicMock(value="REJECTED"),
+        broker_order_id=None,
+        order_id="ORD-2",
+        accepted=False,
+        average_fill_price=None,
     )
     db.create_order.return_value = {"id": 33}
     service = ExecutionService(db, broker=broker, settings=settings)
     signal = Signal(
-        ticker="THYAO.IS", signal_type=SignalType.STRONG_BUY, score=80,
-        price=100.0, position_size=10,
+        ticker="THYAO.IS",
+        signal_type=SignalType.STRONG_BUY,
+        score=80,
+        price=100.0,
+        position_size=10,
     )
 
     attempt = service.execute_signal(signal, force=True, require_fill=True)
@@ -140,8 +155,11 @@ def test_execute_signal_no_broker_returns_none():
     db = MagicMock()
     service = ExecutionService(db, broker=None, settings=settings)
     signal = Signal(
-        ticker="THYAO.IS", signal_type=SignalType.STRONG_BUY, score=80,
-        price=100.0, position_size=10,
+        ticker="THYAO.IS",
+        signal_type=SignalType.STRONG_BUY,
+        score=80,
+        price=100.0,
+        position_size=10,
     )
 
     attempt = service.execute_signal(signal, force=True)
@@ -155,14 +173,29 @@ def test_auto_execute_signals_returns_attempt_list():
     broker = MagicMock()
     broker.authenticate.return_value = True
     broker.place_order.return_value = MagicMock(
-        state=MagicMock(value="FILLED"), broker_order_id="BRK-3", order_id="ORD-3",
-        accepted=True, average_fill_price=100.0,
+        state=MagicMock(value="FILLED"),
+        broker_order_id="BRK-3",
+        order_id="ORD-3",
+        accepted=True,
+        average_fill_price=100.0,
     )
     db.create_order.return_value = {"id": 44}
     service = ExecutionService(db, broker=broker, settings=settings.replace(AUTO_EXECUTE=True))
     signals = [
-        Signal(ticker="THYAO.IS", signal_type=SignalType.STRONG_BUY, score=80, price=100.0, position_size=10),
-        Signal(ticker="ASELS.IS", signal_type=SignalType.STRONG_SELL, score=-80, price=50.0, position_size=20),
+        Signal(
+            ticker="THYAO.IS",
+            signal_type=SignalType.STRONG_BUY,
+            score=80,
+            price=100.0,
+            position_size=10,
+        ),
+        Signal(
+            ticker="ASELS.IS",
+            signal_type=SignalType.STRONG_SELL,
+            score=-80,
+            price=50.0,
+            position_size=20,
+        ),
     ]
 
     attempts = service.auto_execute_signals(signals)

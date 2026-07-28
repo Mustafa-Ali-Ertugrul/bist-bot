@@ -72,7 +72,10 @@ def test_official_timeout_cannot_exceed_streamlit_budget() -> None:
         STREAMLIT_BACKGROUND_SCAN_TIMEOUT_SECONDS=180,
     )
     errors = cfg.collect_preflight_errors()
-    assert any("OFFICIAL_TIMEOUT must be < STREAMLIT_BACKGROUND_SCAN_TIMEOUT_SECONDS" in err for err in errors)
+    assert any(
+        "OFFICIAL_TIMEOUT must be < STREAMLIT_BACKGROUND_SCAN_TIMEOUT_SECONDS" in err
+        for err in errors
+    )
 
 
 def test_scan_timeout_cannot_exceed_streamlit_budget() -> None:

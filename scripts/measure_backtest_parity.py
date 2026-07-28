@@ -303,7 +303,9 @@ def main(argv: list[str] | None = None) -> int:
         max_abs_delta_global = max(max_abs_delta_global, m)
         max_abs_delta_no_h1h3_global = max(max_abs_delta_no_h1h3_global, m_no)
         total_diff_gt1_no_h1h3 += d_no
-        print(f"  rows={n} |delta|>1={d} max|delta|={m:.2f} | basic |delta|>1={d_no} max_basic|delta|={m_no:.2f}")
+        print(
+            f"  rows={n} |delta|>1={d} max|delta|={m:.2f} | basic |delta|>1={d_no} max_basic|delta|={m_no:.2f}"
+        )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fieldnames = [
@@ -331,7 +333,9 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Max |delta| (basic vs vec)     : {max_abs_delta_no_h1h3_global:.4f}")
     print("-" * 100)
     if total_diff_gt1_no_h1h3 > 0:
-        print("BASIC (H1/H3-free) scoring ALSO differs -> iki beyin zaten farkliydi (skor temelde ayrismali).")
+        print(
+            "BASIC (H1/H3-free) scoring ALSO differs -> iki beyin zaten farkliydi (skor temelde ayrismali)."
+        )
     else:
         print("BASIC (H1/H3-free) scoring matches -> fark H1/H3 ek fazlasindan kaynaklaniyor.")
     print(f"CSV written: {output_path}")

@@ -1,4 +1,5 @@
 """Generate delta report comparing HEAD vs pre-fix baseline metrics."""
+
 from __future__ import annotations
 
 import io
@@ -71,7 +72,9 @@ def _stats_block(label, o, n):
 
 
 _section("CONFIG")
-print(f"  n_bars={old['config']['n_bars']} n_symbols={old['config']['n_symbols']} seed={old['config']['seed']}")
+print(
+    f"  n_bars={old['config']['n_bars']} n_symbols={old['config']['n_symbols']} seed={old['config']['seed']}"
+)
 print(f"  n_analyzed old={old['n_analyzed']} new={new['n_analyzed']}")
 
 _section("SIGNAL COUNTS")
@@ -93,16 +96,34 @@ _section("STRUCTURE")
 _stats_block("structure", old["structure"], new["structure"])
 
 _section("EMA INITIAL CROSS")
-print(_line("triggered symbols", old["ema_initial_cross_triggered_symbols"],
-            new["ema_initial_cross_triggered_symbols"], "{:>8.0f}"))
+print(
+    _line(
+        "triggered symbols",
+        old["ema_initial_cross_triggered_symbols"],
+        new["ema_initial_cross_triggered_symbols"],
+        "{:>8.0f}",
+    )
+)
 
 _section("SELL STOP / TARGET (Asama 4 etkisi)")
 _stats_block("sell_stop", old["sell_stop_stats"], new["sell_stop_stats"])
 _stats_block("sell_target", old["sell_target_stats"], new["sell_target_stats"])
-print(_line("stop above price count", old["sell_stop_above_price_count"],
-            new["sell_stop_above_price_count"], "{:>8.0f}"))
-print(_line("target below price count", old["sell_target_below_price_count"],
-            new["sell_target_below_price_count"], "{:>8.0f}"))
+print(
+    _line(
+        "stop above price count",
+        old["sell_stop_above_price_count"],
+        new["sell_stop_above_price_count"],
+        "{:>8.0f}",
+    )
+)
+print(
+    _line(
+        "target below price count",
+        old["sell_target_below_price_count"],
+        new["sell_target_below_price_count"],
+        "{:>8.0f}",
+    )
+)
 
 _section("INTERPRETATION")
 buy_old = sum(old["signal_counts"].get(k, 0) for k in ("STRONG_BUY", "BUY", "WEAK_BUY"))
@@ -114,7 +135,11 @@ hold_new = new["signal_counts"].get("HOLD", 0)
 print(f"  BUY total   old={buy_old}  new={buy_new}  DELTA {buy_new - buy_old:+d}")
 print(f"  SELL total  old={sell_old}  new={sell_new}  DELTA {sell_new - sell_old:+d}")
 print(f"  HOLD        old={hold_old}  new={hold_new}  DELTA {hold_new - hold_old:+d}")
-print(f"  Score max   old={old['scores']['max']:>6.1f}  new={new['scores']['max']:>6.1f}  "
-      f"DELTA {new['scores']['max'] - old['scores']['max']:+.1f}")
-print(f"  Score p99   old={old['scores']['p99']:>6.2f}  new={new['scores']['p99']:>6.2f}  "
-      f"DELTA {new['scores']['p99'] - old['scores']['p99']:+.2f}")
+print(
+    f"  Score max   old={old['scores']['max']:>6.1f}  new={new['scores']['max']:>6.1f}  "
+    f"DELTA {new['scores']['max'] - old['scores']['max']:+.1f}"
+)
+print(
+    f"  Score p99   old={old['scores']['p99']:>6.2f}  new={new['scores']['p99']:>6.2f}  "
+    f"DELTA {new['scores']['p99'] - old['scores']['p99']:+.2f}"
+)

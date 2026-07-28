@@ -316,7 +316,11 @@ class SignalsRepository:
             expires_at_iso = (
                 row.expires_at.replace(tzinfo=UTC).isoformat()
                 if isinstance(row.expires_at, datetime) and row.expires_at.tzinfo is None
-                else (row.expires_at.isoformat() if isinstance(row.expires_at, datetime) else row.expires_at)
+                else (
+                    row.expires_at.isoformat()
+                    if isinstance(row.expires_at, datetime)
+                    else row.expires_at
+                )
             )
             now = datetime.now(UTC)
             expires = row.expires_at

@@ -31,7 +31,9 @@ def main():
     container = get_default_container()
     scanner = build_scan_service(container)
     scheduler = MarketScheduler(
-        scanner, container.notifier, settings=settings,
+        scanner,
+        container.notifier,
+        settings=settings,
         trading_agent=container.trading_agent,
     )
     order_tracker = OrderTracker(container.broker, container.db)

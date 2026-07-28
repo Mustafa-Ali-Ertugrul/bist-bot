@@ -108,7 +108,9 @@ class TestMidasClientSendSignal:
         mock_response = MagicMock()
         mock_response.status_code = 200
 
-        with patch("bist_bot.integrations.midas.requests.post", return_value=mock_response) as mock_post:
+        with patch(
+            "bist_bot.integrations.midas.requests.post", return_value=mock_response
+        ) as mock_post:
             result = client.send_signal({"ticker": "THYAO.IS", "score": 75.0})
 
         assert result is True
@@ -130,7 +132,9 @@ class TestMidasClientSendSignal:
         mock_response = MagicMock()
         mock_response.status_code = 401
 
-        with patch("bist_bot.integrations.midas.requests.post", return_value=mock_response) as mock_post:
+        with patch(
+            "bist_bot.integrations.midas.requests.post", return_value=mock_response
+        ) as mock_post:
             result = client.send_signal({"ticker": "THYAO.IS"})
 
         assert result is False
@@ -190,7 +194,9 @@ class TestMidasClientSendSignal:
         mock_response = MagicMock()
         mock_response.status_code = 500
 
-        with patch("bist_bot.integrations.midas.requests.post", return_value=mock_response) as mock_post:
+        with patch(
+            "bist_bot.integrations.midas.requests.post", return_value=mock_response
+        ) as mock_post:
             result = client.send_signal({"ticker": "THYAO.IS"})
 
         assert result is False
@@ -208,7 +214,9 @@ class TestMidasClientSendSignal:
         mock_response = MagicMock()
         mock_response.status_code = 200
 
-        with patch("bist_bot.integrations.midas.requests.post", return_value=mock_response) as mock_post:
+        with patch(
+            "bist_bot.integrations.midas.requests.post", return_value=mock_response
+        ) as mock_post:
             client.send_signal({"ticker": "ASELS.IS", "score": 50.0})
 
         payload = mock_post.call_args.kwargs["json"]
@@ -227,7 +235,9 @@ class TestMidasClientSendSignal:
         mock_response = MagicMock()
         mock_response.status_code = 200
 
-        with patch("bist_bot.integrations.midas.requests.post", return_value=mock_response) as mock_post:
+        with patch(
+            "bist_bot.integrations.midas.requests.post", return_value=mock_response
+        ) as mock_post:
             client.send_signal({"ticker": "THYAO.IS"})
 
         assert mock_post.call_args.args[0] == "https://api.midas.example.com/signals"

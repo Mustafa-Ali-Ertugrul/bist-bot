@@ -46,8 +46,10 @@ class OrderExecutor:
         self.require_auto_execute = require_auto_execute
 
     def resolve_quantity(self, signal: Signal, quantity: float | None = None) -> float | None:
-        qty = float(quantity) if quantity is not None else (
-            float(signal.position_size) if signal.position_size is not None else 0.0
+        qty = (
+            float(quantity)
+            if quantity is not None
+            else (float(signal.position_size) if signal.position_size is not None else 0.0)
         )
         if qty <= 0:
             logger.info(

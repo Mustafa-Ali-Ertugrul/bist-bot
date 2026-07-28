@@ -7,6 +7,7 @@ suitable for before/after diff comparison.
 Usage:
     python scripts/measure_score_impact.py --output metrics.json
 """
+
 from __future__ import annotations
 
 import argparse
@@ -114,10 +115,19 @@ def compute_metrics(symbols, *, n_bars: int, n_symbols: int, seed: int) -> dict:
     ti = TechnicalIndicators()
     risk = RiskManager(capital=10000.0)
 
-    counts = {n: 0 for n in (
-        "STRONG_BUY", "BUY", "WEAK_BUY", "HOLD", "RADAR",
-        "STRONG_SELL", "SELL", "WEAK_SELL",
-    )}
+    counts = {
+        n: 0
+        for n in (
+            "STRONG_BUY",
+            "BUY",
+            "WEAK_BUY",
+            "HOLD",
+            "RADAR",
+            "STRONG_SELL",
+            "SELL",
+            "WEAK_SELL",
+        )
+    }
     total_scores, mom_scores, trend_scores, vol_scores, struct_scores = [], [], [], [], []
     ema_initial_cross_count = 0
 
@@ -151,8 +161,7 @@ def compute_metrics(symbols, *, n_bars: int, n_symbols: int, seed: int) -> dict:
         struct_scores.append(s_s)
 
         if any(
-            ("EMA" in r and ("kesti" in r or "yeni trend" in r or "kırılması" in r))
-            for r in r_t
+            ("EMA" in r and ("kesti" in r or "yeni trend" in r or "kırılması" in r)) for r in r_t
         ):
             ema_initial_cross_count += 1
 
@@ -210,9 +219,7 @@ def main():
     args = parser.parse_args()
 
     symbols = generate_synthetic_data(args.n_bars, args.n_symbols, args.seed)
-    metrics = compute_metrics(
-        symbols, n_bars=args.n_bars, n_symbols=args.n_symbols, seed=args.seed
-    )
+    metrics = compute_metrics(symbols, n_bars=args.n_bars, n_symbols=args.n_symbols, seed=args.seed)
     out = Path(args.output)
     out.write_text(json.dumps(metrics, indent=2, ensure_ascii=False))
     print(f"Wrote {out}")

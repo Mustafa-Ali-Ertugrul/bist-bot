@@ -9,6 +9,7 @@ are out of scope, this test uses synthetic data shaped so that the
 EMA(200) cross point is unambiguous. If the logic is correct here, it will
 trigger on any real-world BIST data exhibiting the same pattern.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -29,9 +30,7 @@ def _build_frame(prices: list[float], volume: float = 1_000_000.0) -> pd.DataFra
     low = close * 0.999
     open_ = np.concatenate([[close[0]], close[:-1]])
     vol = np.full(n, volume, dtype=float)
-    return pd.DataFrame(
-        {"open": open_, "high": high, "low": low, "close": close, "volume": vol}
-    )
+    return pd.DataFrame({"open": open_, "high": high, "low": low, "close": close, "volume": vol})
 
 
 def _make_enriched(prices: list[float]) -> pd.DataFrame:

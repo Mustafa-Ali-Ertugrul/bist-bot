@@ -230,13 +230,9 @@ class YFinanceProvider:
 
         def _fetch():
             stock = yf.Ticker(ticker)
-            single_timeout = float(
-                getattr(settings.data, "PROVIDER_SINGLE_TIMEOUT_SECONDS", 8)
-            )
+            single_timeout = float(getattr(settings.data, "PROVIDER_SINGLE_TIMEOUT_SECONDS", 8))
             try:
-                return stock.history(
-                    period=period, interval=interval, timeout=single_timeout
-                )
+                return stock.history(period=period, interval=interval, timeout=single_timeout)
             except TypeError:
                 return stock.history(period=period, interval=interval)
 

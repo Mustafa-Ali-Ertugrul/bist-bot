@@ -235,7 +235,9 @@ class StrategyEngine:
     def _score_momentum(self, last: pd.Series, prev: pd.Series) -> tuple[float, list[str]]:
         return score_momentum(self.params, last, prev)
 
-    def _score_trend(self, last: pd.Series, prev: pd.Series, df: pd.DataFrame | None = None) -> tuple[float, list[str]]:
+    def _score_trend(
+        self, last: pd.Series, prev: pd.Series, df: pd.DataFrame | None = None
+    ) -> tuple[float, list[str]]:
         return score_trend(self.params, last, prev, df)
 
     def _score_volume(self, last: pd.Series, prev: pd.Series) -> tuple[float, list[str]]:

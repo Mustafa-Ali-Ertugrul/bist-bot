@@ -193,9 +193,7 @@ class TradingAgent:
             if quantity <= 0:
                 continue
 
-            require_fill = bool(
-                getattr(agent_settings, "AGENT_REQUIRE_FILL_BEFORE_POSITION", True)
-            )
+            require_fill = bool(getattr(agent_settings, "AGENT_REQUIRE_FILL_BEFORE_POSITION", True))
             attempt = self.execution_service.execute_signal(
                 signal, force=True, require_fill=require_fill
             )
@@ -218,9 +216,7 @@ class TradingAgent:
                 continue
 
             entry_order_id = attempt.order_db_id if attempt.order_db_id is not None else 0
-            entry_price = (
-                attempt.fill_price if attempt.fill_price is not None else signal.price
-            )
+            entry_price = attempt.fill_price if attempt.fill_price is not None else signal.price
 
             if signal.stop_loss and signal.target_price:
                 self.position_manager.open_position(

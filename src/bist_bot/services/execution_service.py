@@ -153,7 +153,9 @@ class ExecutionService:
             price=None,
             state="CREATED",
         )
-        order_db_id = int(order_row["id"]) if order_row and order_row.get("id") is not None else None
+        order_db_id = (
+            int(order_row["id"]) if order_row and order_row.get("id") is not None else None
+        )
         try:
             result = self.broker.place_order(
                 ticker=signal.ticker,

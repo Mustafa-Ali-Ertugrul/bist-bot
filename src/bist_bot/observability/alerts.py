@@ -80,7 +80,9 @@ class AlertManager:
             if ok:
                 logger.info("alert_sent", title=alert.title, alert_level=str(alert.level))
             else:
-                logger.error("alert_send_failed", title=alert.title, error="transport_returned_false")
+                logger.error(
+                    "alert_send_failed", title=alert.title, error="transport_returned_false"
+                )
             return ok
         except Exception as exc:
             with self._lock:

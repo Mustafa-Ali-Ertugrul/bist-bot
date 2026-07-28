@@ -119,4 +119,3 @@ class StrategyParams:
         if profile == "conservative":
             return cls.conservative()
         return cls()
-

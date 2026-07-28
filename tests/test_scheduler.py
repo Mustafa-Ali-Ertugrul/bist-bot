@@ -146,4 +146,3 @@ def test_scheduler_retry_calls_agent_callback(monkeypatch) -> None:
         scheduler.run_loop()
 
     agent.on_scan_completed.assert_called()
-

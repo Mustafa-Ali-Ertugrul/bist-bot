@@ -32,9 +32,7 @@ def test_load_watchlist_bist30() -> None:
     assert len(tickers) == 30
 
 
-def test_load_watchlist_robust_from_csv(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_load_watchlist_robust_from_csv(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     csv_path = tmp_path / "robust_watchlist.csv"
     csv_path.write_text(
         "ticker,stress_oos_mean_return\nSISE.IS,5.9\nTHYAO.IS,0.4\nASTOR.IS,5.6\n",

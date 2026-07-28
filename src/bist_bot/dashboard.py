@@ -369,10 +369,15 @@ def create_dashboard_app(
             try:
                 # Prefer lightweight auth probe when available; do not fail hard on paper.
                 auth = getattr(broker, "authenticate", None)
-                if callable(auth) and broker_mode != "paper" and broker_provider not in {
-                    "paper",
-                    "",
-                }:
+                if (
+                    callable(auth)
+                    and broker_mode != "paper"
+                    and broker_provider
+                    not in {
+                        "paper",
+                        "",
+                    }
+                ):
                     ok = bool(auth())
                     broker_status = "ok" if ok else "auth_failed"
             except NotImplementedError:

@@ -107,7 +107,9 @@ class DailyLossAwareBacktester(ScriptedBacktester):
         current = None if self._daily_pnl_date is None else self._daily_pnl_date.date()
         if current != day_key:
             self.daily_realized_pnl = 0.0
-            self._daily_pnl_date = day if isinstance(day, datetime) else datetime.combine(day_key, datetime.min.time())
+            self._daily_pnl_date = (
+                day if isinstance(day, datetime) else datetime.combine(day_key, datetime.min.time())
+            )
 
     def _daily_loss_limit_reached(self) -> bool:
         if self.daily_loss_cap_pct <= 0:
@@ -198,15 +200,36 @@ def _ohlcv(
 
 
 def rising_trend_frame(n: int = 120) -> pd.DataFrame:
-    return _ohlcv(n=n, close_fn=lambda i: 100.0 + i * 0.5, rsi=28.0, sma_cross="GOLDEN_CROSS", macd_cross="BULLISH", bb_position="BELOW_LOWER")
+    return _ohlcv(
+        n=n,
+        close_fn=lambda i: 100.0 + i * 0.5,
+        rsi=28.0,
+        sma_cross="GOLDEN_CROSS",
+        macd_cross="BULLISH",
+        bb_position="BELOW_LOWER",
+    )
 
 
 def falling_trend_frame(n: int = 120) -> pd.DataFrame:
-    return _ohlcv(n=n, close_fn=lambda i: 200.0 - i * 0.5, rsi=75.0, sma_cross="DEATH_CROSS", macd_cross="BEARISH", bb_position="ABOVE_UPPER")
+    return _ohlcv(
+        n=n,
+        close_fn=lambda i: 200.0 - i * 0.5,
+        rsi=75.0,
+        sma_cross="DEATH_CROSS",
+        macd_cross="BEARISH",
+        bb_position="ABOVE_UPPER",
+    )
 
 
 def sideways_frame(n: int = 120) -> pd.DataFrame:
-    return _ohlcv(n=n, close_fn=lambda _i: 100.0, rsi=50.0, sma_cross="NONE", macd_cross="NONE", bb_position="MIDDLE")
+    return _ohlcv(
+        n=n,
+        close_fn=lambda _i: 100.0,
+        rsi=50.0,
+        sma_cross="NONE",
+        macd_cross="NONE",
+        bb_position="MIDDLE",
+    )
 
 
 def cyclic_signal_frame(n: int = 220) -> pd.DataFrame:
@@ -217,10 +240,20 @@ def cyclic_signal_frame(n: int = 220) -> pd.DataFrame:
         phase = idx % 44
         base = 100.0 + idx * 0.35
         if phase < 8:
-            rsi, sma_cross, macd_cross, bb = 24.0, ("GOLDEN_CROSS" if phase == 0 else "NONE"), "BULLISH", "BELOW_LOWER"
+            rsi, sma_cross, macd_cross, bb = (
+                24.0,
+                ("GOLDEN_CROSS" if phase == 0 else "NONE"),
+                "BULLISH",
+                "BELOW_LOWER",
+            )
             sma_fast, sma_slow = base + 2.0, base - 1.5
         elif 22 <= phase < 30:
-            rsi, sma_cross, macd_cross, bb = 78.0, ("DEATH_CROSS" if phase == 22 else "NONE"), "BEARISH", "ABOVE_UPPER"
+            rsi, sma_cross, macd_cross, bb = (
+                78.0,
+                ("DEATH_CROSS" if phase == 22 else "NONE"),
+                "BEARISH",
+                "ABOVE_UPPER",
+            )
             sma_fast, sma_slow = base - 2.0, base + 1.5
         else:
             rsi, sma_cross, macd_cross, bb = 50.0, "NONE", "NONE", "MIDDLE"

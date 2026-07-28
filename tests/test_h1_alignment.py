@@ -76,7 +76,9 @@ def _scorers(momentum: float, trend: float, volume: float, structure: float):
     return momentum_scorer, trend_scorer, volume_scorer, structure_scorer, momentum_checker
 
 
-def _run(params: StrategyParams, df, momentum: float, trend: float, volume: float, structure: float):
+def _run(
+    params: StrategyParams, df, momentum: float, trend: float, volume: float, structure: float
+):
     """Run calculate_score_and_reasons with fixed component scorers."""
     m_s, t_s, v_s, s_s, mc = _scorers(momentum, trend, volume, structure)
     return calculate_score_and_reasons(

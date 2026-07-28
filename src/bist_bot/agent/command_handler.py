@@ -110,7 +110,6 @@ class CommandHandler:
 
         success = False
         try:
-
             pm = self.agent.position_manager
             pos = pm.get_position(ticker)
             if pos:
