@@ -17,6 +17,8 @@ venv/
 
 # SQLite and log files
 *.db
+*.db-shm
+*.db-wal
 *.sqlite
 *.sqlite3
 *.log

@@ -1,0 +1,64 @@
+{
+  "symbols": [
+    {
+      "symbol": "THYAO",
+      "company_name": "Türk Hava Yolları",
+      "aliases": ["THY", "Türk Hava Yolları", "Turkish Airlines", "THYAO", "THYAO.IS"],
+      "sector": "havacilik"
+    },
+    {
+      "symbol": "ASELS",
+      "company_name": "Aselsan",
+      "aliases": ["ASELSAN", "Aselsan", "Aselsan Elektronik", "ASELS", "ASELS.IS"],
+      "sector": "savunma"
+    },
+    {
+      "symbol": "GARAN",
+      "company_name": "Garanti BBVA",
+      "aliases": ["Garanti", "Garanti Bankası", "Garanti BBVA", "GARAN", "GARAN.IS"],
+      "sector": "bankacilik"
+    },
+    {
+      "symbol": "KCHOL",
+      "company_name": "Koç Holding",
+      "aliases": ["Koç Holding", "KCHOL", "KCHOL.IS", "koç"],
+      "sector": "diversified"
+    },
+    {
+      "symbol": "FROTO",
+      "company_name": "Ford Otosan",
+      "aliases": ["Ford Otosan", "FROTO", "FROTO.IS"],
+      "sector": "otomotiv"
+    },
+    {
+      "symbol": "TUPRS",
+      "company_name": "Tüpraş",
+      "aliases": ["Tüpraş", "TUPRS", "TUPRS.IS"],
+      "sector": "enerji"
+    },
+    {
+      "symbol": "BIMAS",
+      "company_name": "BIM",
+      "aliases": ["BIM", "BIMAS", "BIMAS.IS", "bim"],
+      "sector": "perakende"
+    },
+    {
+      "symbol": "EREGL",
+      "company_name": "Erdemir",
+      "aliases": ["Erdemir", "EREGL", "EREGL.IS"],
+      "sector": "demir celi"
+    },
+    {
+      "symbol": "AKBNK",
+      "company_name": "Akbank",
+      "aliases": ["Akbank", "AKBNK", "AKBNK.IS"],
+      "sector": "bankacilik"
+    },
+    {
+      "symbol": "ISCTR",
+      "company_name": "İş Bankası",
+      "aliases": ["İş Bankası", "ISCTR", "ISCTR.IS"],
+      "sector": "bankacilik"
+    }
+  ]
+}

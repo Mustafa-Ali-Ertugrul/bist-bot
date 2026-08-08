@@ -1,0 +1,242 @@
+"""Haber toplayıcı: kaynaklardan çeker, dedup eder, şirket varlıklarını işaretler.
+
+Docker'da ``python -m bist_bot.newsbot.collector`` olarak çalışır; her kaynağı
+kendi ``interval_seconds`` değerine göre periyodik olarak tarar.
+"""
+
+from __future__ import annotations
+
+import time
+from datetime import UTC, datetime
+
+from sqlalchemy import func, select, text
+from sqlalchemy.orm import Session
+
+from bist_bot.app_logging import configure_logging, get_logger
+from bist_bot.db.database import DatabaseManager
+from bist_bot.newsbot.entities import EntityExtractor, load_symbols
+from bist_bot.newsbot.models import NewsbotArticle, NewsbotSource
+from bist_bot.newsbot.schema import init_newsbot_schema
+from bist_bot.newsbot.scrapers import SCRAPER_REGISTRY
+from bist_bot.newsbot.sources import load_sources
+from bist_bot.newsbot.utils import (
+    canonicalize_url,
+    check_cross_site_duplicate_fts,
+    generate_content_hash,
+)
+
+logger = get_logger("newsbot.collector", component="newsbot.collector")
+
+_DEDUP_WINDOW_HOURS = 24
+
+
+def save_articles(
+    session: Session,
+    articles: list[dict],
+    source: NewsbotSource,
+) -> tuple[int, int, int]:
+    """Makaleleri kaydeder; content_hash ve FTS5 tabanlı dedup uygular.
+
+    - ``content_hash`` daha önce kaydedildiyse makale atlanır (``dup``).
+    - Farklı kaynakta son ``_DEDUP_WINDOW_HOURS`` saat içinde aynı başlık varsa
+      makale duplicate işaretlenir ve ``canonical_url`` orijinal makalenin
+      url'ine eşitlenir (``cross_dup``).
+
+    Döner: ``(new, dup, cross_dup)`` sayıları.
+    """
+    new = dup = cross_dup = 0
+    for item in articles:
+        url = canonicalize_url(item.get("url") or "")
+        title = (item.get("title") or "").strip()
+        content = item.get("content") or ""
+        published_at = item.get("published_at")
+        content_hash = generate_content_hash(url, title, content)
+
+        existing = session.execute(
+            select(NewsbotArticle.id).where(NewsbotArticle.content_hash == content_hash)
+        ).scalar_one_or_none()
+        if existing is not None:
+            dup += 1
+            continue
+
+        original_id = check_cross_site_duplicate_fts(session, title, source.id, _DEDUP_WINDOW_HOURS)
+        is_duplicate = 1 if original_id is not None else 0
+        canonical_url = url
+        if original_id is not None:
+            cross_dup += 1
+            original = session.get(NewsbotArticle, original_id)
+            if original is not None and original.url:
+                canonical_url = original.url
+
+        article = NewsbotArticle(
+            source_id=source.id,
+            url=url,
+            canonical_url=canonical_url,
+            title=title,
+            content=content,
+            summary=None,
+            published_at=published_at,
+            detected_at=datetime.now(UTC),
+            language="tr",
+            content_hash=content_hash,
+            is_duplicate=is_duplicate,
+            original_article_id=original_id,
+            trust_score=source.trust_score,
+            raw_payload=None,
+        )
+        session.add(article)
+        # Sonraki satırların hash dedup kontrolü görebilmesi için hemen flush.
+        session.flush()
+        new += 1
+
+    if articles:
+        logger.info(
+            "articles_saved",
+            source=source.name,
+            new=new,
+            dup=dup,
+            cross_dup=cross_dup,
+        )
+    return new, dup, cross_dup
+
+
+def store_article_entities(
+    session: Session,
+    article_id: int,
+    title: str,
+    content: str,
+    symbol_ids: dict[str, int],
+    extractor: EntityExtractor,
+) -> int:
+    """Yeni makale için tespit edilen şirketleri newsbot_article_entities'e yazar.
+
+    DB'de seed edilmemiş semboller sessizce atlanır (FK güvenliği).
+    """
+    inserted = 0
+    for entity in extractor.extract_entities(title or "", content or ""):
+        symbol_id = symbol_ids.get(entity["symbol"])
+        if symbol_id is None:
+            continue
+        session.execute(
+            text(
+                """
+                INSERT INTO newsbot_article_entities
+                    (article_id, symbol_id, match_type, match_confidence, matched_text)
+                VALUES (:article_id, :symbol_id, :match_type, :confidence, :matched_text)
+                """
+            ),
+            {
+                "article_id": article_id,
+                "symbol_id": symbol_id,
+                "match_type": entity["match_type"],
+                "confidence": entity["confidence"],
+                "matched_text": entity["raw_match"],
+            },
+        )
+        inserted += 1
+    return inserted
+
+
+def load_extraction_context(
+    db: DatabaseManager,
+) -> tuple[dict[str, int], EntityExtractor]:
+    """DB'deki aktif sembol id'lerini ve config tabanlı extractor'ı yükler."""
+    with db.session_scope(read_only=True) as session:
+        rows = session.execute(
+            text("SELECT symbol, id FROM newsbot_symbols WHERE is_active = 1")
+        ).all()
+    symbol_ids = {str(row.symbol): int(row.id) for row in rows}
+    extractor = EntityExtractor(load_symbols())
+    return symbol_ids, extractor
+
+
+def _store_entities_for_new_articles(
+    session: Session,
+    db_source: NewsbotSource,
+    max_id: int,
+    symbol_ids: dict[str, int],
+    extractor: EntityExtractor,
+) -> int:
+    """max_id sonrası eklenen makaleler için entity kaydı yapar."""
+    rows = (
+        session.execute(
+            select(NewsbotArticle).where(
+                NewsbotArticle.source_id == db_source.id,
+                NewsbotArticle.id > max_id,
+            )
+        )
+        .scalars()
+        .all()
+    )
+    total = 0
+    for row in rows:
+        total += store_article_entities(
+            session, row.id, row.title or "", row.content or "", symbol_ids, extractor
+        )
+    return total
+
+
+def run_once(db: DatabaseManager) -> None:
+    """Tüm aktif kaynakları bir kez tarar ve kaydeder."""
+    symbol_ids, extractor = load_extraction_context(db)
+    source_configs = [s for s in load_sources() if s.get("active", True)]
+
+    for cfg in source_configs:
+        name = cfg["name"]
+        scraper_cls = SCRAPER_REGISTRY.get(name)
+        if scraper_cls is None:
+            logger.warning("unknown_scraper", source=name)
+            continue
+        try:
+            scraper = scraper_cls(cfg)
+            articles = scraper.fetch_articles()
+            if articles:
+                with db.session_scope() as session:
+                    db_source = session.execute(
+                        select(NewsbotSource).where(NewsbotSource.name == name)
+                    ).scalar_one_or_none()
+                    if db_source is None:
+                        logger.warning("source_not_in_db", source=name)
+                        continue
+                    max_id = (
+                        session.execute(
+                            select(func.max(NewsbotArticle.id)).where(
+                                NewsbotArticle.source_id == db_source.id
+                            )
+                        ).scalar()
+                        or 0
+                    )
+                    new, dup, cross_dup = save_articles(session, articles, db_source)
+                    n_entities = _store_entities_for_new_articles(
+                        session, db_source, max_id, symbol_ids, extractor
+                    )
+                    if n_entities:
+                        logger.info("entities_extracted", source=name, count=n_entities)
+                    logger.debug(
+                        "source_cycle_done",
+                        source=name,
+                        new=new,
+                        dup=dup,
+                        cross_dup=cross_dup,
+                        entities=n_entities,
+                    )
+        except Exception as exc:
+            logger.error("source_cycle_failed", source=name, error=str(exc))
+        time.sleep(cfg.get("interval_seconds", 120))
+
+
+def main() -> None:
+    configure_logging()
+    db = DatabaseManager()
+    init_newsbot_schema(db.engine)
+    logger.info("collector_started")
+    while True:
+        try:
+            run_once(db)
+        except Exception as exc:
+            logger.error("collector_cycle_failed", error=str(exc))
+        time.sleep(5)
+
+
+if __name__ == "__main__":
+    main()
