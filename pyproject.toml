@@ -2,6 +2,7 @@
 src = ["src", "tests"]
 target-version = "py311"
 line-length = 100
+exclude = ["*.json", "*.toml", "*.yaml", "*.yml"]
 
 [tool.ruff.lint]
 select = [
