@@ -1,0 +1,35 @@
+sources:
+  - name: kap
+    url: https://www.kap.org.tr
+    type: official
+    trust_score: 100
+    interval_seconds: 60
+    active: true
+
+  - name: borsaistanbul
+    url: https://www.borsaistanbul.com
+    type: official
+    trust_score: 95
+    interval_seconds: 60
+    active: true
+
+  - name: foreks
+    url: https://www.foreks.com
+    type: news
+    trust_score: 80
+    interval_seconds: 90
+    active: true
+
+  - name: bloomberght
+    url: https://www.bloomberght.com
+    type: news
+    trust_score: 75
+    interval_seconds: 120
+    active: true
+
+  - name: investing_tr
+    url: https://tr.investing.com
+    type: news
+    trust_score: 75
+    interval_seconds: 120
+    active: true
