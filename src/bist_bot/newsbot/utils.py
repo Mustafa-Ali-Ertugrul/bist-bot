@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import unicodedata
 from datetime import UTC, datetime
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
@@ -38,6 +39,24 @@ def clean_text(text: str) -> str:
     text = re.sub(r"<[^>]+>", "", text)
     text = re.sub(r"\s+", " ", text).strip()
     return text
+
+
+def normalize_text(text: str) -> str:
+    """Türkçe ve genel Unicode eşleştirme için metni normalize eder.
+
+    FTS5 ``unicode61 remove_diacritics`` tokenizer ile uyumlu bir normalizasyon
+    gerçekleştirir: NFKD ayrıştırma + birleştirici (combining) işaretlerin
+    atılması + Türkçe ı/i eşleştirmesi. Böylece ``kâr/kar``, ``İş/is``,
+    ``çözüm/cozum`` gibi varyantlar aynı formda birleşir.
+    """
+    if not text:
+        return ""
+    # NFKD ayrıştırma (Örn: Â → A + combining circumflex, İ → I + combining dot)
+    text = unicodedata.normalize("NFKD", text)
+    # Birleştirici işaretleri at (category başlangıcı 'M' olan karakterler)
+    text = "".join(c for c in text if unicodedata.category(c)[0] != "M")
+    # Türkçe büyük/küçük harf + ı/i eşleşmesi
+    return text.lower().replace("\u0307", "").replace("ı", "i")
 
 
 def generate_content_hash(url: str, title: str, content: str) -> str:

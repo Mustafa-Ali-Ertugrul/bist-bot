@@ -103,3 +103,4 @@ services:
       - ./secrets:/run/secrets:ro
       - ./config/newsbot_sources.yaml:/app/config/newsbot_sources.yaml:ro
       - ./config/newsbot_symbols.json:/app/config/newsbot_symbols.json:ro
+      - ./config/newsbot_keywords.json:/app/config/newsbot_keywords.json:ro

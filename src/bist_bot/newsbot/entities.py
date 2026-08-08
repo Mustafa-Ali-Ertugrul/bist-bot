@@ -2,7 +2,7 @@
 
 Sembol tanımları tek kaynaktan (config/newsbot_symbols.json) yüklenir;
 aynı veri hem DB seed'inde hem çıkarımda kullanılır. Türkçe İ/ı/i
-farkları eşleştirme sırasında normalize edilir.
+farkları ve diacritic'ler normalization_utils üzerinden giderilir.
 """
 
 from __future__ import annotations
@@ -13,17 +13,9 @@ import re
 from pathlib import Path
 from typing import Any
 
+from bist_bot.newsbot.utils import normalize_text
+
 DEFAULT_SYMBOLS_PATH = "config/newsbot_symbols.json"
-
-
-def _normalize(text: str) -> str:
-    """Türkçe büyük-küçük harf eşleştirmesi için metni normalize eder.
-
-    ``lower()`` sonrası ``İ`` → ``i`` + combining dot üretir; combining dot
-    kaldırılır ve dotless ``ı`` ``i``'ye eşlenir. Böylece "İş Bankası",
-    "iş bankası", "IŞ BANKASI" gibi yazımlar aynı şekle düşer.
-    """
-    return text.lower().replace("\u0307", "").replace("ı", "i")
 
 
 def load_symbols(path: str | None = None) -> dict[str, dict[str, Any]]:
@@ -52,9 +44,9 @@ class EntityExtractor:
         self.symbols = symbols if symbols is not None else load_symbols()
         self.patterns: dict[str, re.Pattern[str]] = {}
         for symbol, meta in self.symbols.items():
-            aliases = [a for a in (_normalize(a) for a in (meta.get("aliases") or [])) if a]
-            if _normalize(symbol) not in aliases:
-                aliases.append(_normalize(symbol))
+            aliases = [a for a in (normalize_text(a) for a in (meta.get("aliases") or [])) if a]
+            if normalize_text(symbol) not in aliases:
+                aliases.append(normalize_text(symbol))
             pattern = r"\b(?:" + "|".join(re.escape(a) for a in aliases) + r")\b"
             self.patterns[symbol] = re.compile(pattern)
 
@@ -64,7 +56,7 @@ class EntityExtractor:
         Her sonuç: symbol, company_name, match_type ("symbol"|"alias"),
         confidence (100|80), raw_match (normalize edilmiş eşleşen metin).
         """
-        text = _normalize(f"{title or ''} {content or ''}")
+        text = normalize_text(f"{title or ''} {content or ''}")
         found: dict[str, dict[str, Any]] = {}
         for symbol, pattern in self.patterns.items():
             match = pattern.search(text)
