@@ -17,6 +17,12 @@ from bist_bot.db.database import DatabaseManager
 from bist_bot.newsbot.entities import EntityExtractor, load_symbols
 from bist_bot.newsbot.models import NewsbotArticle, NewsbotSource
 from bist_bot.newsbot.schema import init_newsbot_schema
+from bist_bot.newsbot.scorer import (
+    calculate_score,
+    classify_layer,
+    load_keywords,
+    save_layer_scores,
+)
 from bist_bot.newsbot.scrapers import SCRAPER_REGISTRY
 from bist_bot.newsbot.sources import load_sources
 from bist_bot.newsbot.utils import (
@@ -103,17 +109,15 @@ def save_articles(
 def store_article_entities(
     session: Session,
     article_id: int,
-    title: str,
-    content: str,
     symbol_ids: dict[str, int],
-    extractor: EntityExtractor,
+    entities: list[dict],
 ) -> int:
     """Yeni makale için tespit edilen şirketleri newsbot_article_entities'e yazar.
 
     DB'de seed edilmemiş semboller sessizce atlanır (FK güvenliği).
     """
     inserted = 0
-    for entity in extractor.extract_entities(title or "", content or ""):
+    for entity in entities:
         symbol_id = symbol_ids.get(entity["symbol"])
         if symbol_id is None:
             continue
@@ -139,15 +143,17 @@ def store_article_entities(
 
 def load_extraction_context(
     db: DatabaseManager,
-) -> tuple[dict[str, int], EntityExtractor]:
-    """DB'deki aktif sembol id'lerini ve config tabanlı extractor'ı yükler."""
+) -> tuple[dict[str, int], EntityExtractor, dict]:
+    """DB'deki aktif sembol id'lerini ve config tabanlı extractor + keywords yükler."""
     with db.session_scope(read_only=True) as session:
         rows = session.execute(
             text("SELECT symbol, id FROM newsbot_symbols WHERE is_active = 1")
         ).all()
     symbol_ids = {str(row.symbol): int(row.id) for row in rows}
     extractor = EntityExtractor(load_symbols())
-    return symbol_ids, extractor
+    keywords = load_keywords()
+    layer_triggers = keywords.get("layer_triggers", {})
+    return symbol_ids, extractor, layer_triggers, keywords
 
 
 def _store_entities_for_new_articles(
@@ -156,8 +162,13 @@ def _store_entities_for_new_articles(
     max_id: int,
     symbol_ids: dict[str, int],
     extractor: EntityExtractor,
-) -> int:
-    """max_id sonrası eklenen makaleler için entity kaydı yapar."""
+    layer_triggers: dict,
+    keywords: dict,
+) -> tuple[int, int]:
+    """max_id sonrası eklenen makaleler için entity + katman/skor kaydeder.
+
+    Döner: ``(entities_inserted, scores_saved)``
+    """
     rows = (
         session.execute(
             select(NewsbotArticle).where(
@@ -168,17 +179,28 @@ def _store_entities_for_new_articles(
         .scalars()
         .all()
     )
-    total = 0
+    entities_total = 0
+    scores_total = 0
     for row in rows:
-        total += store_article_entities(
-            session, row.id, row.title or "", row.content or "", symbol_ids, extractor
-        )
-    return total
+        title = row.title or ""
+        content = row.content or ""
+        entities = extractor.extract_entities(title, content)
+        entities_total += store_article_entities(session, row.id, symbol_ids, entities)
+
+        # Skorlama — entities listesi scorer'a doğrudan iletilir (tekrar extract yok)
+        symbol_id = next((symbol_ids.get(e["symbol"]) for e in entities), None)
+        layer = classify_layer(title, content, entities, layer_triggers)
+        score, direction, matched = calculate_score(title, content, layer, keywords)
+        save_layer_scores(session, row.id, layer, score, direction, matched, symbol_id)
+        if layer != "uncategorized":
+            scores_total += 1
+
+    return entities_total, scores_total
 
 
 def run_once(db: DatabaseManager) -> None:
     """Tüm aktif kaynakları bir kez tarar ve kaydeder."""
-    symbol_ids, extractor = load_extraction_context(db)
+    symbol_ids, extractor, layer_triggers, keywords = load_extraction_context(db)
     source_configs = [s for s in load_sources() if s.get("active", True)]
 
     for cfg in source_configs:
@@ -207,11 +229,13 @@ def run_once(db: DatabaseManager) -> None:
                         or 0
                     )
                     new, dup, cross_dup = save_articles(session, articles, db_source)
-                    n_entities = _store_entities_for_new_articles(
-                        session, db_source, max_id, symbol_ids, extractor
+                    n_entities, n_scores = _store_entities_for_new_articles(
+                        session, db_source, max_id, symbol_ids, extractor, layer_triggers, keywords
                     )
                     if n_entities:
                         logger.info("entities_extracted", source=name, count=n_entities)
+                    if n_scores:
+                        logger.info("layer_scores_saved", source=name, count=n_scores)
                     logger.debug(
                         "source_cycle_done",
                         source=name,
@@ -219,6 +243,7 @@ def run_once(db: DatabaseManager) -> None:
                         dup=dup,
                         cross_dup=cross_dup,
                         entities=n_entities,
+                        scores=n_scores,
                     )
         except Exception as exc:
             logger.error("source_cycle_failed", source=name, error=str(exc))
