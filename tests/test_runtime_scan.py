@@ -357,27 +357,15 @@ def test_collect_scan_result_returns_scan_stats():
     notifier = MagicMock()
     db = MagicMock()
 
-    with (
-        patch.object(runtime_scan, "check_signals", return_value=None),
-        patch.object(runtime_scan, "send_signal_notification"),
-    ):
-        result = runtime_scan.collect_scan_result(fetcher, engine, notifier, db)
+    result = runtime_scan.collect_scan_result(fetcher, engine)
 
     assert result["scan_stats"] == {"generated": 2, "actionable": 1, "hold": 1}
-    db.save_scan_log.assert_called_once_with(
-        2,
-        2,
-        1,
-        0,
-        1,
-        scan_id="scan-ui123",
-        rejection_breakdown={
-            "total_rejections": 3,
-            "by_reason": [{"reason_code": "score_filtered_sideways", "count": 3}],
-            "by_stage": [{"stage": "scoring", "count": 3}],
-            "scan_id": "scan-ui123",
-        },
-    )
+    assert result["rejection_breakdown"]["scan_id"] == "scan-ui123"
+    # Display-only: UI scans must not persist or notify (single writer is worker/API).
+    db.save_scan_log.assert_not_called()
+    db.save_signals.assert_not_called()
+    db.save_latest_rejection_breakdown.assert_not_called()
+    notifier.send_message.assert_not_called()
 
 
 def test_apply_scan_result_persists_scan_stats():

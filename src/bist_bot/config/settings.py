@@ -96,6 +96,22 @@ _SUB_SETTINGS_GROUPS = (
 )
 
 
+# Known placeholder JWT secrets that must never be accepted by the app
+# (compose-level `:?` guards only protect container startup, not bare
+# `python dashboard.py` runs or Cloud Run env overrides).
+_WEAK_JWT_SECRETS = frozenset(
+    {
+        "dev-only-change-me",
+        "change-me",
+        "changeme",
+        "secret",
+        "jwt-secret",
+        "default",
+        "your-secret-key",
+    }
+)
+
+
 @dataclass(frozen=True)
 class Settings:
     DEFAULT_BIST100_WATCHLIST: list[str] = field(
@@ -162,6 +178,10 @@ class Settings:
     def require_security_config(self) -> None:
         if not self.JWT_SECRET_KEY:
             raise RuntimeError("Missing required security setting(s): JWT_SECRET_KEY")
+        if self.JWT_SECRET_KEY.strip().lower() in _WEAK_JWT_SECRETS:
+            raise RuntimeError(
+                "JWT_SECRET_KEY is a known placeholder value; set a strong random secret"
+            )
 
     @property
     def admin_bootstrap_enabled(self) -> bool:

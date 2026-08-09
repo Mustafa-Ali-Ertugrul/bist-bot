@@ -22,7 +22,7 @@ Bu doküman, BIST-Bot projesinin mevcut "Sinyal + Paper Trade" yapısından, öl
 ## 🔵 Aşama 3: Orta Vade (Mimari ve Soyutlama)
 - [x] Aracı kurumlar (Broker) için bir `ExecutionProvider` soyutlaması (interface) tasarla. *(tamamlandı: `execution/base.py` → `ExecutionBroker`, `place_order`/`get_balance` API'si)*
 - [x] Paper trade (sanal işlem) ile Live Execution (canlı işlem) arayüzlerini birbirinden ayır. *(tamamlandı: `execution/paper_broker.py` + `execution/live.py`; eski `broker/` paketi kaldırıldı)*
-- [ ] Emir yaşam döngüsü modeli ekle (durumlar: `created` -> `sent` -> `partial` -> `filled` -> `cancelled` -> `rejected`).
+- [x] Emir yaşam döngüsü modeli eklendi (durumlar: `created` -> `sent` -> `partial` -> `filled` -> `cancelled` -> `rejected`). *(tamamlandı: `execution/base.py` → `OrderState` enum'ı tüm durumları içeriyor)*
 - [ ] Portföy ve risk kararlarını, genel tarama (scan) akışından bağımsız ayrı bir servis (microservice mantığı) haline getir.
 - [ ] AlgoLab sandbox/doğrulama checklist'i oluştur; resmi HTTP path'leri teyit edilmeden canlı modu açma.
 - [ ] Matriks/Foreks/Finnet adaptörleri için de aynı canlı kullanım politikası ve sandbox/mock doğrulama adımlarını zorunlu hale getir.
