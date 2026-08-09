@@ -91,11 +91,10 @@ def collect_scan_result(
     force_clear: bool = False,
     limited_tickers: list[str] | None = None,
 ) -> ScanResult:
-    """Run one display-only scan cycle and return the runtime payload.
+    """Run one scan cycle and return the runtime payload for DISPLAY only.
 
-    This path intentionally has **no persistence and no notifications**: the
-    worker/API ``ScanService`` is the single writer for DB and Telegram.
-    Results only populate Streamlit session state.
+    This function never writes to the database and never sends notifications:
+    the worker/API ScanService is the single writer of scan data.
     """
     scan_started_at = datetime.now(TR)
     if _should_clear_cache(scan_started_at, last_scan_time, force_clear):
@@ -161,6 +160,7 @@ def collect_scan_result(
         if isinstance(rejection_breakdown, dict)
         else dict(EMPTY_REJECTION_BREAKDOWN)
     )
+
     scan_stats: ScanStats = {
         "generated": len(signals),
         "actionable": actionable_count,
@@ -210,7 +210,7 @@ def apply_scan_result(scan_result: ScanResult) -> None:
 
 def run_scan(force_clear: bool = False) -> None:
     """Execute a synchronous scan using the session-scoped dependencies."""
-    fetcher, engine, _, _, last_scan_time = _session_dependencies()
+    fetcher, engine, _notifier, _db, last_scan_time = _session_dependencies()
     result = collect_scan_result(
         fetcher=fetcher,
         engine=engine,
@@ -225,7 +225,7 @@ def run_initial_scan(force_clear: bool = False, limited: bool = False) -> bool:
     if st.session_state.get("all_data"):
         return True
 
-    fetcher, engine, _, _, last_scan_time = _session_dependencies()
+    fetcher, engine, _notifier, _db, last_scan_time = _session_dependencies()
     limited_tickers = None
     if limited:
         limit = int(getattr(settings, "STREAMLIT_INITIAL_SCAN_LIMIT", 10))
@@ -311,7 +311,7 @@ def start_background_scan(force_clear: bool = False, limited: bool = False) -> b
             return False
         ACTIVE_SCAN_SESSIONS.add(session_key)
 
-    fetcher, engine, _, _, last_scan_time = _session_dependencies()
+    fetcher, engine, _notifier, _db, last_scan_time = _session_dependencies()
     scan_started_at = datetime.now(TR)
     st.session_state.scan_in_progress = True
     st.session_state.scan_started_at = scan_started_at

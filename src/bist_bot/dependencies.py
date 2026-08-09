@@ -167,7 +167,7 @@ def _build_broker() -> BaseExecutionProvider:
 
         return LiveBroker(provider=provider, settings=settings)
 
-    # Default paper path: prefer new broker.PaperBroker (compatible with place_order)
+    # Default paper path: single execution implementation (no facade indirection)
     from bist_bot.execution.paper_broker import PaperBroker as BrokerPaperBroker
 
     return BrokerPaperBroker(

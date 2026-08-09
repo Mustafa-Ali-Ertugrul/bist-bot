@@ -7,14 +7,15 @@ from typing import Any
 
 from bist_bot.app_logging import get_logger
 from bist_bot.app_metrics import inc_counter
-from bist_bot.config.settings import settings as default_settings
-from bist_bot.execution.base import (
+from bist_bot.broker.base import (
+    Broker,
     OrderResult,
     OrderSide,
     OrderState,
     OrderType,
     coerce_order_type,
 )
+from bist_bot.config.settings import settings as default_settings
 from bist_bot.observability.alerts import AlertLevel, send_alert
 from bist_bot.observability.logging import log_order
 from bist_bot.observability.metrics import observe_order_latency, record_order
@@ -24,7 +25,7 @@ logger = get_logger(__name__, component="order_executor")
 
 
 class OrderExecutor:
-    """Route risk-approved signals to a ``BaseExecutionProvider`` implementation.
+    """Route risk-approved signals to a ``Broker`` implementation.
 
     This is the application service between strategy/risk output and venue
     submission. It does **not** re-size positions; callers must provide a
@@ -33,7 +34,7 @@ class OrderExecutor:
 
     def __init__(
         self,
-        broker: Any,
+        broker: Broker,
         *,
         db: Any | None = None,
         settings: Any | None = None,
@@ -164,8 +165,7 @@ class OrderExecutor:
 
         started = time.perf_counter()
         try:
-            # Call place_order directly (unified API from execution/ package)
-            result = self.broker.place_order(
+            result = self.broker.submit_order(
                 ticker=signal.ticker,
                 side=side,
                 quantity=qty,

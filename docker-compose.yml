@@ -21,7 +21,7 @@ services:
       DB_PATH: /app/data/bist_signals.db
       METRICS_PUBLIC: ${METRICS_PUBLIC:-false}
       LOG_FORMAT: ${LOG_FORMAT:-json}
-      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?JWT_SECRET_KEY must be set}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?JWT_SECRET_KEY must be set for secure startup}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
       BROKER_MODE: ${BROKER_MODE:-paper}
@@ -66,7 +66,7 @@ services:
       API_BASE_URL: http://bot:5000
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://bist:bist@postgres:5432/bist_bot}
       DB_PATH: /app/data/bist_signals.db
-      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?JWT_SECRET_KEY must be set}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?JWT_SECRET_KEY must be set for secure startup}
     ports:
       - "8501:8501"
     volumes:
@@ -101,7 +101,7 @@ services:
       LOG_FORMAT: ${LOG_FORMAT:-json}
       BROKER_MODE: ${BROKER_MODE:-paper}
       BROKER_PROVIDER: ${BROKER_PROVIDER:-paper}
-      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?JWT_SECRET_KEY must be set}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?JWT_SECRET_KEY must be set for secure startup}
       MTF_ENABLED: "false"
     volumes:
       - bot-data:/app/data

@@ -12,8 +12,8 @@ from bist_bot.execution.base import (
     OrderStatus,
     OrderType,
     Position,
-    coerce_side,
     coerce_order_type,
+    coerce_side,
     utc_now,
 )
 from bist_bot.risk.costs import DEFAULT_COSTS, TradingCosts

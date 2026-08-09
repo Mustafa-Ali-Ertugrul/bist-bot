@@ -16,6 +16,21 @@ except ImportError:
 # Guard against repeated ``load_dotenv`` calls during ``importlib.reload`` so
 # monkeypatched/test values are not silently re-populated from ``.env``.
 _DOTENV_FLAG = "_bist_bot_dotenv_loaded"
+
+_WEAK_JWT_SECRETS = frozenset(
+    {
+        "dev-only-change-me",
+        "change-me",
+        "change-me-please",
+        "your-secret-key",
+        "jwt-secret",
+        "secret",
+        "default",
+        "development",
+        "changeme",
+        "password",
+    }
+)
 if load_dotenv is not None and _DOTENV_FLAG not in __import__("sys").modules:
     load_dotenv()
     __import__("sys").modules[_DOTENV_FLAG] = True
@@ -40,7 +55,7 @@ from bist_bot.config.watchlist import load_watchlist, resolve_watchlist_source  
 
 
 def _default_watchlist_source() -> str:
-    return resolve_watchlist_source("bist30")
+    return resolve_watchlist_source(None)
 
 
 def _default_watchlist() -> list[str]:
@@ -93,22 +108,6 @@ _SUB_SETTINGS_GROUPS = (
     "ml",
     "notification",
     "agent",
-)
-
-
-# Known placeholder JWT secrets that must never be accepted by the app
-# (compose-level `:?` guards only protect container startup, not bare
-# `python dashboard.py` runs or Cloud Run env overrides).
-_WEAK_JWT_SECRETS = frozenset(
-    {
-        "dev-only-change-me",
-        "change-me",
-        "changeme",
-        "secret",
-        "jwt-secret",
-        "default",
-        "your-secret-key",
-    }
 )
 
 
@@ -178,9 +177,10 @@ class Settings:
     def require_security_config(self) -> None:
         if not self.JWT_SECRET_KEY:
             raise RuntimeError("Missing required security setting(s): JWT_SECRET_KEY")
-        if self.JWT_SECRET_KEY.strip().lower() in _WEAK_JWT_SECRETS:
+        if self.JWT_SECRET_KEY in _WEAK_JWT_SECRETS:
             raise RuntimeError(
-                "JWT_SECRET_KEY is a known placeholder value; set a strong random secret"
+                "JWT_SECRET_KEY is set to a known placeholder value. "
+                "Set a strong, unique secret before starting the dashboard."
             )
 
     @property
