@@ -2,7 +2,11 @@
 
 from bist_bot.risk.manager import RiskManager
 from bist_bot.risk.models import RiskLevels
-from bist_bot.risk.portfolio_limits import PortfolioLimits, PortfolioState, check_order_against_limits
+from bist_bot.risk.portfolio_limits import (
+    PortfolioLimits,
+    PortfolioState,
+    check_order_against_limits,
+)
 from bist_bot.risk.profile import RiskProfile, RiskProfileLoader
 from bist_bot.risk.stops import (
     calc_atr_levels,
