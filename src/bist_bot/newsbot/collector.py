@@ -13,9 +13,11 @@ from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from bist_bot.app_logging import configure_logging, get_logger
+from bist_bot.config.settings import settings
 from bist_bot.db.database import DatabaseManager
 from bist_bot.newsbot.entities import EntityExtractor, load_symbols
 from bist_bot.newsbot.models import NewsbotArticle, NewsbotSource
+from bist_bot.newsbot.notifier import NewsbotNotifier
 from bist_bot.newsbot.schema import init_newsbot_schema
 from bist_bot.newsbot.scorer import (
     calculate_score,
@@ -164,10 +166,11 @@ def _store_entities_for_new_articles(
     extractor: EntityExtractor,
     layer_triggers: dict,
     keywords: dict,
-) -> tuple[int, int]:
+    notifier: NewsbotNotifier | None = None,
+) -> tuple[int, int, int]:
     """max_id sonrası eklenen makaleler için entity + katman/skor kaydeder.
 
-    Döner: ``(entities_inserted, scores_saved)``
+    Döner: ``(entities_inserted, scores_saved, notifications_sent)``
     """
     rows = (
         session.execute(
@@ -181,6 +184,7 @@ def _store_entities_for_new_articles(
     )
     entities_total = 0
     scores_total = 0
+    notif_total = 0
     for row in rows:
         title = row.title or ""
         content = row.content or ""
@@ -195,12 +199,33 @@ def _store_entities_for_new_articles(
         if layer != "uncategorized":
             scores_total += 1
 
-    return entities_total, scores_total
+        # Bildirim — yalnızca uncategorized olmayan ve eşiği aşan skorlar
+        if notifier is not None and layer != "uncategorized":
+            sent = notifier.notify(
+                session,
+                article_id=row.id,
+                title=title,
+                layer=layer,
+                score=score,
+                direction=direction,
+                source_name=db_source.name,
+                symbol=None,  # symbol id DB'de tutulur, burada string gerekli değil
+                matched_keywords=matched,
+            )
+            if sent:
+                notif_total += 1
+
+    return entities_total, scores_total, notif_total
 
 
 def run_once(db: DatabaseManager) -> None:
     """Tüm aktif kaynakları bir kez tarar ve kaydeder."""
     symbol_ids, extractor, layer_triggers, keywords = load_extraction_context(db)
+    notifier = NewsbotNotifier(
+        token=settings.notification.TELEGRAM_BOT_TOKEN,
+        chat_id=settings.notification.TELEGRAM_CHAT_ID,
+        min_score=settings.notification.NEWSBOT_MIN_SCORE,
+    )
     source_configs = [s for s in load_sources() if s.get("active", True)]
 
     for cfg in source_configs:
@@ -229,13 +254,15 @@ def run_once(db: DatabaseManager) -> None:
                         or 0
                     )
                     new, dup, cross_dup = save_articles(session, articles, db_source)
-                    n_entities, n_scores = _store_entities_for_new_articles(
-                        session, db_source, max_id, symbol_ids, extractor, layer_triggers, keywords
+                    n_entities, n_scores, n_notifs = _store_entities_for_new_articles(
+                        session, db_source, max_id, symbol_ids, extractor, layer_triggers, keywords, notifier
                     )
                     if n_entities:
                         logger.info("entities_extracted", source=name, count=n_entities)
                     if n_scores:
                         logger.info("layer_scores_saved", source=name, count=n_scores)
+                    if n_notifs:
+                        logger.info("notifications_sent", source=name, count=n_notifs)
                     logger.debug(
                         "source_cycle_done",
                         source=name,
@@ -244,6 +271,7 @@ def run_once(db: DatabaseManager) -> None:
                         cross_dup=cross_dup,
                         entities=n_entities,
                         scores=n_scores,
+                        notifications=n_notifs,
                     )
         except Exception as exc:
             logger.error("source_cycle_failed", source=name, error=str(exc))

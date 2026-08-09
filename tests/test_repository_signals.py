@@ -17,20 +17,18 @@ from bist_bot.strategy.signal_models import Signal, SignalType
 @pytest.fixture
 def signals_repo():
     """Create a SignalsRepository with a temporary database."""
-    # Create a temporary database file
     temp_fd, temp_path = tempfile.mkstemp(suffix=".db")
-    os.close(temp_fd)  # Close the file descriptor
+    os.close(temp_fd)
 
-    manager = DatabaseManager(sqlite_path=temp_path)
+    database_url = f"sqlite:///{temp_path}"
+    manager = DatabaseManager(database_url=database_url)
     repo = SignalsRepository(manager=manager)
     try:
         yield repo
     finally:
-        # Clean up connections before deleting the file
         manager.session_factory.remove()
         if hasattr(manager, "engine"):
             manager.engine.dispose()
-        # Clean up the temporary file
         if os.path.exists(temp_path):
             os.unlink(temp_path)
 

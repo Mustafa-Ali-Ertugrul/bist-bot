@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy.exc import OperationalError
@@ -15,7 +15,8 @@ from bist_bot.strategy.signal_models import Signal, SignalType
 
 @pytest.fixture
 def signals_repo(tmp_path):
-    manager = DatabaseManager(sqlite_path=str(tmp_path / "signals_test.db"))
+    db_path = str(tmp_path / "signals_test.db")
+    manager = DatabaseManager(database_url=f"sqlite:///{db_path}")
     return SignalsRepository(manager=manager)
 
 
@@ -29,7 +30,7 @@ def sample_signal():
         reasons=["RSI low", "MACD bullish"],
         stop_loss=95.0,
         target_price=110.0,
-        timestamp=datetime(2025, 1, 1, 10, 0, 0),
+        timestamp=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
     )
 
 
@@ -58,7 +59,7 @@ def test_empty_db_query_does_not_crash(signals_repo):
 
 
 def test_database_manager_retries_locked_writes(tmp_path):
-    manager = DatabaseManager(sqlite_path=str(tmp_path / "retry_test.db"))
+    manager = DatabaseManager(database_url=f"sqlite:///{tmp_path}/retry_test.db")
     calls = {"count": 0}
 
     def flaky_write(_session):
@@ -72,7 +73,7 @@ def test_database_manager_retries_locked_writes(tmp_path):
 
 
 def test_database_manager_read_only_session_does_not_commit(tmp_path):
-    manager = DatabaseManager(sqlite_path=str(tmp_path / "readonly_test.db"))
+    manager = DatabaseManager(database_url=f"sqlite:///{tmp_path}/readonly_test.db")
 
     manager.run_session(
         lambda session: session.add(
@@ -90,7 +91,7 @@ def test_database_manager_read_only_session_does_not_commit(tmp_path):
 
 
 def test_portfolio_close_calculates_positive_pnl_for_winning_trade(tmp_path):
-    manager = DatabaseManager(sqlite_path=str(tmp_path / "portfolio_test.db"))
+    manager = DatabaseManager(database_url=f"sqlite:///{tmp_path}/portfolio_test.db")
     repo = PortfolioRepository(manager=manager)
 
     repo.add_paper_trade("THYAO.IS", "BUY", 100.0)

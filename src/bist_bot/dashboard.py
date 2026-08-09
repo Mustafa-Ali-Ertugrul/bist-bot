@@ -353,6 +353,8 @@ def create_dashboard_app(
             "version": "1.0.0",
             "timestamp": datetime.now(TR).isoformat(),
             "circuit_state": str(circuit.state) if circuit else "UNKNOWN",
+            "provider": settings.BROKER_PROVIDER,
+            "broker_mode": settings.BROKER_MODE,
         }
         if not db_ok:
             health["status"] = "degraded"
@@ -366,6 +368,13 @@ def create_dashboard_app(
 
     @app.route("/metrics")
     def metrics():
+        allowed = settings.METRICS_ALLOWED_IPS
+        if allowed and request.remote_addr not in allowed:
+            logger.warning(
+                "metrics_forbidden",
+                remote_addr=request.remote_addr,
+            )
+            return "Forbidden", 403
         return app.response_class(render_metrics(), mimetype="text/plain; version=0.0.4")
 
     @app.route("/api/auth/login", methods=["POST"])
@@ -421,7 +430,6 @@ def create_dashboard_app(
             )
             scan_service = get_scan_service()
             logger.info("api_scan_started", force_refresh=force_refresh)
-            exec_svc = scan_service.execution_service
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(scan_service.scan_once, force_refresh=force_refresh)
                 try:
@@ -440,9 +448,6 @@ def create_dashboard_app(
                         }
                     ), 504
             scan_stats = scan_service.last_scan_stats
-
-            if getattr(settings, "AUTO_EXECUTE", False):
-                exec_svc.auto_execute_signals(signals)
 
             if getattr(settings, "PAPER_MODE", False):
                 if not scan_service.last_side_effects.get("paper_trades_queued", False):

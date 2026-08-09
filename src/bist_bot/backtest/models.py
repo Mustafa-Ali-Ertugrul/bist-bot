@@ -8,6 +8,8 @@ from typing import Any, Protocol, TypedDict, cast
 import numpy as np
 import pandas as pd
 
+from bist_bot.config.settings import settings
+
 try:
     from sklearn.metrics import log_loss, roc_auc_score
 except ImportError:
@@ -100,6 +102,20 @@ class CostModel:
     volume_slippage_bps_per_volume_ratio: float = 200.0
     atr_slippage_ratio: float = 0.10
     max_slippage_bps: float = 50.0
+
+
+def default_cost_model() -> CostModel:
+    """Build a CostModel with commission sourced from settings.
+
+    The backtest commission percentage (``BACKTEST_COMMISSION_PCT``) is the
+    single source of truth for the non-legacy cost path. It is converted from
+    a fraction (e.g. 0.001 = 0.1%) to basis points (10 bps). BSMV, exchange
+    fee and slippage keep their CostModel literal defaults because no dedicated
+    backtest settings exist for them.
+    """
+    commission_pct = float(getattr(settings, "BACKTEST_COMMISSION_PCT", 0.001))
+    commission_bps = commission_pct * 10_000.0
+    return CostModel(commission_bps=commission_bps)
 
 
 @dataclass

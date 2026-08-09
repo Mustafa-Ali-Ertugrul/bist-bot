@@ -22,3 +22,8 @@ redis>=5.0.0
 holidays>=0.50
 alpaca-py>=0.43.0
 exchange-calendars>=4.13.0
+PyYAML>=6.0.1
+
+# Newsbot: KAP WAF bypass (TLS impersonation) + RSS tarih parsing
+curl_cffi>=0.7.0
+python-dateutil>=2.8.0

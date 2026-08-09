@@ -29,13 +29,6 @@ EMPTY_REJECTION_BREAKDOWN = {
     "scan_id": "",
 }
 
-EMPTY_REJECTION_BREAKDOWN = {
-    "total_rejections": 0,
-    "by_reason": [],
-    "by_stage": [],
-    "scan_id": "",
-}
-
 
 class ScanService:
     """Coordinate one market scan from data fetch through side effects.
@@ -121,115 +114,14 @@ class ScanService:
             return []
 
         try:
-            self.last_side_effects["paper_trades_queued"] = False
-            if force_refresh:
-                self.fetcher.clear_cache(scope="intraday_fetch")
-                self.fetcher.clear_cache(scope="analysis")
-            all_data = self.fetcher.fetch_multi_timeframe_all(
-                trend_period=getattr(self.settings, "MTF_TREND_PERIOD", "6mo"),
-                trend_interval=getattr(self.settings, "MTF_TREND_INTERVAL", "1d"),
-                trigger_period=getattr(self.settings, "MTF_TRIGGER_PERIOD", "1mo"),
-                trigger_interval=getattr(self.settings, "MTF_TRIGGER_INTERVAL", "15m"),
-                force_refresh=force_refresh,
+            all_data, signals, breakdown, actionable, buys, sells = self._evaluate_signals(
+                force_refresh, started_at
             )
-
-            if not all_data:
-                duration_ms = round((time.perf_counter() - started_at) * 1000, 2)
-                inc_counter("bist_scan_fail_total")
-                set_gauge("bist_last_scan_duration_ms", duration_ms)
-                set_gauge("bist_last_scan_scanned_count", 0)
-                logger.error(
-                    "scan_failed",
-                    error_type="empty_fetch",
-                    duration_ms=duration_ms,
-                    scanned_count=0,
-                )
-                return []
-
-            signals = self.engine.scan_all(all_data)
-            breakdown_getter = getattr(self.engine, "get_last_rejection_breakdown", None)
-            breakdown = (
-                breakdown_getter()
-                if callable(breakdown_getter)
-                else dict(EMPTY_REJECTION_BREAKDOWN)
-            )
-            self.last_rejection_breakdown = (
-                breakdown if isinstance(breakdown, dict) else dict(EMPTY_REJECTION_BREAKDOWN)
-            )
-            actionable = self.engine.get_actionable_signals(signals)
-            buys = [
-                s
-                for s in actionable
-                if s.signal_type in (SignalType.BUY, SignalType.STRONG_BUY, SignalType.WEAK_BUY)
-            ]
-            sells = [
-                s
-                for s in actionable
-                if s.signal_type in (SignalType.SELL, SignalType.STRONG_SELL, SignalType.WEAK_SELL)
-            ]
-            self.last_scan_stats = {
-                "scanned": len(all_data),
-                "signals": len(signals),
-                "actionable": len(actionable),
-                "buys": len(buys),
-                "sells": len(sells),
-            }
-
-            self._check_signal_changes(signals)
-            self.db.save_signals(signals)
-            self._auto_execute_signals(actionable)
-            if getattr(self.settings, "PAPER_MODE", False):
-                self.last_side_effects["paper_trades_queued"] = bool(
-                    self.paper_trade_service.queue_actionable_signals(actionable)
-                )
-            self.db.save_scan_log(
-                len(all_data),
-                len(signals),
-                len(buys),
-                len(sells),
-                len(actionable),
-                scan_id=str(self.last_rejection_breakdown.get("scan_id", "") or ""),
-                rejection_breakdown=self.last_rejection_breakdown,
-            )
-            self.notification_service.notify_scan_results(signals, actionable, len(all_data))
+            self._persist_and_notify(all_data, signals, breakdown, actionable, buys, sells)
+            self._finalize_scan(all_data, signals, actionable, started_at)
 
             if getattr(self.settings, "PAPER_MODE", False):
                 self.update_paper_trades()
-
-            duration_ms = round((time.perf_counter() - started_at) * 1000, 2)
-            rejection_count = len(all_data) - len(signals)
-            radar_count = sum(1 for s in signals if s.signal_type == SignalType.RADAR)
-
-            inc_counter("bist_scan_total")
-            inc_counter("bist_signal_emitted_total", len(actionable))
-            set_gauge("bist_last_scan_duration_ms", duration_ms)
-            set_gauge("bist_last_scan_scanned_count", len(all_data))
-
-            logger.info(
-                "scan_summary",
-                requested=len(self.settings.WATCHLIST),
-                fetched=len(all_data),
-                signals=len(signals),
-                actionable=len(actionable),
-                radar=radar_count,
-                rejected=rejection_count,
-                buys=len(buys),
-                sells=len(sells),
-                duration_ms=duration_ms,
-                scan_id=str(self.last_rejection_breakdown.get("scan_id", "") or ""),
-            )
-
-            for signal in signals:
-                if signal.signal_type is not SignalType.HOLD:
-                    logger.debug(
-                        "signal_emitted",
-                        ticker=signal.ticker,
-                        signal_type=str(signal.signal_type),
-                        score=signal.score,
-                    )
-
-            if self.circuit_breaker:
-                self.circuit_breaker.record_success()
 
             return cast(list[Signal], signals)
         except Exception as exc:
@@ -240,6 +132,143 @@ class ScanService:
             if hasattr(self, "circuit_breaker") and self.circuit_breaker:
                 self.circuit_breaker.record_error()
             raise
+
+    def _fetch_market_data(self, force_refresh: bool, started_at: float) -> list[dict[str, object]]:
+        """Load multi-timeframe market data; return empty on failure."""
+        self.last_side_effects["paper_trades_queued"] = False
+        if force_refresh:
+            self.fetcher.clear_cache(scope="intraday_fetch")
+            self.fetcher.clear_cache(scope="analysis")
+        all_data = self.fetcher.fetch_multi_timeframe_all(
+            trend_period=getattr(self.settings, "MTF_TREND_PERIOD", "6mo"),
+            trend_interval=getattr(self.settings, "MTF_TREND_INTERVAL", "1d"),
+            trigger_period=getattr(self.settings, "MTF_TRIGGER_PERIOD", "1mo"),
+            trigger_interval=getattr(self.settings, "MTF_TRIGGER_INTERVAL", "15m"),
+            force_refresh=force_refresh,
+        )
+        if not all_data:
+            duration_ms = round((time.perf_counter() - started_at) * 1000, 2)
+            inc_counter("bist_scan_fail_total")
+            set_gauge("bist_last_scan_duration_ms", duration_ms)
+            set_gauge("bist_last_scan_scanned_count", 0)
+            logger.error(
+                "scan_failed",
+                error_type="empty_fetch",
+                duration_ms=duration_ms,
+                scanned_count=0,
+            )
+        return all_data  # type: ignore[return-value]
+
+    def _evaluate_signals(
+        self, force_refresh: bool, started_at: float
+    ) -> tuple[list[dict[str, object]], list[Signal], dict[str, object], list[Signal], list[Signal], list[Signal]]:
+        """Fetch data, score signals, compute buys/sells/actionable splits."""
+        all_data = self._fetch_market_data(force_refresh, started_at)
+        if not all_data:
+            return [], [], {}, [], [], []
+
+        signals = self.engine.scan_all(all_data)
+        breakdown_getter = getattr(self.engine, "get_last_rejection_breakdown", None)
+        breakdown = (
+            breakdown_getter()
+            if callable(breakdown_getter)
+            else dict(EMPTY_REJECTION_BREAKDOWN)
+        )
+        self.last_rejection_breakdown = (
+            breakdown if isinstance(breakdown, dict) else dict(EMPTY_REJECTION_BREAKDOWN)
+        )
+        actionable = self.engine.get_actionable_signals(signals)
+        buys = [
+            s
+            for s in actionable
+            if s.signal_type in (SignalType.BUY, SignalType.STRONG_BUY, SignalType.WEAK_BUY)
+        ]
+        sells = [
+            s
+            for s in actionable
+            if s.signal_type in (SignalType.SELL, SignalType.STRONG_SELL, SignalType.WEAK_SELL)
+        ]
+        self.last_scan_stats = {
+            "scanned": len(all_data),
+            "signals": len(signals),
+            "actionable": len(actionable),
+            "buys": len(buys),
+            "sells": len(sells),
+        }
+        return all_data, signals, breakdown, actionable, buys, sells
+
+    def _persist_and_notify(
+        self,
+        all_data: list[dict[str, object]],
+        signals: list[Signal],
+        breakdown: dict[str, object],
+        actionable: list[Signal],
+        buys: list[Signal],
+        sells: list[Signal],
+    ) -> None:
+        """Persist results and dispatch side effects in deterministic order."""
+        self._check_signal_changes(signals)
+        self.db.save_signals(signals)
+        self._auto_execute_signals(actionable)
+        if getattr(self.settings, "PAPER_MODE", False):
+            self.last_side_effects["paper_trades_queued"] = bool(
+                self.paper_trade_service.queue_actionable_signals(actionable)
+            )
+        self.db.save_scan_log(
+            len(all_data),
+            len(signals),
+            len(buys),
+            len(sells),
+            len(actionable),
+            scan_id=str(breakdown.get("scan_id", "") or ""),
+            rejection_breakdown=breakdown,
+        )
+        self.notification_service.notify_scan_results(signals, actionable, len(all_data))
+
+    def _finalize_scan(
+        self,
+        all_data: list[dict[str, object]],
+        signals: list[Signal],
+        actionable: list[Signal],
+        started_at: float,
+    ) -> None:
+        """Record scan metrics, emit summary log, and record circuit-breaker success."""
+        duration_ms = round((time.perf_counter() - started_at) * 1000, 2)
+        rejection_count = len(all_data) - len(signals)
+        radar_count = sum(1 for s in signals if s.signal_type == SignalType.RADAR)
+        buys = self.last_scan_stats.get("buys", 0)
+        sells = self.last_scan_stats.get("sells", 0)
+
+        inc_counter("bist_scan_total")
+        inc_counter("bist_signal_emitted_total", len(actionable))
+        set_gauge("bist_last_scan_duration_ms", duration_ms)
+        set_gauge("bist_last_scan_scanned_count", len(all_data))
+
+        logger.info(
+            "scan_summary",
+            requested=len(self.settings.WATCHLIST),
+            fetched=len(all_data),
+            signals=len(signals),
+            actionable=len(actionable),
+            radar=radar_count,
+            rejected=rejection_count,
+            buys=buys,
+            sells=sells,
+            duration_ms=duration_ms,
+            scan_id=str(self.last_rejection_breakdown.get("scan_id", "") or ""),
+        )
+
+        for signal in signals:
+            if signal.signal_type is not SignalType.HOLD:
+                logger.debug(
+                    "signal_emitted",
+                    ticker=signal.ticker,
+                    signal_type=str(signal.signal_type),
+                    score=signal.score,
+                )
+
+        if self.circuit_breaker:
+            self.circuit_breaker.record_success()
 
     def update_paper_trades(self) -> None:
         """Refresh open paper trades and close only triggered positions."""

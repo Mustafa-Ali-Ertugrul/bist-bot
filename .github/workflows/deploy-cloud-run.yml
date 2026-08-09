@@ -69,7 +69,10 @@ jobs:
 
       - name: Deploy API service
         run: |
-          gcloud run deploy "$API_SERVICE_NAME" --project "$GCP_PROJECT_ID" --region "$GCP_REGION" --image "$IMAGE_URI" --allow-unauthenticated --command python --args dashboard.py --set-env-vars PYTHONPATH=/app/src,DB_PATH=/tmp/bist_signals.db,RATE_LIMIT_STORAGE_URI=memory:// --set-secrets JWT_SECRET_KEY="${GCP_JWT_SECRET_NAME}:latest" --timeout=300 --no-cpu-throttling
+          # RATE_LIMIT_STORAGE_URI: override via vars (Redis/Cloud SQL recommended for multi-instance).
+          # Default stays `memory://` which only works for single-instance local/dev deployments.
+          RATE_LIMIT="${RATE_LIMIT_STORAGE_URI:-memory://}"
+          gcloud run deploy "$API_SERVICE_NAME" --project "$GCP_PROJECT_ID" --region "$GCP_REGION" --image "$IMAGE_URI" --allow-unauthenticated --command python --args dashboard.py --set-env-vars PYTHONPATH=/app/src,DB_PATH=/tmp/bist_signals.db,RATE_LIMIT_STORAGE_URI="$RATE_LIMIT" --set-secrets JWT_SECRET_KEY="${GCP_JWT_SECRET_NAME}:latest" --timeout=300 --no-cpu-throttling
           API_URL="$(gcloud run services describe "$API_SERVICE_NAME" --project "$GCP_PROJECT_ID" --region "$GCP_REGION" --format 'value(status.url)')"
           echo "API_URL=$API_URL" >> "$GITHUB_ENV"
 

@@ -66,6 +66,7 @@ class TelegramNotifier:
     ):
         self.token = token or settings.TELEGRAM_BOT_TOKEN
         self.chat_id = chat_id or settings.TELEGRAM_CHAT_ID
+        self.group_chat_id = getattr(settings, "TELEGRAM_GROUP_CHAT_ID", "") or None
         self.sender = sender
         self.base_url = f"https://api.telegram.org/bot{self.token}"
         self.enabled = bool(self.token and self.chat_id)
@@ -76,7 +77,7 @@ class TelegramNotifier:
                 detail="Telegram ayarlanmamış. .env dosyasına TELEGRAM_BOT_TOKEN ve TELEGRAM_CHAT_ID ekle.",
             )
 
-    def send_message(self, text: str, parse_mode: str = "HTML") -> bool:
+    def _send(self, chat_id: str, text: str, parse_mode: str = "HTML") -> bool:
         if not self.enabled:
             logger.info("telegram_disabled", preview=text[:80])
             return False
@@ -84,7 +85,7 @@ class TelegramNotifier:
         try:
             sent = self.sender(
                 base_url=self.base_url,
-                chat_id=self.chat_id,
+                chat_id=chat_id,
                 text=text,
                 parse_mode=parse_mode,
                 max_retries=getattr(settings, "NOTIFICATION_MAX_RETRIES", 3),
@@ -99,8 +100,78 @@ class TelegramNotifier:
             logger.error("telegram_error", error=str(e))
             return False
 
+    def send_message(self, text: str, parse_mode: str = "HTML") -> bool:
+        return self._send(self.chat_id, text, parse_mode)
+
+    def send_to_group(self, text: str, parse_mode: str = "HTML") -> bool:
+        """Send a message to the Telegram group chat."""
+        chat_id = self.group_chat_id or self.chat_id
+        return self._send(chat_id, text, parse_mode)
+
+    # ------------------------------------------------------------------
+    # Detail message: split into actionable vs radar labels with diagnosis
+    # ------------------------------------------------------------------
+    def _build_diagnosis_block(self, signal: Signal) -> str:
+        """Return the  🔍 Teşhis block for a signal."""
+        # agreement_ratio
+        ar = signal.agreement_ratio
+        if ar is None:
+            agree_str = "belirsiz"
+            level = "unknown"
+        else:
+            agree_int = round(ar * 4)
+            if agree_int >= 3:
+                level = "high"
+            elif agree_int >= 2:
+                level = "medium"
+            else:
+                level = "low"
+            agree_str = f"{agree_int}/4"
+
+        lines = [f"  Bileşen uyumu: {agree_str} → {level}"]
+
+        # Gates reasons block
+        gate_keywords = [
+            "Karşıt-trend bastırma",
+            "Aşırı uzama chase koruması",
+            "MTF çelişki",
+            "nötr",
+            "Hacim divergence",
+            "bastırıldı",
+        ]
+        gate_reasons = [
+            r for r in signal.reasons if any(kw in r for kw in gate_keywords)
+        ]
+        if gate_reasons:
+            lines.append("  🛡️ Uygulanan korumalar:")
+            for gr in gate_reasons:
+                lines.append(f"    • {gr}")
+        else:
+            lines.append("  🛡️ Koruma tetiklenmedi")
+
+        # Threshold info
+        buy_threshold = getattr(settings, "BUY_THRESHOLD", 20)
+        if signal.score >= buy_threshold:
+            tag = "actionable"
+        else:
+            tag = "radar"
+        lines.append(f"  Skor {signal.score:+.0f} / actionable eşiği {buy_threshold} → {tag}")
+
+        return "\n".join(lines)
+
+    def _signal_label(self, signal: Signal) -> str:
+        """Return the one-line label for a signal detail message."""
+        buy_threshold = getattr(settings, "BUY_THRESHOLD", 20)
+        if signal.score >= buy_threshold:
+            return "<b>AL SİNYALİ</b> (actionable — paper'da emir simüle edilir)"
+        if signal.score > 0:
+            return "<b>RADAR / İZLE</b> (henüz actionable DEĞİL — emir YOK, sadece izleme)"
+        return f"{signal.signal_type.value}"
+
     def send_signal(self, signal: Signal) -> bool:
         name = settings.TICKER_NAMES.get(signal.ticker, signal.ticker)
+
+        label_line = self._signal_label(signal)
 
         emoji_map = {
             SignalType.STRONG_BUY: "🚀💰",
@@ -115,11 +186,13 @@ class TelegramNotifier:
 
         reasons_html = "\n".join([f"  • {r}" for r in signal.reasons])
 
+        diagnosis = self._build_diagnosis_block(signal)
+
         message = f"""
 {emoji} <b>{name}</b> ({signal.ticker.replace(".IS", "")})
 ━━━━━━━━━━━━━━━━━━━━
 
-📊 <b>Sinyal:</b> {signal.signal_type.value}
+{label_line}
 📈 <b>Skor:</b> {signal.score:+.0f}/100
 🎯 <b>Güven:</b> {signal.confidence}
 
@@ -130,9 +203,12 @@ class TelegramNotifier:
 📋 <b>Nedenler:</b>
 {reasons_html}
 
+🔍 <b>Teşhis:</b>
+{diagnosis}
+
 ⏰ {signal.timestamp.strftime("%d.%m.%Y %H:%M")}
 ━━━━━━━━━━━━━━━━━━━━
-⚠️ <i>Bu bir yatırım tavsiyesi değildir!</i>
+⚠️ <i>Bu bir yatırım tavniyesi değildir!</i>
 """
         return self.send_message(message.strip())
 
@@ -224,7 +300,7 @@ class TelegramNotifier:
 
 ⏰ {datetime.now(TR).strftime("%d.%m.%Y %H:%M")}
 ━━━━━━━━━━━━━━━━━━━━
-⚠️ <i>Yatırım tavsiyesi değildir!</i>
+⚠️ <i>Yatırım tavniyesi değildir!</i>
 """
         return self.send_message(message.strip())
 

@@ -1,5 +1,7 @@
 """Centralized strategy threshold and scoring defaults."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 
 from bist_bot.config.settings import settings
@@ -30,6 +32,15 @@ class StrategyParams:
     adx_threshold: float = field(default_factory=lambda: float(settings.ADX_THRESHOLD))
     adx_low_trend_penalty: float = 5.0
     sideways_score_multiplier: float = 0.6
+    slope_lookback: int = 40
+    obv_divergence_block_enabled: bool = False
+    obv_divergence_cap: float = 25.0
+    chase_block_enabled: bool = True
+    chase_blocked_score_cap: float = 20.0
+    chase_strong_trend_cap: float = 30.0
+    mtf_confluence_block_enabled: bool = True
+    counter_trend_multiplier: float = 0.3
+    score_sma_death_cross: float = 12.0
 
     # RSI Parametreleri
     rsi_oversold_extreme: float = 25.0
@@ -72,3 +83,27 @@ class StrategyParams:
     score_sr_distance: float = 6.0
     score_rsi_divergence: float = 15.0
     score_macd_divergence: float = 12.0
+
+    @classmethod
+    def conservative(cls) -> StrategyParams:
+        return cls(
+            buy_threshold=25.0,
+            sell_threshold=-25.0,
+            sideways_score_multiplier=0.4,
+            adx_threshold=20.0,
+            score_rsi_extreme=12.6,
+            score_rsi_normal=9.8,
+            score_rsi_weak_low=4.9,
+            score_rsi_weak_high=2.8,
+            score_stoch_cross=5.6,
+            score_stoch_extreme=4.2,
+            score_stoch_trend=2.1,
+            chase_blocked_score_cap=10.0,
+            chase_strong_trend_cap=20.0,
+            counter_trend_multiplier=0.0,
+            slope_lookback=40,
+            mtf_confluence_block_enabled=True,
+            obv_divergence_block_enabled=True,
+            obv_divergence_cap=15.0,
+        )
+

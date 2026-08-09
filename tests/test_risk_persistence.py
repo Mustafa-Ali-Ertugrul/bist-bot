@@ -33,7 +33,7 @@ def build_frame(scale: float = 1.0, atr: float = 2.0) -> pd.DataFrame:
 
 
 def test_risk_manager_restores_open_paper_position_state_after_restart(tmp_path):
-    db = DataAccess(DatabaseManager(sqlite_path=str(tmp_path / "risk_restart.db")))
+    db = DataAccess(DatabaseManager(database_url=f"sqlite:///{tmp_path}/risk_restart.db"))
     db.add_paper_trade(
         ticker="XBANK.IS",
         signal_type="BUY",
@@ -58,7 +58,7 @@ def test_risk_manager_restores_open_paper_position_state_after_restart(tmp_path)
 
 
 def test_correlation_check_uses_restored_open_positions_after_restart(tmp_path):
-    db = DataAccess(DatabaseManager(sqlite_path=str(tmp_path / "risk_corr_restart.db")))
+    db = DataAccess(DatabaseManager(database_url=f"sqlite:///{tmp_path}/risk_corr_restart.db"))
     db.create_order(
         ticker="XBANK.IS",
         side="BUY",

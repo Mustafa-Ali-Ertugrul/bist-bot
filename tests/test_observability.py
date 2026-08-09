@@ -84,7 +84,7 @@ def _build_client(tmp_path):
         ADMIN_BOOTSTRAP_PASSWORD_HASH="",
         CORS_ORIGINS=("http://localhost:8501",),
     ):
-        manager = DatabaseManager(sqlite_path=str(tmp_path / "observability.db"))
+        manager = DatabaseManager(database_url=f"sqlite:///{tmp_path}/observability.db")
         db = DataAccess(manager)
         app = create_dashboard_app(cast(Any, MetricsFetcher()), cast(Any, MetricsEngine()), db)
         app.config["TESTING"] = True
@@ -107,6 +107,42 @@ def test_metrics_endpoint_returns_200(tmp_path):
 
     assert response.status_code == 200
     assert "bist_scan_total" in response.get_data(as_text=True)
+
+
+def _build_client_with_ips(tmp_path, metrics_allowed_ips: tuple[str, ...]):
+    reset_metrics()
+    overrides = dict(
+        DB_PATH=str(tmp_path / "observability.db"),
+        JWT_SECRET_KEY="test_secret_key_12345678901234567890",
+        ADMIN_BOOTSTRAP_EMAIL="",
+        ADMIN_BOOTSTRAP_PASSWORD_HASH="",
+        CORS_ORIGINS=("http://localhost:8501",),
+        METRICS_ALLOWED_IPS=metrics_allowed_ips,
+    )
+    manager = DatabaseManager(database_url=f"sqlite:///{tmp_path}/observability.db")
+    db = DataAccess(manager)
+    app = create_dashboard_app(cast(Any, MetricsFetcher()), cast(Any, MetricsEngine()), db)
+    app.config["TESTING"] = True
+    client = app.test_client()
+    return settings.override(**overrides), client
+
+
+def test_metrics_endpoint_forbidden_for_non_whitelisted_ip(tmp_path):
+    ctx, client = _build_client_with_ips(tmp_path, metrics_allowed_ips=("127.0.0.1",))
+    with ctx:
+        response = client.get(
+            "/metrics", environ_overrides={"REMOTE_ADDR": "10.0.0.99"}
+        )
+    assert response.status_code == 403
+
+
+def test_metrics_endpoint_allows_whitelisted_ip(tmp_path):
+    ctx, client = _build_client_with_ips(tmp_path, metrics_allowed_ips=("127.0.0.1",))
+    with ctx:
+        response = client.get(
+            "/metrics", environ_overrides={"REMOTE_ADDR": "127.0.0.1"}
+        )
+    assert response.status_code == 200
 
 
 def test_scan_updates_metrics_counters(tmp_path):

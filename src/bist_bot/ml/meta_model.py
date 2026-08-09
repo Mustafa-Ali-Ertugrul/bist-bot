@@ -156,6 +156,9 @@ class SignalMetaModel:
             y_train = targets[train_idx]
             x_test = features.iloc[test_idx]
 
+            if len(np.unique(y_train)) < 2:
+                continue
+
             fold_model = _build_classifier(self.xgb_params or None)
             fold_model.fit(x_train, y_train)
             oof_predictions[test_idx] = fold_model.predict_proba(x_test)[:, 1]

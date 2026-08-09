@@ -5,8 +5,11 @@ from __future__ import annotations
 from datetime import datetime
 
 import pandas as pd
+import pytest
 
 from bist_bot.backtest import Backtester, CostModel
+from bist_bot.backtest.models import default_cost_model
+from bist_bot.config.settings import settings
 
 
 class IdentityIndicators:
@@ -95,3 +98,16 @@ def test_cost_models_reduce_net_return() -> None:
     assert fixed_cost_result.cost_breakdown.net_return < no_cost_result.cost_breakdown.net_return
     assert volume_cost_result.cost_breakdown.net_return < no_cost_result.cost_breakdown.net_return
     assert atr_cost_result.cost_breakdown.net_return < no_cost_result.cost_breakdown.net_return
+
+
+def test_default_cost_model_reads_settings() -> None:
+    with settings.override(BACKTEST_COMMISSION_PCT=0.0003):
+        model = default_cost_model()
+    assert model.commission_bps == pytest.approx(3.0)
+
+
+def test_default_cost_model_keeps_non_commission_defaults() -> None:
+    model = default_cost_model()
+    assert model.bsmv_bps == 0.1
+    assert model.exchange_fee_bps == 0.3
+    assert model.slippage_model == "fixed"

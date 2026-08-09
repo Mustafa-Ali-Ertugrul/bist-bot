@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Protocol, cast
@@ -49,7 +50,11 @@ class RiskManager:
         self.position_repository = position_repository
         self._sector_signal_counts: dict[str, int] = {}
         self.sector_positions = self._sector_signal_counts
-        self._portfolio_history: dict[str, pd.DataFrame] = {}
+        # Bounded LRU cache: oldest item is evicted when max size is exceeded.
+        # Using OrderedDict for O(1) move_to_end + deterministic eviction order.
+        max_portfolio_history_size = int(getattr(settings, "CORRELATION_MAX_CLUSTER", 50)) * 10
+        self._portfolio_history: OrderedDict[str, pd.DataFrame] = OrderedDict()
+        self._portfolio_history_max = max(10, max_portfolio_history_size)
         self._global_corr_cache: pd.DataFrame | None = None
         self.correlation_threshold = float(getattr(settings, "CORRELATION_THRESHOLD", 0.70))
         self.correlation_risk_step = float(getattr(settings, "CORRELATION_RISK_STEP", 0.35))
@@ -134,7 +139,18 @@ class RiskManager:
             pd.DataFrame,
             df[[c for c in ["close", "high", "low", "atr"] if c in df.columns]].copy(),
         )
-        self._portfolio_history[ticker] = history_slice
+        if ticker in self._portfolio_history:
+            self._portfolio_history.move_to_end(ticker)
+        else:
+            if len(self._portfolio_history) >= self._portfolio_history_max:
+                evicted, _ = self._portfolio_history.popitem(last=False)
+                logger.debug(
+                    "portfolio_history_evicted",
+                    ticker=evicted,
+                    reason="max_size",
+                    max_size=self._portfolio_history_max,
+                )
+            self._portfolio_history[ticker] = history_slice
 
     def _restore_persisted_positions(self, data: dict) -> None:
         if self.position_repository is None or not hasattr(

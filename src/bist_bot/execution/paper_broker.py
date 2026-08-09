@@ -55,6 +55,7 @@ class PaperBroker(BaseExecutionProvider):
         price: float | None = None,
         stop_price: float | None = None,
     ) -> OrderResult:
+        self._validate_order_inputs(ticker, quantity, order_type, price, stop_price)
         state = OrderState.CREATED if self.manual_confirm else OrderState.SENT
         order = Order(
             ticker=ticker,

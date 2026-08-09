@@ -63,7 +63,8 @@ class USMarketScheduler:
                 schedule = nyse.schedule.loc[today]
                 market_open = schedule.open.astimezone(UTC).to_pydatetime()
                 warmup_end = market_open + __import__("datetime").timedelta(minutes=warmup_minutes)
-            except Exception:
+            except (KeyError, AttributeError, TypeError) as exc:
+                logger.warning("scheduler_us_warmup_fallback", error=str(exc))
                 warmup_end = None
 
             if warmup_end and now < warmup_end:
