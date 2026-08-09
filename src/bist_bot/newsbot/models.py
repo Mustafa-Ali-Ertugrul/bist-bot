@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from bist_bot.db.database import Base
@@ -43,3 +43,20 @@ class NewsbotArticle(Base):
     original_article_id: Mapped[int | None] = mapped_column(Integer)
     trust_score: Mapped[int | None] = mapped_column(Integer)
     raw_payload: Mapped[str | None] = mapped_column(Text)
+
+
+class NewsbotPriceSnapshot(Base):
+    """Fiyat snapshot kaydı (raw DDL FK'ları DB tarafında zorlanır; newsbot_symbols
+    bir ORM modeli olmadığı için create_all'da referans verilmez)."""
+
+    __tablename__ = "newsbot_price_snapshots"
+    __table_args__ = (
+        UniqueConstraint("article_id", "symbol_id", "horizon", name="uq_snapshot_article_symbol_horizon"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    article_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    symbol_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    horizon: Mapped[str] = mapped_column(String, nullable=False)
+    price: Mapped[float] = mapped_column(Float, nullable=False)
+    captured_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))

@@ -16,8 +16,10 @@ from bist_bot.app_logging import configure_logging, get_logger
 from bist_bot.config.settings import settings
 from bist_bot.db.database import DatabaseManager
 from bist_bot.newsbot.entities import EntityExtractor, load_symbols
+from bist_bot.newsbot.feedback import evaluate_due_feedback
 from bist_bot.newsbot.models import NewsbotArticle, NewsbotSource
 from bist_bot.newsbot.notifier import NewsbotNotifier
+from bist_bot.newsbot.price_snapshot import PriceSnapshotService
 from bist_bot.newsbot.schema import init_newsbot_schema
 from bist_bot.newsbot.scorer import (
     calculate_score,
@@ -167,6 +169,7 @@ def _store_entities_for_new_articles(
     layer_triggers: dict,
     keywords: dict,
     notifier: NewsbotNotifier | None = None,
+    snapshot_service: PriceSnapshotService | None = None,
 ) -> tuple[int, int, int]:
     """max_id sonrası eklenen makaleler için entity + katman/skor kaydeder.
 
@@ -215,6 +218,23 @@ def _store_entities_for_new_articles(
             if sent:
                 notif_total += 1
 
+        # Fiyat snapshot — skorlama ile aynı sembol (ilk entity) üzerinden t0
+        if snapshot_service is not None and symbol_id is not None:
+            symbol = next(
+                (e["symbol"] for e in entities if symbol_ids.get(e["symbol"]) == symbol_id),
+                None,
+            )
+            if symbol is not None:
+                try:
+                    snapshot_service.capture_t0(session, row.id, symbol_id, symbol)
+                except Exception as exc:
+                    logger.error(
+                        "snapshot_capture_failed",
+                        article_id=row.id,
+                        symbol=symbol,
+                        error=str(exc),
+                    )
+
     return entities_total, scores_total, notif_total
 
 
@@ -226,6 +246,7 @@ def run_once(db: DatabaseManager) -> None:
         chat_id=settings.notification.TELEGRAM_CHAT_ID,
         min_score=settings.notification.NEWSBOT_MIN_SCORE,
     )
+    snapshot_service = PriceSnapshotService()
     source_configs = [s for s in load_sources() if s.get("active", True)]
 
     for cfg in source_configs:
@@ -255,7 +276,8 @@ def run_once(db: DatabaseManager) -> None:
                     )
                     new, dup, cross_dup = save_articles(session, articles, db_source)
                     n_entities, n_scores, n_notifs = _store_entities_for_new_articles(
-                        session, db_source, max_id, symbol_ids, extractor, layer_triggers, keywords, notifier
+                        session, db_source, max_id, symbol_ids, extractor, layer_triggers,
+                        keywords, notifier, snapshot_service,
                     )
                     if n_entities:
                         logger.info("entities_extracted", source=name, count=n_entities)
@@ -276,6 +298,15 @@ def run_once(db: DatabaseManager) -> None:
         except Exception as exc:
             logger.error("source_cycle_failed", source=name, error=str(exc))
         time.sleep(cfg.get("interval_seconds", 120))
+
+    # Feedback loop — vadesi gelen 1h/4h/1d snapshotlarını kapat ve yorumla
+    try:
+        with db.session_scope() as session:
+            n_feedback = evaluate_due_feedback(session, snapshot_service)
+        if n_feedback:
+            logger.info("feedback_evaluated_total", count=n_feedback)
+    except Exception as exc:
+        logger.error("feedback_cycle_failed", error=str(exc))
 
 
 def main() -> None:
