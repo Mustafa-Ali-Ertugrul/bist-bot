@@ -115,7 +115,9 @@ def test_signal_auto_sets_expires_at():
 def signals_repo():
     temp_fd, temp_path = tempfile.mkstemp(suffix=".db")
     os.close(temp_fd)
-    manager = DatabaseManager(sqlite_path=temp_path)
+
+    database_url = f"sqlite:///{temp_path}"
+    manager = DatabaseManager(database_url=database_url)
     repo = SignalsRepository(manager=manager)
     try:
         yield repo

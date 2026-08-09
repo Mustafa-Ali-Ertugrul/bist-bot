@@ -33,6 +33,7 @@ def test_flask_debug_env_override(monkeypatch):
 def test_flask_port_prefers_cloud_run_port(monkeypatch):
     monkeypatch.setenv("PORT", "8080")
     monkeypatch.setenv("FLASK_PORT", "5000")
+    monkeypatch.delenv("API_BASE_URL", raising=False)
 
     sub = importlib.import_module("bist_bot.config.subsettings")
     importlib.reload(sub)

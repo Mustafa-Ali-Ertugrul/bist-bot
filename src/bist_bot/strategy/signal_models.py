@@ -73,6 +73,7 @@ class Signal:
     kelly_fraction: float | None = None
     timestamp: datetime = field(default_factory=datetime.now)
     confidence: str = "confidence.low"
+    agreement_ratio: float | None = field(default=None)
     expires_at: datetime | None = field(default=None)
 
     def __post_init__(self) -> None:
@@ -113,6 +114,7 @@ class Signal:
             kelly_fraction=self.kelly_fraction,
             timestamp=self.timestamp,
             confidence=self.confidence,
+            agreement_ratio=self.agreement_ratio,
             expires_at=self.expires_at,
         )
 

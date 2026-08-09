@@ -138,7 +138,7 @@ def _build_authorized_client(
         CORS_ORIGINS=("http://localhost:8501",),
         **overrides,
     ):
-        manager = DatabaseManager(sqlite_path=str(tmp_path / "dashboard_cache.db"))
+        manager = DatabaseManager(database_url=f"sqlite:///{tmp_path}/dashboard_cache.db")
         db = DataAccess(manager)
         app = create_dashboard_app(cast(Any, fetcher), cast(Any, engine), db, broker=broker)
         app.config["TESTING"] = True
@@ -254,6 +254,36 @@ def test_scan_endpoint_auto_executes_when_broker_is_available(tmp_path):
     pending_orders = db.get_pending_orders()
     assert len(pending_orders) == 1
     assert pending_orders[0]["state"] == "SENT"
+
+
+def test_auto_execute_idempotent_on_double_submit(tmp_path):
+    """Regression test: auto-execute must not place duplicate orders when
+    scanner and dashboard endpoint both trigger execution for the same signal."""
+    signal = Signal(
+        ticker="THYAO.IS",
+        signal_type=SignalType.STRONG_BUY,
+        score=75,
+        price=5.2,
+        position_size=10,
+    )
+    broker = BrokerSpy()
+    client, _fetcher, _engine, token, db = _build_authorized_client(
+        tmp_path,
+        scan_signals=[signal],
+        scan_payload={"THYAO.IS": {"trend": object(), "trigger": object()}},
+        broker=broker,
+    )
+
+    with settings.override(AUTO_EXECUTE=True):
+        response = client.post("/api/scan", headers={"Authorization": f"Bearer {token}"})
+
+    assert response.status_code == 200
+    # Even if execution engine is invoked twice (scanner loop + endpoint handler),
+    # only one order must be placed -- idempotency guard prevents double order.
+    assert broker.order_calls == 1
+    pending_orders = db.get_pending_orders()
+    assert len(pending_orders) == 1
+
 
 
 def test_scan_endpoint_returns_504_on_timeout(tmp_path):

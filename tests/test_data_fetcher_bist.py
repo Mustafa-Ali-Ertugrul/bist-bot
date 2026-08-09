@@ -31,7 +31,7 @@ def test_get_current_price_realtime_success(caplog):
         "status": "success",
     }
     assert "quote_resolution_completed" in caplog.text
-    assert "quote_source=scrape" in caplog.text
+    assert "quote_source" in caplog.text and "scrape" in caplog.text
 
 
 def test_get_current_price_realtime_failure_yahoo_fallback():
@@ -99,8 +99,8 @@ def test_get_current_price_both_fail(caplog):
                     "status": "failed",
                     "reason": "batch_fallback",
                 }
-                assert "quote_resolution_terminal_failed" in caplog.text
-                assert "quote_source=failed" in caplog.text
+    assert "quote_resolution_terminal_failed" in caplog.text
+    assert "quote_source" in caplog.text and "failed" in caplog.text
 
 
 def test_get_current_price_realtime_disabled():

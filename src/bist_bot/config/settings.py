@@ -194,6 +194,12 @@ class Settings:
             errors.append("INITIAL_CAPITAL must be > 0")
         if self.FLASK_PORT < 1 or self.FLASK_PORT > 65535:
             errors.append("FLASK_PORT must be between 1 and 65535")
+        if self.RATE_LIMIT_STORAGE_URI.startswith("memory://"):
+            import logging
+            logging.getLogger(__name__).warning(
+                "RATE_LIMIT_STORAGE_URI is memory:// — only valid for single-instance/local deployments. "
+                "Use Redis/Cloud SQL for production multi-worker scenarios."
+            )
         return errors
 
     SCAN_TIMEOUT_SECONDS: int = field(

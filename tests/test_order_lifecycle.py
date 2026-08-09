@@ -16,7 +16,7 @@ from bist_bot.execution.paper_broker import PaperBroker  # noqa: E402
 
 
 def test_order_lifecycle_created_to_sent_to_filled(tmp_path) -> None:
-    manager = DatabaseManager(sqlite_path=str(tmp_path / "orders.db"))
+    manager = DatabaseManager(database_url=f"sqlite:///{tmp_path}/orders.db")
     db = DataAccess(manager)
     broker = PaperBroker(initial_cash=1_000)
     tracker = OrderTracker(broker, db, poll_interval_seconds=0.01)
@@ -55,7 +55,7 @@ def test_order_lifecycle_created_to_sent_to_filled(tmp_path) -> None:
 
 
 def test_order_repository_preserves_created_quantity_and_updated_state(tmp_path) -> None:
-    manager = DatabaseManager(sqlite_path=str(tmp_path / "orders.db"))
+    manager = DatabaseManager(database_url=f"sqlite:///{tmp_path}/orders.db")
     db = DataAccess(manager)
 
     created = db.create_order(
@@ -73,3 +73,49 @@ def test_order_repository_preserves_created_quantity_and_updated_state(tmp_path)
     assert updated["qty"] == 7
     assert updated["state"] == "REJECTED"
     assert updated["broker_order_id"] == "BRK-7"
+
+
+import pytest  # noqa: E402
+
+
+def test_paper_broker_rejects_negative_quantity() -> None:
+    broker = PaperBroker(initial_cash=1_000)
+    with pytest.raises(ValueError):
+        broker.place_order("THYAO.IS", OrderSide.BUY, -5, OrderType.MARKET)
+
+
+def test_paper_broker_rejects_zero_quantity() -> None:
+    broker = PaperBroker(initial_cash=1_000)
+    with pytest.raises(ValueError):
+        broker.place_order("THYAO.IS", OrderSide.BUY, 0, OrderType.MARKET)
+
+
+def test_paper_broker_rejects_limit_without_price() -> None:
+    broker = PaperBroker(initial_cash=1_000)
+    with pytest.raises(ValueError):
+        broker.place_order("THYAO.IS", OrderSide.BUY, 10, OrderType.LIMIT, price=None)
+
+
+def test_paper_broker_rejects_limit_with_zero_price() -> None:
+    broker = PaperBroker(initial_cash=1_000)
+    with pytest.raises(ValueError):
+        broker.place_order("THYAO.IS", OrderSide.BUY, 10, OrderType.LIMIT, price=0.0)
+
+
+def test_paper_broker_rejects_stop_without_stop_price() -> None:
+    broker = PaperBroker(initial_cash=1_000)
+    with pytest.raises(ValueError):
+        broker.place_order("THYAO.IS", OrderSide.BUY, 10, OrderType.STOP, stop_price=None)
+
+
+def test_paper_broker_rejects_empty_ticker() -> None:
+    broker = PaperBroker(initial_cash=1_000)
+    with pytest.raises(ValueError):
+        broker.place_order("  ", OrderSide.BUY, 10, OrderType.MARKET)
+
+
+def test_paper_broker_accepts_valid_market_order() -> None:
+    broker = PaperBroker(initial_cash=1_000)
+    result = broker.place_order("THYAO.IS", OrderSide.BUY, 10, OrderType.MARKET)
+    assert result.accepted is True
+    assert result.state.value in {"SENT", "FILLED"}

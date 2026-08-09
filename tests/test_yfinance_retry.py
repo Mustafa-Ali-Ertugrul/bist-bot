@@ -92,7 +92,9 @@ class TestFetchHistoryRetry:
 
         with patch("bist_bot.data.providers.yf") as mock_yf:
             mock_yf.Ticker.return_value = mock_ticker
-            result = provider.fetch_history("THYAO.IS", "3mo", "1d")
+            with patch.object(provider, "_fetch_chart_history", return_value=None), \
+                 patch.object(provider, "_fetch_stockanalysis_history", return_value=None):
+                result = provider.fetch_history("THYAO.IS", "3mo", "1d")
 
         assert result is None
         assert mock_ticker.history.call_count == 2
@@ -108,7 +110,9 @@ class TestFetchHistoryRetry:
 
         with patch("bist_bot.data.providers.yf") as mock_yf:
             mock_yf.Ticker.return_value = mock_ticker
-            result = provider.fetch_history("THYAO.IS", "3mo", "1d")
+            with patch.object(provider, "_fetch_chart_history", return_value=None), \
+                 patch.object(provider, "_fetch_stockanalysis_history", return_value=None):
+                result = provider.fetch_history("THYAO.IS", "3mo", "1d")
 
         assert result is None
         assert mock_ticker.history.call_count == 1

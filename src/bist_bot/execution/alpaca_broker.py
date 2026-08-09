@@ -104,6 +104,7 @@ class AlpacaBroker(BaseExecutionProvider):
         price: float | None = None,
         stop_price: float | None = None,
     ) -> OrderResult:
+        self._validate_order_inputs(ticker, quantity, order_type, price, stop_price)
         if self.dry_run:
             logger.info(
                 "alpaca_dry_run_order",

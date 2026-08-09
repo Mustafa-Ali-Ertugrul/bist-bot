@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 
 from bist_bot.risk.models import RiskLevels
+from bist_bot.risk.ticks import round_to_tick
 
 
 def calc_atr_levels(
@@ -115,7 +116,16 @@ def calc_swing_levels(df: pd.DataFrame, price: float, levels: RiskLevels) -> Ris
     return levels
 
 
-def determine_final_levels(price: float, levels: RiskLevels) -> RiskLevels:
+def determine_final_levels(
+    price: float, levels: RiskLevels, daily_price_limit_pct: float = 10.0
+) -> RiskLevels:
+    """Select final stop/target from candidate methods, apply BIST tick rounding,
+    daily price limit clamp, and ATR-based sanity gate.
+
+    H8: round(x,2) yerine round_to_tick kullanılır (BIST fiyat adımı).
+    H8: hedef/reference dışındaki ±daily_price_limit_pct bandına clamp'lendi.
+    H3: stop/target ATR katları tutarsızsa (ATR dışındaysa) fallback uygulanır.
+    """
     all_stops: dict[str, float] = {
         "ATR": levels.stop_atr,
         "Destek": levels.stop_support,
@@ -178,12 +188,54 @@ def determine_final_levels(price: float, levels: RiskLevels) -> RiskLevels:
         levels.final_target = levels.target_percent
         target_method = "Yüzdelik"
 
+    # ── H8: ±günlük fiyat limiti clamp ────────────────────────────────────
+    # BIST %10 günlük fiyat sınırları vardır. Hedef/reference dışındaki
+    # bu bandı aşan hedefler ulaşılamaztır → clamp + işaret.
+    limit_factor = daily_price_limit_pct / 100.0
+    max_target = price * (1 + limit_factor)
+    min_stop = price * (1 - limit_factor)
+    limit_clamped = False
+    if levels.final_target > max_target:
+        levels.final_target = max_target
+        limit_clamped = True
+    if levels.final_stop > 0 and levels.final_stop < min_stop:
+        levels.final_stop = min_stop
+        limit_clamped = True
+
+    # ── H8: BIST tick rounding (round(x,2) yerine) ────────────────────────
+    # Stop BUY yönünde (aşağı), target SELL yönünde (yukarı) yuvarlanır.
+    levels.final_stop = round_to_tick(levels.final_stop, "SELL")
+    levels.final_target = round_to_tick(levels.final_target, "BUY")
+
+    # ── H8: ATR tutarlılık sanity gate ────────────────────────────────────
+    # Stop ve target aynı ATR'nin makul katları içinde mı?
+    # Değilse (örn. Fib stop çok dar + ATR target çok geniş) → ATR fallback.
+    risk = price - levels.final_stop
+    reward = levels.final_target - price
+    rr = reward / risk if risk > 0 else 0
+    method_consistent = (stop_method == target_method) or (
+        stop_method in {"ATR", "Yüzdelik"} and target_method in {"ATR", "Yüzdelik"}
+    )
+    levels.method_used = f"Stop: {stop_method} | Hedef: {target_method}"
+    if limit_clamped:
+        levels.method_used += " | Günlük limit clamp"
+    if not method_consistent and (rr < 0.5 or rr > 10):
+        # Tutarsız çift → ATR fallback (eğer ATR seviyeleri varsa)
+        if levels.stop_atr > 0 and levels.target_atr > 0:
+            levels.final_stop = round_to_tick(levels.stop_atr, "SELL")
+            levels.final_target = round_to_tick(levels.target_atr, "BUY")
+            stop_method = "ATR"
+            target_method = "ATR"
+            levels.method_used += " | TUTARSIZ→ATR fallback"
+        else:
+            levels.method_used += " | TUTARSIZ (ATR fallback yok)"
+
+    # Re-calculate risk/reward after potential ATR fallback
     risk = price - levels.final_stop
     reward = levels.final_target - price
     levels.risk_pct = round(-risk / price * 100, 2)
     levels.reward_pct = round(reward / price * 100, 2)
     levels.risk_reward_ratio = round(reward / risk, 2) if risk > 0 else 0
-    levels.method_used = f"Stop: {stop_method} | Hedef: {target_method}"
 
     stop_values = [value for value in valid_stops.values()]
     if len(stop_values) >= 3:

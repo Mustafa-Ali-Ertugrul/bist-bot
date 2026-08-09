@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
-from datetime import datetime
+from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -19,13 +19,14 @@ from bist_bot.strategy.signal_models import Signal, SignalType  # noqa: E402
 
 
 def test_database_manager_enables_wal_mode(tmp_path):
-    manager = DatabaseManager(sqlite_path=str(tmp_path / "wal_test.db"))
+    manager = DatabaseManager(database_url=f"sqlite:///{tmp_path}/wal_test.db")
 
     assert manager.get_journal_mode().lower() == "wal"
 
 
 def test_signal_database_saves_and_reads_signal(tmp_path):
-    manager = DatabaseManager(sqlite_path=str(tmp_path / "signals.db"))
+    db_path = str(tmp_path / "signals.db")
+    manager = DatabaseManager(database_url=f"sqlite:///{db_path}")
     db = SignalsRepository(manager=manager)
     signal = Signal(
         ticker="THYAO.IS",
@@ -36,7 +37,7 @@ def test_signal_database_saves_and_reads_signal(tmp_path):
         stop_loss=118.0,
         target_price=135.0,
         confidence="ORTA",
-        timestamp=datetime(2025, 1, 1, 10, 0, 0),
+        timestamp=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
     )
 
     db.save_signal(signal)

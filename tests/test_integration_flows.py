@@ -155,7 +155,7 @@ def _build_client(tmp_path, fetcher, engine):
         ADMIN_BOOTSTRAP_PASSWORD_HASH="",
         CORS_ORIGINS=("http://localhost:8501",),
     ):
-        manager = DatabaseManager(sqlite_path=str(tmp_path / "integration_api.db"))
+        manager = DatabaseManager(database_url=f"sqlite:///{tmp_path}/integration_api.db")
         db = DataAccess(manager)
         app = create_dashboard_app(cast(Any, fetcher), cast(Any, engine), db)
         app.config["TESTING"] = True
@@ -274,15 +274,18 @@ def test_api_analyze_uses_batch_fallback_when_single_fetch_fails(tmp_path) -> No
         tmp_path, fetcher, ApiEngineStub(analyze_signal=signal)
     )
 
-    response = client.get("/api/analyze/THYAO", headers={"Authorization": f"Bearer {token}"})
+    with settings.override(MTF_ENABLED=False):
+        response = client.get(
+            "/api/analyze/THYAO", headers={"Authorization": f"Bearer {token}"}
+        )
 
     assert response.status_code == 200
     payload = response.get_json()
     assert payload is not None
     assert payload["ticker"] == "THYAO.IS"
     assert payload["signal"]["type"] == SignalType.BUY.value
-    assert fetcher.provider.history_calls == ["THYAO.IS", "THYAO.IS"]
-    assert fetcher.provider.batch_calls == [["THYAO.IS"], ["THYAO.IS"]]
+    assert fetcher.provider.history_calls == ["THYAO.IS"]
+    assert fetcher.provider.batch_calls == [["THYAO.IS"]]
     assert fetcher.get_last_history_fetch_meta("THYAO.IS", "6mo", "1d") == {
         "source": "batch_fallback",
         "status": "success",
@@ -303,7 +306,7 @@ def test_api_analyze_returns_500_when_engine_fails(tmp_path) -> None:
 
 
 def test_signal_and_order_persistence_integration(tmp_path) -> None:
-    manager = DatabaseManager(sqlite_path=str(tmp_path / "integration_repo.db"))
+    manager = DatabaseManager(database_url=f"sqlite:///{tmp_path}/integration_repo.db")
     db = DataAccess(manager)
     signal = Signal(
         ticker="ASELS.IS",
@@ -344,7 +347,7 @@ def test_signal_and_order_persistence_integration(tmp_path) -> None:
 
 
 def test_scan_orchestration_auto_execute_creates_sent_order(tmp_path) -> None:
-    manager = DatabaseManager(sqlite_path=str(tmp_path / "integration_scan.db"))
+    manager = DatabaseManager(database_url=f"sqlite:///{tmp_path}/integration_scan.db")
     db = DataAccess(manager)
     broker = BrokerStub()
     execution_service = ExecutionService(
@@ -405,7 +408,7 @@ def test_scan_orchestration_auto_execute_creates_sent_order(tmp_path) -> None:
 
 
 def test_scan_orchestration_marks_order_rejected_when_broker_fails(tmp_path) -> None:
-    manager = DatabaseManager(sqlite_path=str(tmp_path / "integration_scan_fail.db"))
+    manager = DatabaseManager(database_url=f"sqlite:///{tmp_path}/integration_scan_fail.db")
     db = DataAccess(manager)
     broker = BrokerStub(should_raise=True)
     execution_service = ExecutionService(

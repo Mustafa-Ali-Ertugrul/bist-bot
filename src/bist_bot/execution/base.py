@@ -115,6 +115,31 @@ class ExecutionProvider(Protocol):
 class BaseExecutionProvider(ABC):
     """Shared execution provider base class."""
 
+    @staticmethod
+    def _validate_order_inputs(
+        ticker: str,
+        quantity: float,
+        order_type: OrderType,
+        price: float | None,
+        stop_price: float | None,
+    ) -> None:
+        """Reject clearly invalid order parameters before execution.
+
+        Stateless by design: no ``self`` usage, so subclasses cannot
+        accidentally override it with instance-specific logic. Raises
+        ValueError for programming-contract violations (negative quantity,
+        empty ticker, missing/zero price on limit orders). This complements
+        broker-specific REJECTED returns for unsupported runtime combinations.
+        """
+        if not ticker or not str(ticker).strip():
+            raise ValueError("Order ticker must be a non-empty string")
+        if quantity is None or float(quantity) <= 0:
+            raise ValueError(f"Order quantity must be positive: {quantity}")
+        if order_type is OrderType.LIMIT and (price is None or float(price) <= 0):
+            raise ValueError("Limit orders require a positive price")
+        if order_type is OrderType.STOP and (stop_price is None or float(stop_price) <= 0):
+            raise ValueError("Stop orders require a positive stop price")
+
     @abstractmethod
     def authenticate(self) -> bool:
         raise NotImplementedError

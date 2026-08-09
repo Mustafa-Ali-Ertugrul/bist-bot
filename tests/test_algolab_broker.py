@@ -74,6 +74,24 @@ def test_place_order_dry_run_does_not_call_http() -> None:
     session.request.assert_not_called()
 
 
+def test_place_order_dry_run_validates_inputs() -> None:
+    import pytest
+
+    session = MagicMock(spec=requests.Session)
+    broker = build_broker(session=session, dry_run=True)
+
+    with pytest.raises(ValueError):
+        broker.place_order("THYAO.IS", OrderSide.BUY, -10, OrderType.MARKET)
+
+    with pytest.raises(ValueError):
+        broker.place_order("THYAO.IS", OrderSide.BUY, 10, OrderType.LIMIT, price=None)
+
+    with pytest.raises(ValueError):
+        broker.place_order("", OrderSide.BUY, 10, OrderType.MARKET)
+
+    session.request.assert_not_called()
+
+
 def test_request_retries_on_timeout_then_succeeds(monkeypatch) -> None:
     session = MagicMock(spec=requests.Session)
     session.request.side_effect = [

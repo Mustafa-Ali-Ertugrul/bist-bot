@@ -205,6 +205,7 @@ class AlgoLabBroker(BaseExecutionProvider):
         price: float | None = None,
         stop_price: float | None = None,
     ) -> OrderResult:
+        self._validate_order_inputs(ticker, quantity, order_type, price, stop_price)
         if self.dry_run:
             logger.info(
                 "dry_run_order",

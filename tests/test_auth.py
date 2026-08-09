@@ -68,13 +68,14 @@ class DummyEngine:
 
 def build_test_client(tmp_path):
     with settings.override(
+        DATABASE_URL="",
         DB_PATH=str(tmp_path / "auth_test.db"),
         JWT_SECRET_KEY="test_secret_key_12345678901234567890",
         ADMIN_BOOTSTRAP_EMAIL="",
         ADMIN_BOOTSTRAP_PASSWORD_HASH="",
         CORS_ORIGINS=("http://localhost:8501",),
     ):
-        manager = DatabaseManager(sqlite_path=str(tmp_path / "auth_test.db"))
+        manager = DatabaseManager(database_url=f"sqlite:///{tmp_path}/auth_test.db")
         db = DataAccess(manager)
         app = create_dashboard_app(cast(Any, DummyFetcher()), cast(Any, DummyEngine()), db)
         app.config["TESTING"] = True
@@ -89,6 +90,7 @@ def build_db_user_client(
     allow_public_registration: bool = False,
 ):
     override_kwargs = {
+        "DATABASE_URL": "",
         "DB_PATH": str(tmp_path / "auth_db_only.db"),
         "JWT_SECRET_KEY": "test_secret_key_12345678901234567890",
         "CORS_ORIGINS": ("http://localhost:8501",),
@@ -101,7 +103,7 @@ def build_db_user_client(
         override_kwargs["ADMIN_BOOTSTRAP_PASSWORD_HASH"] = hash_password("bootstrap-password")
 
     with settings.override(**override_kwargs):
-        manager = DatabaseManager(sqlite_path=str(tmp_path / "auth_db_only.db"))
+        manager = DatabaseManager(database_url=f"sqlite:///{tmp_path}/auth_db_only.db")
         with manager.engine.begin() as conn:
             conn.execute(
                 text(
@@ -497,7 +499,7 @@ def test_existing_db_users_do_not_block_admin_seed(tmp_path):
         ADMIN_BOOTSTRAP_EMAIL="bootstrap@bistbot.local",
         ADMIN_BOOTSTRAP_PASSWORD_HASH=hash_password("bootstrap-password"),
     ):
-        manager = DatabaseManager(sqlite_path=db_path)
+        manager = DatabaseManager(database_url=f"sqlite:///{db_path}")
         db = DataAccess(manager)
         app = create_dashboard_app(cast(Any, DummyFetcher()), cast(Any, DummyEngine()), db)
         app.config["TESTING"] = True
@@ -546,7 +548,7 @@ def test_existing_admin_email_blocks_duplicate_seed(tmp_path):
         ADMIN_BOOTSTRAP_EMAIL=admin_email,
         ADMIN_BOOTSTRAP_PASSWORD_HASH=hash_password("original-password"),
     ):
-        manager = DatabaseManager(sqlite_path=db_path)
+        manager = DatabaseManager(database_url=f"sqlite:///{db_path}")
 
     with manager.engine.begin() as conn:
         count = conn.execute(text("SELECT COUNT(*) FROM users")).scalar_one()
@@ -561,7 +563,7 @@ def test_missing_jwt_secret_prevents_app_startup(tmp_path):
         ADMIN_BOOTSTRAP_PASSWORD_HASH="",
         CORS_ORIGINS=("http://localhost:8501",),
     ):
-        manager = DatabaseManager(sqlite_path=str(tmp_path / "auth_missing_jwt.db"))
+        manager = DatabaseManager(database_url=f"sqlite:///{tmp_path}/auth_missing_jwt.db")
         db = DataAccess(manager)
 
         try:
@@ -581,7 +583,7 @@ def test_legacy_bcrypt_hash_migrates_on_successful_login(tmp_path):
         ADMIN_BOOTSTRAP_PASSWORD_HASH="",
         CORS_ORIGINS=("http://localhost:8501",),
     ):
-        manager = DatabaseManager(sqlite_path=str(tmp_path / "auth_legacy.db"))
+        manager = DatabaseManager(database_url=f"sqlite:///{tmp_path}/auth_legacy.db")
         with manager.engine.begin() as conn:
             conn.execute(
                 text(
@@ -628,7 +630,7 @@ def test_admin_seed_creates_loginable_user(tmp_path):
         ADMIN_BOOTSTRAP_PASSWORD_HASH=password_hash,
         CORS_ORIGINS=("http://localhost:8501",),
     ):
-        manager = DatabaseManager(sqlite_path=str(tmp_path / "auth_bootstrap.db"))
+        manager = DatabaseManager(database_url=f"sqlite:///{tmp_path}/auth_bootstrap.db")
         db = DataAccess(manager)
         app = create_dashboard_app(cast(Any, DummyFetcher()), cast(Any, DummyEngine()), db)
         app.config["TESTING"] = True
@@ -653,7 +655,7 @@ def test_admin_seed_wrong_password_returns_401(tmp_path):
         ADMIN_BOOTSTRAP_PASSWORD_HASH=password_hash,
         CORS_ORIGINS=("http://localhost:8501",),
     ):
-        manager = DatabaseManager(sqlite_path=str(tmp_path / "auth_bootstrap_wrong.db"))
+        manager = DatabaseManager(database_url=f"sqlite:///{tmp_path}/auth_bootstrap_wrong.db")
         db = DataAccess(manager)
         app = create_dashboard_app(cast(Any, DummyFetcher()), cast(Any, DummyEngine()), db)
         app.config["TESTING"] = True
@@ -675,7 +677,7 @@ def test_no_admin_seed_no_crash(tmp_path):
         ADMIN_BOOTSTRAP_PASSWORD_HASH="",
         CORS_ORIGINS=("http://localhost:8501",),
     ):
-        manager = DatabaseManager(sqlite_path=str(tmp_path / "auth_no_seed.db"))
+        manager = DatabaseManager(database_url=f"sqlite:///{tmp_path}/auth_no_seed.db")
         db = DataAccess(manager)
         app = create_dashboard_app(cast(Any, DummyFetcher()), cast(Any, DummyEngine()), db)
         app.config["TESTING"] = True
@@ -722,7 +724,7 @@ def test_existing_admin_not_updated_by_default(tmp_path):
         ADMIN_BOOTSTRAP_PASSWORD_HASH=hash_password("new-password"),
         ADMIN_BOOTSTRAP_UPDATE_EXISTING=False,
     ):
-        manager = DatabaseManager(sqlite_path=db_path)
+        manager = DatabaseManager(database_url=f"sqlite:///{db_path}")
 
     with manager.engine.begin() as conn:
         stored_hash = conn.execute(
@@ -767,7 +769,7 @@ def test_existing_admin_updated_when_flag_true(tmp_path):
         ADMIN_BOOTSTRAP_PASSWORD_HASH=new_hash,
         ADMIN_BOOTSTRAP_UPDATE_EXISTING=True,
     ):
-        manager = DatabaseManager(sqlite_path=db_path)
+        manager = DatabaseManager(database_url=f"sqlite:///{db_path}")
 
     with manager.engine.begin() as conn:
         stored_hash = conn.execute(
@@ -811,7 +813,7 @@ def test_updated_admin_can_login_with_new_password(tmp_path):
         ADMIN_BOOTSTRAP_PASSWORD_HASH=hash_password(new_password),
         ADMIN_BOOTSTRAP_UPDATE_EXISTING=True,
     ):
-        manager = DatabaseManager(sqlite_path=db_path)
+        manager = DatabaseManager(database_url=f"sqlite:///{db_path}")
         db = DataAccess(manager)
         app = create_dashboard_app(cast(Any, DummyFetcher()), cast(Any, DummyEngine()), db)
         app.config["TESTING"] = True

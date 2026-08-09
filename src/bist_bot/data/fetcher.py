@@ -122,15 +122,19 @@ class BISTDataFetcher:
         watchlist: list[str] | None = None,
         provider: MarketDataProvider | None = None,
         quote_provider: QuoteProvider | None = None,
+        rate_limiter: RateLimiter | None = None,
     ) -> None:
         """Initialize the fetcher with a normalized watchlist.
 
         Args:
             watchlist: Optional explicit ticker list. If None, resolved lazily
                 on first use to avoid blocking network calls during startup.
+            rate_limiter: Optional shared rate limiter. If None, the module-level
+                default limiter is used.
         """
-        self.provider = provider or YFinanceProvider(_rate_limiter)
-        self.quote_provider = quote_provider or BorsaIstanbulQuoteProvider(_rate_limiter)
+        limiter = rate_limiter or _rate_limiter
+        self.provider = provider or YFinanceProvider(limiter)
+        self.quote_provider = quote_provider or BorsaIstanbulQuoteProvider(limiter)
         self._history_cache: dict[tuple[str, str, str], CacheEntry] = {}
         self._history_fetch_meta: dict[tuple[str, str, str], HistoryFetchMeta] = {}
         self._analysis_cache: dict[str, CacheEntry] = {}

@@ -21,6 +21,7 @@ from bist_bot.strategy.signal_models import Signal, SignalType
 logger = get_logger(__name__, component="strategy")
 
 ScoreTwoRows = Callable[[pd.Series, pd.Series], tuple[float, list[str]]]
+TrendScorer = Callable[[pd.Series, pd.Series, pd.DataFrame | None], tuple[float, list[str]]]
 ScoreOneRow = Callable[[pd.Series], tuple[float, list[str]]]
 MomentumChecker = Callable[[pd.DataFrame, float], bool]
 ConfluenceApplier = Callable[[SignalType, TrendBias, list[str]], bool]
@@ -103,12 +104,12 @@ def calculate_score_and_reasons(
     last: pd.Series,
     prev: pd.Series,
     momentum_scorer: ScoreTwoRows,
-    trend_scorer: ScoreTwoRows,
-    volume_scorer: ScoreOneRow,
+    trend_scorer: TrendScorer,
+    volume_scorer: ScoreTwoRows,
     structure_scorer: ScoreOneRow,
     momentum_checker: MomentumChecker = check_momentum_confirmation,
     reject_logger: RejectLogger | None = None,
-) -> tuple[float, list[str]] | None:
+) -> tuple[float, list[str], float | None] | None:
     """Calculate the bounded strategy score and explanatory reason list."""
     reasons: list[str] = []
     regime = detect_regime(df)
@@ -116,11 +117,14 @@ def calculate_score_and_reasons(
         reasons.append("Piyasa rejimi yatay - skor etkisi azaltildi")
 
     s1, r1 = momentum_scorer(last, prev)
-    s2, r2 = trend_scorer(last, prev)
-    s3, r3 = volume_scorer(last)
+    s2, r2 = trend_scorer(last, prev, df)
+    s3, r3 = volume_scorer(last, prev)
     s4, r4 = structure_scorer(last)
     score = s1 + s2 + s3 + s4
     reasons.extend(r1 + r2 + r3 + r4)
+    _components = (s1, s2, s3, s4)
+    agree = sum(1 for c in _components if (score > 0 and c > 0) or (score < 0 and c < 0))
+    agreement_ratio = agree / 4.0
 
     if regime == MarketRegime.SIDEWAYS:
         score *= params.sideways_score_multiplier
@@ -155,6 +159,56 @@ def calculate_score_and_reasons(
                 )
             return None
 
+    # H4 — OBV / volume divergence gate.
+    # Raw volume spike can pad the volume score (vol_confirm +8, vol_spike +8, total +16)
+    # even when OBV is DOWN or price_volume is BEARISH_CONFIRMATION (structural
+    # distribution). Without this gate, an institutional exit + retail chase produces a
+    # fake long signal. Override (min/max), NOT penalty — H7 saturation owns penalty.
+    # Also symmetric for shorts (OBV UP / BULLISH_CONFIRMATION against short candidates).
+    if params.obv_divergence_block_enabled:
+        obv_trend = last.get("obv_trend", "FLAT")
+        pv_direction = last.get("price_volume_direction", "NONE")
+        obv_down = obv_trend == "DOWN"
+        bearish_pv = pv_direction == "BEARISH_CONFIRMATION"
+        volume_divergence_long = obv_down or bearish_pv
+        obv_up = obv_trend == "UP"
+        bullish_pv = pv_direction == "BULLISH_CONFIRMATION"
+        volume_divergence_short = obv_up or bullish_pv
+        cap = params.obv_divergence_cap
+
+        if volume_divergence_long and score > 0:
+            capped = min(score, cap)
+            if capped != score:
+                reasons.append(
+                    f"Hacim divergence (OBV düşüş / fiyat-hacim ayı) → uzun skor {cap:.0f}'e bastırıldı"
+                )
+                logger.debug(
+                    "strategy_obv_divergence_capped_long",
+                    ticker=ticker,
+                    old_score=round(float(score), 2),
+                    capped_score=round(float(capped), 2),
+                    cap=cap,
+                    obv_trend=obv_trend,
+                    pv_direction=pv_direction,
+                )
+            score = capped
+        elif volume_divergence_short and score < 0:
+            capped = max(score, -cap)
+            if capped != score:
+                reasons.append(
+                    f"Hacim divergence (OBV yükseliş / fiyat-hacim boğa) → kısa skor -{cap:.0f}'e bastırıldı"
+                )
+                logger.debug(
+                    "strategy_obv_divergence_capped_short",
+                    ticker=ticker,
+                    old_score=round(float(score), 2),
+                    capped_score=round(float(capped), 2),
+                    cap=cap,
+                    obv_trend=obv_trend,
+                    pv_direction=pv_direction,
+                )
+            score = capped
+
     score = max(-100, min(100, score))
     if score == 0:
         if reject_logger is not None:
@@ -165,7 +219,7 @@ def calculate_score_and_reasons(
                 reason_detail="combined component score resolved to zero",
             )
         return None
-    return score, reasons
+    return score, reasons, agreement_ratio
 
 
 def passes_multi_timeframe_confluence(
