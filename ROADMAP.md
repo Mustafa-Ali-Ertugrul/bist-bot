@@ -7,7 +7,7 @@ Bu doküman, BIST-Bot projesinin mevcut "Sinyal + Paper Trade" yapısından, öl
 - [ ] Skor ağırlıkları, eşikler ve indikatör periyotları için tek bir parametre şeması (dataclass) oluştur.
 - [ ] `backtest.py` içinde performans profili çıkar; en yavaş bölümleri (darboğazları) ölç.
 - [ ] `risk_manager.py` için korelasyon hesaplamalarını hızlandıracak bir önbellek (cache) katmanı ekle.
-- [ ] `README.md` dosyasını güncelle: Sistemin şu an "live trading" (canlı işlem) değil, "signal + paper trade" platformu olduğunu açıkça belirt.
+- [x] `README.md` dosyasını güncelle: Sistemin şu an "live trading" (canlı işlem) değil, "signal + paper trade" platformu olduğunu açıkça belirt. *(tamamlandı: README üst banner + yanlış clone URL düzeltildi)*
 - [ ] ML meta-model + olasılık kalibrasyonu (`Platt`/`isotonic`) + fractional Kelly pozisyon boyutlamasını üst seviye öncelik olarak devreye al.
 
 ## 🟡 Aşama 2: Kısa Vade (Performans ve Optimizasyon)
@@ -20,8 +20,8 @@ Bu doküman, BIST-Bot projesinin mevcut "Sinyal + Paper Trade" yapısından, öl
 - [ ] `OfficialProvider` retry/backoff akışını `RateLimitError.retry_after` semantiği ile üretim kullanımına göre sertleştir; 429/5xx davranışlarını testlerle doğrula.
 
 ## 🔵 Aşama 3: Orta Vade (Mimari ve Soyutlama)
-- [ ] Aracı kurumlar (Broker) için bir `ExecutionProvider` soyutlaması (interface) tasarla.
-- [ ] Paper trade (sanal işlem) ile Live Execution (canlı işlem) arayüzlerini birbirinden ayır.
+- [x] Aracı kurumlar (Broker) için bir `ExecutionProvider` soyutlaması (interface) tasarla. *(tamamlandı: `execution/base.py` → `ExecutionBroker`, `place_order`/`get_balance` API'si)*
+- [x] Paper trade (sanal işlem) ile Live Execution (canlı işlem) arayüzlerini birbirinden ayır. *(tamamlandı: `execution/paper_broker.py` + `execution/live.py`; eski `broker/` paketi kaldırıldı)*
 - [ ] Emir yaşam döngüsü modeli ekle (durumlar: `created` -> `sent` -> `partial` -> `filled` -> `cancelled` -> `rejected`).
 - [ ] Portföy ve risk kararlarını, genel tarama (scan) akışından bağımsız ayrı bir servis (microservice mantığı) haline getir.
 - [ ] AlgoLab sandbox/doğrulama checklist'i oluştur; resmi HTTP path'leri teyit edilmeden canlı modu açma.
@@ -41,5 +41,5 @@ Bu doküman, BIST-Bot projesinin mevcut "Sinyal + Paper Trade" yapısından, öl
 - [ ] Strateji parametreleri kod (mantık) değiştirilmeden dışarıdan güncellenebilir olmalı.
 - [ ] Backtest süresi vektörel işlemler sayesinde belirgin şekilde saniyelere/milisaniyelere düşmeli.
 - [ ] Aynı backtest, Walk-Forward Validation sayesinde farklı piyasa dönemlerinde daha stabil sonuçlar vermeli.
-- [ ] Paper trade ile canlı işlem (Live trade) motorları mimari olarak aynı arayüzü (interface) sorunsuzca kullanabilmeli.
+- [x] Paper trade ile canlı işlem (Live trade) motorları mimari olarak aynı arayüzü (interface) sorunsuzca kullanabilmeli. *(sağlandı: iki também `execution.base` aynı taban sınıfını kullanıyor)*
 - [ ] Risk hesapları (özellikle korelasyon), tekrar eden ve işlemciyi yoran pahalı işlemlerden kurtulmalı.

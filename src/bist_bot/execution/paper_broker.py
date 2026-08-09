@@ -12,6 +12,8 @@ from bist_bot.execution.base import (
     OrderStatus,
     OrderType,
     Position,
+    coerce_side,
+    coerce_order_type,
     utc_now,
 )
 from bist_bot.risk.costs import DEFAULT_COSTS, TradingCosts
@@ -213,3 +215,34 @@ class PaperBroker(BaseExecutionProvider):
         position.updated_at = utc_now()
         if position.quantity <= 0:
             self.positions.pop(ticker, None)
+
+    # --- Product API compatibility (migrated from broker.paper.PaperBroker) ---
+
+    def submit_order(
+        self,
+        ticker: str,
+        side: OrderSide | str,
+        quantity: float,
+        order_type: OrderType | str,
+        price: float | None = None,
+        stop_price: float | None = None,
+    ) -> OrderResult:
+        """Product-facing alias for place_order with string coercion."""
+        return self.place_order(
+            ticker=ticker,
+            side=coerce_side(side),
+            quantity=float(quantity),
+            order_type=coerce_order_type(order_type),
+            price=price,
+            stop_price=stop_price,
+        )
+
+    def get_balance(self):
+        """Return cash / equity balances (product API compatibility)."""
+        info = self.get_account_info()
+        from bist_bot.execution.base import Balance
+
+        return Balance.from_account_info(info)
+
+
+__all__ = ["PaperBroker"]

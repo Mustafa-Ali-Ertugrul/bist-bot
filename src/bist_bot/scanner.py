@@ -185,6 +185,7 @@ class ScanService:
                     duration_ms=duration_ms,
                     scanned_count=0,
                 )
+                self.notifier.send_message("⚠️ Tarama verisi alınamadı (fetcher boş döndü).")
                 return []
 
             signals = self.engine.scan_all(all_data)

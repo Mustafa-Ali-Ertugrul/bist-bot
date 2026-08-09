@@ -7,8 +7,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from bist_bot.broker import OrderExecutor, PaperBroker
-from bist_bot.broker.base import Balance, OrderSide, OrderState, OrderType
+from bist_bot.execution import OrderExecutor, PaperBroker
+from bist_bot.execution.base import Balance, OrderSide, OrderState, OrderType
 from bist_bot.strategy.signal_models import Signal, SignalType
 
 
@@ -64,7 +64,7 @@ def test_paper_broker_get_order_status() -> None:
 
 
 def test_live_broker_rejects_unsupported_provider() -> None:
-    from bist_bot.broker.live import LiveBroker
+    from bist_bot.execution.live import LiveBroker
 
     mock_settings = MagicMock()
     with pytest.raises(ValueError, match="not supported by LiveBroker"):
@@ -132,7 +132,7 @@ def test_order_executor_force_bypasses_auto_execute_flag() -> None:
 
 
 def test_order_executor_propagates_venue_failure() -> None:
-    from bist_bot.broker.live import LiveBroker
+    from bist_bot.execution.live import LiveBroker
 
     mock_settings = MagicMock()
     mock_settings.ALGOLAB_API_KEY = "k"
@@ -168,7 +168,7 @@ def test_order_executor_propagates_venue_failure() -> None:
 def test_build_broker_paper_mode() -> None:
     pytest.importorskip("joblib")
     from bist_bot import dependencies as deps
-    from bist_bot.broker.paper import PaperBroker as BP
+    from bist_bot.execution.paper_broker import PaperBroker as BP
 
     with deps.settings.override(BROKER_MODE="paper", BROKER_PROVIDER="paper"):
         broker = deps._build_broker()

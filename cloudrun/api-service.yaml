@@ -29,6 +29,8 @@ spec:
               # For local development, set JWT_SECRET_KEY via environment variable or .env file
             - name: RATE_LIMIT_STORAGE_URI
               value: "memory://"
+            - name: WATCHLIST_SOURCE
+              value: "bist30"
             - name: CORS_ORIGINS
               value: "https://bist-bot-ui-REPLACE.a.run.app"
             # Admin bootstrap: set these to seed an initial admin user on first startup.

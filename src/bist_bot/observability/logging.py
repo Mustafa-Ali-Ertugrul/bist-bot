@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, Literal
 
 from bist_bot.app_logging import BoundLogger, get_logger
 
@@ -177,7 +177,7 @@ class timed_event:
         self._started = time.perf_counter()
         return self
 
-    def __exit__(self, exc_type, exc, tb) -> bool:
+    def __exit__(self, exc_type, exc, tb) -> Literal[False]:
         latency_ms = (time.perf_counter() - self._started) * 1000.0
         if exc is not None:
             self.error = exc
