@@ -16,6 +16,7 @@ from bist_bot.strategy.signal_models import SignalType
 from bist_bot.streamlit_utils import check_signals, send_signal_notification
 from bist_bot.ui.runtime_types import ScanResult, ScanStats
 from bist_bot.ui.session_cooldown import consume_cooldown
+from bist_bot.utils.scan_lock import ScanLock
 
 TR = timezone(timedelta(hours=3))
 EMPTY_REJECTION_BREAKDOWN = {
@@ -27,6 +28,8 @@ EMPTY_REJECTION_BREAKDOWN = {
 SCAN_LOCK = threading.Lock()
 PENDING_SCAN_RESULTS: dict[str, ScanResult] = {}
 ACTIVE_SCAN_SESSIONS: set[str] = set()
+UI_SCAN_LOCK = ScanLock()
+UI_SCAN_LOCK_TIMEOUT_SECONDS = 1.0
 
 logger = get_logger(__name__, component="ui_scan")
 
@@ -73,7 +76,7 @@ def _set_scan_phase(phase: str) -> None:
     logger.info("ui_scan_phase", phase=phase)
 
 
-def collect_scan_result(
+def _collect_scan_result_impl(
     fetcher,
     engine,
     notifier,
@@ -189,6 +192,39 @@ def collect_scan_result(
     }
     _set_scan_phase("Tarama tamamlandi")
     return result
+
+
+def collect_scan_result(
+    fetcher,
+    engine,
+    notifier,
+    db,
+    last_scan_time: datetime | None = None,
+    force_clear: bool = False,
+    limited_tickers: list[str] | None = None,
+) -> ScanResult:
+    """Run one scan cycle and return the runtime payload (single-writer guarded).
+
+    Serializes with the shared file lock so the Streamlit runtime never writes
+    signals/scan_log while the scheduler, CLI, or HTTP API scan is active.
+    """
+    if not UI_SCAN_LOCK.acquire(timeout=UI_SCAN_LOCK_TIMEOUT_SECONDS):
+        logger.warning("ui_scan_skipped_lock_busy")
+        return _empty_scan_result(
+            last_scan_time, "Baska bir tarama zaten calisiyor, bu tarama atlandi."
+        )
+    try:
+        return _collect_scan_result_impl(
+            fetcher=fetcher,
+            engine=engine,
+            notifier=notifier,
+            db=db,
+            last_scan_time=last_scan_time,
+            force_clear=force_clear,
+            limited_tickers=limited_tickers,
+        )
+    finally:
+        UI_SCAN_LOCK.release()
 
 
 def apply_scan_result(scan_result: ScanResult) -> None:

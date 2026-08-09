@@ -20,6 +20,7 @@ from bist_bot.services.notification_service import NotificationDispatchService
 from bist_bot.services.paper_trade_service import PaperTradeService
 from bist_bot.services.signal_change_service import SignalChangeService
 from bist_bot.strategy.signal_models import Signal, SignalType
+from bist_bot.utils.scan_lock import ScanLock
 
 logger = get_logger(__name__, component="scanner")
 EMPTY_REJECTION_BREAKDOWN = {
@@ -58,6 +59,8 @@ class ScanService:
         paper_trade_service: PaperTradeService | None = None,
         notification_service: NotificationDispatchService | None = None,
         circuit_breaker: CircuitBreaker | None = None,
+        scan_lock: ScanLock | None = None,
+        scan_lock_timeout: float = 5.0,
     ) -> None:
         """Create a scan service with explicit runtime dependencies."""
         self.fetcher = fetcher
@@ -85,6 +88,8 @@ class ScanService:
         self.last_side_effects: dict[str, bool] = {"paper_trades_queued": False}
         self.last_rejection_breakdown: dict[str, object] = dict(EMPTY_REJECTION_BREAKDOWN)
         self.circuit_breaker = circuit_breaker
+        self.scan_lock = scan_lock or ScanLock()
+        self.scan_lock_timeout = max(0.0, scan_lock_timeout)
 
     def _auto_execute_signals(self, signals: list[Signal]) -> None:
         """Submit actionable signals to the configured execution service."""
@@ -113,6 +118,10 @@ class ScanService:
             logger.warning("scan_aborted_circuit_open")
             return []
 
+        if not self.scan_lock.acquire(timeout=self.scan_lock_timeout):
+            logger.warning("scan_skipped_lock_busy")
+            return []
+
         try:
             all_data, signals, breakdown, actionable, buys, sells = self._evaluate_signals(
                 force_refresh, started_at
@@ -132,6 +141,8 @@ class ScanService:
             if hasattr(self, "circuit_breaker") and self.circuit_breaker:
                 self.circuit_breaker.record_error()
             raise
+        finally:
+            self.scan_lock.release()
 
     def _fetch_market_data(self, force_refresh: bool, started_at: float) -> list[dict[str, object]]:
         """Load multi-timeframe market data; return empty on failure."""

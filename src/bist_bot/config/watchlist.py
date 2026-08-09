@@ -6,7 +6,6 @@ import csv
 import os
 from pathlib import Path
 
-
 BIST30_TICKERS: list[str] = [
     "AKBNK.IS",
     "ARCLK.IS",
