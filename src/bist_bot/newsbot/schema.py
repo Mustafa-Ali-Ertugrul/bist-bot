@@ -145,6 +145,18 @@ CREATE TABLE IF NOT EXISTS newsbot_feedback_log (
     FOREIGN KEY (symbol_id)  REFERENCES newsbot_symbols(id)
 );
 
+CREATE TABLE IF NOT EXISTS newsbot_price_snapshots (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    article_id    INTEGER NOT NULL,
+    symbol_id     INTEGER NOT NULL,
+    horizon       TEXT NOT NULL,
+    price         REAL NOT NULL,
+    captured_at   TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (article_id) REFERENCES newsbot_articles(id),
+    FOREIGN KEY (symbol_id)  REFERENCES newsbot_symbols(id),
+    UNIQUE(article_id, symbol_id, horizon)
+);
+
 CREATE VIRTUAL TABLE IF NOT EXISTS newsbot_articles_fts USING fts5(
     title,
     content,
@@ -161,6 +173,7 @@ CREATE INDEX IF NOT EXISTS idx_newsbot_articles_content_hash   ON newsbot_articl
 CREATE INDEX IF NOT EXISTS idx_newsbot_entities_article_id     ON newsbot_article_entities(article_id);
 CREATE INDEX IF NOT EXISTS idx_newsbot_scores_article_id       ON newsbot_layer_scores(article_id);
 CREATE INDEX IF NOT EXISTS idx_newsbot_notifications_article_id ON newsbot_notifications(article_id);
+CREATE INDEX IF NOT EXISTS idx_newsbot_snapshots_article_symbol ON newsbot_price_snapshots(article_id, symbol_id);
 """
 
 
