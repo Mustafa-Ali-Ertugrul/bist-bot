@@ -110,13 +110,13 @@ def score_trend(params, last, prev, df=None) -> tuple[float, list[str]]:
             score += params.score_ema_initial_cross
             reasons.append(f"Fiyat EMA{settings.EMA_LONG}'i kesti (yukarı) → yeni trend başlangıcı")
         elif above_ema:
-            if pd.notna(slope) and slope > 0:
+            if slope is not None and pd.notna(slope) and slope > 0:
                 if pd.notna(adx) and adx >= params.adx_threshold:
                     score += params.score_ema_cross
                     reasons.append(
                         f"yükseliş trendi (EMA{settings.EMA_LONG} üzerinde + eğim pozitif)"
                     )
-            elif pd.notna(slope) and slope <= 0:
+            elif slope is not None and pd.notna(slope) and slope <= 0:
                 reasons.append(
                     f"EMA{settings.EMA_LONG} üzerinde ama eğim negatif → trend teyit yok (sahte dönüş filtresi)"
                 )
@@ -128,11 +128,11 @@ def score_trend(params, last, prev, df=None) -> tuple[float, list[str]]:
             score -= params.score_ema_initial_cross
             reasons.append(f"Fiyat EMA{settings.EMA_LONG}'i kesti (aşağı) → trend kırılması")
         elif not above_ema:
-            if pd.notna(slope) and slope < 0:
+            if slope is not None and pd.notna(slope) and slope < 0:
                 if pd.notna(adx) and adx >= params.adx_threshold:
                     score -= params.score_ema_cross / 2
                     reasons.append(f"düşüş teyiti (EMA{settings.EMA_LONG} altında + eğim negatif)")
-            elif pd.notna(slope) and slope >= 0:
+            elif slope is not None and pd.notna(slope) and slope >= 0:
                 pass
             else:
                 if pd.notna(adx) and adx >= params.adx_threshold:

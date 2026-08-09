@@ -7,8 +7,7 @@ from typing import Any
 
 from bist_bot.app_logging import get_logger
 from bist_bot.app_metrics import inc_counter
-from bist_bot.broker.base import (
-    Broker,
+from bist_bot.execution.base import (
     OrderResult,
     OrderSide,
     OrderState,
@@ -25,7 +24,7 @@ logger = get_logger(__name__, component="order_executor")
 
 
 class OrderExecutor:
-    """Route risk-approved signals to a ``Broker`` implementation.
+    """Route risk-approved signals to a ``BaseExecutionProvider`` implementation.
 
     This is the application service between strategy/risk output and venue
     submission. It does **not** re-size positions; callers must provide a
@@ -34,7 +33,7 @@ class OrderExecutor:
 
     def __init__(
         self,
-        broker: Broker,
+        broker: Any,
         *,
         db: Any | None = None,
         settings: Any | None = None,
@@ -165,7 +164,8 @@ class OrderExecutor:
 
         started = time.perf_counter()
         try:
-            result = self.broker.submit_order(
+            # Call place_order directly (unified API from execution/ package)
+            result = self.broker.place_order(
                 ticker=signal.ticker,
                 side=side,
                 quantity=qty,
@@ -173,14 +173,14 @@ class OrderExecutor:
                 price=price if price is not None else getattr(signal, "price", None),
             )
         except NotImplementedError:
-            if order_row_id is not None and hasattr(self.db, "update_order"):
+            if order_row_id is not None and self.db is not None and hasattr(self.db, "update_order"):
                 self.db.update_order(order_row_id, state="REJECTED")
             raise
         except Exception as exc:
             latency_ms = (time.perf_counter() - started) * 1000.0
             observe_order_latency(latency_ms / 1000.0)
             record_order(side.value, "ERROR")
-            if order_row_id is not None and hasattr(self.db, "update_order"):
+            if order_row_id is not None and self.db is not None and hasattr(self.db, "update_order"):
                 self.db.update_order(order_row_id, state="REJECTED")
             inc_counter("bist_auto_execute_fail_total")
             log_order(
@@ -214,7 +214,7 @@ class OrderExecutor:
         latency_ms = (time.perf_counter() - started) * 1000.0
         observe_order_latency(latency_ms / 1000.0)
 
-        if order_row_id is not None and hasattr(self.db, "update_order"):
+        if order_row_id is not None and self.db is not None and hasattr(self.db, "update_order"):
             try:
                 self.db.update_order(
                     order_row_id,

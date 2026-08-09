@@ -64,7 +64,7 @@ class ExecutionService:
         if not getattr(result, "accepted", False):
             return False
         state = getattr(result, "state", None)
-        state_value = state.value if hasattr(state, "value") else str(state or "")
+        state_value = state.value if state is not None and hasattr(state, "value") else str(state or "")
         if state_value in {OrderState.REJECTED.value, OrderState.CANCELLED.value, "ERROR"}:
             return False
         if require_fill:

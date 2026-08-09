@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 from bist_bot.app_logging import get_logger
 from bist_bot.config.settings import settings as default_settings
 from bist_bot.config.watchlist import load_watchlist
-from bist_bot.strategy.signal_models import Signal
+from bist_bot.strategy.signal_models import Signal, SignalType
 
 logger = get_logger(__name__, component="shadow_trade")
 
@@ -69,12 +69,23 @@ class ShadowTradeService:
                 positions = {}
             before = json.dumps(positions, sort_keys=True)
             prices = self._current_prices(signals, market_data or {})
-            closed = self._close_due_positions(positions, prices, current_time)
+            closed = self._close_due_positions(positions, prices, current_time, signals)
             closed_tickers = {row["ticker"] for row in closed}
+            cooldown_tickers = self._cooldown_tickers(current_time)
             candidates = [signal for signal in signals if self._is_shadow_candidate(signal)]
             opened = 0
+            cooldown_blocked = 0
+            duplicate_blocked = 0
             for signal in candidates:
                 if signal.ticker in positions or signal.ticker in closed_tickers:
+                    duplicate_blocked += 1
+                    continue
+                if signal.ticker in cooldown_tickers:
+                    cooldown_blocked += 1
+                    logger.info(
+                        "shadow_cooldown",
+                        ticker=signal.ticker,
+                    )
                     continue
                 positions[signal.ticker] = self._entry_from_signal(signal)
                 opened += 1
@@ -92,6 +103,8 @@ class ShadowTradeService:
                 candidates=len(candidates),
                 opened=opened,
                 closed=len(closed),
+                duplicate_blocked=duplicate_blocked,
+                cooldown_blocked=cooldown_blocked,
                 open_positions=len(positions),
             )
             return closed
@@ -130,11 +143,38 @@ class ShadowTradeService:
             return True
 
     def _is_shadow_candidate(self, signal: Signal) -> bool:
-        if not 0 < float(signal.score) < float(signal.buy_threshold):
+        min_score = int(getattr(self.settings, "SHADOW_MIN_SCORE", 15))
+        if not (float(min_score) <= float(signal.score) < float(signal.buy_threshold)):
             return False
         return not bool(getattr(self.settings, "SHADOW_ONLY_ROBUST", True)) or (
             signal.ticker in self.robust_tickers
         )
+
+    def _is_in_cooldown(self, ticker: str, now: datetime) -> bool:
+        return ticker in self._cooldown_tickers(now)
+
+    def _cooldown_tickers(self, now: datetime) -> set[str]:
+        cooldown_days = int(getattr(self.settings, "SHADOW_COOLDOWN_DAYS", 3))
+        if cooldown_days <= 0:
+            return set()
+        if not self.csv_path.exists():
+            return set()
+        cutoff = now - timedelta(days=cooldown_days)
+        tickers: set[str] = set()
+        try:
+            with self.csv_path.open(encoding="utf-8", newline="") as handle:
+                for row in csv.DictReader(handle):
+                    if row.get("ticker") is None or row.get("hit") != "stop":
+                        continue
+                    try:
+                        exit_time = self._aware_utc(datetime.fromisoformat(row["exit_time"]))
+                    except (ValueError, KeyError):
+                        continue
+                    if exit_time >= cutoff:
+                        tickers.add(row["ticker"])
+        except OSError:
+            return set()
+        return tickers
 
     def _entry_from_signal(self, signal: Signal) -> dict[str, Any]:
         entry_time = self._aware_utc(signal.timestamp)
@@ -167,6 +207,7 @@ class ShadowTradeService:
         positions: dict[str, dict[str, Any]],
         prices: dict[str, float],
         now: datetime,
+        signals: list[Signal] | None = None,
     ) -> list[dict[str, Any]]:
         closed: list[dict[str, Any]] = []
         for ticker, position in list(positions.items()):
@@ -176,10 +217,25 @@ class ShadowTradeService:
             entry_time = self._aware_utc(datetime.fromisoformat(position["entry_time"]))
             stop = float(position.get("stop") or 0.0)
             target = float(position.get("target") or 0.0)
+
+            opposite_signal = False
+            if signals:
+                for sig in signals:
+                    if sig.ticker == ticker:
+                        if sig.signal_type in (
+                            SignalType.WEAK_SELL,
+                            SignalType.SELL,
+                            SignalType.STRONG_SELL,
+                        ):
+                            opposite_signal = True
+                            break
+
             if stop > 0 and price <= stop:
                 hit = "stop"
             elif target > 0 and price >= target:
                 hit = "target"
+            elif opposite_signal:
+                hit = "opposite_signal"
             elif now >= entry_time + timedelta(days=int(position["holding_days"])):
                 hit = "timeout"
             else:

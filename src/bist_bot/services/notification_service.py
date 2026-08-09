@@ -32,10 +32,14 @@ class NotificationDispatchService:
         return signal.ticker in self._robust_set
 
     def notify_scan_results(self, signals, actionable, total_scanned: int) -> None:
+        # Always send the scan summary, even with zero signals, so the owner
+        # can see the scan cadence. Without this, quiet scans (all HOLD /
+        # below threshold) produced no Telegram message at all and looked
+        # like the bot stopped scanning.
+        self.notifier.send_scan_summary(signals, total_scanned)
+
         if not signals:
             return
-
-        self.notifier.send_scan_summary(signals, total_scanned)
 
         # Detail messages for all positive-score signals (actionable + radar).
         # Previously gated by score threshold; now expanded to any signal that

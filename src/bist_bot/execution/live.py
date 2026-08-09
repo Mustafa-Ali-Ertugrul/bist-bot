@@ -23,6 +23,8 @@ from bist_bot.execution.base import (
     OrderStatus,
     OrderType,
     Position,
+    coerce_order_type,
+    coerce_side,
 )
 
 if TYPE_CHECKING:
@@ -57,7 +59,7 @@ class LiveBroker(BaseExecutionProvider):
     """Thin delegation layer over a real venue adapter.
 
     Resolves ``BROKER_PROVIDER`` → concrete ``BaseExecutionProvider`` and
-    forwards every call.  This keeps ``Broker`` / ``OrderExecutor`` code
+    forwards every call.  This keeps the execution code
     provider-agnostic while ensuring live mode actually works.
     """
 
@@ -126,8 +128,6 @@ class LiveBroker(BaseExecutionProvider):
         stop_price: float | None = None,
     ) -> OrderResult:
         """Product API alias used by ``OrderExecutor``."""
-        from bist_bot.broker.base import coerce_order_type, coerce_side
-
         return self.place_order(
             ticker=ticker,
             side=coerce_side(side),

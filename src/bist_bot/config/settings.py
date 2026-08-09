@@ -40,7 +40,7 @@ from bist_bot.config.watchlist import load_watchlist, resolve_watchlist_source  
 
 
 def _default_watchlist_source() -> str:
-    return resolve_watchlist_source(None)
+    return resolve_watchlist_source("bist30")
 
 
 def _default_watchlist() -> list[str]:
