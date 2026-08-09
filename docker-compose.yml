@@ -18,7 +18,7 @@ x-bist-bot-common: &bist-bot-common
     WATCHLIST_SOURCE: ${WATCHLIST_SOURCE:-robust}
     LOG_FORMAT: ${LOG_FORMAT:-json}
   volumes:
-    - ./data:/app/data
+    - bist-bot-data:/app/data
     - ./secrets:/run/secrets:ro
   restart: unless-stopped
   logging:
@@ -104,3 +104,6 @@ services:
       - ./config/newsbot_sources.yaml:/app/config/newsbot_sources.yaml:ro
       - ./config/newsbot_symbols.json:/app/config/newsbot_symbols.json:ro
       - ./config/newsbot_keywords.json:/app/config/newsbot_keywords.json:ro
+
+volumes:
+  bist-bot-data:
