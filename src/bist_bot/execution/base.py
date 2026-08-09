@@ -196,7 +196,7 @@ __all__ = [
     "OrderStatus",
     "OrderType",
     "Position",
-    "coerce_side",
     "coerce_order_type",
+    "coerce_side",
     "utc_now",
 ]

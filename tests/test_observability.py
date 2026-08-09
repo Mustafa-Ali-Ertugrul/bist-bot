@@ -325,8 +325,8 @@ def test_alert_manager_skips_without_webhook():
 def test_order_executor_records_metrics_and_alerts_on_reject():
     from datetime import UTC, datetime
 
-    from bist_bot.execution.base import OrderResult, OrderState
-    from bist_bot.execution.order_executor import OrderExecutor
+    from bist_bot.broker.base import OrderResult, OrderState
+    from bist_bot.broker.executor import OrderExecutor
     from bist_bot.strategy.signal_models import Signal, SignalType
 
     reset_observability_metrics()
@@ -344,7 +344,7 @@ def test_order_executor_records_metrics_and_alerts_on_reject():
 
     broker = MagicMock()
     broker.authenticate.return_value = True
-    broker.place_order.return_value = OrderResult(
+    broker.submit_order.return_value = OrderResult(
         accepted=False,
         order_id="rej-1",
         state=OrderState.REJECTED,

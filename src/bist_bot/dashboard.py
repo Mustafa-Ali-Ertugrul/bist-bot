@@ -312,7 +312,9 @@ def create_dashboard_app(
                     )
                 logger.info("verify_admin_hash_upgrade_end", email=_mask_email(email))
             except SQLAlchemyError as exc:
-                logger.warning("verify_admin_hash_upgrade_failed", email=_mask_email(email), error=str(exc))
+                logger.warning(
+                    "verify_admin_hash_upgrade_failed", email=_mask_email(email), error=str(exc)
+                )
         logger.info("login_success", email=_mask_email(email))
         return True
 
@@ -475,14 +477,18 @@ def create_dashboard_app(
         email = str(payload.get("email", "")).strip().lower()
         password = str(payload.get("password", ""))
         if not email or not password:
-            logger.warning("api_login_failed", reason="missing_credentials", email=_mask_email(email) or "")
+            logger.warning(
+                "api_login_failed", reason="missing_credentials", email=_mask_email(email) or ""
+            )
             return jsonify(
                 {"status": "error", "message": get_message("api.invalid_credentials")}
             ), 401
 
         logger.info("api_login_attempt", email=_mask_email(email))
         if not verify_admin(email, password):
-            logger.warning("api_login_failed", reason="invalid_credentials", email=_mask_email(email))
+            logger.warning(
+                "api_login_failed", reason="invalid_credentials", email=_mask_email(email)
+            )
             return jsonify(
                 {"status": "error", "message": get_message("api.invalid_credentials")}
             ), 401
@@ -521,24 +527,23 @@ def create_dashboard_app(
             )
             scan_service = get_scan_service()
             logger.info("api_scan_started", force_refresh=force_refresh)
-            with _scan_mutex:
-                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                    future = executor.submit(scan_service.scan_once, force_refresh=force_refresh)
-                    try:
-                        signals = future.result(timeout=settings.SCAN_TIMEOUT_SECONDS)
-                    except concurrent.futures.TimeoutError:
-                        logger.error(
-                            "api_scan_timed_out",
-                            timeout_seconds=settings.SCAN_TIMEOUT_SECONDS,
-                            force_refresh=force_refresh,
-                        )
-                        return jsonify(
-                            {
-                                "status": "error",
-                                "message": "Scan timed out",
-                                "timeout_seconds": settings.SCAN_TIMEOUT_SECONDS,
-                            }
-                        ), 504
+            with _scan_mutex, concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(scan_service.scan_once, force_refresh=force_refresh)
+                try:
+                    signals = future.result(timeout=settings.SCAN_TIMEOUT_SECONDS)
+                except concurrent.futures.TimeoutError:
+                    logger.error(
+                        "api_scan_timed_out",
+                        timeout_seconds=settings.SCAN_TIMEOUT_SECONDS,
+                        force_refresh=force_refresh,
+                    )
+                    return jsonify(
+                        {
+                            "status": "error",
+                            "message": "Scan timed out",
+                            "timeout_seconds": settings.SCAN_TIMEOUT_SECONDS,
+                        }
+                    ), 504
             scan_stats = scan_service.last_scan_stats
 
             results = [

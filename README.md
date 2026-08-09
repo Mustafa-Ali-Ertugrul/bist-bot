@@ -1,8 +1,5 @@
 # BIST Bot — Borsa İstanbul Sinyal Botu
 
-> ⚠️ **Bu bir "signal + paper trade" platformudur, canlı işlem (live trading) yapmaz.**
-> Canlı trade için `CONFIRM_LIVE_TRADING=true` ve broker konfigürasyonu gereklidir.
-
 BIST hisselerini teknik indikatörlerle tarayan, sinyal üreten, Telegram'a bildiren, paper trade kaydı tutan ve backtest yapabilen otonom bir bot.
 
 ## Özellikler
@@ -73,8 +70,8 @@ bist_bot/
 ## Kurulum
 
 ```bash
-git clone https://github.com/Mustafa-Ali-Ertugrul/bist-bot.git
-cd bist-bot
+git clone https://github.com/Mustafa-Ali-Ertugrul/docmind-ai.git
+cd docmind-ai
 pip install -r requirements.txt
 ```
 
