@@ -17,20 +17,17 @@ def extractor() -> EntityExtractor:
 
 
 def test_load_symbols_from_config() -> None:
-    """Config JSON 10 BIST sembolü içerir ve yüklenir."""
+    """Config JSON 22 BIST sembolü içerir ve yüklenir."""
     symbols = load_symbols(str(_CONFIG_PATH))
-    assert set(symbols) == {
-        "THYAO",
-        "ASELS",
-        "GARAN",
-        "KCHOL",
-        "FROTO",
-        "TUPRS",
-        "BIMAS",
-        "EREGL",
-        "AKBNK",
-        "ISCTR",
+    assert len(symbols) == 22
+    # Hepsini içermeli
+    expected_all = {
+        "THYAO", "ASELS", "GARAN", "KCHOL", "FROTO", "TUPRS", "BIMAS",
+        "EREGL", "AKBNK", "ISCTR",
+        "HALKB", "VAKBN", "YKBNK", "SASA", "PGSUS", "TOASO",
+        "SAHOL", "PETKM", "MGROS", "SOKM", "TCELL", "ENKAI",
     }
+    assert set(symbols) == expected_all
 
 
 def test_symbol_exact_match(extractor: EntityExtractor) -> None:

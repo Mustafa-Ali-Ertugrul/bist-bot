@@ -59,6 +59,78 @@
       "company_name": "İş Bankası",
       "aliases": ["İş Bankası", "ISCTR", "ISCTR.IS"],
       "sector": "bankacilik"
+    },
+    {
+      "symbol": "HALKB",
+      "company_name": "Halkbank",
+      "aliases": ["HALKB", "Halkbank", "Halk Bankası"],
+      "sector": "bankacilik"
+    },
+    {
+      "symbol": "VAKBN",
+      "company_name": "VakıfBank",
+      "aliases": ["VAKBN", "VakıfBank", "Vakıfbank"],
+      "sector": "bankacilik"
+    },
+    {
+      "symbol": "YKBNK",
+      "company_name": "Yapı Kredi",
+      "aliases": ["YKBNK", "Yapı Kredi", "YapıKredi"],
+      "sector": "bankacilik"
+    },
+    {
+      "symbol": "SASA",
+      "company_name": "SASA Polyester",
+      "aliases": ["SASA", "SASA Polyester"],
+      "sector": "kimya"
+    },
+    {
+      "symbol": "PGSUS",
+      "company_name": "Pegasus",
+      "aliases": ["PGSUS", "Pegasus", "Pegasus Havayolları"],
+      "sector": "havacilik"
+    },
+    {
+      "symbol": "TOASO",
+      "company_name": "Tofaş",
+      "aliases": ["TOASO", "Tofaş", "Tofas"],
+      "sector": "otomotiv"
+    },
+    {
+      "symbol": "SAHOL",
+      "company_name": "Sabancı Holding",
+      "aliases": ["SAHOL", "Sabancı", "Sabancı Holding"],
+      "sector": "holding"
+    },
+    {
+      "symbol": "PETKM",
+      "company_name": "Petkim",
+      "aliases": ["PETKM", "Petkim"],
+      "sector": "kimya"
+    },
+    {
+      "symbol": "MGROS",
+      "company_name": "Migros",
+      "aliases": ["MGROS", "Migros"],
+      "sector": "perakende"
+    },
+    {
+      "symbol": "SOKM",
+      "company_name": "Şok Marketler",
+      "aliases": ["SOKM", "Şok", "Sok Marketler"],
+      "sector": "perakende"
+    },
+    {
+      "symbol": "TCELL",
+      "company_name": "Turkcell",
+      "aliases": ["TCELL", "Turkcell"],
+      "sector": "telekom"
+    },
+    {
+      "symbol": "ENKAI",
+      "company_name": "Enka İnşaat",
+      "aliases": ["ENKAI", "Enka", "Enka İnşaat"],
+      "sector": "insaat"
     }
   ]
 }

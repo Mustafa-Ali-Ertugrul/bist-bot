@@ -25,7 +25,10 @@
         "faaliyet karı",
         "net kâr",
         "brüt kar",
-        "aktif yönetim"
+        "aktif yönetim",
+        "güçlendi",
+        "kara geçildi",
+        "bilanço beklenti üstü"
       ],
       "negative": [
         "zarar etti",
@@ -47,7 +50,11 @@
         "margin sıkışması",
         "rekabet baskısı",
         "fiyat baskısı",
-        "talep düşüşü"
+        "talep düşüşü",
+        "düşürdü",
+        "düşüyor",
+        "yavaşladı",
+        "belirsizlik"
       ]
     },
     "macro": {
@@ -70,7 +77,9 @@
         "ihracat patladı",
         "ticaret fazlası",
         "dış borç azaldı",
-        "likidite artışı"
+        "likidite artışı",
+        "toparlanma",
+        "beklentisi güçlendi"
       ],
       "negative": [
         "faiz artışı",
@@ -91,7 +100,10 @@
         "ithalat artışı",
         "sınır dışı baskı",
         "gri liste",
-        "yapılandırma"
+        "yapılandırma",
+        "yavaşladı",
+        "belirsizlik",
+        "düşürdü"
       ]
     },
     "global": {
@@ -107,7 +119,11 @@
         "FED yumuşak iniş",
         "yeniden dengelenme",
         "yapay zeka atılımı",
-        "teknoloji rekoru"
+        "teknoloji rekoru",
+        "yükseldi",
+        "yükseliyor",
+        "yükselişte",
+        "güçlendi"
       ],
       "negative": [
         "savaş",
@@ -125,7 +141,14 @@
         "korku endeksi",
         "VIX yükseldi",
         "petrol artışı",
-        "enerji krizi"
+        "enerji krizi",
+        "yükseldi",
+        "yükseliyor",
+        "zirvede",
+        "zirvesine",
+        "düşürdü",
+        "düşüyor",
+        "belirsizlik"
       ]
     }
   },
