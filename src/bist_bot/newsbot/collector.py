@@ -34,6 +34,7 @@ from bist_bot.newsbot.utils import (
     check_cross_site_duplicate_fts,
     generate_content_hash,
 )
+from bist_bot.newsbot.weight_updater import update_keyword_weights
 
 logger = get_logger("newsbot.collector", component="newsbot.collector")
 
@@ -307,6 +308,15 @@ def run_once(db: DatabaseManager) -> None:
             logger.info("feedback_evaluated_total", count=n_feedback)
     except Exception as exc:
         logger.error("feedback_cycle_failed", error=str(exc))
+
+    # Keyword weight auto-update (kapalıysa skip)
+    try:
+        with db.session_scope() as session:
+            n_updates = update_keyword_weights(session)
+        if n_updates:
+            logger.info("keyword_weights_updated", count=n_updates)
+    except Exception as exc:
+        logger.error("weight_update_cycle_failed", error=str(exc))
 
 
 def main() -> None:
