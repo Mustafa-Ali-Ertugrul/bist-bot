@@ -28,6 +28,24 @@ def _deserialize_reasons(raw: str | None) -> list[str]:
     return [str(value)]
 
 
+def _serialize_breakdown(breakdown: dict[str, float] | None) -> str | None:
+    if breakdown is None:
+        return None
+    return json.dumps(breakdown, ensure_ascii=False)
+
+
+def _deserialize_breakdown(raw: str | None) -> dict[str, float] | None:
+    if not raw:
+        return None
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(value, dict):
+        return None
+    return {str(k): float(v) for k, v in value.items()}
+
+
 def _empty_rejection_breakdown(scan_id: str = "") -> dict[str, Any]:
     return {
         "total_rejections": 0,
@@ -130,6 +148,7 @@ class SignalsRepository:
                     reasons=" | ".join(signal.reasons),
                     conditions=_serialize_reasons(signal.reasons),
                     expires_at=signal.expires_at,
+                    score_breakdown=_serialize_breakdown(signal.score_breakdown),
                 )
             )
             return None
@@ -365,4 +384,5 @@ class SignalsRepository:
             "conditions": _deserialize_reasons(row.conditions),
             "expires_at": expires_at_iso,
             "is_expired": is_expired,
+            "score_breakdown": _deserialize_breakdown(row.score_breakdown),
         }

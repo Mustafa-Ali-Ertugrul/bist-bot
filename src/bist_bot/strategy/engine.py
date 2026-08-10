@@ -27,9 +27,12 @@ from bist_bot.strategy.engine_meta import (
 )
 from bist_bot.strategy.params import StrategyParams
 from bist_bot.strategy.regime import (
+    MACRO_BENCHMARK_TICKERS,
+    MarketRegime,
     TrendBias,
     apply_confluence,
     check_momentum_confirmation,
+    detect_macro_regime,
     get_trend_bias,
 )
 from bist_bot.strategy.scoring import (
@@ -105,6 +108,7 @@ class StrategyEngine:
         self._current_scan_id: str | None = None
         self._current_rejection_counts: dict[str, dict[str, int]] = {"reason": {}, "stage": {}}
         self._last_rejection_breakdown: dict[str, object] = _empty_rejection_breakdown()
+        self.last_macro_regime: MarketRegime = MarketRegime.UNKNOWN
 
     def _reset_rejection_aggregation(self) -> None:
         self._current_rejection_counts = {"reason": {}, "stage": {}}
@@ -324,6 +328,21 @@ class StrategyEngine:
         )
         return result
 
+    def _build_score_breakdown(
+        self, last: pd.Series, prev: pd.Series, df: pd.DataFrame | None = None
+    ) -> dict[str, float]:
+        """Compute a per-component score breakdown for explainability."""
+        s_momentum, _ = self._score_momentum(last, prev)
+        s_trend, _ = self._score_trend(last, prev, df)
+        s_volume, _ = self._score_volume(last, prev)
+        s_structure, _ = self._score_structure(last)
+        return {
+            "momentum": round(float(s_momentum), 2),
+            "trend": round(float(s_trend), 2),
+            "volume": round(float(s_volume), 2),
+            "structure": round(float(s_structure), 2),
+        }
+
     def _classify_signal(
         self, score: float, agreement_ratio: float | None = None
     ) -> tuple[SignalType, str]:
@@ -376,6 +395,7 @@ class StrategyEngine:
         risk_levels: RiskLevels,
         fallback_confidence: str,
         agreement_ratio: float | None = None,
+        score_breakdown: dict[str, float] | None = None,
     ) -> Signal:
         return Signal(
             ticker=ticker,
@@ -392,6 +412,7 @@ class StrategyEngine:
             agreement_ratio=agreement_ratio,
             buy_threshold=self.params.buy_threshold,
             is_actionable=score >= self.params.buy_threshold,
+            score_breakdown=score_breakdown,
         )
 
     def _append_signal_reasons(self, signal: Signal, risk_levels: RiskLevels) -> None:
@@ -494,6 +515,9 @@ class StrategyEngine:
                 )
                 return None
 
+        # Capture per-component breakdown once scoring is finalized.
+        score_breakdown = self._build_score_breakdown(last, prev, df)
+
         signal_type, confidence = self._classify_signal(score, _agreement)
         risk_levels = self.risk_manager.calculate(df)
         adjusted_risk_levels = self._apply_buy_side_risk(
@@ -520,6 +544,7 @@ class StrategyEngine:
             risk_levels=risk_levels,
             fallback_confidence=confidence,
             agreement_ratio=_agreement,
+            score_breakdown=score_breakdown,
         )
         self._append_signal_reasons(signal, risk_levels)
 
@@ -555,6 +580,72 @@ class StrategyEngine:
             self.risk_manager.register_position(ticker, df)
         return signal
 
+    def _detect_macro_regime(
+        self, data: dict[str, pd.DataFrame] | dict[str, dict[str, pd.DataFrame]]
+    ) -> MarketRegime:
+        """Aggregate per-benchmark regimes from trend frames present in the scan.
+
+        Benchmark trend frames are enriched with indicators and fed to
+        ``detect_macro_regime``. Missing or too-short benchmark data degrades
+        gracefully to ``UNKNOWN`` (no gate applied).
+        """
+        benchmark_dfs: dict[str, pd.DataFrame] = {}
+        for ticker in MACRO_BENCHMARK_TICKERS:
+            ticker_data = data.get(ticker)
+            if ticker_data is None:
+                continue
+            trend_df = (
+                ticker_data.get("trend", ticker_data)
+                if isinstance(ticker_data, dict)
+                else ticker_data
+            )
+            if trend_df is None or len(trend_df) < 50:
+                continue
+            try:
+                benchmark_dfs[ticker] = self.indicators.add_all(trend_df.copy())
+            except Exception as exc:
+                logger.debug(
+                    "macro_regime_enrichment_failed",
+                    ticker=ticker,
+                    error_type=type(exc).__name__,
+                )
+        return detect_macro_regime(benchmark_dfs)
+
+    def _apply_macro_regime_gate(
+        self,
+        signals: list[Signal],
+        data: dict[str, pd.DataFrame] | dict[str, dict[str, pd.DataFrame]],
+    ) -> None:
+        """Demote buy-family signals to RADAR when the macro regime is BEAR.
+
+        Opening new long positions against a bearish macro backdrop is blocked;
+        sell/exit signals stay untouched so open positions can still be closed.
+        The gate is a no-op when disabled, when benchmark data is unavailable,
+        or when the regime is not BEAR.
+        """
+        if not getattr(settings, "MACRO_REGIME_GATE_ENABLED", True):
+            return
+        self.last_macro_regime = self._detect_macro_regime(data)
+        if self.last_macro_regime != MarketRegime.BEAR:
+            return
+        buy_family = {
+            SignalType.STRONG_BUY,
+            SignalType.BUY,
+            SignalType.WEAK_BUY,
+        }
+        demoted = 0
+        for signal in signals:
+            if signal.signal_type in buy_family:
+                signal.signal_type = SignalType.RADAR
+                signal.reasons.append("Makro rejim BEAR → alım sinyali RADAR'a düşürüldü")
+                demoted += 1
+        if demoted:
+            logger.warning(
+                "macro_regime_gate_demoted",
+                demoted=demoted,
+                macro_regime=str(self.last_macro_regime.value),
+            )
+
     def scan_all(
         self, data: dict[str, pd.DataFrame] | dict[str, dict[str, pd.DataFrame]]
     ) -> list[Signal]:
@@ -581,6 +672,7 @@ class StrategyEngine:
                         signals.append(signal)
 
             signals.sort(key=lambda s: s.score, reverse=True)
+            self._apply_macro_regime_gate(signals, data)
         finally:
             self._finalize_rejection_breakdown(self._current_scan_id or "")
             self._current_scan_id = None

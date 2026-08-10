@@ -38,6 +38,12 @@ def _build_parser() -> argparse.ArgumentParser:
         default="rolling",
         help="Walk-forward mode",
     )
+    parser.add_argument(
+        "--monte-carlo-trials",
+        type=int,
+        default=0,
+        help="Ticker başına Monte Carlo simülasyon sayısı (0 = kapalı)",
+    )
     return parser
 
 
@@ -131,6 +137,17 @@ def run_backtest(fetcher, walk_forward: bool | None = None) -> None:
         if backtest_result is not None:
             backtest_results.append(backtest_result)
             print(backtest_result)
+            if args.monte_carlo_trials > 0:
+                from bist_bot.backtest.monte_carlo import simulate_from_history
+
+                mc_result = simulate_from_history(df, trials=args.monte_carlo_trials)
+                print(
+                    f"  🎲 MC ({args.monte_carlo_trials} sim): "
+                    f"P5 %{mc_result.percentiles['p5'] * 100:+.1f} | "
+                    f"P50 %{mc_result.percentiles['p50'] * 100:+.1f} | "
+                    f"P95 %{mc_result.percentiles['p95'] * 100:+.1f} | "
+                    f"Kar olasılığı %{mc_result.prob_profit * 100:.1f}"
+                )
 
     if not backtest_results:
         return

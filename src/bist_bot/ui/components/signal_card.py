@@ -38,6 +38,19 @@ def render_signal_card(signal, df_data=None, chart_factory=None) -> None:
         for reason in reasons
     )
 
+    # Score contribution breakdown (new for explainable scoring).
+    breakdown: dict[str, float] | None = getattr(signal, "score_breakdown", None)
+    if not isinstance(breakdown, dict):
+        breakdown = None
+    top_contributors = sorted(
+        breakdown.items(), key=lambda kv: abs(kv[1]), reverse=True
+    )[:3] if breakdown else []
+    breakdown_html = ""
+    for name, value in top_contributors:
+        arrow = "▲" if value >= 0 else "▼"
+        sign = "+" if value >= 0 else ""
+        breakdown_html += f"<div class='bb-list-row'><div><div class='bb-label'>{html.escape(name.title())}</div><div style='color:var(--bb-text-muted);font-size:13px;'>{arrow} {sign}{value:.0f}</div></div></div>"
+
     content = f"""
     <div style='display:grid;gap:16px;'>
       <div style='display:flex;align-items:flex-start;justify-content:space-between;gap:14px;'>
@@ -57,6 +70,10 @@ def render_signal_card(signal, df_data=None, chart_factory=None) -> None:
         <div class='bb-list-row'><div><div class='bb-label'>Skor</div><div class='bb-note-strong' style='color:{accent_color};'>{signal.score:+.0f}</div></div></div>
         <div class='bb-list-row'><div><div class='bb-label'>Stop loss</div><div class='bb-note-strong bb-text-danger'>TL{signal.stop_loss:.2f}</div></div></div>
         <div class='bb-list-row'><div><div class='bb-label'>Hedef</div><div class='bb-note-strong bb-text-positive'>TL{signal.target_price:.2f}</div></div></div>
+      </div>
+      <div>
+        <div class='bb-section-title' style='margin:0 0 10px;'>Katki Dağılımı</div>
+        <div class='bb-list'>{breakdown_html or "<div class='bb-note'>Katki bilgisi henüz yok.</div>"}</div>
       </div>
       <div>
         <div class='bb-section-title' style='margin:0 0 10px;'>Sinyal Nedenleri</div>

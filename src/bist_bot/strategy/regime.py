@@ -172,3 +172,57 @@ def check_momentum_confirmation(df: pd.DataFrame, threshold: float = 4.0) -> boo
     sma_20 = float(df["close"].tail(20).mean())
     momentum = (float(last["close"]) - sma_20) / sma_20 * 100
     return abs(momentum) >= threshold
+
+
+# ---------------------------------------------------------------------------
+# Macro-level regime detection (Item 1)
+# ---------------------------------------------------------------------------
+
+MACRO_BENCHMARK_TICKERS = ("THYAO.IS", "GARAN.IS", "AKBNK.IS")
+"""Tickers used as a lightweight proxy for the broader market regime."""
+
+
+def detect_macro_regime(dfs: dict[str, pd.DataFrame]) -> MarketRegime:
+    """Aggregate per-ticker regime into a single macro view.
+
+    Returns ``MarketRegime.UNKNOWN`` when fewer than two benchmarks are
+    available. The final decision is the *mode* of individual regimes, with
+    a simple tie-break: BULL > SIDEWAYS > BEAR > UNKNOWN.
+    """
+    if not dfs:
+        return MarketRegime.UNKNOWN
+
+    regime_votes: list[MarketRegime] = []
+    for _ticker, df in dfs.items():
+        if df is None or len(df) < 50:
+            continue
+        regime_votes.append(detect_regime(df))
+
+    if len(regime_votes) < 2:
+        # Not enough data — fall back to the single available reading.
+        return regime_votes[0] if regime_votes else MarketRegime.UNKNOWN
+
+    from collections import Counter
+
+    counts = Counter(regime_votes)
+    # Deterministic tie-break order: BULL > SIDEWAYS > BEAR > UNKNOWN.
+    # Invert so higher-priority regimes get a larger sort key.
+    tie_break_scores = {
+        MarketRegime.BULL: 4,
+        MarketRegime.SIDEWAYS: 3,
+        MarketRegime.BEAR: 2,
+        MarketRegime.UNKNOWN: 1,
+    }
+    best = max(counts, key=lambda r: (counts[r], tie_break_scores.get(r, 0)))
+    return best
+
+
+def is_macro_bullish(dfs: dict[str, pd.DataFrame]) -> bool:
+    """Return True when the macro regime is BULL or BEAR is absent."""
+    regime = detect_macro_regime(dfs)
+    return regime == MarketRegime.BULL
+
+
+def is_macro_bearish(dfs: dict[str, pd.DataFrame]) -> bool:
+    """Return True when the macro regime is BEAR."""
+    return detect_macro_regime(dfs) == MarketRegime.BEAR
