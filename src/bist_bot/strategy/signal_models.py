@@ -87,6 +87,8 @@ class Signal:
     expires_at: datetime | None = field(default=None)
     buy_threshold: float = 20.0
     is_actionable: bool = False
+    score_breakdown: dict[str, float] | None = field(default=None)
+    """Per-component score contributions for explainability."""
 
     def __post_init__(self) -> None:
         if self.expires_at is None:
@@ -124,7 +126,16 @@ class Signal:
             expires_at=self.expires_at,
             buy_threshold=self.buy_threshold,
             is_actionable=self.is_actionable,
+            score_breakdown=dict(self.score_breakdown) if self.score_breakdown else None,
         )
+
+    def top_contributors(self, *, count: int = 3) -> list[tuple[str, float]]:
+        """Return the top-scoring components sorted by absolute contribution."""
+        if not self.score_breakdown:
+            return []
+        return sorted(
+            self.score_breakdown.items(), key=lambda kv: abs(kv[1]), reverse=True
+        )[:count]
 
     def __str__(self) -> str:
         name = settings.TICKER_NAMES.get(self.ticker, self.ticker)

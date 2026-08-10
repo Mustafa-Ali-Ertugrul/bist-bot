@@ -788,23 +788,36 @@ class Backtester:
     def _should_exit_on_open(self, signal: dict[str, float | bool]) -> bool:
         return bool(signal.get("exit"))
 
-    def _fee_components(self, notional: float) -> dict[str, float]:
+    def _fee_components(self, notional: float, *, is_sell: bool = False) -> dict[str, float]:
+        """Compute fee components for a given notional amount.
+
+        BIST fees are side-specific: commission and exchange fees apply both
+        ways; stamp tax and BSMV apply only on sell-side.
+        """
         if self.cost_model is None:
             return {
                 "commission": 0.0,
                 "bsmv": 0.0,
                 "exchange_fee": 0.0,
+                "stamp_tax": 0.0,
+                "spread": 0.0,
                 "total": 0.0,
             }
 
         commission = notional * (self.cost_model.commission_bps / 10_000)
-        bsmv = notional * (self.cost_model.bsmv_bps / 10_000)
         exchange_fee = notional * (self.cost_model.exchange_fee_bps / 10_000)
+        # Stamp tax and BSMV are sell-side only per BIST rules.
+        bsmv = notional * (self.cost_model.bsmv_bps / 10_000) if is_sell else 0.0
+        stamp_tax = notional * (self.cost_model.stamp_tax_bps / 10_000) if is_sell else 0.0
+        spread = notional * (self.cost_model.spread_bps / 10_000)
+        total = commission + bsmv + exchange_fee + stamp_tax + spread
         return {
             "commission": commission,
             "bsmv": bsmv,
             "exchange_fee": exchange_fee,
-            "total": commission + bsmv + exchange_fee,
+            "stamp_tax": stamp_tax,
+            "spread": spread,
+            "total": total,
         }
 
     def _extract_row_value(self, row: Any, key: str, default: float = 0.0) -> float:
@@ -854,7 +867,9 @@ class Backtester:
     def _calculate_fill_price(self, price: float, row: Any, is_buy: bool, shares: int) -> float:
         if self.cost_model is not None:
             slippage_pct = self._calculate_slippage_bps(price, row, shares) / 10_000
-            return price * (1 + slippage_pct if is_buy else 1 - slippage_pct)
+            spread_pct = self.cost_model.spread_bps / 10_000
+            total_worse_pct = slippage_pct + spread_pct
+            return price * (1 + total_worse_pct if is_buy else 1 - total_worse_pct)
         return self._calculate_dynamic_slippage(price, row, is_buy=is_buy)
 
     def _calculate_dynamic_slippage(self, price: float, row: Any, is_buy: bool) -> float:
@@ -899,25 +914,32 @@ class Backtester:
             entry_fee_tl = shares * entry_price * self.commission_buy_pct
             entry_bsmv_tl = 0.0
             entry_exchange_fee_tl = 0.0
+            entry_stamp_tax_tl = 0.0
+            entry_spread_tl = 0.0
+            # Normalise naming for downstream code that expects these keys.
+            entry_commission = entry_fee_tl
+            entry_exchange = entry_exchange_fee_tl
         else:
-            fee_pct = (
-                self.cost_model.commission_bps
-                + self.cost_model.bsmv_bps
-                + self.cost_model.exchange_fee_bps
-            ) / 10_000
-            unit_cost = entry_price * (1 + fee_pct)
+            # Entry fees: commission + exchange fee + spread only; no stamp/BSMV on buy.
+            unit_cost = entry_price * (
+                1
+                + (self.cost_model.commission_bps + self.cost_model.exchange_fee_bps + self.cost_model.spread_bps)
+                / 10_000
+            )
             shares = int(capital_to_deploy / unit_cost) if unit_cost > 0 else 0
-            fee_components = self._fee_components(shares * entry_price)
-            entry_fee_tl = fee_components["commission"]
-            entry_bsmv_tl = fee_components["bsmv"]
-            entry_exchange_fee_tl = fee_components["exchange_fee"]
+            entry_notional = shares * entry_price
+            entry_commission = entry_notional * (self.cost_model.commission_bps / 10_000)
+            entry_exchange = entry_notional * (self.cost_model.exchange_fee_bps / 10_000)
+            entry_stamp_tax_tl = 0.0
+            entry_bsmv_tl = 0.0
+            entry_spread_tl = entry_notional * (self.cost_model.spread_bps / 10_000)
         if shares <= 0:
             return None
 
         if self.cost_model is None:
             cost = shares * unit_cost
         else:
-            cost = shares * entry_price + entry_fee_tl + entry_bsmv_tl + entry_exchange_fee_tl
+            cost = shares * entry_price + entry_commission + entry_bsmv_tl + entry_exchange + entry_stamp_tax_tl + entry_spread_tl
         entry_slippage_tl = shares * max(entry_price - reference_price, 0.0)
         return {
             "entry_date": entry_date,
@@ -930,9 +952,11 @@ class Backtester:
             "score": _to_float(signal.get("score"), 0.0),
             "signal_probability": signal.get("signal_probability"),
             "position_fraction": position_fraction,
-            "entry_fee_tl": entry_fee_tl,
+            "entry_fee_tl": entry_commission,
             "entry_bsmv_tl": entry_bsmv_tl,
-            "entry_exchange_fee_tl": entry_exchange_fee_tl,
+            "entry_exchange_fee_tl": entry_exchange,
+            "entry_stamp_tax_tl": entry_stamp_tax_tl,
+            "entry_spread_tl": entry_spread_tl,
             "entry_slippage_tl": entry_slippage_tl,
             "entry_notional_tl": shares * entry_price,
         }
@@ -1003,13 +1027,17 @@ class Backtester:
             exit_fee_tl = notional * self.commission_sell_pct
             exit_bsmv_tl = 0.0
             exit_exchange_fee_tl = 0.0
+            exit_stamp_tax_tl = 0.0
+            exit_spread_tl = 0.0
         else:
-            fee_components = self._fee_components(notional)
+            fee_components = self._fee_components(notional, is_sell=True)
             exit_fee_tl = fee_components["commission"]
             exit_bsmv_tl = fee_components["bsmv"]
             exit_exchange_fee_tl = fee_components["exchange_fee"]
+            exit_stamp_tax_tl = fee_components["stamp_tax"]
+            exit_spread_tl = fee_components["spread"]
 
-        revenue = notional - exit_fee_tl - exit_bsmv_tl - exit_exchange_fee_tl
+        revenue = notional - exit_fee_tl - exit_bsmv_tl - exit_exchange_fee_tl - exit_stamp_tax_tl - exit_spread_tl
         profit_tl = revenue - position["cost"]
         profit_pct = (profit_tl / position["cost"]) * 100 if position["cost"] else 0.0
         holding_days = max((exit_date - position["entry_date"]).days, 0)
@@ -1018,9 +1046,12 @@ class Backtester:
         total_commission_tl = position["entry_fee_tl"] + exit_fee_tl
         total_bsmv_tl = position["entry_bsmv_tl"] + exit_bsmv_tl
         total_exchange_fee_tl = position["entry_exchange_fee_tl"] + exit_exchange_fee_tl
+        total_stamp_tax_tl = position.get("entry_stamp_tax_tl", 0.0) + exit_stamp_tax_tl
+        total_spread_cost_tl = position.get("entry_spread_tl", 0.0) + exit_spread_tl
         total_slippage_tl = position["entry_slippage_tl"] + exit_slippage_tl
         total_cost_tl = (
-            total_commission_tl + total_bsmv_tl + total_exchange_fee_tl + total_slippage_tl
+            total_commission_tl + total_bsmv_tl + total_exchange_fee_tl
+            + total_stamp_tax_tl + total_spread_cost_tl + total_slippage_tl
         )
 
         trades.append(
@@ -1041,6 +1072,8 @@ class Backtester:
                 commission_tl=round(total_commission_tl, 2),
                 bsmv_tl=round(total_bsmv_tl, 2),
                 exchange_fee_tl=round(total_exchange_fee_tl, 2),
+                stamp_tax_tl=round(total_stamp_tax_tl, 2),
+                spread_cost_tl=round(total_spread_cost_tl, 2),
                 slippage_tl=round(total_slippage_tl, 2),
                 signal_probability=(
                     round(_to_float(cast(Any, position.get("signal_probability"))), 4)

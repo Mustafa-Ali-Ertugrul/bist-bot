@@ -175,6 +175,7 @@ class TradingSettings:
     STRONG_SELL_THRESHOLD: int = _get_int_env("STRONG_SELL_THRESHOLD", -48)
     SIDEWAYS_EXTRA_THRESHOLD: float = _get_float_env("SIDEWAYS_EXTRA_THRESHOLD", 5.0)
     MOMENTUM_CONFIRMATION_THRESHOLD: float = _get_float_env("MOMENTUM_CONFIRMATION_THRESHOLD", 4.0)
+    MACRO_REGIME_GATE_ENABLED: bool = _get_bool_env("MACRO_REGIME_GATE_ENABLED", True)
     RSI_PERIOD: int = _get_int_env("RSI_PERIOD", 14)
     RSI_OVERSOLD: int = _get_int_env("RSI_OVERSOLD", 30)
     RSI_OVERBOUGHT: int = _get_int_env("RSI_OVERBOUGHT", 70)

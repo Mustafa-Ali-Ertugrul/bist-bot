@@ -74,6 +74,7 @@ class SignalRecord(Base):
         DateTime, nullable=False, default=lambda: datetime.now(UTC)
     )
     expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    score_breakdown: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class PaperTradeRecord(Base):
@@ -348,6 +349,7 @@ class DatabaseManager:
             ("created_at", "ALTER TABLE signals ADD COLUMN created_at TEXT NOT NULL DEFAULT ''"),
             ("position_size", "ALTER TABLE signals ADD COLUMN position_size INTEGER"),
             ("expires_at", "ALTER TABLE signals ADD COLUMN expires_at TEXT"),
+            ("score_breakdown", "ALTER TABLE signals ADD COLUMN score_breakdown TEXT"),
         ]
         for column, sql in migrations:
             if column not in signal_columns:
