@@ -35,11 +35,11 @@ class StrategyParams:
     slope_lookback: int = 40
     obv_divergence_block_enabled: bool = False
     obv_divergence_cap: float = 25.0
-    chase_block_enabled: bool = True
+    chase_block_enabled: bool = False
     chase_blocked_score_cap: float = 20.0
     chase_strong_trend_cap: float = 30.0
-    # Chase "aÅŸÄ±rÄ± uzama" tespit eÅŸikleri (profil baÄŸÄ±msÄ±z; yalnÄ±zca
-    # overextended kararÄ±nÄ± belirler, cap bÃ¼yÃ¼klÃ¼kleri yukarÄ±da kalÄ±r).
+    # Chase "aşırı uzama" tespit eşikleri (profil bağımsız; yalnızca
+    # overextended kararını belirler, cap büyüklükleri yukarıda kalır).
     chase_cci_threshold: float = 150.0
     chase_resist_pct: float = 1.0
     chase_strong_trend_adx: float = 30.0
@@ -92,6 +92,17 @@ class StrategyParams:
     score_sr_distance: float = 6.0
     score_rsi_divergence: float = 15.0
     score_macd_divergence: float = 12.0
+
+    # ------------------------------------------------------------------
+    # Trade-actionability contract (single source for all downstream layers)
+    # ------------------------------------------------------------------
+    def buy_actionable_score(self, score: float) -> bool:
+        """Return True when `score` crosses the buy-side trade threshold."""
+        return score >= self.buy_threshold
+
+    def sell_actionable_score(self, score: float) -> bool:
+        """Return True when `score` crosses the sell-side trade threshold."""
+        return score <= self.sell_threshold
 
     @classmethod
     def conservative(cls) -> StrategyParams:
