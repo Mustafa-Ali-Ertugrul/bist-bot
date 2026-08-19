@@ -38,6 +38,11 @@ class StrategyParams:
     chase_block_enabled: bool = True
     chase_blocked_score_cap: float = 20.0
     chase_strong_trend_cap: float = 30.0
+    # H3 chase (aşırı uzama) eşikleri — profil bağımsız; cap'ler profil bağımlı kalır.
+    # Değerler engine_filters._apply_chase_cap içindeki eski hardcode'larla birebir aynıdır.
+    chase_cci_threshold: float = 150.0
+    chase_resist_pct: float = 1.0
+    chase_strong_trend_adx: float = 30.0
     mtf_confluence_block_enabled: bool = True
     counter_trend_multiplier: float = 0.3
     agreement_gate_enabled: bool = False

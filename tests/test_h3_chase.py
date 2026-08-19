@@ -380,3 +380,124 @@ class TestChaseCapValues:
         assert s1 == pytest.approx(10.0)
         assert s2 == pytest.approx(20.0)
         assert s1 != s2  # they must differ
+
+
+# ─── Test: H3 eşiklerinin parametrizasyonu (davranış-koruyucu) ────────
+
+
+class TestChaseThresholdParameters:
+    """Adım 1: 150 / 1.0 / 30.0 hardcode'ları params'a taşındı.
+
+    Bu testler (a) varsayılanların eski hardcode değerleriyle birebir aynı
+    olduğunu, (b) karşılaştırma yönlerinin (>=, <=) korunduğunu ve
+    (c) alanların gerçekten engine_filters'a bağlı olduğunu kilitler.
+    """
+
+    @staticmethod
+    def _df(**overrides):
+        base = {
+            "bb_position": "MIDDLE",
+            "cci": 50.0,
+            "dist_to_resistance_pct": 8.0,
+            "dist_to_support_pct": 8.0,
+            "adx": 20.0,
+            "plus_di": 25.0,
+            "minus_di": 15.0,
+        }
+        base.update(overrides)
+        return _bull_df(base)
+
+    def test_defaults_match_previous_hardcoded_values(self):
+        p = StrategyParams()
+        assert p.chase_cci_threshold == pytest.approx(150.0)
+        assert p.chase_resist_pct == pytest.approx(1.0)
+        assert p.chase_strong_trend_adx == pytest.approx(30.0)
+
+    def test_thresholds_are_profile_independent(self):
+        cons = StrategyParams.conservative()
+        assert cons.chase_cci_threshold == pytest.approx(150.0)
+        assert cons.chase_resist_pct == pytest.approx(1.0)
+        assert cons.chase_strong_trend_adx == pytest.approx(30.0)
+
+    def test_cci_boundary_is_inclusive(self):
+        """cci == 150.0 chase tetikler (>= korunmuştur, > değil)."""
+        params = StrategyParams()
+        at_threshold = _run(
+            params, self._df(cci=150.0), momentum=25.0, trend=20.0, volume=5.0, structure=5.0
+        )
+        below = _run(
+            params, self._df(cci=149.9), momentum=25.0, trend=20.0, volume=5.0, structure=5.0
+        )
+        assert at_threshold[0] == pytest.approx(20.0)
+        assert below[0] == pytest.approx(55.0)
+
+    def test_resistance_boundary_is_inclusive_at_one_percent(self):
+        """dist_to_resistance_pct == 1.0 chase tetikler; 1.01 tetiklemez."""
+        params = StrategyParams()
+        at_threshold = _run(
+            params,
+            self._df(dist_to_resistance_pct=1.0),
+            momentum=25.0,
+            trend=20.0,
+            volume=5.0,
+            structure=5.0,
+        )
+        above = _run(
+            params,
+            self._df(dist_to_resistance_pct=1.01),
+            momentum=25.0,
+            trend=20.0,
+            volume=5.0,
+            structure=5.0,
+        )
+        assert at_threshold[0] == pytest.approx(20.0)
+        assert above[0] == pytest.approx(55.0)
+
+    def test_strong_trend_adx_boundary_is_inclusive(self):
+        """adx == 30.0 strong-trend ride'ı açar (cap 30), 29.9 açmaz (cap 20)."""
+        params = StrategyParams()
+        at_threshold = _run(
+            params,
+            self._df(bb_position="ABOVE_UPPER", adx=30.0),
+            momentum=25.0,
+            trend=20.0,
+            volume=5.0,
+            structure=5.0,
+        )
+        below = _run(
+            params,
+            self._df(bb_position="ABOVE_UPPER", adx=29.9),
+            momentum=25.0,
+            trend=20.0,
+            volume=5.0,
+            structure=5.0,
+        )
+        assert at_threshold[0] == pytest.approx(30.0)
+        assert below[0] == pytest.approx(20.0)
+
+    def test_cci_threshold_is_wired_to_engine_filters(self):
+        """Eşiği düşürmek daha önce chase saymayan satırı chase yapar."""
+        loosened = StrategyParams(chase_cci_threshold=40.0)
+        result = _run(
+            loosened, self._df(cci=50.0), momentum=25.0, trend=20.0, volume=5.0, structure=5.0
+        )
+        assert result[0] == pytest.approx(20.0)
+        assert any("Aşırı uzama chase koruması" in r for r in result[1])
+
+    def test_short_side_uses_the_same_thresholds(self):
+        """Kısa taraf -cci_threshold ve dist_to_support ile simetriktir."""
+        params = StrategyParams()
+        df = _bear_df(
+            {
+                "bb_position": "BELOW_LOWER",
+                "cci": -150.0,
+                "dist_to_support_pct": 1.0,
+                "dist_to_resistance_pct": 8.0,
+                "adx": 20.0,
+                "plus_di": 15.0,
+                "minus_di": 25.0,
+            }
+        )
+        result = _run(params, df, momentum=-25.0, trend=-20.0, volume=-5.0, structure=-5.0)
+        assert result[0] == pytest.approx(-20.0)
+        assert any("Aşırı uzama chase koruması" in r for r in result[1])
