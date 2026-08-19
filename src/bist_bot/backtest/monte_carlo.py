@@ -58,7 +58,7 @@ class MonteCarloResult:
     prob_profit: float = 0.5
     """Empirical probability of a positive terminal return."""
 
-    prob_loss_exceeds: dict[float, float] = field(default_factory=dict)
+    prob_loss_exceeds: dict[str, float] = field(default_factory=dict)
     """P(loss > X %) for a handful of thresholds."""
 
 
