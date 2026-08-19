@@ -42,9 +42,9 @@ def render_signal_card(signal, df_data=None, chart_factory=None) -> None:
     breakdown: dict[str, float] | None = getattr(signal, "score_breakdown", None)
     if not isinstance(breakdown, dict):
         breakdown = None
-    top_contributors = sorted(
-        breakdown.items(), key=lambda kv: abs(kv[1]), reverse=True
-    )[:3] if breakdown else []
+    top_contributors = (
+        sorted(breakdown.items(), key=lambda kv: abs(kv[1]), reverse=True)[:3] if breakdown else []
+    )
     breakdown_html = ""
     for name, value in top_contributors:
         arrow = "▲" if value >= 0 else "▼"

@@ -142,9 +142,7 @@ def arms_identical(
         return False
     if not deltas:
         return False
-    return all(
-        d["delta_oos_pp"] == 0 and d["on_trades"] == d["off_trades"] for d in deltas
-    )
+    return all(d["delta_oos_pp"] == 0 and d["on_trades"] == d["off_trades"] for d in deltas)
 
 
 def decide(
@@ -166,8 +164,7 @@ def decide(
     if delta_median > eps_pp:
         return (
             "keep",
-            f"H3 kalır — medyan OOS farkı {delta_median:+.2f} pp "
-            f"(> +{eps_pp:.2f} pp eşiği).",
+            f"H3 kalır — medyan OOS farkı {delta_median:+.2f} pp (> +{eps_pp:.2f} pp eşiği).",
         )
     if delta_median < -eps_pp:
         return (
@@ -200,9 +197,7 @@ def summarize_diagnose(path: Path) -> dict[str, object] | None:
         per_ticker[ticker] = per_ticker.get(ticker, 0) + 1
     gaps = [
         abs(raw - cap)
-        for raw, cap in (
-            (_f(r.get("raw_score")), _f(r.get("capped_score"))) for r in capped_rows
-        )
+        for raw, cap in ((_f(r.get("raw_score")), _f(r.get("capped_score"))) for r in capped_rows)
         if raw is not None and cap is not None
     ]
     raws = [v for v in (_f(r.get("raw_score")) for r in rows) if v is not None]
@@ -250,9 +245,7 @@ def build_report(
             f"ctm={r.get('counter_trend_multiplier', '?')}"
         )
 
-    missing = sorted(
-        {r["ticker"] for r in on_rows if r.get("status") != "OK"}
-    )
+    missing = sorted({r["ticker"] for r in on_rows if r.get("status") != "OK"})
     lines: list[str] = []
     lines.append("# H3 Chase Block A/B Walk-Forward Raporu")
     lines.append("")
@@ -265,19 +258,13 @@ def build_report(
     lines.append("- WF cache: yerel parquet, 22.07.2026; period=3y.")
     lines.append(
         f"- Coverage: {int(on_agg['n'])}/{len(on_rows)} ticker OK;"
-        + (
-            f" eksik/verisiz: {', '.join(missing)}"
-            if missing
-            else " tüm ticker'lar OK."
-        )
+        + (f" eksik/verisiz: {', '.join(missing)}" if missing else " tüm ticker'lar OK.")
     )
     lines.append(
         "- Overfitting tanımı: (1) flag = WF `has_overfitting_warning` payı; "
         "(2) struct = IS Ort > 0 ama OOS Ort <= 0 ticker payı."
     )
-    lines.append(
-        f"- Karar eşiği: medyan OOS delta ±{DECISION_EPS_PP:.2f} pp."
-    )
+    lines.append(f"- Karar eşiği: medyan OOS delta ±{DECISION_EPS_PP:.2f} pp.")
     lines.append("")
     lines.append("## Universe Aggregate (status=OK)")
     lines.append("")
@@ -309,9 +296,7 @@ def build_report(
         lines.append("Ortak OK ticker yok — delta tablosu üretilemedi.")
     if on_only or off_only:
         lines.append("")
-        lines.append(
-            f"- Kol farkları: yalnız ON={on_only or '[]'}, yalnız OFF={off_only or '[]'}"
-        )
+        lines.append(f"- Kol farkları: yalnız ON={on_only or '[]'}, yalnız OFF={off_only or '[]'}")
     lines.append("")
     lines.append(
         "Not: diagnose CSV'si yalnızca overextended LONG satırlarını loglar ve CCI/direnç "
@@ -346,9 +331,13 @@ def build_report(
     lines.append("")
     if diagnose:
         lines.append(f"- chase_candidate_rows (overextended long): {diagnose['candidates']}")
-        lines.append(f"- raw score max / >= {DIAGNOSE_BUY_THRESHOLD:g} satır: "
-                     f"{_fmt(diagnose['max_raw'])} / {diagnose['rows_raw_ge_buy_threshold']}")
-        lines.append(f"- high-score satır (raw > eşik, cap hesaplanan): {diagnose['high_score_rows']}")
+        lines.append(
+            f"- raw score max / >= {DIAGNOSE_BUY_THRESHOLD:g} satır: "
+            f"{_fmt(diagnose['max_raw'])} / {diagnose['rows_raw_ge_buy_threshold']}"
+        )
+        lines.append(
+            f"- high-score satır (raw > eşik, cap hesaplanan): {diagnose['high_score_rows']}"
+        )
         lines.append(f"- h3_actually_capped_rows: {diagnose['capped']}")
         lines.append(f"- ortalama cap boşluğu (raw-capped): {_fmt(diagnose['mean_cap_gap'])}")
         per_ticker = diagnose["per_ticker_capped"]
@@ -366,9 +355,7 @@ def build_report(
     lines.append(f"- Karar anahtarı: `{key}`")
     lines.append(f"- **{sentence}**")
     lines.append("")
-    lines.append(
-        "Bu rapor yalnızca öneridir; kill-switch uygulaması kullanıcı onayı gerektirir."
-    )
+    lines.append("Bu rapor yalnızca öneridir; kill-switch uygulaması kullanıcı onayı gerektirir.")
     return "\n".join(lines) + "\n"
 
 

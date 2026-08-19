@@ -30,7 +30,7 @@ def test_signal_top_contributors_sorted_by_abs() -> None:
     )
     top = sig.top_contributors(count=3)
     names = [n for n, _ in top]
-    assert names[0] == "neg"   # abs 8
+    assert names[0] == "neg"  # abs 8
     assert names[1] == "pos2"  # abs 5
     assert names[2] == "pos1"  # abs 3
 

@@ -13,8 +13,7 @@ import pytest
 from bist_bot.config.settings import settings
 from bist_bot.scanner import ScanService
 from bist_bot.services.execution_service import ExecutionService
-from bist_bot.services.shadow_trade_service import CSV_FIELDS
-from bist_bot.services.shadow_trade_service import ShadowTradeService
+from bist_bot.services.shadow_trade_service import CSV_FIELDS, ShadowTradeService
 from bist_bot.strategy.signal_models import Signal, SignalType
 
 ROBUST = "THYAO.IS"

@@ -89,7 +89,11 @@ def main() -> None:
     print(format_fundamentals_table(rows, limit=args.limit))
     print(f"\nToplam uygun hisse: {len(rows)}")
 
-    output = Path(args.output) if args.output else REPO_ROOT / "results" / f"fundamentals_{datetime.now():%Y%m%d}.csv"
+    output = (
+        Path(args.output)
+        if args.output
+        else REPO_ROOT / "results" / f"fundamentals_{datetime.now():%Y%m%d}.csv"
+    )
     output.parent.mkdir(parents=True, exist_ok=True)
     save_fundamentals_csv(rows, str(output))
     print(f"CSV kaydedildi: {output}")

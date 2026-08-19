@@ -50,9 +50,7 @@ def test_gate_demotes_buy_family_to_radar_in_bear(engine: StrategyEngine) -> Non
         Signal(ticker="Z.IS", signal_type=SignalType.WEAK_BUY, score=10, price=10.0),
         Signal(ticker="W.IS", signal_type=SignalType.SELL, score=-40, price=10.0),
     ]
-    with patch(
-        "bist_bot.strategy.engine.detect_macro_regime", return_value=MarketRegime.BEAR
-    ):
+    with patch("bist_bot.strategy.engine.detect_macro_regime", return_value=MarketRegime.BEAR):
         engine._apply_macro_regime_gate(signals, _benchmark_data())
 
     assert [s.signal_type for s in signals] == [
@@ -68,9 +66,7 @@ def test_gate_demotes_buy_family_to_radar_in_bear(engine: StrategyEngine) -> Non
 def test_gate_noop_when_regime_not_bear(engine: StrategyEngine) -> None:
     for regime in (MarketRegime.BULL, MarketRegime.SIDEWAYS, MarketRegime.UNKNOWN):
         signal = Signal(ticker="X.IS", signal_type=SignalType.BUY, score=50, price=10.0)
-        with patch(
-            "bist_bot.strategy.engine.detect_macro_regime", return_value=regime
-        ):
+        with patch("bist_bot.strategy.engine.detect_macro_regime", return_value=regime):
             engine._apply_macro_regime_gate([signal], _benchmark_data())
         assert signal.signal_type == SignalType.BUY
         assert engine.last_macro_regime == regime
@@ -79,9 +75,7 @@ def test_gate_noop_when_regime_not_bear(engine: StrategyEngine) -> None:
 def test_gate_respects_disabled_setting(engine: StrategyEngine) -> None:
     signal = Signal(ticker="X.IS", signal_type=SignalType.BUY, score=50, price=10.0)
     with settings.override(MACRO_REGIME_GATE_ENABLED=False):
-        with patch(
-            "bist_bot.strategy.engine.detect_macro_regime", return_value=MarketRegime.BEAR
-        ):
+        with patch("bist_bot.strategy.engine.detect_macro_regime", return_value=MarketRegime.BEAR):
             engine._apply_macro_regime_gate([signal], _benchmark_data())
     assert signal.signal_type == SignalType.BUY
     assert engine.last_macro_regime == MarketRegime.UNKNOWN
@@ -108,9 +102,7 @@ def test_scan_all_applies_gate_to_generated_signals(engine: StrategyEngine) -> N
 
     with (
         patch.object(engine, "analyze", side_effect=_fake_analyze),
-        patch(
-            "bist_bot.strategy.engine.detect_macro_regime", return_value=MarketRegime.BEAR
-        ),
+        patch("bist_bot.strategy.engine.detect_macro_regime", return_value=MarketRegime.BEAR),
     ):
         signals = engine.scan_all(data)
 
