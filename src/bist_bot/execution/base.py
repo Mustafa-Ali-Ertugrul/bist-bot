@@ -10,6 +10,36 @@ from typing import Any, Protocol
 from uuid import uuid4
 
 
+@dataclass
+class AccountInfo:
+    cash_balance: float
+    buying_power: float
+    equity: float
+    currency: str = "TRY"
+    account_id: str | None = None
+
+
+@dataclass
+class Balance:
+    """Account cash / equity snapshot."""
+
+    cash: float
+    buying_power: float
+    equity: float
+    currency: str = "TRY"
+    account_id: str | None = None
+
+    @classmethod
+    def from_account_info(cls, info: AccountInfo) -> Balance:
+        return cls(
+            cash=float(info.cash_balance),
+            buying_power=float(info.buying_power),
+            equity=float(info.equity),
+            currency=str(info.currency or "TRY"),
+            account_id=info.account_id,
+        )
+
+
 def utc_now() -> datetime:
     return datetime.now(UTC)
 
@@ -42,15 +72,6 @@ class Position:
     market_value: float = 0.0
     unrealized_pnl: float = 0.0
     updated_at: datetime = field(default_factory=utc_now)
-
-
-@dataclass
-class AccountInfo:
-    cash_balance: float
-    buying_power: float
-    equity: float
-    currency: str = "TRY"
-    account_id: str | None = None
 
 
 @dataclass
@@ -150,3 +171,32 @@ class BaseExecutionProvider(ABC):
     @abstractmethod
     def get_open_orders(self) -> list[Order]:
         raise NotImplementedError
+
+
+def coerce_side(side: OrderSide | str) -> OrderSide:
+    if isinstance(side, OrderSide):
+        return side
+    return OrderSide(str(side).upper())
+
+
+def coerce_order_type(order_type: OrderType | str) -> OrderType:
+    if isinstance(order_type, OrderType):
+        return order_type
+    return OrderType(str(order_type).upper())
+
+
+__all__ = [
+    "AccountInfo",
+    "BaseExecutionProvider",
+    "ExecutionProvider",
+    "Order",
+    "OrderResult",
+    "OrderSide",
+    "OrderState",
+    "OrderStatus",
+    "OrderType",
+    "Position",
+    "coerce_order_type",
+    "coerce_side",
+    "utc_now",
+]

@@ -6,14 +6,13 @@ Turkey abolished DST in 2016, so TR = UTC+3 year-round.
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
+from typing import Any
 
 try:
     import holidays as _holidays
 
-    _TR_HOLIDAYS = _holidays.Turkey(years=range(2020, 2031))
-except ImportError:
-    _TR_HOLIDAYS = {}
-except AttributeError:
+    _TR_HOLIDAYS: Any = _holidays.Turkey(years=range(2020, 2031))
+except (ImportError, AttributeError):
     _TR_HOLIDAYS = {}
 
 TR = timezone(timedelta(hours=3))

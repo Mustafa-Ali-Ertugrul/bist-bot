@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import concurrent.futures
+import threading
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta, timezone
@@ -51,6 +52,17 @@ def _coerce_bool(value: Any) -> bool:
     if value is None:
         return False
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _mask_email(email: str) -> str:
+    """Log-safe email representation: `ab***@domain.tld` (no PII in logs)."""
+    if not email:
+        return ""
+    local, sep, domain = email.partition("@")
+    if not sep:
+        return email[:2] + "***" if len(email) > 2 else "***"
+    visible = local[:2] + "***" if len(local) > 2 else local + "***"
+    return f"{visible}@{domain}"
 
 
 def _coerce_int(value: Any, default: int = 0) -> int:
@@ -250,16 +262,19 @@ def create_dashboard_app(
             circuit_breaker=app.config.get("circuit_breaker"),
         )
 
+    # Process-level mutex to prevent concurrent /api/scan race on shared RiskManager
+    _scan_mutex = threading.Lock()
+
     def verify_admin(email: str, password: str) -> bool:
-        logger.info("verify_admin_start", email=email)
+        logger.info("verify_admin_start", email=_mask_email(email))
         manager = getattr(get_db(), "manager", None)
         if manager is None:
-            logger.warning("login_db_unavailable", email=email)
+            logger.warning("login_db_unavailable", email=_mask_email(email))
             return False
         try:
-            logger.info("verify_admin_db_transaction_start", email=email)
+            logger.info("verify_admin_db_transaction_start", email=_mask_email(email))
             with manager.engine.begin() as conn:
-                logger.info("verify_admin_select_user_start", email=email)
+                logger.info("verify_admin_select_user_start", email=_mask_email(email))
                 row = (
                     conn.execute(
                         text("SELECT id, password_hash FROM users WHERE email = :email LIMIT 1"),
@@ -268,22 +283,22 @@ def create_dashboard_app(
                     .mappings()
                     .first()
                 )
-                logger.info("verify_admin_select_user_end", email=email)
+                logger.info("verify_admin_select_user_end", email=_mask_email(email))
         except SQLAlchemyError as exc:
-            logger.error("verify_admin_db_error", email=email, error=str(exc))
+            logger.error("verify_admin_db_error", email=_mask_email(email), error=str(exc))
             return False
         if row is None:
-            logger.info("login_user_not_found", email=email)
+            logger.info("login_user_not_found", email=_mask_email(email))
             return False
-        logger.info("verify_admin_password_check_start", email=email)
+        logger.info("verify_admin_password_check_start", email=_mask_email(email))
         verified, upgraded_hash = verify_and_rehash_password(password, str(row["password_hash"]))
-        logger.info("verify_admin_password_check_end", email=email)
+        logger.info("verify_admin_password_check_end", email=_mask_email(email))
         if not verified:
-            logger.info("login_password_invalid", email=email)
+            logger.info("login_password_invalid", email=_mask_email(email))
             return False
         if upgraded_hash is not None:
             try:
-                logger.info("verify_admin_hash_upgrade_start", email=email)
+                logger.info("verify_admin_hash_upgrade_start", email=_mask_email(email))
                 with manager.engine.begin() as conn:
                     conn.execute(
                         text(
@@ -295,10 +310,12 @@ def create_dashboard_app(
                             "updated_at": datetime.now(TR),
                         },
                     )
-                logger.info("verify_admin_hash_upgrade_end", email=email)
+                logger.info("verify_admin_hash_upgrade_end", email=_mask_email(email))
             except SQLAlchemyError as exc:
-                logger.warning("verify_admin_hash_upgrade_failed", email=email, error=str(exc))
-        logger.info("login_success", email=email)
+                logger.warning(
+                    "verify_admin_hash_upgrade_failed", email=_mask_email(email), error=str(exc)
+                )
+        logger.info("login_success", email=_mask_email(email))
         return True
 
     def create_user(email: str, password: str) -> tuple[bool, str]:
@@ -460,19 +477,23 @@ def create_dashboard_app(
         email = str(payload.get("email", "")).strip().lower()
         password = str(payload.get("password", ""))
         if not email or not password:
-            logger.warning("api_login_failed", reason="missing_credentials", email=email or "")
+            logger.warning(
+                "api_login_failed", reason="missing_credentials", email=_mask_email(email) or ""
+            )
             return jsonify(
                 {"status": "error", "message": get_message("api.invalid_credentials")}
             ), 401
 
-        logger.info("api_login_attempt", email=email)
+        logger.info("api_login_attempt", email=_mask_email(email))
         if not verify_admin(email, password):
-            logger.warning("api_login_failed", reason="invalid_credentials", email=email)
+            logger.warning(
+                "api_login_failed", reason="invalid_credentials", email=_mask_email(email)
+            )
             return jsonify(
                 {"status": "error", "message": get_message("api.invalid_credentials")}
             ), 401
 
-        logger.info("api_login_succeeded", email=email)
+        logger.info("api_login_succeeded", email=_mask_email(email))
         token = create_access_token(identity=email)
         return jsonify({"status": "ok", "access_token": token, "expires_in_hours": 1})
 
@@ -506,8 +527,7 @@ def create_dashboard_app(
             )
             scan_service = get_scan_service()
             logger.info("api_scan_started", force_refresh=force_refresh)
-            exec_svc = scan_service.execution_service
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            with _scan_mutex, concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(scan_service.scan_once, force_refresh=force_refresh)
                 try:
                     signals = future.result(timeout=settings.SCAN_TIMEOUT_SECONDS)
@@ -525,16 +545,6 @@ def create_dashboard_app(
                         }
                     ), 504
             scan_stats = scan_service.last_scan_stats
-
-            if getattr(settings, "AUTO_EXECUTE", False):
-                exec_svc.auto_execute_signals(signals)
-
-            if getattr(settings, "PAPER_MODE", False):
-                if not scan_service.last_side_effects.get("paper_trades_queued", False):
-                    scan_service.paper_trade_service.queue_actionable_signals(
-                        scan_service.engine.get_actionable_signals(signals)
-                    )
-                scan_service.paper_trade_service.update_open_trades()
 
             results = [
                 {

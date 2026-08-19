@@ -52,6 +52,15 @@ class CircuitBreakerConfig:
     half_open_max_probes: int = 1
     """Successful probes required in HALF_OPEN to transition to CLOSED."""
 
+    max_account_drawdown_pct: float = 0.15
+    """Max peak-to-trough drawdown as a fraction of peak capital before trip."""
+
+    var_confidence_level: float = 0.95
+    """Confidence level for VaR estimation (default 95 %)."""
+
+    var_lookback_bars: int = 60
+    """Number of daily PnL bars used for VaR estimation."""
+
 
 class CircuitBreaker:
     """Thread-safe circuit breaker for live trading protection.
@@ -92,6 +101,10 @@ class CircuitBreaker:
         self._opened_at: float = 0.0
         self._half_open_successes = 0
 
+        # Drawdown tracking (Item 5 — portfolio breaker extension)
+        self._peak_equity: float = capital
+        self._daily_pnl_series: list[float] = []
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -118,6 +131,10 @@ class CircuitBreaker:
             loss_pct = (self._daily_loss / self._capital) * 100.0
             if loss_pct >= self._config.daily_loss_limit_pct:
                 self._trip(f"daily loss {loss_pct:.2f}% >= {self._config.daily_loss_limit_pct}%")
+                return
+
+            # Track equity for drawdown detection
+            self._update_equity(-amount)
 
     def record_error(self) -> None:
         """Register a scan or execution error."""
@@ -147,12 +164,65 @@ class CircuitBreaker:
             self._close()
             self._daily_loss = 0.0
             self._consecutive_errors = 0
+            self._peak_equity = self._capital
+            self._daily_pnl_series.clear()
+
+    def record_equity_change(self, pnl: float) -> None:
+        """Register a daily PnL delta for drawdown/VaR tracking."""
+        with self._lock:
+            self._update_equity(pnl)
+
+    @property
+    def current_drawdown_pct(self) -> float:
+        """Current peak-to-trough drawdown as a positive fraction."""
+        with self._lock:
+            if self._peak_equity <= 0:
+                return 0.0
+            equity = self._capital
+            dd = (self._peak_equity - equity) / self._peak_equity
+            return max(0.0, dd)
+
+    def estimate_var(self, confidence: float | None = None) -> float:
+        """Parametric (z-score) VaR over the lookback window.
+
+        Returns the VaR as a positive fraction of capital. Returns 0.0 when
+        there is insufficient history.
+        """
+        with self._lock:
+            conf = confidence or self._config.var_confidence_level
+            series = list(self._daily_pnl_series[-self._config.var_lookback_bars :])
+            if len(series) < 10:
+                return 0.0
+            import statistics
+
+            mean = statistics.mean(series)
+            stdev = statistics.pstdev(series) if len(series) > 1 else 0.0
+            # z-score approximation for the given confidence level.
+            z_scores: dict[float, float] = {0.90: 1.282, 0.95: 1.645, 0.99: 2.326}
+            z = z_scores.get(conf, 1.645)
+            var = -(mean - z * stdev)
+            return max(0.0, var / self._capital)
 
     def snapshot(self) -> dict[str, Any]:
         """Return a JSON-serialisable status snapshot."""
         with self._lock:
             self._maybe_transition()
-            return {
+            # Compute drawdown / VaR inline to avoid re-acquiring the lock.
+            dd_pct = 0.0
+            if self._peak_equity > 0:
+                dd_pct = max(0.0, (self._peak_equity - self._capital) / self._peak_equity)
+            var_val = 0.0
+            series = list(self._daily_pnl_series[-self._config.var_lookback_bars :])
+            if len(series) >= 10 and self._capital > 0:
+                import statistics
+
+                mean = statistics.mean(series)
+                stdev = statistics.pstdev(series) if len(series) > 1 else 0.0
+                z_scores = {0.90: 1.282, 0.95: 1.645, 0.99: 2.326}
+                z = z_scores.get(self._config.var_confidence_level, 1.645)
+                var_val = max(0.0, -(mean - z * stdev) / self._capital)
+
+            result: dict[str, Any] = {
                 "state": str(self._state),
                 "daily_loss": round(self._daily_loss, 2),
                 "daily_loss_pct": round((self._daily_loss / self._capital) * 100, 2),
@@ -161,6 +231,12 @@ class CircuitBreaker:
                 "max_consecutive_errors": self._config.max_consecutive_errors,
                 "cooldown_seconds": self._config.cooldown_seconds,
             }
+            if dd_pct > 0:
+                result["drawdown_pct"] = round(dd_pct * 100, 2)
+                result["max_drawdown_limit_pct"] = self._config.max_account_drawdown_pct * 100
+            if var_val > 0:
+                result["var_95_pct"] = round(var_val * 100, 2)
+            return result
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -227,6 +303,22 @@ class CircuitBreaker:
         if today != self._daily_loss_date:
             self._daily_loss = 0.0
             self._daily_loss_date = today
+            # Roll the PnL series to the new day.
+            self._daily_pnl_series.clear()
+
+    def _update_equity(self, pnl_delta: float) -> None:
+        """Update tracked equity and check drawdown threshold (caller holds lock)."""
+        self._capital += pnl_delta
+        if self._capital > self._peak_equity:
+            self._peak_equity = self._capital
+        dd_pct = (
+            (self._peak_equity - self._capital) / self._peak_equity
+            if self._peak_equity > 0
+            else 0.0
+        )
+        if dd_pct >= self._config.max_account_drawdown_pct:
+            self._trip(f"drawdown {dd_pct:.2%} >= {self._config.max_account_drawdown_pct:.2%}")
+        self._daily_pnl_series.append(float(pnl_delta))
 
     @staticmethod
     def _today() -> str:

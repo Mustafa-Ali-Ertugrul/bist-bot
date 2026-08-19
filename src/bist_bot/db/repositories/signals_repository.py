@@ -130,6 +130,7 @@ class SignalsRepository:
                     reasons=" | ".join(signal.reasons),
                     conditions=_serialize_reasons(signal.reasons),
                     expires_at=signal.expires_at,
+                    score_breakdown=_serialize_breakdown(signal.score_breakdown),
                 )
             )
             return None
@@ -365,4 +366,5 @@ class SignalsRepository:
             "conditions": _deserialize_reasons(row.conditions),
             "expires_at": expires_at_iso,
             "is_expired": is_expired,
+            "score_breakdown": _deserialize_breakdown(row.score_breakdown),
         }

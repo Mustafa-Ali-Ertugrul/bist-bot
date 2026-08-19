@@ -160,6 +160,20 @@ class TelegramNotifier:
             return "<b>RADAR / İZLE</b> (henüz actionable DEĞİL — emir YOK, sadece izleme)"
         return f"{signal.signal_type.value}"
 
+    def _build_contribution_block(self, signal: Signal) -> str:
+        """Render a compact per-component score summary."""
+        if not signal.score_breakdown:
+            return ""
+        top = signal.top_contributors(count=3)
+        if not top:
+            return ""
+        lines = ["🧮 <b>Katki Dağılımı:</b>"]
+        for name, value in top:
+            bar = "+" if value >= 0 else ""
+            emoji = "▲" if value >= 0 else "▼"
+            lines.append(f"  {emoji} {name}: {bar}{value:.0f}")
+        return "\n".join(lines)
+
     def send_signal(self, signal: Signal) -> bool:
         name = settings.TICKER_NAMES.get(signal.ticker, signal.ticker)
 
@@ -194,6 +208,9 @@ class TelegramNotifier:
 
 📋 <b>Nedenler:</b>
 {reasons_html}
+
+🧮 <b>Katki Dağılımı:</b>
+{self._build_contribution_block(signal)}
 
 🔍 <b>Teşhis:</b>
 {diagnosis}

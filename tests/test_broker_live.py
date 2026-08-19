@@ -6,7 +6,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from bist_bot.broker.live import LiveBroker, _resolve_venue
 from bist_bot.execution.base import (
     AccountInfo,
     BaseExecutionProvider,
@@ -18,6 +17,7 @@ from bist_bot.execution.base import (
     OrderType,
     Position,
 )
+from bist_bot.execution.live import LiveBroker, _resolve_venue
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -201,7 +201,7 @@ class TestLiveBrokerInitLogging:
         from unittest.mock import patch
 
         broker, _ = TestLiveBrokerDelegation()._make_broker()
-        with patch("bist_bot.broker.live.logger") as mock_log:
+        with patch("bist_bot.execution.live.logger") as mock_log:
             broker._venue = MockVenue()
             broker.authenticate()
         mock_log.info.assert_any_call(
@@ -216,7 +216,7 @@ class TestLiveBrokerOrderLogging:
         from unittest.mock import patch
 
         broker, _ = TestLiveBrokerDelegation()._make_broker()
-        with patch("bist_bot.broker.live.logger") as mock_log:
+        with patch("bist_bot.execution.live.logger") as mock_log:
             broker.place_order("THYAO.IS", OrderSide.BUY, 5, OrderType.MARKET)
         mock_log.info.assert_any_call(
             "live_broker_order",
@@ -234,7 +234,7 @@ class TestLiveBrokerOrderLogging:
 
         broker, _venue = TestLiveBrokerDelegation()._make_broker()
         r = broker.place_order("THYAO.IS", OrderSide.BUY, 1, OrderType.MARKET)
-        with patch("bist_bot.broker.live.logger") as mock_log:
+        with patch("bist_bot.execution.live.logger") as mock_log:
             broker.cancel_order(r.order_id)
         mock_log.info.assert_any_call(
             "live_broker_cancel",
@@ -247,7 +247,7 @@ class TestLiveBrokerOrderLogging:
         from unittest.mock import patch
 
         broker, _ = TestLiveBrokerDelegation()._make_broker()
-        with patch("bist_bot.broker.live.logger") as mock_log:
+        with patch("bist_bot.execution.live.logger") as mock_log:
             broker.authenticate()
         mock_log.info.assert_any_call(
             "live_broker_auth",

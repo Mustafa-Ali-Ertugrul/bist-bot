@@ -35,6 +35,14 @@ NUL
 .pip-audit-tmp/
 .coverage
 htmlcov/
+pytest_tmp_*/
+tmppytest-bist-bot/
+UsersAliAppDataLocalTemppytest-bist-bot/
+ruff_err.txt
+pytest_err.txt
+pytest_risk_err.txt
+test_out.txt
+test_output.txt
 
 # Streamlit secrets
 .streamlit/secrets.toml
@@ -54,8 +62,26 @@ build/
 # Agent workflow artifacts
 .agentflow/
 
-# Model and temp files
+# Model and ML files
 models/*.pkl
+models/*.ubj
+models/*.joblib
+models/*/
 tmp/
 cache/
 test.txt
+
+# Temp and generated files
+__temp_*
+*.bak
+opencode.json.legacy-*
+get-pip.py
+debug_login.py
+original_overview.py
+pr_body.txt
+validate_live.py
+backtest_compare.py
+notes.md
+task_plan.md
+PROJECT_ACTIVITY_REPORT.md
+custom.db

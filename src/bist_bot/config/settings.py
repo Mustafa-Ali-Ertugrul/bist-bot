@@ -16,6 +16,21 @@ except ImportError:
 # Guard against repeated ``load_dotenv`` calls during ``importlib.reload`` so
 # monkeypatched/test values are not silently re-populated from ``.env``.
 _DOTENV_FLAG = "_bist_bot_dotenv_loaded"
+
+_WEAK_JWT_SECRETS = frozenset(
+    {
+        "dev-only-change-me",
+        "change-me",
+        "change-me-please",
+        "your-secret-key",
+        "jwt-secret",
+        "secret",
+        "default",
+        "development",
+        "changeme",
+        "password",
+    }
+)
 if load_dotenv is not None and _DOTENV_FLAG not in __import__("sys").modules:
     load_dotenv()
     __import__("sys").modules[_DOTENV_FLAG] = True
@@ -162,6 +177,11 @@ class Settings:
     def require_security_config(self) -> None:
         if not self.JWT_SECRET_KEY:
             raise RuntimeError("Missing required security setting(s): JWT_SECRET_KEY")
+        if self.JWT_SECRET_KEY in _WEAK_JWT_SECRETS:
+            raise RuntimeError(
+                "JWT_SECRET_KEY is set to a known placeholder value. "
+                "Set a strong, unique secret before starting the dashboard."
+            )
 
     @property
     def admin_bootstrap_enabled(self) -> bool:

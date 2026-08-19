@@ -1,38 +1,14 @@
 {
-  "ODAS.IS": {
-    "ticker": "ODAS.IS",
-    "entry_price": 8.65999984741211,
-    "entry_time": "2026-07-28T07:54:27.093454+00:00",
-    "stop": 8.55,
-    "target": 8.87,
-    "score": 11.4,
-    "agreement_ratio": 0.75,
-    "reasons": "RSI nötr (47.8) | Stochastic Bearish Cross (K:25, D:25) | düşüş teyiti (EMA200 altında + eğim negatif) | SMA trend aşağı | MACD Histogram güçleniyor (0.00) | Güçlü yükseliş trendi (ADX:30, +DI>15) | Düşük hacimli geri çekilme | Hacim artıyor 📊 | OBV yükseliş trendi → Akış var | Fiyat desteğe yakın (%0.8) | R/R: 1:1.9 | Stop: Destek | Hedef: Direnç | Pozisyon: 10392 lot | Risk Bütçesi: TL2000.00 | Volatilite throttle: x1.00 | ATR%: %0.69",
+  "ASTOR.IS": {
+    "ticker": "ASTOR.IS",
+    "entry_price": 310.0,
+    "entry_time": "2026-08-05T13:48:27.498282+00:00",
+    "stop": 306.4,
+    "target": 334.8,
+    "score": 20.0,
+    "agreement_ratio": 1.0,
+    "reasons": "RSI nötr (60.0) | Stochastic Bullish Cross (K:63, D:62) | yükseliş trendi (EMA200 üzerinde + eğim pozitif) | SMA trend yukarı | MACD Histogram zayıflıyor (-0.24) | Güçlü yükseliş trendi (ADX:39, +DI>18) | Hacim azalıyor 📊 | OBV yükseliş trendi → Akış var | Bollinger Squeeze → Patlama bekleniyor ⚠️ | Fiyat desteğe yakın (%1.5) | Güçlü trend ride → skor 20 ile sınırlandı | Aşırı uzama chase koruması → uzun skor 20 ile sınırlandı | R/R: 1:6.9 | Stop: Fibonacci | Hedef: Yüzdelik | Pozisyon: 290 lot | Risk Bütçesi: TL2000.00 | Volatilite throttle: x1.00 | ATR%: %0.61",
     "holding_days": 5,
-    "quantity": 10392.0
-  },
-  "TUPRS.IS": {
-    "ticker": "TUPRS.IS",
-    "entry_price": 297.25,
-    "entry_time": "2026-07-28T07:54:26.599545+00:00",
-    "stop": 293.6,
-    "target": 321.2,
-    "score": 10.0,
-    "agreement_ratio": 0.5,
-    "reasons": "RSI nötr (57.4) | Stochastic aşırı alım bölgesi (K:89) | CCI aşırı alım (162) | düşüş teyiti (EMA200 altında + eğim negatif) | SMA Golden Cross ✨ → Yükseliş sinyali | MACD Histogram güçleniyor (0.77) | Güçlü yükseliş trendi (ADX:43, +DI>16) | Hacim azalıyor 📊 | OBV yükseliş trendi → Akış var | Bollinger %B yüksek (0.92) | Fiyat dirence yakın (%0.3) | Karşıt-trend bastırma uygulandı (trend yukarı, momentum x0) | Aşırı uzama chase koruması → uzun skor 10 ile sınırlandı | R/R: 1:6.6 | Stop: Swing | Hedef: Yüzdelik | Pozisyon: 302 lot | Risk Bütçesi: TL2000.00 | Volatilite throttle: x1.00 | ATR%: %0.61",
-    "holding_days": 5,
-    "quantity": 302.0
-  },
-  "PETKM.IS": {
-    "ticker": "PETKM.IS",
-    "entry_price": 20.040000915527344,
-    "entry_time": "2026-07-28T08:03:06.696852+00:00",
-    "stop": 19.75,
-    "target": 20.46,
-    "score": 15.0,
-    "agreement_ratio": 0.75,
-    "reasons": "RSI düşük (26.5) -> Aşırı satım bölgesi | Stochastic Bearish Cross (K:34, D:35) | CCI aşırı satım (-102) | düşüş teyiti (EMA200 altında + eğim negatif) | SMA trend aşağı | MACD Bullish Crossover 📈 | MACD Histogram güçleniyor (0.00) | Güçlü düşüş trendi (ADX:52, -DI>7) | Düşük hacimli geri çekilme | Hacim azalıyor 📊 | OBV düşüş trendi → Çıkış var | Bollinger %B düşük (0.18) | Fiyat desteğe yakın (%1.4) | Hacim divergence (OBV düşüş / fiyat-hacim ayı) → uzun skor 15'e bastırıldı | R/R: 1:1.4 | Stop: ATR | Hedef: Direnç | Pozisyon: 4491 lot | Risk Bütçesi: TL2000.00 | Volatilite throttle: x1.00 | ATR%: %0.72",
-    "holding_days": 5,
-    "quantity": 4491.0
+    "quantity": 290.0
   }
 }
