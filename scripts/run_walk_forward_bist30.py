@@ -661,6 +661,20 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "Output saved to *_h6_off.csv when disabled."
         ),
     )
+    parser.add_argument(
+        "--chase-block-enabled",
+        dest="chase_block_enabled",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "Override chase_block_enabled (H3) on the conservative profile. "
+            "When True, overextended candidates (BB upper / CCI / distance-to-resistance) "
+            "are capped at chase_blocked_score_cap. Default: True. "
+            "--no-chase-block-enabled disables H3 only (H1 stays on) for the A/B run. "
+            "Output saved to *_h3_off.csv when disabled. "
+            "Explicit flag wins over --no-gates."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -684,6 +698,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.no_gates:
         params.counter_trend_multiplier = 1.0
         params.chase_block_enabled = False
+    # Explicit --chase-block-enabled / --no-chase-block-enabled wins over --no-gates.
+    if args.chase_block_enabled is not None:
+        params.chase_block_enabled = bool(args.chase_block_enabled)
     output_path = Path(args.output)
     if args.buy_threshold is not None and args.output == str(DEFAULT_RESULTS_CSV):
         output_path = (
@@ -701,6 +718,8 @@ def main(argv: list[str] | None = None) -> int:
         output_path = REPO_ROOT / "results" / f"walk_forward_bist30_h2_sl{args.slope_lookback}.csv"
     elif args.mtf_confluence_block_enabled is False and args.output == str(DEFAULT_RESULTS_CSV):
         output_path = REPO_ROOT / "results" / "walk_forward_bist30_h6_off.csv"
+    elif args.chase_block_enabled is False and args.output == str(DEFAULT_RESULTS_CSV):
+        output_path = REPO_ROOT / "results" / "walk_forward_bist30_conservative_h3_off.csv"
     cache_dir = Path(args.cache_dir)
     wf = WalkForwardValidator(
         train_window=252,
@@ -717,7 +736,8 @@ def main(argv: list[str] | None = None) -> int:
         f"counter_trend_multiplier={params.counter_trend_multiplier}, "
         f"gates={'ON' if gates_enabled else 'OFF'}, "
         f"slope_lookback={params.slope_lookback}, "
-        f"mtf_confluence_block={'ON' if params.mtf_confluence_block_enabled else 'OFF'})"
+        f"mtf_confluence_block={'ON' if params.mtf_confluence_block_enabled else 'OFF'}, "
+        f"chase={'ON' if params.chase_block_enabled else 'OFF'})"
     )
     print(
         f"  tickers={len(tickers)}  period={args.period}  "
