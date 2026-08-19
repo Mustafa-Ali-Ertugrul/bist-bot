@@ -146,8 +146,12 @@ class ScanService:
         # Keep fetcher universe aligned with active settings watchlist.
         try:
             self.fetcher.watchlist = watchlist
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning(
+                "scanner_fetcher_watchlist_sync_failed",
+                error_type=type(exc).__name__,
+                error=str(exc),
+            )
 
         if self.circuit_breaker and not self.circuit_breaker.allow_request():
             logger.warning("scan_aborted_circuit_open")

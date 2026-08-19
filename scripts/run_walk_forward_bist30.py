@@ -42,26 +42,22 @@ warnings.filterwarnings("ignore")
 # Approximate current BIST30 constituents (Yahoo Finance .IS symbols).
 # Composition changes over time; update when the index rebalances.
 BIST30_TICKERS: list[str] = [
+    "AEFES.IS",
     "AKBNK.IS",
-    "ARCLK.IS",
     "ASELS.IS",
     "ASTOR.IS",
     "BIMAS.IS",
+    "DSTKF.IS",
     "EKGYO.IS",
     "ENKAI.IS",
     "EREGL.IS",
     "FROTO.IS",
     "GARAN.IS",
     "GUBRF.IS",
-    "HEKTS.IS",
     "ISCTR.IS",
     "KCHOL.IS",
-    "KONTR.IS",
-    "KOZAA.IS",
-    "KOZAL.IS",
     "KRDMD.IS",
-    "ODAS.IS",
-    "OYAKC.IS",
+    "MGROS.IS",
     "PETKM.IS",
     "PGSUS.IS",
     "SAHOL.IS",
@@ -71,7 +67,11 @@ BIST30_TICKERS: list[str] = [
     "TCELL.IS",
     "THYAO.IS",
     "TOASO.IS",
+    "TRALT.IS",
+    "TTKOM.IS",
     "TUPRS.IS",
+    "VAKBN.IS",
+    "YKBNK.IS",
 ]
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -308,6 +308,52 @@ def write_csv(rows: list[dict[str, object]], path: Path) -> None:
             writer.writerow({k: row.get(k) for k in fieldnames})
 
 
+def _diagnose_row(
+    ticker: str,
+    window_idx: int,
+    last: pd.Series,
+    bb_pos: object,
+    cci_val: float | None,
+    dist_resist: float | None,
+    raw_score: float,
+    capped_score: float,
+    is_high_score: bool,
+    obv_trend_notnull: int,
+    h4_long_fired: int,
+    h4_short_fired: int,
+    h6_confluence_total: int,
+    h6_confluence_neutralized: int,
+    h6_contradiction: bool,
+    sma20_diff: float,
+    ema_dir: int,
+) -> dict[str, object]:
+    """Build one chase diagnose CSV row.
+
+    raw_score: H3 ve H4 kapalı skor (gerçek ham); capped_score: H3 açık
+    hesaplanır (yalnızca high-score satırlarında; diğerlerinde raw'a eşit).
+    """
+    return {
+        "ticker": ticker,
+        "window_idx": window_idx,
+        "date": str(last.name),
+        "bb_position": str(bb_pos),
+        "cci": float(cci_val) if cci_val is not None else None,
+        "dist_to_resistance_pct": (float(dist_resist) if dist_resist is not None else None),
+        "raw_score": float(raw_score),
+        "capped_score": float(capped_score),
+        "capped": "YES" if capped_score < raw_score else "no",
+        "high_score": "YES" if is_high_score else "no",
+        "obv_trend_notnull": obv_trend_notnull,
+        "h4_long_fired": h4_long_fired,
+        "h4_short_fired": h4_short_fired,
+        "h6_confluence_total": h6_confluence_total,
+        "h6_confluence_neutralized": h6_confluence_neutralized,
+        "h6_contradiction": h6_contradiction,
+        "sma20_slope_diff": sma20_diff,
+        "ema_long_slope_dir": ema_dir,
+    }
+
+
 def diagnose_chase_for_window(
     ticker: str,
     window_idx: int,
@@ -316,7 +362,12 @@ def diagnose_chase_for_window(
     params: StrategyParams,
     log_rows: list[dict[str, object]],
 ) -> tuple[int, int, int, int, int, int, int, int]:
-    """Analyze all test rows in a window for H3 chase, H4 divergence, and H6 mtf confluence."""
+    """Analyze all test rows in a window for H3 chase, H4 divergence, and H6 mtf confluence.
+
+    All overextended long-side candidates are logged into ``log_rows`` with the
+    H3/H4-free raw score; capped scores are only computed for rows whose raw
+    score exceeds buy_threshold (rows that would otherwise be actionable).
+    """
     full_df = pd.concat([train_df, test_df])
     enriched_full = TechnicalIndicators.add_all(full_df)
 
@@ -396,9 +447,12 @@ def diagnose_chase_for_window(
             else:
                 h6_kill_disabled += 1
 
-        # Pre-H4 raw score (H4 gate disabled to see raw strength)
+        # Pre-H4 raw score (H4 gate disabled to see raw strength).
+        # Chase cap must also be OFF here so raw_score is truly uncapped;
+        # the capped comparison below re-enables H3 explicitly (params_on).
         params_off = copy.deepcopy(params)
         params_off.obv_divergence_block_enabled = False
+        params_off.chase_block_enabled = False
 
         def score_mom_off(
             lst: pd.Series, pr: pd.Series, df: pd.DataFrame = None, params_off=params_off
@@ -453,13 +507,39 @@ def diagnose_chase_for_window(
         if (obv_up or bullish_pv) and raw_score < 0:
             h4_short_fired += 1
 
-        # Now check if this row is a chase candidate (overextended and raw_score > buy_threshold)
+        # Now check if this row is a chase candidate (overextended).
+        # ALL candidate rows are logged (not only high-score ones) so the
+        # diagnose CSV reflects the full raw-score distribution; capped_score
+        # is only computed when the row would be actionable (raw > threshold).
         if not overextended_long:
             continue
 
         chase_candidates += 1
 
-        if raw_score <= params.buy_threshold:
+        is_high_score = raw_score > params.buy_threshold
+        capped_score = raw_score
+        if not is_high_score:
+            log_rows.append(
+                _diagnose_row(
+                    ticker,
+                    window_idx,
+                    last,
+                    bb_pos,
+                    cci_val,
+                    dist_resist,
+                    raw_score,
+                    capped_score,
+                    is_high_score,
+                    obv_trend_notnull,
+                    h4_long_fired,
+                    h4_short_fired,
+                    h6_confluence_total,
+                    h6_confluence_neutralized,
+                    h6_contradiction,
+                    sma20_diff,
+                    ema_dir,
+                )
+            )
             continue
 
         chase_high += 1
@@ -510,25 +590,25 @@ def diagnose_chase_for_window(
             h3_capped += 1
 
         log_rows.append(
-            {
-                "ticker": ticker,
-                "window_idx": window_idx,
-                "date": str(last.name),
-                "bb_position": str(bb_pos),
-                "cci": float(cci_val) if cci_val is not None else None,
-                "dist_to_resistance_pct": (float(dist_resist) if dist_resist is not None else None),
-                "raw_score": float(raw_score),
-                "capped_score": float(capped_score),
-                "capped": "YES" if capped_score < raw_score else "no",
-                "obv_trend_notnull": obv_trend_notnull,
-                "h4_long_fired": h4_long_fired,
-                "h4_short_fired": h4_short_fired,
-                "h6_confluence_total": h6_confluence_total,
-                "h6_confluence_neutralized": h6_confluence_neutralized,
-                "h6_contradiction": h6_contradiction,
-                "sma20_slope_diff": sma20_diff,
-                "ema_long_slope_dir": ema_dir,
-            }
+            _diagnose_row(
+                ticker,
+                window_idx,
+                last,
+                bb_pos,
+                cci_val,
+                dist_resist,
+                raw_score,
+                capped_score,
+                is_high_score,
+                obv_trend_notnull,
+                h4_long_fired,
+                h4_short_fired,
+                h6_confluence_total,
+                h6_confluence_neutralized,
+                h6_contradiction,
+                sma20_diff,
+                ema_dir,
+            )
         )
 
     return (
@@ -555,6 +635,7 @@ def write_chase_diagnose_csv(rows: list[dict[str, object]], path: Path) -> None:
         "raw_score",
         "capped_score",
         "capped",
+        "high_score",
         "obv_trend_notnull",
         "h4_long_fired",
         "h4_short_fired",
@@ -661,6 +742,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "Output saved to *_h6_off.csv when disabled."
         ),
     )
+    parser.add_argument(
+        "--chase-block-enabled",
+        dest="chase_block_enabled",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "Override chase_block_enabled (H3 only) on the conservative profile. "
+            "Applied after --no-gates, so an explicit flag wins over the kill-switch. "
+            "When disabled, output saved to *_h3_off.csv unless --output is explicit."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -684,6 +776,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.no_gates:
         params.counter_trend_multiplier = 1.0
         params.chase_block_enabled = False
+    # H3-only toggle applies AFTER the --no-gates kill-switch, so an explicit
+    # --chase-block-enabled / --no-chase-block-enabled wins over --no-gates.
+    # Precedence: explicit flag > --no-gates > conservative profile default.
+    if args.chase_block_enabled is not None:
+        params.chase_block_enabled = bool(args.chase_block_enabled)
     output_path = Path(args.output)
     if args.buy_threshold is not None and args.output == str(DEFAULT_RESULTS_CSV):
         output_path = (
@@ -701,6 +798,11 @@ def main(argv: list[str] | None = None) -> int:
         output_path = REPO_ROOT / "results" / f"walk_forward_bist30_h2_sl{args.slope_lookback}.csv"
     elif args.mtf_confluence_block_enabled is False and args.output == str(DEFAULT_RESULTS_CSV):
         output_path = REPO_ROOT / "results" / "walk_forward_bist30_h6_off.csv"
+    elif not params.chase_block_enabled and args.output == str(DEFAULT_RESULTS_CSV):
+        # H3 disabled by an explicit flag OR by --no-gates.
+        # Note: --no-gates matches the elif above first, so this branch covers
+        # the explicit --no-chase-block-enabled case only; both write the same file.
+        output_path = REPO_ROOT / "results" / "walk_forward_bist30_conservative_h3_off.csv"
     cache_dir = Path(args.cache_dir)
     wf = WalkForwardValidator(
         train_window=252,
@@ -716,6 +818,7 @@ def main(argv: list[str] | None = None) -> int:
         f"BIST30 walk-forward scan (StrategyParams.conservative, "
         f"counter_trend_multiplier={params.counter_trend_multiplier}, "
         f"gates={'ON' if gates_enabled else 'OFF'}, "
+        f"chase_block={'ON' if params.chase_block_enabled else 'OFF'}, "
         f"slope_lookback={params.slope_lookback}, "
         f"mtf_confluence_block={'ON' if params.mtf_confluence_block_enabled else 'OFF'})"
     )

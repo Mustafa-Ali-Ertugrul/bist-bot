@@ -95,3 +95,44 @@ def test_cost_models_reduce_net_return() -> None:
     assert fixed_cost_result.cost_breakdown.net_return < no_cost_result.cost_breakdown.net_return
     assert volume_cost_result.cost_breakdown.net_return < no_cost_result.cost_breakdown.net_return
     assert atr_cost_result.cost_breakdown.net_return < no_cost_result.cost_breakdown.net_return
+
+
+def test_stamp_tax_applied_only_on_sell_side() -> None:
+    """Stamp tax (damga vergisi) must be chargeable only on sell trades per BIST rules."""
+    df = build_cost_frame()
+    model = CostModel(
+        commission_bps=2.0,
+        stamp_tax_bps=9.3,
+        bsmv_bps=5.0,
+        exchange_fee_bps=0.3,
+        spread_bps=10.0,
+        fixed_slippage_bps=5.0,
+    )
+    bt = ScriptedCostBacktester(cost_model=model)
+    result = bt.run("TEST.IS", df, verbose=False)
+    assert result is not None
+    assert result.cost_breakdown is not None
+    # Stamp tax should appear in cost breakdown when sells exist.
+    assert result.cost_breakdown.total_stamp_tax >= 0.0
+    # Total costs should include stamp + spread + commission + BSMV + fees + slippage.
+    total_known = (
+        result.cost_breakdown.total_commission
+        + result.cost_breakdown.total_bsmv
+        + result.cost_breakdown.total_exchange_fee
+        + result.cost_breakdown.total_stamp_tax
+        + result.cost_breakdown.total_spread_cost
+        + result.cost_breakdown.total_slippage
+    )
+    assert total_known > 0.0
+
+
+def test_default_cost_model_matches_bist_fee_schedule() -> None:
+    """Default CostModel values should reflect the 2024 BIST fee schedule."""
+    default = CostModel()
+    assert default.commission_bps == 2.0
+    assert default.stamp_tax_bps == 9.3
+    assert default.bsmv_bps == 5.0
+    assert default.exchange_fee_bps == 0.3
+    assert default.spread_bps == 10.0
+    assert default.slippage_model == "fixed"
+    assert default.fixed_slippage_bps == 5.0

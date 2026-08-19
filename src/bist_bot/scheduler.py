@@ -5,7 +5,7 @@ from time import sleep
 
 from bist_bot.app_logging import get_logger
 from bist_bot.config.settings import settings as default_settings
-from bist_bot.market_calendar import is_bist_open
+from bist_bot.market_calendar import is_bist_open, next_bist_session
 from bist_bot.notifier import TR
 
 logger = get_logger(__name__, component="scheduler")
@@ -21,6 +21,20 @@ class MarketScheduler:
 
     def _now(self) -> datetime:
         return datetime.now(TR)
+
+    def _sleep_until_next_session(self) -> None:
+        """Sleep until the next BIST session opens, checking self.running periodically for clean shutdown."""
+        now = self._now()
+        next_session = next_bist_session(now)
+        wait_seconds = max((next_session - now).total_seconds(), 10)
+        logger.info(
+            "scheduler_market_closed",
+            next_session=next_session.isoformat(),
+            sleep_seconds=int(wait_seconds),
+        )
+        deadline = now.timestamp() + wait_seconds
+        while self.running and datetime.now(TR).timestamp() < deadline:
+            sleep(10)
 
     def _scan_once(self):
         signals = self.scanner.scan_once()
@@ -39,8 +53,7 @@ class MarketScheduler:
                 now = self._now()
 
                 if not is_bist_open(now):
-                    logger.info("scheduler_market_closed_idle")
-                    sleep(60)
+                    self._sleep_until_next_session()
                     continue
 
                 minute = now.minute
@@ -57,8 +70,14 @@ class MarketScheduler:
                 try:
                     self._scan_once()
                 except Exception as e:
-                    logger.error("scheduler_scan_failed", error_type=type(e).__name__)
-                    self.notifier.send_message(f"⚠️ Bot hatası: {e}")
+                    logger.error(
+                        "scheduler_scan_failed",
+                        error_type=type(e).__name__,
+                        error=str(e),
+                    )
+                    self.notifier.send_message(
+                        "⚠️ Tarama hatası oluştu. Birkaç dakika sonra yeniden deneniyor."
+                    )
                     for attempt in range(1, 4):
                         if not self.running:
                             break
@@ -87,12 +106,20 @@ class MarketScheduler:
                     scan_interval_minutes=self.settings.SCAN_INTERVAL_MINUTES,
                 )
 
+                # Align the next scan to the 15-minute wall-clock grid
+                # (:00/:15/:30/:45) instead of sleeping a full interval after
+                # scan completion. This removes cumulative drift: scans that
+                # take a few seconds no longer push every later scan later.
                 CHECK_INTERVAL_SECONDS = 10
-                total_wait_seconds = self.settings.SCAN_INTERVAL_MINUTES * 60
-                max_iterations = total_wait_seconds // CHECK_INTERVAL_SECONDS
-                for _ in range(max_iterations):
-                    if not self.running:
-                        break
+                interval_minutes = max(1, int(getattr(self.settings, "SCAN_INTERVAL_MINUTES", 15)))
+                interval_seconds = interval_minutes * 60
+                now = self._now()
+                seconds_into_cycle = (now.minute * 60 + now.second) % interval_seconds
+                wait_seconds = interval_seconds - seconds_into_cycle
+                if wait_seconds <= 0:
+                    wait_seconds = interval_seconds
+                deadline = now.timestamp() + wait_seconds
+                while self.running and self._now().timestamp() < deadline:
                     sleep(CHECK_INTERVAL_SECONDS)
 
             except Exception as exc:

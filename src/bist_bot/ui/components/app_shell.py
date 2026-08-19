@@ -112,9 +112,7 @@ def render_shell(active_page: str, email: str = "") -> str | None:
     )
 
     action: str | None = None
-    nav_action = render_sidebar_nav(active_page)
-    if nav_action:
-        action = nav_action
+    render_sidebar_nav(active_page)
     return action
 
 

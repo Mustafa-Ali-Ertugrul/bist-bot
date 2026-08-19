@@ -26,6 +26,8 @@ spec:
               value: "180"
             - name: API_REQUEST_TIMEOUT_SECONDS
               value: "45"
+            - name: WATCHLIST_SOURCE
+              value: "bist30"
           ports:
             - name: http1
               containerPort: 8080

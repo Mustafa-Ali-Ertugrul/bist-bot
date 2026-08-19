@@ -173,14 +173,22 @@ class OrderExecutor:
                 price=price if price is not None else getattr(signal, "price", None),
             )
         except NotImplementedError:
-            if order_row_id is not None and hasattr(self.db, "update_order"):
+            if (
+                order_row_id is not None
+                and self.db is not None
+                and hasattr(self.db, "update_order")
+            ):
                 self.db.update_order(order_row_id, state="REJECTED")
             raise
         except Exception as exc:
             latency_ms = (time.perf_counter() - started) * 1000.0
             observe_order_latency(latency_ms / 1000.0)
             record_order(side.value, "ERROR")
-            if order_row_id is not None and hasattr(self.db, "update_order"):
+            if (
+                order_row_id is not None
+                and self.db is not None
+                and hasattr(self.db, "update_order")
+            ):
                 self.db.update_order(order_row_id, state="REJECTED")
             inc_counter("bist_auto_execute_fail_total")
             log_order(
@@ -214,7 +222,7 @@ class OrderExecutor:
         latency_ms = (time.perf_counter() - started) * 1000.0
         observe_order_latency(latency_ms / 1000.0)
 
-        if order_row_id is not None and hasattr(self.db, "update_order"):
+        if order_row_id is not None and self.db is not None and hasattr(self.db, "update_order"):
             try:
                 self.db.update_order(
                     order_row_id,

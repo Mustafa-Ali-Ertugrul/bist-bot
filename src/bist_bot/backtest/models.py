@@ -43,6 +43,8 @@ class BacktestTrade:
     commission_tl: float = 0.0
     bsmv_tl: float = 0.0
     exchange_fee_tl: float = 0.0
+    stamp_tax_tl: float = 0.0
+    spread_cost_tl: float = 0.0
     slippage_tl: float = 0.0
     signal_probability: float | None = None
     position_fraction: float | None = None
@@ -65,6 +67,8 @@ class BacktestTrade:
             "commission_tl": self.commission_tl,
             "bsmv_tl": self.bsmv_tl,
             "exchange_fee_tl": self.exchange_fee_tl,
+            "stamp_tax_tl": self.stamp_tax_tl,
+            "spread_cost_tl": self.spread_cost_tl,
             "slippage_tl": self.slippage_tl,
             "signal_probability": self.signal_probability,
             "position_fraction": self.position_fraction,
@@ -77,6 +81,8 @@ class CostBreakdown:
     total_commission: float = 0.0
     total_bsmv: float = 0.0
     total_exchange_fee: float = 0.0
+    total_stamp_tax: float = 0.0
+    total_spread_cost: float = 0.0
     total_slippage: float = 0.0
     net_return: float = 0.0
 
@@ -86,6 +92,8 @@ class CostBreakdown:
             "total_commission": self.total_commission,
             "total_bsmv": self.total_bsmv,
             "total_exchange_fee": self.total_exchange_fee,
+            "total_stamp_tax": self.total_stamp_tax,
+            "total_spread_cost": self.total_spread_cost,
             "total_slippage": self.total_slippage,
             "net_return": self.net_return,
         }
@@ -93,9 +101,23 @@ class CostBreakdown:
 
 @dataclass(frozen=True)
 class CostModel:
+    """BIST-compatible transaction cost model.
+
+    All BIST fees are expressed in basis points (bps).  Values below follow
+    the 2024 BIST fee schedule unless noted; they can be overridden per-run.
+
+    - ``commission_bps``   : broker/commission — applied on both sides
+    - ``stamp_tax_bps``   : damga vergisi — sell-side only (~9.3 bps)
+    - ``bsmv_bps``        : BSMV — sell-side only (~5.0 bps)
+    - ``exchange_fee_bps``: BIST-ST / exchange fee — both sides
+    - ``spread_bps``       : bid-ask half-spread — applied as price impact
+    """
+
     commission_bps: float = 2.0
-    bsmv_bps: float = 0.1
+    stamp_tax_bps: float = 9.3
+    bsmv_bps: float = 5.0
     exchange_fee_bps: float = 0.3
+    spread_bps: float = 10.0
     slippage_model: str = "fixed"
     fixed_slippage_bps: float = 5.0
     volume_slippage_bps_per_volume_ratio: float = 200.0
@@ -465,6 +487,8 @@ def _build_cost_breakdown(
     total_commission = sum(trade.commission_tl for trade in trades)
     total_bsmv = sum(trade.bsmv_tl for trade in trades)
     total_exchange_fee = sum(trade.exchange_fee_tl for trade in trades)
+    total_stamp_tax = sum(trade.stamp_tax_tl for trade in trades)
+    total_spread_cost = sum(trade.spread_cost_tl for trade in trades)
     total_slippage = sum(trade.slippage_tl for trade in trades)
     gross_return = sum(trade.gross_profit_tl for trade in trades)
     net_return = final_capital - initial_capital
@@ -474,6 +498,8 @@ def _build_cost_breakdown(
         total_commission=round(total_commission, 2),
         total_bsmv=round(total_bsmv, 2),
         total_exchange_fee=round(total_exchange_fee, 2),
+        total_stamp_tax=round(total_stamp_tax, 2),
+        total_spread_cost=round(total_spread_cost, 2),
         total_slippage=round(total_slippage, 2),
         net_return=round(net_return, 2),
     )

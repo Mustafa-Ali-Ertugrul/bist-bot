@@ -40,7 +40,6 @@ jobs:
 
       - name: Mypy type check
         run: mypy src/bist_bot --ignore-missing-imports
-        continue-on-error: true
 
       - name: Compile check
         run: python -m compileall src/bist_bot main.py dashboard.py streamlit_app.py

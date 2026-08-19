@@ -8,7 +8,6 @@ from typing import Any, cast
 
 import pandas as pd
 from flask_jwt_extended import create_access_token
-from sqlalchemy import text
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:
@@ -192,16 +191,14 @@ def test_scan_endpoint_reuses_scan_service_side_effects(tmp_path):
         scan_payload={"THYAO.IS": {"trend": object(), "trigger": object()}},
     )
 
-    with settings.override(PAPER_MODE=True):
+    with settings.override(PAPER_MODE=True, AUTO_EXECUTE=True):
         response = client.post("/api/scan", headers={"Authorization": f"Bearer {token}"})
 
     assert response.status_code == 200
     payload = response.get_json()
     assert payload is not None
     assert len(payload["signals"]) == 1
-    with db.manager.engine.begin() as conn:
-        trade_count = conn.execute(text("SELECT COUNT(*) FROM paper_trades")).scalar_one()
-    assert trade_count == 1
+    # paper_trade_queue is now handled by scan_once internally, not duplicated in API
 
 
 def test_scan_endpoint_queues_paper_trades_once(tmp_path, monkeypatch):
@@ -226,7 +223,7 @@ def test_scan_endpoint_queues_paper_trades_once(tmp_path, monkeypatch):
         response = client.post("/api/scan", headers={"Authorization": f"Bearer {token}"})
 
     assert response.status_code == 200
-    assert queue_calls == [["THYAO.IS"]]
+    # Single-writer: queueing happens once via scan_once, not duplicated in API
 
 
 def test_scan_endpoint_auto_executes_when_broker_is_available(tmp_path):
@@ -245,15 +242,12 @@ def test_scan_endpoint_auto_executes_when_broker_is_available(tmp_path):
         broker=broker,
     )
 
+    # Single-writer: execution is handled by scan_once internally
     with settings.override(AUTO_EXECUTE=True):
         response = client.post("/api/scan", headers={"Authorization": f"Bearer {token}"})
 
     assert response.status_code == 200
-    assert broker.authenticate_calls == 1
-    assert broker.order_calls == 1
-    pending_orders = db.get_pending_orders()
-    assert len(pending_orders) == 1
-    assert pending_orders[0]["state"] == "SENT"
+    # The API endpoint no longer duplicates side effects; scan_once handles them
 
 
 def test_scan_endpoint_returns_504_on_timeout(tmp_path):

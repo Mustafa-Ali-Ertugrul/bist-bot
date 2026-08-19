@@ -78,7 +78,9 @@ def test_scheduler_closed_market_uses_idle_poll(monkeypatch) -> None:
 
     scheduler.run_loop()
 
-    assert slept == [60]
+    # _sleep_until_next_session polls in 10s chunks (responsive shutdown),
+    # not a single 60s sleep, and the first poll flips `running` to False.
+    assert slept == [10]
 
 
 def test_scheduler_keeps_normal_interval_after_13_on_full_day(monkeypatch) -> None:

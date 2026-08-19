@@ -163,12 +163,12 @@ def _build_broker() -> BaseExecutionProvider:
             dry_run=settings.ALGOLAB_DRY_RUN,
         )
     if effective == "live":
-        from bist_bot.broker.live import LiveBroker
+        from bist_bot.execution.live import LiveBroker
 
         return LiveBroker(provider=provider, settings=settings)
 
-    # Default paper path: prefer new broker.PaperBroker (compatible with place_order)
-    from bist_bot.broker.paper import PaperBroker as BrokerPaperBroker
+    # Default paper path: single execution implementation (no facade indirection)
+    from bist_bot.execution.paper_broker import PaperBroker as BrokerPaperBroker
 
     return BrokerPaperBroker(
         initial_cash=getattr(settings, "INITIAL_CAPITAL", 8500.0),

@@ -13,7 +13,6 @@ import streamlit as st
 from bist_bot.app_logging import get_logger
 from bist_bot.config.settings import settings
 from bist_bot.strategy.signal_models import SignalType
-from bist_bot.streamlit_utils import check_signals, send_signal_notification
 from bist_bot.ui.runtime_types import ScanResult, ScanStats
 from bist_bot.ui.session_cooldown import consume_cooldown
 
@@ -88,13 +87,15 @@ def _set_scan_phase(phase: str) -> None:
 def collect_scan_result(
     fetcher,
     engine,
-    notifier,
-    db,
     last_scan_time: datetime | None = None,
     force_clear: bool = False,
     limited_tickers: list[str] | None = None,
 ) -> ScanResult:
-    """Run one scan cycle and return the runtime payload."""
+    """Run one scan cycle and return the runtime payload for DISPLAY only.
+
+    This function never writes to the database and never sends notifications:
+    the worker/API ScanService is the single writer of scan data.
+    """
     scan_started_at = datetime.now(TR)
     if _should_clear_cache(scan_started_at, last_scan_time, force_clear):
         _set_scan_phase("Cache temizleniyor")
@@ -152,40 +153,6 @@ def collect_scan_result(
         if isinstance(data, dict) and "trigger" in data
     }
 
-    _set_scan_phase("Sonuçlar kaydediliyor")
-    try:
-        db.save_signals(signals)
-    except Exception as exc:
-        logger.warning("ui_scan_signal_save_failed", error_type=type(exc).__name__, error=str(exc))
-    save_breakdown = getattr(db, "save_latest_rejection_breakdown", None)
-    if callable(save_breakdown):
-        try:
-            save_breakdown(
-                rejection_breakdown
-                if isinstance(rejection_breakdown, dict)
-                else EMPTY_REJECTION_BREAKDOWN
-            )
-        except Exception as exc:
-            logger.warning(
-                "ui_scan_breakdown_save_failed", error_type=type(exc).__name__, error=str(exc)
-            )
-
-    buy_count = sum(
-        1
-        for signal in signals
-        if signal.signal_type in {SignalType.BUY, SignalType.STRONG_BUY, SignalType.WEAK_BUY}
-    )
-    sell_count = sum(
-        1
-        for signal in signals
-        if signal.signal_type in {SignalType.SELL, SignalType.STRONG_SELL, SignalType.WEAK_SELL}
-    )
-
-    for ticker, market_data in timeframe_data.items():
-        signal = check_signals(ticker, market_data, engine=engine)
-        if signal is not None:
-            send_signal_notification(signal, notifier)
-
     hold_count = sum(1 for signal in signals if signal.signal_type == SignalType.HOLD)
     actionable_count = len(signals) - hold_count
     normalized_breakdown = (
@@ -193,18 +160,7 @@ def collect_scan_result(
         if isinstance(rejection_breakdown, dict)
         else dict(EMPTY_REJECTION_BREAKDOWN)
     )
-    try:
-        db.save_scan_log(
-            len(timeframe_data),
-            len(signals),
-            buy_count,
-            sell_count,
-            actionable_count,
-            scan_id=str(normalized_breakdown.get("scan_id", "") or ""),
-            rejection_breakdown=normalized_breakdown,
-        )
-    except Exception as exc:
-        logger.warning("ui_scan_log_save_failed", error_type=type(exc).__name__, error=str(exc))
+
     scan_stats: ScanStats = {
         "generated": len(signals),
         "actionable": actionable_count,
@@ -254,12 +210,10 @@ def apply_scan_result(scan_result: ScanResult) -> None:
 
 def run_scan(force_clear: bool = False) -> None:
     """Execute a synchronous scan using the session-scoped dependencies."""
-    fetcher, engine, notifier, db, last_scan_time = _session_dependencies()
+    fetcher, engine, _notifier, _db, last_scan_time = _session_dependencies()
     result = collect_scan_result(
         fetcher=fetcher,
         engine=engine,
-        notifier=notifier,
-        db=db,
         last_scan_time=last_scan_time,
         force_clear=force_clear,
     )
@@ -271,7 +225,7 @@ def run_initial_scan(force_clear: bool = False, limited: bool = False) -> bool:
     if st.session_state.get("all_data"):
         return True
 
-    fetcher, engine, notifier, db, last_scan_time = _session_dependencies()
+    fetcher, engine, _notifier, _db, last_scan_time = _session_dependencies()
     limited_tickers = None
     if limited:
         limit = int(getattr(settings, "STREAMLIT_INITIAL_SCAN_LIMIT", 10))
@@ -286,8 +240,6 @@ def run_initial_scan(force_clear: bool = False, limited: bool = False) -> bool:
         result = collect_scan_result(
             fetcher=fetcher,
             engine=engine,
-            notifier=notifier,
-            db=db,
             last_scan_time=last_scan_time,
             force_clear=force_clear,
             limited_tickers=limited_tickers,
@@ -359,7 +311,7 @@ def start_background_scan(force_clear: bool = False, limited: bool = False) -> b
             return False
         ACTIVE_SCAN_SESSIONS.add(session_key)
 
-    fetcher, engine, notifier, db, last_scan_time = _session_dependencies()
+    fetcher, engine, _notifier, _db, last_scan_time = _session_dependencies()
     scan_started_at = datetime.now(TR)
     st.session_state.scan_in_progress = True
     st.session_state.scan_started_at = scan_started_at
@@ -401,8 +353,6 @@ def start_background_scan(force_clear: bool = False, limited: bool = False) -> b
                 _collect_with_ctx,
                 fetcher=fetcher,
                 engine=engine,
-                notifier=notifier,
-                db=db,
                 last_scan_time=last_scan_time,
                 force_clear=force_clear,
                 limited_tickers=limited_tickers,

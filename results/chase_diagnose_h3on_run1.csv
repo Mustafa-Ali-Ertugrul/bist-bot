@@ -1,0 +1,1 @@
+ticker,window_idx,date,bb_position,cci,dist_to_resistance_pct,raw_score,capped_score,capped,obv_trend_notnull,h4_long_fired,h4_short_fired,h6_confluence_total,h6_confluence_neutralized,h6_contradiction,sma20_slope_diff,ema_long_slope_dir

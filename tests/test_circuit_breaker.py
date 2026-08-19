@@ -18,6 +18,7 @@ def _make_breaker(
     max_consecutive_errors: int = 3,
     cooldown_seconds: float = 0.1,
     half_open_max_probes: int = 1,
+    max_account_drawdown_pct: float = 1.0,
 ) -> CircuitBreaker:
     return CircuitBreaker(
         capital=capital,
@@ -26,6 +27,7 @@ def _make_breaker(
             max_consecutive_errors=max_consecutive_errors,
             cooldown_seconds=cooldown_seconds,
             half_open_max_probes=half_open_max_probes,
+            max_account_drawdown_pct=max_account_drawdown_pct,
         ),
     )
 
@@ -200,3 +202,69 @@ def test_negative_capital_raises_value_error() -> None:
 
     with pytest.raises(ValueError, match="capital must be positive"):
         CircuitBreaker(capital=-1000)
+
+
+# ── Drawdown tracking (Item 5 extension) ─────────────────────────────
+
+
+def test_drawdown_accumulates_and_trips_at_threshold() -> None:
+    breaker = _make_breaker(
+        capital=10_000.0,
+        max_account_drawdown_pct=0.10,  # 10 % threshold
+    )
+    # Simulate a 5 % drop → no trip.
+    breaker.record_equity_change(-500.0)
+    assert breaker.state == CircuitState.CLOSED
+    assert round(breaker.current_drawdown_pct, 4) == 0.05
+
+    # Another 5 % drop → total 10 %, should trip.
+    breaker.record_equity_change(-500.0)
+    assert breaker.state == CircuitState.OPEN
+
+
+def test_peak_equity_tracks_upward_only() -> None:
+    breaker = _make_breaker(capital=10_000.0, max_account_drawdown_pct=1.0)
+    breaker.record_equity_change(2000.0)  # peak rises to 12_000
+    assert breaker.current_drawdown_pct == 0.0
+    breaker.record_equity_change(-3000.0)  # equity 9_000, dd = 3000/12000 = 25%
+    assert round(breaker.current_drawdown_pct, 4) == 0.25
+
+
+def test_reset_clears_drawdown_state() -> None:
+    breaker = _make_breaker(
+        capital=10_000.0,
+        max_account_drawdown_pct=1.0,
+    )
+    breaker.record_equity_change(-500.0)
+    assert breaker.current_drawdown_pct > 0
+    breaker.reset()
+    assert breaker.current_drawdown_pct == 0.0
+
+
+def test_snapshot_includes_drawdown_when_nonzero() -> None:
+    breaker = _make_breaker(capital=10_000.0, max_account_drawdown_pct=1.0)
+    snap = breaker.snapshot()
+    assert "drawdown_pct" not in snap  # no loss yet
+
+    breaker.record_equity_change(-500.0)
+    snap = breaker.snapshot()
+    assert "drawdown_pct" in snap
+    assert snap["drawdown_pct"] > 0
+
+
+# ── VaR estimation ───────────────────────────────────────────────────
+
+
+def test_var_returns_zero_with_insufficient_history() -> None:
+    breaker = _make_breaker(capital=10_000.0)
+    assert breaker.estimate_var() == 0.0
+
+
+def test_var_returns_nonzero_after_enough_data() -> None:
+    breaker = _make_breaker(capital=10_000.0)
+    # Feed 15 daily PnL values with negative mean.
+    pnl_values = [-100.0] * 15
+    for pnl in pnl_values:
+        breaker.record_equity_change(pnl)
+    var = breaker.estimate_var(confidence=0.95)
+    assert var > 0.0
