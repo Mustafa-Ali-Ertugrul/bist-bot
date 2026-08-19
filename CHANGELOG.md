@@ -5,6 +5,16 @@ Tum degisiklikler chronolojik sirayla listelenir.
 ## [Unreleased]
 
 ### Added
+- Faz 2 — Stored-signal replay motoru (`backtest/signal_replay.py`): `bist_signals.db`'de
+  kalici olan sinyalleri gecmis gunluk barlar uzerinde replay ederek exit performansini
+  (TP/SL/TIMEOUT, R-multiple, MFE/MAE, maliyet kirilimi) olcer. Salt-okunur; mevcut
+  gostergeli `Backtester` degistirilmedi. Dataset'ler: raw / episodes / first_actionable /
+  hysteresis. Analiz: skor bucket, confidence, EMA200 filtresi, RSI extreme veto,
+  entry-delay (+1/+2/+3 bar). N >= 10 kanit guard'ini gecmeyen hicbir bucket threshold
+  onerisi uretmez (`low_n` etiketi ile raporlanir).
+- `scripts/run_signal_replay.py` CLI runner: `results/signal_replay_trades.csv` +
+  `results/signal_replay_summary.json` uretir; `--bars-dir` ile agsiz (offline CSV)
+  tekrarlanabilir replay ve `--db-path` ile acik SQLite kaynagi destekler.
 - Walk-forward validation akisi eklendi; optimizer tabanli out-of-sample pencere testleri ve JSON rapor ciktilari uretiliyor.
 - BIST'e daha yakin komisyon, BSMV, borsa payi ve slippage kirilimlarini izleyen cost model eklendi.
 - AlgoLab broker entegrasyonu icin test edilebilir execution iskeleti, order tracker ve order lifecycle persistence eklendi.
