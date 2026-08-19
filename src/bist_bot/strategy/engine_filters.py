@@ -67,16 +67,24 @@ def _apply_chase_cap(
     distance_resistance = float(last.get("dist_to_resistance_pct", float("inf")) or 0.0)
     distance_support = float(last.get("dist_to_support_pct", float("inf")) or 0.0)
     long_overextended = score > 0 and (
-        bb_position == "ABOVE_UPPER" or cci >= 150 or distance_resistance <= 1.0
+        bb_position == "ABOVE_UPPER"
+        or cci >= params.chase_cci_threshold
+        or distance_resistance <= params.chase_resist_pct
     )
     short_overextended = score < 0 and (
-        bb_position == "BELOW_LOWER" or cci <= -150 or distance_support <= 1.0
+        bb_position == "BELOW_LOWER"
+        or cci <= -params.chase_cci_threshold
+        or distance_support <= params.chase_resist_pct
     )
     if not (long_overextended or short_overextended):
         return score
     adx = float(last.get("adx", 0.0) or 0.0)
     score_dir = component_direction(score)
-    strong_trend_ride = adx >= 30.0 and trend_dir == score_dir and momentum_dir == score_dir
+    strong_trend_ride = (
+        adx >= params.chase_strong_trend_adx
+        and trend_dir == score_dir
+        and momentum_dir == score_dir
+    )
     cap = params.chase_strong_trend_cap if strong_trend_ride else params.chase_blocked_score_cap
     capped = min(score, cap) if score > 0 else max(score, -cap)
     if strong_trend_ride:
