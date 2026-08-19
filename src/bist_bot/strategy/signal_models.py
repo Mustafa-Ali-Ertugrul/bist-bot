@@ -133,9 +133,7 @@ class Signal:
         """Return the top-scoring components sorted by absolute contribution."""
         if not self.score_breakdown:
             return []
-        return sorted(
-            self.score_breakdown.items(), key=lambda kv: abs(kv[1]), reverse=True
-        )[:count]
+        return sorted(self.score_breakdown.items(), key=lambda kv: abs(kv[1]), reverse=True)[:count]
 
     def __str__(self) -> str:
         name = settings.TICKER_NAMES.get(self.ticker, self.ticker)
