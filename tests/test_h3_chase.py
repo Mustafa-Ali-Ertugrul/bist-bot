@@ -17,6 +17,21 @@ from bist_bot.strategy.params import StrategyParams
 # ─── Helpers ──────────────────────────────────────────────────────────────
 
 
+def _chase_params(**kwargs) -> StrategyParams:
+    """StrategyParams with chase_block_enabled=True for H3 mechanism tests."""
+    kwargs.setdefault("chase_block_enabled", True)
+    return StrategyParams(**kwargs)
+
+
+def _cons_chase_params(**kwargs) -> StrategyParams:
+    """Conservative StrategyParams with chase_block_enabled=True for H3 tests."""
+    p = StrategyParams.conservative()
+    p.chase_block_enabled = True
+    for k, v in kwargs.items():
+        setattr(p, k, v)
+    return p
+
+
 def _bull_df(last_kwargs: dict | None = None) -> pd.DataFrame:
     """Return a 55-row BULL regime DataFrame.
 
@@ -142,7 +157,7 @@ class TestChaseVetoConservative:
 
     def test_chase_blocked_to_conservative_cap(self, df):
         """Conservative profile: cap=10 → score clamped to 10."""
-        params = StrategyParams.conservative()
+        params = _cons_chase_params()
         result = _run(params, df, momentum=25.0, trend=20.0, volume=5.0, structure=5.0)
         assert result is not None
         score, reasons, _ = result
@@ -151,7 +166,7 @@ class TestChaseVetoConservative:
 
     def test_chase_blocked_to_default_cap(self, df):
         """Default profile: cap=20 → score clamped to 20."""
-        params = StrategyParams()
+        params = _chase_params()
         result = _run(params, df, momentum=25.0, trend=20.0, volume=5.0, structure=5.0)
         assert result is not None
         score, reasons, _ = result
@@ -182,7 +197,7 @@ class TestChaseVetoWithStrongTrendRide:
 
     def test_strong_trend_ride_relaxes_cap(self, df):
         """ADX=35 → strong_trend_ride=True → cap=30."""
-        params = StrategyParams()
+        params = _chase_params()
         result = _run(params, df, momentum=25.0, trend=20.0, volume=5.0, structure=5.0)
         assert result is not None
         score, reasons, _ = result
@@ -191,7 +206,7 @@ class TestChaseVetoWithStrongTrendRide:
 
     def test_strong_trend_ride_conservative_relaxed_cap(self, df):
         """Conservative+ride: cap=20."""
-        params = StrategyParams.conservative()
+        params = _cons_chase_params()
         result = _run(params, df, momentum=25.0, trend=20.0, volume=5.0, structure=5.0)
         assert result is not None
         score, reasons, _ = result
@@ -201,7 +216,7 @@ class TestChaseVetoWithStrongTrendRide:
     def test_strong_trend_ride_requires_trend_momentum_alignment(self, df):
         """ADX 35 ama momentum negatif (bearish MR) → trend_dir=+1, momentum_dir=-1
         → strong_trend_ride=False → sert cap (20) uygulanır."""
-        params = StrategyParams()
+        params = _chase_params()
         result = _run(params, df, momentum=-10.0, trend=20.0, volume=5.0, structure=10.0)
         assert result is not None
         score, reasons, _ = result
@@ -232,7 +247,7 @@ class TestNoChaseWhenNotOverextended:
         )
 
     def test_score_unchanged(self, df):
-        params = StrategyParams()
+        params = _chase_params()
         result = _run(params, df, momentum=25.0, trend=20.0, volume=5.0, structure=5.0)
         assert result is not None
         score, reasons, _ = result
@@ -259,6 +274,11 @@ class TestChaseKillSwitch:
             }
         )
 
+    def test_default_is_disabled(self):
+        """H3 kill-switch: default StrategyParams has chase_block_enabled=False."""
+        assert StrategyParams().chase_block_enabled is False
+        assert StrategyParams.conservative().chase_block_enabled is False
+
     def test_kill_switch_disables_blocking(self, df):
         params = StrategyParams(chase_block_enabled=False)
         result = _run(params, df, momentum=25.0, trend=20.0, volume=5.0, structure=5.0)
@@ -270,7 +290,7 @@ class TestChaseKillSwitch:
 
     def test_kill_switch_equals_default_behavior_when_chase_off(self, df):
         """Kill-switch ile eski (H3 öncesi) davranış aynı: chase_block_enabled=False."""
-        params_off = StrategyParams(chase_block_enabled=False)
+        params_off = StrategyParams()
         result_off = _run(params_off, df, momentum=25.0, trend=20.0, volume=5.0, structure=5.0)
         assert result_off is not None
         score_off, _, _ = result_off
@@ -299,7 +319,7 @@ class TestChaseVetoShortSide:
         )
 
     def test_short_side_blocked(self, df):
-        params = StrategyParams()
+        params = _chase_params()
         result = _run(params, df, momentum=-25.0, trend=-20.0, volume=-5.0, structure=-5.0)
         assert result is not None
         score, reasons, _ = result
@@ -307,7 +327,7 @@ class TestChaseVetoShortSide:
         assert any("kısa skor" in r for r in reasons)
 
     def test_short_side_conservative_tighter_cap(self, df):
-        params = StrategyParams.conservative()
+        params = _cons_chase_params()
         result = _run(params, df, momentum=-25.0, trend=-20.0, volume=-5.0, structure=-5.0)
         assert result is not None
         score, reasons, _ = result
@@ -327,7 +347,7 @@ class TestChaseVetoShortSide:
                 "minus_di": 25.0,
             }
         )
-        params = StrategyParams()
+        params = _chase_params()
         result = _run(params, df, momentum=-25.0, trend=-20.0, volume=-5.0, structure=-5.0)
         assert result is not None
         score, reasons, _ = result
@@ -370,8 +390,8 @@ class TestChaseCapValues:
                 "minus_di": 15.0,
             }
         )
-        cons = StrategyParams.conservative()
-        default = StrategyParams()
+        cons = _cons_chase_params()
+        default = _chase_params()
         r1 = _run(cons, df, momentum=25.0, trend=20.0, volume=5.0, structure=5.0)
         r2 = _run(default, df, momentum=25.0, trend=20.0, volume=5.0, structure=5.0)
         assert r1 is not None and r2 is not None
@@ -391,7 +411,7 @@ class TestChaseThresholdParametrization:
 
     def test_threshold_defaults_and_profile_independence(self):
         """Threshold'lar profil bağımsız: default ve conservative aynı değerler."""
-        for params in (StrategyParams(), StrategyParams.conservative()):
+        for params in (_chase_params(), _cons_chase_params()):
             assert params.chase_cci_threshold == pytest.approx(150.0)
             assert params.chase_resist_pct == pytest.approx(1.0)
             assert params.chase_strong_trend_adx == pytest.approx(30.0)
@@ -409,7 +429,7 @@ class TestChaseThresholdParametrization:
                 "minus_di": 15.0,
             }
         )
-        result = _run(StrategyParams(), df, momentum=25.0, trend=20.0, volume=5.0, structure=5.0)
+        result = _run(_chase_params(), df, momentum=25.0, trend=20.0, volume=5.0, structure=5.0)
         assert result is not None
         score, reasons, _ = result
         assert score == pytest.approx(20.0)
@@ -428,7 +448,7 @@ class TestChaseThresholdParametrization:
                 "minus_di": 15.0,
             }
         )
-        result = _run(StrategyParams(), df, momentum=25.0, trend=20.0, volume=5.0, structure=5.0)
+        result = _run(_chase_params(), df, momentum=25.0, trend=20.0, volume=5.0, structure=5.0)
         assert result is not None
         score, reasons, _ = result
         assert score == pytest.approx(55.0)
@@ -447,7 +467,7 @@ class TestChaseThresholdParametrization:
                 "minus_di": 15.0,
             }
         )
-        result = _run(StrategyParams(), df, momentum=25.0, trend=20.0, volume=5.0, structure=5.0)
+        result = _run(_chase_params(), df, momentum=25.0, trend=20.0, volume=5.0, structure=5.0)
         assert result is not None
         score, reasons, _ = result
         assert score == pytest.approx(20.0)
@@ -466,7 +486,7 @@ class TestChaseThresholdParametrization:
                 "minus_di": 15.0,
             }
         )
-        result = _run(StrategyParams(), df, momentum=25.0, trend=20.0, volume=5.0, structure=5.0)
+        result = _run(_chase_params(), df, momentum=25.0, trend=20.0, volume=5.0, structure=5.0)
         assert result is not None
         score, reasons, _ = result
         assert score == pytest.approx(55.0)
@@ -485,9 +505,7 @@ class TestChaseThresholdParametrization:
                 "minus_di": 25.0,
             }
         )
-        result = _run(
-            StrategyParams(), df, momentum=-25.0, trend=-20.0, volume=-5.0, structure=-5.0
-        )
+        result = _run(_chase_params(), df, momentum=-25.0, trend=-20.0, volume=-5.0, structure=-5.0)
         assert result is not None
         score, reasons, _ = result
         assert score == pytest.approx(-20.0)
@@ -506,7 +524,7 @@ class TestChaseThresholdParametrization:
                 "minus_di": 15.0,
             }
         )
-        result = _run(StrategyParams(), df, momentum=25.0, trend=20.0, volume=5.0, structure=5.0)
+        result = _run(_chase_params(), df, momentum=25.0, trend=20.0, volume=5.0, structure=5.0)
         assert result is not None
         score, reasons, _ = result
         assert score == pytest.approx(30.0)
@@ -525,7 +543,7 @@ class TestChaseThresholdParametrization:
                 "minus_di": 15.0,
             }
         )
-        result = _run(StrategyParams(), df, momentum=25.0, trend=20.0, volume=5.0, structure=5.0)
+        result = _run(_chase_params(), df, momentum=25.0, trend=20.0, volume=5.0, structure=5.0)
         assert result is not None
         score, reasons, _ = result
         assert score == pytest.approx(20.0)
@@ -539,7 +557,7 @@ class TestChaseThresholdParametrization:
         ride'a da girmez (< chase_strong_trend_adx), böylece beklenen cap
         doğrudan chase_blocked_score_cap olur.
         """
-        params = StrategyParams(chase_cci_threshold=40.0)
+        params = _chase_params(chase_cci_threshold=40.0)
         blocked = _bull_df(
             {
                 "bb_position": "MIDDLE",
