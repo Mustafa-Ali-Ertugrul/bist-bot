@@ -38,6 +38,11 @@ class StrategyParams:
     chase_block_enabled: bool = True
     chase_blocked_score_cap: float = 20.0
     chase_strong_trend_cap: float = 30.0
+    # Chase "aÅŸÄ±rÄ± uzama" tespit eÅŸikleri (profil baÄŸÄ±msÄ±z; yalnÄ±zca
+    # overextended kararÄ±nÄ± belirler, cap bÃ¼yÃ¼klÃ¼kleri yukarÄ±da kalÄ±r).
+    chase_cci_threshold: float = 150.0
+    chase_resist_pct: float = 1.0
+    chase_strong_trend_adx: float = 30.0
     mtf_confluence_block_enabled: bool = True
     counter_trend_multiplier: float = 0.3
     agreement_gate_enabled: bool = False

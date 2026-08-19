@@ -380,3 +380,194 @@ class TestChaseCapValues:
         assert s1 == pytest.approx(10.0)
         assert s2 == pytest.approx(20.0)
         assert s1 != s2  # they must differ
+
+
+# ─── Test: (g) parametrize edilmiş eşikler ve sınır davranışı ────────
+
+
+class TestChaseThresholdParametrization:
+    """Yeni threshold alanları davranış-koruyucu bağlanır ve sınır
+    (boundary) durumları mevcut >= / <= yönleriyle korunur."""
+
+    def test_threshold_defaults_and_profile_independence(self):
+        """Threshold'lar profil bağımsız: default ve conservative aynı değerler."""
+        for params in (StrategyParams(), StrategyParams.conservative()):
+            assert params.chase_cci_threshold == pytest.approx(150.0)
+            assert params.chase_resist_pct == pytest.approx(1.0)
+            assert params.chase_strong_trend_adx == pytest.approx(30.0)
+
+    def test_cci_exact_threshold_blocks_long(self):
+        """cci == chase_cci_threshold (150) → >= koşulu tetiklenir."""
+        df = _bull_df(
+            {
+                "bb_position": "MIDDLE",
+                "cci": 150.0,
+                "dist_to_resistance_pct": 8.0,
+                "dist_to_support_pct": 8.0,
+                "adx": 20.0,
+                "plus_di": 25.0,
+                "minus_di": 15.0,
+            }
+        )
+        result = _run(StrategyParams(), df, momentum=25.0, trend=20.0, volume=5.0, structure=5.0)
+        assert result is not None
+        score, reasons, _ = result
+        assert score == pytest.approx(20.0)
+        assert any("Aşırı uzama chase koruması" in r for r in reasons)
+
+    def test_cci_just_below_threshold_does_not_block(self):
+        """cci = 149.9 (< 150) → blokaj yok → skor değişmez."""
+        df = _bull_df(
+            {
+                "bb_position": "MIDDLE",
+                "cci": 149.9,
+                "dist_to_resistance_pct": 8.0,
+                "dist_to_support_pct": 8.0,
+                "adx": 30.0,
+                "plus_di": 25.0,
+                "minus_di": 15.0,
+            }
+        )
+        result = _run(StrategyParams(), df, momentum=25.0, trend=20.0, volume=5.0, structure=5.0)
+        assert result is not None
+        score, reasons, _ = result
+        assert score == pytest.approx(55.0)
+        assert not any("chase" in r.lower() for r in reasons)
+
+    def test_dist_to_resistance_exact_threshold_blocks_long(self):
+        """dist_to_resistance_pct == chase_resist_pct (1.0) → <= koşulu tetiklenir."""
+        df = _bull_df(
+            {
+                "bb_position": "MIDDLE",
+                "cci": 50.0,
+                "dist_to_resistance_pct": 1.0,
+                "dist_to_support_pct": 8.0,
+                "adx": 20.0,
+                "plus_di": 25.0,
+                "minus_di": 15.0,
+            }
+        )
+        result = _run(StrategyParams(), df, momentum=25.0, trend=20.0, volume=5.0, structure=5.0)
+        assert result is not None
+        score, reasons, _ = result
+        assert score == pytest.approx(20.0)
+        assert any("Aşırı uzama chase koruması" in r for r in reasons)
+
+    def test_dist_to_resistance_just_above_threshold_does_not_block(self):
+        """dist_to_resistance_pct = 1.01 (> 1.0) → tetiklenmez."""
+        df = _bull_df(
+            {
+                "bb_position": "MIDDLE",
+                "cci": 50.0,
+                "dist_to_resistance_pct": 1.01,
+                "dist_to_support_pct": 8.0,
+                "adx": 30.0,
+                "plus_di": 25.0,
+                "minus_di": 15.0,
+            }
+        )
+        result = _run(StrategyParams(), df, momentum=25.0, trend=20.0, volume=5.0, structure=5.0)
+        assert result is not None
+        score, reasons, _ = result
+        assert score == pytest.approx(55.0)
+        assert not any("chase" in r.lower() for r in reasons)
+
+    def test_cci_exact_negative_threshold_blocks_short(self):
+        """cci == -chase_cci_threshold (-150) → <= -threshold koşulu tetiklenir."""
+        df = _bear_df(
+            {
+                "bb_position": "MIDDLE",
+                "cci": -150.0,
+                "dist_to_resistance_pct": 8.0,
+                "dist_to_support_pct": 8.0,
+                "adx": 20.0,
+                "plus_di": 15.0,
+                "minus_di": 25.0,
+            }
+        )
+        result = _run(
+            StrategyParams(), df, momentum=-25.0, trend=-20.0, volume=-5.0, structure=-5.0
+        )
+        assert result is not None
+        score, reasons, _ = result
+        assert score == pytest.approx(-20.0)
+        assert any("kısa skor" in r for r in reasons)
+
+    def test_strong_trend_adx_exact_threshold_uses_ride_cap(self):
+        """adx == chase_strong_trend_adx (30) + hizalı yönler → ride cap 30 (default)."""
+        df = _bull_df(
+            {
+                "bb_position": "ABOVE_UPPER",
+                "cci": 50.0,
+                "dist_to_resistance_pct": 8.0,
+                "dist_to_support_pct": 8.0,
+                "adx": 30.0,
+                "plus_di": 25.0,
+                "minus_di": 15.0,
+            }
+        )
+        result = _run(StrategyParams(), df, momentum=25.0, trend=20.0, volume=5.0, structure=5.0)
+        assert result is not None
+        score, reasons, _ = result
+        assert score == pytest.approx(30.0)
+        assert any("Güçlü trend ride" in r for r in reasons)
+
+    def test_strong_trend_adx_just_below_threshold_uses_blocked_cap(self):
+        """adx = 29.9 (< 30) → ride yok → sert cap 20 (default)."""
+        df = _bull_df(
+            {
+                "bb_position": "ABOVE_UPPER",
+                "cci": 50.0,
+                "dist_to_resistance_pct": 8.0,
+                "dist_to_support_pct": 8.0,
+                "adx": 29.9,
+                "plus_di": 25.0,
+                "minus_di": 15.0,
+            }
+        )
+        result = _run(StrategyParams(), df, momentum=25.0, trend=20.0, volume=5.0, structure=5.0)
+        assert result is not None
+        score, reasons, _ = result
+        assert score == pytest.approx(20.0)
+        assert any("Aşırı uzama chase koruması" in r for r in reasons)
+        assert not any("Güçlü trend ride" in r for r in reasons)
+
+    def test_custom_cci_threshold_is_honored(self):
+        """Threshold override motor tarafından okunur: 40.0 → cci=140 blokaj, cci=39 yok.
+
+        adx=25.0 seçilir: ADX cezası yemez (>= adx_threshold) ve strong-trend
+        ride'a da girmez (< chase_strong_trend_adx), böylece beklenen cap
+        doğrudan chase_blocked_score_cap olur.
+        """
+        params = StrategyParams(chase_cci_threshold=40.0)
+        blocked = _bull_df(
+            {
+                "bb_position": "MIDDLE",
+                "cci": 140.0,
+                "dist_to_resistance_pct": 8.0,
+                "dist_to_support_pct": 8.0,
+                "adx": 25.0,
+                "plus_di": 25.0,
+                "minus_di": 15.0,
+            }
+        )
+        free = _bull_df(
+            {
+                "bb_position": "MIDDLE",
+                "cci": 39.0,
+                "dist_to_resistance_pct": 8.0,
+                "dist_to_support_pct": 8.0,
+                "adx": 25.0,
+                "plus_di": 25.0,
+                "minus_di": 15.0,
+            }
+        )
+        run_blocked = _run(params, blocked, momentum=25.0, trend=20.0, volume=5.0, structure=5.0)
+        run_free = _run(params, free, momentum=25.0, trend=20.0, volume=5.0, structure=5.0)
+        assert run_blocked is not None and run_free is not None
+        score_blocked, reasons_blocked, _ = run_blocked
+        score_free, reasons_free, _ = run_free
+        assert score_blocked == pytest.approx(20.0)
+        assert any("Aşırı uzama chase koruması" in r for r in reasons_blocked)
+        assert score_free == pytest.approx(55.0)
+        assert not any("chase" in r.lower() for r in reasons_free)
