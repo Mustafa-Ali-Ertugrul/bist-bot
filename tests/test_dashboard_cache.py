@@ -8,7 +8,6 @@ from typing import Any, cast
 
 import pandas as pd
 from flask_jwt_extended import create_access_token
-from sqlalchemy import text
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:

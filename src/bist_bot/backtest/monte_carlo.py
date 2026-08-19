@@ -90,7 +90,7 @@ def simulate_geometric_brownian_motion(
     import numpy as np
 
     rng = np.random.default_rng(seed)
-    drift = (mu - 0.5 * sigma ** 2) * n_steps
+    drift = (mu - 0.5 * sigma**2) * n_steps
     diff = sigma * math.sqrt(n_steps)
     # Closed-form terminal log-normal for efficiency.
     terminals = initial_equity * np.exp(drift + diff * rng.standard_normal(n_sims))
@@ -116,9 +116,7 @@ def simulate_geometric_brownian_motion(
 
     # Loss exceedance probabilities.
     thresholds = [-0.05, -0.10, -0.20, -0.30]
-    result.prob_loss_exceeds = {
-        f"{abs(t):.0%}": float(np.mean(returns <= t)) for t in thresholds
-    }
+    result.prob_loss_exceeds = {f"{abs(t):.0%}": float(np.mean(returns <= t)) for t in thresholds}
     return result
 
 
@@ -140,9 +138,7 @@ def summarize_result(result: MonteCarloResult) -> str:
     return "\n".join(lines)
 
 
-def estimate_gbm_parameters(
-    df, price_col: str = "close"
-) -> tuple[float, float]:
+def estimate_gbm_parameters(df, price_col: str = "close") -> tuple[float, float]:
     """Estimate daily log-return mean/std for GBM from a historical price series.
 
     Returns the conservative default pair ``(0.001, 0.02)`` when the series is

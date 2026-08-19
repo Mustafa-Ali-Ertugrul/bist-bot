@@ -6,7 +6,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from bist_bot.execution.live import LiveBroker, _resolve_venue
 from bist_bot.execution.base import (
     AccountInfo,
     BaseExecutionProvider,
@@ -18,6 +17,7 @@ from bist_bot.execution.base import (
     OrderType,
     Position,
 )
+from bist_bot.execution.live import LiveBroker, _resolve_venue
 
 # ---------------------------------------------------------------------------
 # Helpers

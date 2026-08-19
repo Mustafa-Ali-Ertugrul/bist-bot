@@ -190,7 +190,7 @@ class CircuitBreaker:
         """
         with self._lock:
             conf = confidence or self._config.var_confidence_level
-            series = list(self._daily_pnl_series[-self._config.var_lookback_bars:])
+            series = list(self._daily_pnl_series[-self._config.var_lookback_bars :])
             if len(series) < 10:
                 return 0.0
             import statistics
@@ -212,9 +212,10 @@ class CircuitBreaker:
             if self._peak_equity > 0:
                 dd_pct = max(0.0, (self._peak_equity - self._capital) / self._peak_equity)
             var_val = 0.0
-            series = list(self._daily_pnl_series[-self._config.var_lookback_bars:])
+            series = list(self._daily_pnl_series[-self._config.var_lookback_bars :])
             if len(series) >= 10 and self._capital > 0:
                 import statistics
+
                 mean = statistics.mean(series)
                 stdev = statistics.pstdev(series) if len(series) > 1 else 0.0
                 z_scores = {0.90: 1.282, 0.95: 1.645, 0.99: 2.326}
@@ -232,9 +233,7 @@ class CircuitBreaker:
             }
             if dd_pct > 0:
                 result["drawdown_pct"] = round(dd_pct * 100, 2)
-                result["max_drawdown_limit_pct"] = (
-                    self._config.max_account_drawdown_pct * 100
-                )
+                result["max_drawdown_limit_pct"] = self._config.max_account_drawdown_pct * 100
             if var_val > 0:
                 result["var_95_pct"] = round(var_val * 100, 2)
             return result
@@ -312,7 +311,11 @@ class CircuitBreaker:
         self._capital += pnl_delta
         if self._capital > self._peak_equity:
             self._peak_equity = self._capital
-        dd_pct = (self._peak_equity - self._capital) / self._peak_equity if self._peak_equity > 0 else 0.0
+        dd_pct = (
+            (self._peak_equity - self._capital) / self._peak_equity
+            if self._peak_equity > 0
+            else 0.0
+        )
         if dd_pct >= self._config.max_account_drawdown_pct:
             self._trip(f"drawdown {dd_pct:.2%} >= {self._config.max_account_drawdown_pct:.2%}")
         self._daily_pnl_series.append(float(pnl_delta))

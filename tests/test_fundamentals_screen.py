@@ -39,9 +39,7 @@ def test_screen_applies_max_pe_and_market_cap_filter() -> None:
             "B.IS": {"name": "B", "sector": "S", "market_cap": 3e9, "pe_ratio": 10.0},
         }
     )
-    rows = screen_fundamentals(
-        fetcher, ["A.IS", "B.IS"], max_pe=25, min_market_cap_tl=2e9
-    )
+    rows = screen_fundamentals(fetcher, ["A.IS", "B.IS"], max_pe=25, min_market_cap_tl=2e9)
     assert [r.ticker for r in rows] == ["B.IS"]
 
 

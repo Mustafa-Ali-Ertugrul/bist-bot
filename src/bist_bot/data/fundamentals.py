@@ -90,8 +90,7 @@ def format_fundamentals_table(rows: list[FundamentalRow], limit: int | None = 20
     for row in visible:
         cap_text = f"{row.market_cap / 1_000_000_000:,.2f} Mr $" if row.market_cap else "-"
         lines.append(
-            f"{row.ticker:<12} {row.pe_ratio:>8.1f} {cap_text:>14} "
-            f"{row.sector:<24} {row.name:<24}"
+            f"{row.ticker:<12} {row.pe_ratio:>8.1f} {cap_text:>14} {row.sector:<24} {row.name:<24}"
         )
     if limit is not None and len(rows) > limit:
         lines.append(f"... toplam {len(rows)} hisse (ilk {limit} gösteriliyor)")

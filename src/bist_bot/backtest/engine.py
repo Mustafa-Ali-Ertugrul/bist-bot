@@ -923,7 +923,11 @@ class Backtester:
             # Entry fees: commission + exchange fee + spread only; no stamp/BSMV on buy.
             unit_cost = entry_price * (
                 1
-                + (self.cost_model.commission_bps + self.cost_model.exchange_fee_bps + self.cost_model.spread_bps)
+                + (
+                    self.cost_model.commission_bps
+                    + self.cost_model.exchange_fee_bps
+                    + self.cost_model.spread_bps
+                )
                 / 10_000
             )
             shares = int(capital_to_deploy / unit_cost) if unit_cost > 0 else 0
@@ -939,7 +943,14 @@ class Backtester:
         if self.cost_model is None:
             cost = shares * unit_cost
         else:
-            cost = shares * entry_price + entry_commission + entry_bsmv_tl + entry_exchange + entry_stamp_tax_tl + entry_spread_tl
+            cost = (
+                shares * entry_price
+                + entry_commission
+                + entry_bsmv_tl
+                + entry_exchange
+                + entry_stamp_tax_tl
+                + entry_spread_tl
+            )
         entry_slippage_tl = shares * max(entry_price - reference_price, 0.0)
         return {
             "entry_date": entry_date,
@@ -1037,7 +1048,14 @@ class Backtester:
             exit_stamp_tax_tl = fee_components["stamp_tax"]
             exit_spread_tl = fee_components["spread"]
 
-        revenue = notional - exit_fee_tl - exit_bsmv_tl - exit_exchange_fee_tl - exit_stamp_tax_tl - exit_spread_tl
+        revenue = (
+            notional
+            - exit_fee_tl
+            - exit_bsmv_tl
+            - exit_exchange_fee_tl
+            - exit_stamp_tax_tl
+            - exit_spread_tl
+        )
         profit_tl = revenue - position["cost"]
         profit_pct = (profit_tl / position["cost"]) * 100 if position["cost"] else 0.0
         holding_days = max((exit_date - position["entry_date"]).days, 0)
@@ -1050,8 +1068,12 @@ class Backtester:
         total_spread_cost_tl = position.get("entry_spread_tl", 0.0) + exit_spread_tl
         total_slippage_tl = position["entry_slippage_tl"] + exit_slippage_tl
         total_cost_tl = (
-            total_commission_tl + total_bsmv_tl + total_exchange_fee_tl
-            + total_stamp_tax_tl + total_spread_cost_tl + total_slippage_tl
+            total_commission_tl
+            + total_bsmv_tl
+            + total_exchange_fee_tl
+            + total_stamp_tax_tl
+            + total_spread_cost_tl
+            + total_slippage_tl
         )
 
         trades.append(

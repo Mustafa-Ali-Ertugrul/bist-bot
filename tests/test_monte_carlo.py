@@ -15,26 +15,20 @@ from bist_bot.backtest.monte_carlo import (
 
 
 def test_simulate_returns_percentiles() -> None:
-    result = simulate_geometric_brownian_motion(
-        mu=0.0, sigma=0.0, n_sims=100, seed=42
-    )
+    result = simulate_geometric_brownian_motion(mu=0.0, sigma=0.0, n_sims=100, seed=42)
     # Zero drift + zero vol → all paths stay at 1.0 equity, return = 0.
     assert result.percentiles["p50"] == 0.0
     assert result.prob_profit == 0.0  # returns == 0, not strictly > 0
 
 
 def test_simulate_positive_drift_skews_right() -> None:
-    result = simulate_geometric_brownian_motion(
-        mu=0.05, sigma=0.0, n_sims=500, seed=42
-    )
+    result = simulate_geometric_brownian_motion(mu=0.05, sigma=0.0, n_sims=500, seed=42)
     assert result.percentiles["p50"] > 0.0
     assert result.prob_profit > 0.5
 
 
 def test_simulate_negative_drift_skews_left() -> None:
-    result = simulate_geometric_brownian_motion(
-        mu=-0.05, sigma=0.0, n_sims=500, seed=42
-    )
+    result = simulate_geometric_brownian_motion(mu=-0.05, sigma=0.0, n_sims=500, seed=42)
     assert result.percentiles["p50"] < 0.0
     assert result.prob_profit < 0.5
 
