@@ -81,9 +81,9 @@ def test_deserialize_reasons():
     # This is better tested in the actual function tests
 
 
-def test_signals_repository_init():
+def test_signals_repository_init(tmp_path):
     """Test SignalsRepository initialization."""
-    manager = DatabaseManager()
+    manager = DatabaseManager(sqlite_path=str(tmp_path / "init_test.db"))
     repo = SignalsRepository(manager=manager)
     assert repo.manager == manager
 

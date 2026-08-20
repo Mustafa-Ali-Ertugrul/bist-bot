@@ -22,7 +22,13 @@ from bist_bot.services.notification_service import NotificationDispatchService
 from bist_bot.services.paper_trade_service import PaperTradeService
 from bist_bot.services.shadow_trade_service import ShadowTradeService
 from bist_bot.services.signal_change_service import SignalChangeService
-from bist_bot.strategy.signal_models import Signal, SignalType
+from bist_bot.strategy.params import StrategyParams
+from bist_bot.strategy.signal_models import (
+    Signal,
+    SignalCategory,
+    SignalType,
+    categorize_signal,
+)
 
 logger = get_logger(__name__, component="scanner")
 EMPTY_REJECTION_BREAKDOWN = {
@@ -70,7 +76,12 @@ class ScanService:
         self.db = db
         self.broker = broker
         self.settings = settings or default_settings
-        self.signal_change_service = signal_change_service or SignalChangeService(db, notifier)
+        self.signal_change_service = signal_change_service or SignalChangeService(
+            db,
+            notifier,
+            params=StrategyParams.from_settings(),
+            min_score_delta=getattr(self.settings, "SIGNAL_CHANGE_MIN_SCORE_DELTA", None),
+        )
         self.execution_service = execution_service or ExecutionService(
             db, broker=broker, settings=self.settings
         )
@@ -203,22 +214,19 @@ class ScanService:
             )
             actionable = self.engine.get_actionable_signals(signals)
             self._process_shadow_trades(signals, all_data)
-            buys = [
-                s
-                for s in actionable
-                if s.signal_type in (SignalType.BUY, SignalType.STRONG_BUY, SignalType.WEAK_BUY)
-            ]
-            sells = [
-                s
-                for s in actionable
-                if s.signal_type in (SignalType.SELL, SignalType.STRONG_SELL, SignalType.WEAK_SELL)
-            ]
+            actionable_buys = [s for s in actionable if s.signal_type.is_buy]
+            actionable_sells = [s for s in actionable if s.signal_type.is_sell]
+            al_signals = [s for s in signals if categorize_signal(s) is SignalCategory.AL]
             self.last_scan_stats = {
                 "scanned": len(all_data),
                 "signals": len(signals),
-                "actionable": len(actionable),
-                "buys": len(buys),
-                "sells": len(sells),
+                # NOTE: 'actionable' counts only canonical AL signals (score >= buy_threshold).
+                # Previously this counted all actionable types (buys + sells).  The new
+                # semantic matches the daily report's "Actionable AL" column.  Historical
+                # scan_log rows retain the old meaning — dashboard should label accordingly.
+                "actionable": len(al_signals),
+                "buys": len(actionable_buys),
+                "sells": len(actionable_sells),
             }
 
             self._check_signal_changes(signals)
@@ -240,20 +248,20 @@ class ScanService:
             self.db.save_scan_log(
                 len(all_data),
                 len(signals),
-                len(buys),
-                len(sells),
-                len(actionable),
+                len(actionable_buys),
+                len(actionable_sells),
+                len(al_signals),
                 scan_id=str(self.last_rejection_breakdown.get("scan_id", "") or ""),
                 rejection_breakdown=self.last_rejection_breakdown,
             )
             self.notification_service.notify_scan_results(signals, actionable, len(all_data))
 
             if getattr(self.settings, "PAPER_MODE", False):
-                self.update_paper_trades()
+                self.update_paper_trades(signals=signals)
 
             duration_ms = round((time.perf_counter() - started_at) * 1000, 2)
             rejection_count = len(all_data) - len(signals)
-            radar_count = sum(1 for s in signals if s.signal_type == SignalType.RADAR)
+            radar_count = sum(1 for s in signals if categorize_signal(s) is SignalCategory.RADAR)
 
             inc_counter("bist_scan_total")
             inc_counter("bist_signal_emitted_total", len(actionable))
@@ -265,11 +273,11 @@ class ScanService:
                 requested=len(watchlist),
                 fetched=len(all_data),
                 signals=len(signals),
-                actionable=len(actionable),
+                actionable=len(al_signals),
                 radar=radar_count,
                 rejected=rejection_count,
-                buys=len(buys),
-                sells=len(sells),
+                buys=len(actionable_buys),
+                sells=len(actionable_sells),
                 duration_ms=duration_ms,
                 scan_id=str(self.last_rejection_breakdown.get("scan_id", "") or ""),
             )
@@ -303,6 +311,6 @@ class ScanService:
                 self.circuit_breaker.record_error()
             raise
 
-    def update_paper_trades(self) -> None:
+    def update_paper_trades(self, signals: list["Signal"] | None = None) -> None:
         """Refresh open paper trades and close only triggered positions."""
-        self.paper_trade_service.update_open_trades()
+        self.paper_trade_service.update_open_trades(signals=signals)

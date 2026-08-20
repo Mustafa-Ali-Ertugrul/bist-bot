@@ -21,6 +21,16 @@ class SignalType(Enum):
     STRONG_SELL = "🚨 GÜÇLÜ SAT"
 
     @property
+    def is_buy(self) -> bool:
+        """Return True when this type belongs to the long direction (weak levels included)."""
+        return self in {SignalType.STRONG_BUY, SignalType.BUY, SignalType.WEAK_BUY}
+
+    @property
+    def is_sell(self) -> bool:
+        """Return True when this type belongs to the short direction (weak levels included)."""
+        return self in {SignalType.STRONG_SELL, SignalType.SELL, SignalType.WEAK_SELL}
+
+    @property
     def key(self) -> str:
         key_map = {
             "STRONG_BUY": "signal.strong_buy",
@@ -55,6 +65,50 @@ class SignalType(Enum):
         raise ValueError(f"Unknown signal type: {value}")
 
 
+class SignalCategory(Enum):
+    AL = "AL"
+    RADAR = "RADAR"
+    SAT = "SAT"
+    HOLD = "HOLD"
+
+
+def categorize(
+    signal_type: SignalType, score: float, buy_threshold: float = 20.0
+) -> SignalCategory:
+    """Classify a signal into the canonical category (AL / RADAR / SAT / HOLD).
+
+    Rules (in priority order):
+    1. Short/sell direction family -> SAT
+    2. HOLD type -> HOLD
+    3. RADAR type -> RADAR if score > 0 else HOLD
+    4. Long/buy direction family:
+       - score >= buy_threshold -> AL
+       - score > 0 -> RADAR
+       - otherwise -> HOLD
+    """
+    if signal_type.is_sell:
+        return SignalCategory.SAT
+    if signal_type is SignalType.HOLD:
+        return SignalCategory.HOLD
+    if signal_type is SignalType.RADAR:
+        return SignalCategory.RADAR if score > 0 else SignalCategory.HOLD
+    if signal_type.is_buy:
+        if score >= buy_threshold:
+            return SignalCategory.AL
+        if score > 0:
+            return SignalCategory.RADAR
+        return SignalCategory.HOLD
+    return SignalCategory.HOLD
+
+
+def categorize_signal(signal: Signal, buy_threshold: float | None = None) -> SignalCategory:
+    """Categorize a Signal object using its internal buy_threshold unless overridden."""
+    threshold = (
+        buy_threshold if buy_threshold is not None else getattr(signal, "buy_threshold", 20.0)
+    )
+    return categorize(signal.signal_type, float(signal.score), threshold)
+
+
 def ensure_utc(value: datetime) -> datetime:
     """Return an aware UTC datetime and reject ambiguous naive values."""
     if value.tzinfo is None or value.utcoffset() is None:
@@ -86,9 +140,14 @@ class Signal:
     agreement_ratio: float | None = field(default=None)
     expires_at: datetime | None = field(default=None)
     buy_threshold: float = 20.0
+    sell_threshold: float = -20.0
     is_actionable: bool = False
     score_breakdown: dict[str, float] | None = field(default=None)
     """Per-component score contributions for explainability."""
+    ema_200: float | None = field(default=None)
+    """EMA200 value at signal time (for shadow trend filtering)."""
+    ema_200_slope: float | None = field(default=None)
+    """Direction of EMA200: >0 rising, <0 falling, 0 flat."""
 
     def __post_init__(self) -> None:
         if self.expires_at is None:
@@ -125,8 +184,11 @@ class Signal:
             agreement_ratio=self.agreement_ratio,
             expires_at=self.expires_at,
             buy_threshold=self.buy_threshold,
+            sell_threshold=self.sell_threshold,
             is_actionable=self.is_actionable,
             score_breakdown=dict(self.score_breakdown) if self.score_breakdown else None,
+            ema_200=self.ema_200,
+            ema_200_slope=self.ema_200_slope,
         )
 
     def top_contributors(self, *, count: int = 3) -> list[tuple[str, float]]:

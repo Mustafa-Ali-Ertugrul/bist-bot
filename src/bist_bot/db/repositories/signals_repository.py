@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any, cast
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select
 
@@ -150,6 +151,31 @@ class SignalsRepository:
         rows = self.manager.run_session(_read, read_only=True)
         return [self._signal_to_dict(row) for row in rows]
 
+    def get_signals_for_day(
+        self,
+        day: date,
+        tz: ZoneInfo = ZoneInfo("Europe/Istanbul"),
+    ) -> list[dict[str, Any]]:
+        """Return signals generated on the given local day (half-open interval [start, end) in UTC)."""
+        start_local = datetime.combine(day, time.min, tzinfo=tz)
+        end_local = start_local + timedelta(days=1)
+        start_utc = start_local.astimezone(UTC)
+        end_utc = end_local.astimezone(UTC)
+
+        def _read(session):
+            statement = (
+                select(SignalRecord)
+                .where(
+                    SignalRecord.timestamp >= start_utc,
+                    SignalRecord.timestamp < end_utc,
+                )
+                .order_by(SignalRecord.timestamp.asc(), SignalRecord.id.asc())
+            )
+            return session.scalars(statement).all()
+
+        rows = self.manager.run_session(_read, read_only=True)
+        return [self._signal_to_dict(row) for row in rows]
+
     def get_recent_signals(
         self, limit: int = 50, ticker: str | None = None
     ) -> list[dict[str, Any]]:
@@ -282,6 +308,31 @@ class SignalsRepository:
                 select(ScanLogRecord)
                 .order_by(ScanLogRecord.timestamp.desc(), ScanLogRecord.id.desc())
                 .limit(limit)
+            )
+            return session.scalars(statement).all()
+
+        rows = self.manager.run_session(_read, read_only=True)
+        return [self._scan_log_to_dict(row) for row in rows]
+
+    def get_scan_logs_for_day(
+        self,
+        day: date,
+        tz: ZoneInfo = ZoneInfo("Europe/Istanbul"),
+    ) -> list[dict[str, Any]]:
+        """Return scan logs recorded on the given local day (half-open interval [start, end) in UTC)."""
+        start_local = datetime.combine(day, time.min, tzinfo=tz)
+        end_local = start_local + timedelta(days=1)
+        start_utc = start_local.astimezone(UTC)
+        end_utc = end_local.astimezone(UTC)
+
+        def _read(session):
+            statement = (
+                select(ScanLogRecord)
+                .where(
+                    ScanLogRecord.timestamp >= start_utc,
+                    ScanLogRecord.timestamp < end_utc,
+                )
+                .order_by(ScanLogRecord.timestamp.asc(), ScanLogRecord.id.asc())
             )
             return session.scalars(statement).all()
 

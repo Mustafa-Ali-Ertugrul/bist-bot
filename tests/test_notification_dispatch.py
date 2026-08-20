@@ -8,7 +8,6 @@ import os
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
-from unittest.mock import patch
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:
@@ -83,7 +82,7 @@ def test_scan_summary_distinguishes_actionable_buys_from_radars():
     summary = captured[0]
     assert "Alım Sinyali: 1" in summary
     assert "Radar / İzle: 1" in summary
-    assert "🟢 ASTOR.IS" in summary
+    assert "🟢 Astor Enerji" in summary
     assert "(Skor: +30) — AL" in summary
     assert "🟡 Odas" in summary
     assert "(Skor: +11) — RADAR" in summary
@@ -107,22 +106,14 @@ OVERFIT_NAMES = {"ASELS.IS", "GARAN.IS", "SAHOL.IS", "THYAO.IS", "BIMAS.IS", "IS
 
 def _make_service(
     notifier: TelegramNotifier,
-    batch_threshold: int = 3,
 ) -> NotificationDispatchService:
-    """Build a service whose robust set and chat_id are test-controlled.
+    """Build a service whose group chat_id is test-controlled.
 
     ``_make_signal`` already uses a far-future timestamp so the real
     ``is_expired`` returns False without patching.
     """
-    with patch(
-        "bist_bot.services.notification_service.load_watchlist",
-        return_value=list(ROBUST_SET),
-    ):
-        with settings.override(
-            TELEGRAM_GROUP_CHAT_ID="mock-group",
-            TELEGRAM_GROUP_BATCH_THRESHOLD=batch_threshold,
-        ):
-            svc = NotificationDispatchService(notifier, sleeper=lambda _: None)
+    with settings.override(TELEGRAM_GROUP_CHAT_ID="mock-group"):
+        svc = NotificationDispatchService(notifier, sleeper=lambda _: None)
     assert svc._group_chat_id == "mock-group"
     return svc
 
@@ -200,8 +191,9 @@ def test_actionable_signal_to_owner_and_group():
     assert "AL SİNYALİ" in detail_msg
     assert "actionable" in detail_msg
 
-    group_msg = captured[2]
-    assert "AL (robust üye)" in group_msg
+    assert captured[2] == captured[0]
+    assert captured[3] == detail_msg
+    assert "AL SİNYALİ" in captured[3]
 
 
 # ============================================================================
@@ -210,6 +202,7 @@ def test_actionable_signal_to_owner_and_group():
 
 
 def test_radar_signal_to_owner_and_group_if_robust():
+    """Positive RADAR signals now get detail messages (with 'RADAR / İZLE' label)."""
     notifier, captured = _make_notifier_with_fake_sender()
     svc = _make_service(notifier)
 
@@ -222,23 +215,22 @@ def test_radar_signal_to_owner_and_group_if_robust():
 
     svc.notify_scan_results([signal], [], 10)
 
-    assert len(captured) >= 2
-
-    detail_msg = captured[1]
-    assert "RADAR / İZLE" in detail_msg
-    assert "actionable DEĞİL" in detail_msg
-
-    group_msg = captured[2]
-    assert "İZLE" in group_msg
-    assert "robust üye" in group_msg
+    # Owner: summary + detail with RADAR / İZLE label
+    # Group:  summary + detail (mirrored)
+    assert len(captured) == 4
+    assert "BIST TARAMA RAPORU" in captured[0]
+    assert "RADAR / İZLE" in captured[1]
+    assert captured[2] == captured[0]  # group summary == owner summary
+    assert captured[3] == captured[1]  # group detail == owner detail
 
 
 # ============================================================================
-# (c) Radar signal NOT in robust watchlist → no group message
+# (c) Radar signal outside robust watchlist is still only in summary
 # ============================================================================
 
 
-def test_radar_signal_no_group_if_not_robust():
+def test_radar_signal_outside_robust_is_mirrored_to_group():
+    """Positive RADAR outside robust watchlist still gets detail messages."""
     notifier, captured = _make_notifier_with_fake_sender()
     svc = _make_service(notifier)
 
@@ -251,20 +243,19 @@ def test_radar_signal_no_group_if_not_robust():
 
     svc.notify_scan_results([signal], [], 10)
 
-    assert len(captured) >= 2, f"Expected scan summary + detail; got {len(captured)}"
+    assert len(captured) == 4
+    assert "BIST TARAMA RAPORU" in captured[0]
     assert "RADAR / İZLE" in captured[1]
-
-    group_msgs = [m for m in captured if "Grup" in m]
-    assert len(group_msgs) == 0, f"No group messages expected; got {group_msgs}"
+    assert captured[2] == captured[0]
+    assert captured[3] == captured[1]
 
 
 # ============================================================================
-# (c2) Overfit-guard: ASELS/GARAN/SAHOL never go to group even with positive score
+# (c2) Every positive owner detail is mirrored, regardless of old robust classification
 # ============================================================================
 
 
-def test_overfit_names_never_reach_group():
-    """Hard guard against re-introducing overfit names to public channel."""
+def test_all_positive_owner_details_reach_group():
     notifier, captured = _make_notifier_with_fake_sender()
     svc = _make_service(notifier)
 
@@ -275,8 +266,8 @@ def test_overfit_names_never_reach_group():
     ]
     svc.notify_scan_results(signals, signals, 10)
 
-    group_msgs = [m for m in captured if "Grup" in m]
-    assert len(group_msgs) == 0, f"Overfit names leaked to group: {group_msgs}"
+    assert captured[4] == captured[0]
+    assert captured[5:8] == captured[1:4]
 
 
 # ============================================================================
@@ -296,8 +287,9 @@ def test_negative_score_skipped_everywhere():
 
     svc.notify_scan_results([signal], [], 10)
 
-    assert len(captured) == 1, f"Expected only scan summary, got {len(captured)}"
+    assert len(captured) == 2, f"Expected owner and group summaries, got {len(captured)}"
     assert "BIST TARAMA RAPORU" in captured[0]
+    assert captured[1] == captured[0]
 
 
 # ============================================================================
@@ -334,13 +326,13 @@ def test_diagnosis_shows_agreement_ratio_and_gates():
 
 
 # ============================================================================
-# (f) Batch: > threshold robust signals → single summary to group
+# (f) Multiple robust signals → each group message uses full detail format
 # ============================================================================
 
 
-def test_batch_sends_single_summary_when_above_threshold():
+def test_multiple_robust_signals_send_full_details_to_group():
     notifier, captured = _make_notifier_with_fake_sender()
-    svc = _make_service(notifier, batch_threshold=2)
+    svc = _make_service(notifier)
 
     signals = [
         _make_signal(ticker="ASTOR.IS", signal_type=SignalType.BUY, score=30.0),
@@ -352,11 +344,22 @@ def test_batch_sends_single_summary_when_above_threshold():
 
     svc.notify_scan_results(signals, actionable, 10)
 
-    group_msgs = [m for m in captured if "Grup Özet" in m]
-    assert len(group_msgs) == 1, f"Expected 1 batch summary, got {len(group_msgs)}"
-    assert "3 sinyal" in group_msgs[0]
-
-    assert len(captured) >= 5
+    # 3 signals: 2 AL + 1 positive RADAR — all get detail messages
+    # captured order:
+    # 0: summary (owner)
+    # 1: ASTOR detail (owner) — AL
+    # 2: TUPRS detail (owner) — AL
+    # 3: PETKM detail (owner) — RADAR / İZLE
+    # 4: summary (group)
+    # 5: ASTOR detail (group)
+    # 6: TUPRS detail (group)
+    # 7: PETKM detail (group)
+    owner_details = captured[1:4]
+    assert captured[4] == captured[0]
+    group_details = captured[5:8]
+    assert group_details == owner_details
+    assert all("📋 <b>Nedenler:</b>" in message for message in group_details)
+    assert all("🔍 <b>Teşhis:</b>" in message for message in group_details)
 
 
 # ============================================================================
