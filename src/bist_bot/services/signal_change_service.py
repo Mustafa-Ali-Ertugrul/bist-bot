@@ -185,4 +185,3 @@ class SignalChangeService:
             gate=gate,
             suppress_reason=suppress_reason,
         )
-
