@@ -250,6 +250,10 @@ class RiskSettings:
     MIN_SIGNAL_PROBABILITY: float = _get_float_env("MIN_SIGNAL_PROBABILITY", 0.50)
     MIN_LIQUIDITY_VALUE_TL: float = _get_float_env("MIN_LIQUIDITY_VALUE_TL", 5_000_000.0)
     DAILY_LOSS_CAP_PCT: float = _get_float_env("DAILY_LOSS_CAP_PCT", 3.0)
+    MIN_STOP_LOSS_PCT: float = _get_float_env("MIN_STOP_LOSS_PCT", 1.5)
+    ATR_TARGET_FLOOR_PCT: float = _get_float_env("ATR_TARGET_FLOOR_PCT", 2.0)
+    FALLBACK_TARGET_RR: float = _get_float_env("FALLBACK_TARGET_RR", 2.0)
+    ATR_TARGET_MULT: float = _get_float_env("ATR_TARGET_MULT", 1.5)
 
 
 @dataclass(frozen=True)

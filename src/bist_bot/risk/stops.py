@@ -125,6 +125,7 @@ def determine_final_levels(
     H8: round(x,2) yerine round_to_tick kullanılır (BIST fiyat adımı).
     H8: hedef/reference dışındaki ±daily_price_limit_pct bandına clamp'lendi.
     H3: stop/target ATR katları tutarsızsa (ATR dışındaysa) fallback uygulanır.
+    Z2: MIN_STOP_LOSS_PCT tabanı + volatilite-adaptif Yüzdelik→ATR fallback.
     """
     all_stops: dict[str, float] = {
         "ATR": levels.stop_atr,
@@ -188,6 +189,33 @@ def determine_final_levels(
         levels.final_target = levels.target_percent
         target_method = "Yüzdelik"
 
+    # ── Z2: Yüzdelik fallback → volatilite-adaptif hedef (ATR) ────────────
+    # When final target fell back to fixed percent and ATR is valid, replace
+    # with max(ATR*ATR_TARGET_MULT, risk*FALLBACK_TARGET_RR) clamped to
+    # [price*(1+ATR_TARGET_FLOOR_PCT), price*1.10] — converges with backtest's
+    # close+risk*2.0 contract and removes the +8% clustering on low-vol names.
+    if target_method == "Yüzdelik" and levels.target_atr > price and levels.stop_atr > 0:
+        try:
+            from bist_bot.config.settings import settings as _z2_settings
+
+            _atr_mult = float(getattr(_z2_settings, "ATR_TARGET_MULT", 1.5))
+            _fallback_rr = float(getattr(_z2_settings, "FALLBACK_TARGET_RR", 2.0))
+            _floor_pct = float(getattr(_z2_settings, "ATR_TARGET_FLOOR_PCT", 2.0))
+            _atr_est = (levels.target_atr - price) / _atr_mult if _atr_mult != 0 else 0.0
+            _risk = price - levels.final_stop
+            if _risk > 0 and _atr_est > 0:
+                _atr_target = price + _atr_mult * _atr_est
+                _rr_target = price + _fallback_rr * _risk
+                _fallback = max(_atr_target, _rr_target)
+                _floor = price * (1 + _floor_pct / 100.0)
+                _cap = price * 1.10
+                _fallback = max(_floor, min(_fallback, _cap))
+                if _fallback > price:
+                    levels.final_target = _fallback
+                    target_method = "ATR-fallback"
+        except Exception:
+            pass
+
     # ── H8: ±günlük fiyat limiti clamp ────────────────────────────────────
     # BIST %10 günlük fiyat sınırları vardır. Hedef/reference dışındaki
     # bu bandı aşan hedefler ulaşılamaztır → clamp + işaret.
@@ -201,6 +229,17 @@ def determine_final_levels(
     if levels.final_stop > 0 and levels.final_stop < min_stop:
         levels.final_stop = min_stop
         limit_clamped = True
+
+    # ── Z2: MIN_STOP_LOSS_PCT tabanı (limit clamp sonrası, tick öncesi) ───
+    try:
+        from bist_bot.config.settings import settings as _z2s2
+
+        _min_stop_pct = float(getattr(_z2s2, "MIN_STOP_LOSS_PCT", 1.5))
+        _min_stop_price = price * (1 - _min_stop_pct / 100.0)
+        if levels.final_stop > _min_stop_price:
+            levels.final_stop = _min_stop_price
+    except Exception:
+        pass
 
     # ── H8: BIST tick rounding (round(x,2) yerine) ────────────────────────
     # Stop BUY yönünde (aşağı), target SELL yönünde (yukarı) yuvarlanır.
