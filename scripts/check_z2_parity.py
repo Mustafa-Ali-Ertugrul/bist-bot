@@ -23,6 +23,15 @@ Behavior:
 from __future__ import annotations
 
 import argparse
+import sys
+
+# Windows cp1252 cannot encode Turkish characters in --help output; force UTF-8 where possible.
+if getattr(sys.stdout, "encoding", None) and sys.stdout.encoding.lower() != "utf-8":  # pragma: no cover
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
+        sys.stderr.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
+    except Exception:
+        pass
 import csv
 import os
 import subprocess
