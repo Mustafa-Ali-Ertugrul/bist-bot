@@ -157,9 +157,7 @@ def apply_buy_side_risk(
                 )
             else:
                 reason_code = "portfolio_risk_blocked"
-                reason_detail = (
-                    "portfolio correlation or sizing constraints blocked candidate"
-                )
+                reason_detail = "portfolio correlation or sizing constraints blocked candidate"
             reject_logger(
                 stage="risk",
                 reason_code=reason_code,

@@ -314,9 +314,7 @@ def generate_daily_report(
             last_price = sorted_entries[-1].get("price", 0)
             best = max(entries, key=lambda x: x["score_float"])
             rr = _compute_rr(best)
-            liq_cell = _format_liquidity(
-                _parse_liquidity_tl(best.get("reasons")), min_liquidity_tl
-            )
+            liq_cell = _format_liquidity(_parse_liquidity_tl(best.get("reasons")), min_liquidity_tl)
             ticker_display = ticker.replace(".IS", "")
             if len(entries) >= 2:
                 ticker_display += " 🔁"

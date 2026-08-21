@@ -67,9 +67,7 @@ def _service(db, *, trailing: bool = False, pct: float = 2.0) -> PaperTradeServi
 
 def _price_service(db, ticker: str, price: float, **kwargs) -> PaperTradeService:
     service = _service(db, **kwargs)
-    service.fetcher.fetch_all.return_value = {
-        ticker: pd.DataFrame({"close": [100.0, price]})
-    }
+    service.fetcher.fetch_all.return_value = {ticker: pd.DataFrame({"close": [100.0, price]})}
     return service
 
 
@@ -103,9 +101,7 @@ def test_paper_eod_half_day_closes_at_1230():
 
     monkey_half_day = pytest.MonkeyPatch()
     try:
-        monkey_half_day.setattr(
-            market_calendar, "_HALF_DAY_DATES", {half_day}, raising=False
-        )
+        monkey_half_day.setattr(market_calendar, "_HALF_DAY_DATES", {half_day}, raising=False)
         service.update_open_trades(now=now)
     finally:
         monkey_half_day.undo()
@@ -165,16 +161,12 @@ def test_trailing_tightens_stop_on_rise_long():
     db.get_open_paper_trades.return_value = [trade]
     now = datetime(2026, 8, 20, 10, 0, tzinfo=UTC)
     service = _service(db, trailing=True, pct=2.0)
-    service.fetcher.fetch_all.return_value = {
-        "THYAO.IS": pd.DataFrame({"close": [100.0, 104.0]})
-    }
+    service.fetcher.fetch_all.return_value = {"THYAO.IS": pd.DataFrame({"close": [100.0, 104.0]})}
 
     service.update_open_trades(now=now)  # watermark 104 -> trail 101.92; open
     db.close_paper_trade.assert_not_called()
 
-    service.fetcher.fetch_all.return_value = {
-        "THYAO.IS": pd.DataFrame({"close": [100.0, 101.0]})
-    }
+    service.fetcher.fetch_all.return_value = {"THYAO.IS": pd.DataFrame({"close": [100.0, 101.0]})}
     service.update_open_trades(now=now)  # 101 <= 101.92 -> trail hit
 
     db.close_paper_trade.assert_called_once_with(
@@ -189,15 +181,11 @@ def test_trailing_never_loosens_on_fall_long():
     db.get_open_paper_trades.return_value = [trade]
     now = datetime(2026, 8, 20, 10, 0, tzinfo=UTC)
     service = _service(db, trailing=True, pct=2.0)
-    service.fetcher.fetch_all.return_value = {
-        "THYAO.IS": pd.DataFrame({"close": [100.0, 108.0]})
-    }
+    service.fetcher.fetch_all.return_value = {"THYAO.IS": pd.DataFrame({"close": [100.0, 108.0]})}
 
     service.update_open_trades(now=now)  # watermark 108 -> trail 105.84
 
-    service.fetcher.fetch_all.return_value = {
-        "THYAO.IS": pd.DataFrame({"close": [100.0, 103.0]})
-    }
+    service.fetcher.fetch_all.return_value = {"THYAO.IS": pd.DataFrame({"close": [100.0, 103.0]})}
     service.update_open_trades(now=now)  # trail stays 105.84 (not 103-based)
 
     db.close_paper_trade.assert_called_once_with(
@@ -218,16 +206,12 @@ def test_trailing_short_mirror():
     db.get_open_paper_trades.return_value = [trade]
     now = datetime(2026, 8, 20, 10, 0, tzinfo=UTC)
     service = _service(db, trailing=True, pct=2.0)
-    service.fetcher.fetch_all.return_value = {
-        "THYAO.IS": pd.DataFrame({"close": [100.0, 96.0]})
-    }
+    service.fetcher.fetch_all.return_value = {"THYAO.IS": pd.DataFrame({"close": [100.0, 96.0]})}
 
     service.update_open_trades(now=now)  # low-water 96 -> trail 97.92; open
     db.close_paper_trade.assert_not_called()
 
-    service.fetcher.fetch_all.return_value = {
-        "THYAO.IS": pd.DataFrame({"close": [100.0, 98.0]})
-    }
+    service.fetcher.fetch_all.return_value = {"THYAO.IS": pd.DataFrame({"close": [100.0, 98.0]})}
     service.update_open_trades(now=now)  # 98 >= 97.92 -> trail hit
 
     db.close_paper_trade.assert_called_once_with(
@@ -242,14 +226,10 @@ def test_trailing_disabled_is_noop():
     db.get_open_paper_trades.return_value = [trade]
     now = datetime(2026, 8, 20, 10, 0, tzinfo=UTC)
     service = _service(db, trailing=False, pct=2.0)
-    service.fetcher.fetch_all.return_value = {
-        "THYAO.IS": pd.DataFrame({"close": [100.0, 104.0]})
-    }
+    service.fetcher.fetch_all.return_value = {"THYAO.IS": pd.DataFrame({"close": [100.0, 104.0]})}
 
     service.update_open_trades(now=now)
-    service.fetcher.fetch_all.return_value = {
-        "THYAO.IS": pd.DataFrame({"close": [100.0, 101.0]})
-    }
+    service.fetcher.fetch_all.return_value = {"THYAO.IS": pd.DataFrame({"close": [100.0, 101.0]})}
     service.update_open_trades(now=now)  # would be a trail hit if enabled
 
     db.close_paper_trade.assert_not_called()
@@ -262,15 +242,11 @@ def test_original_stop_wins_over_trail():
     db.get_open_paper_trades.return_value = [trade]
     now = datetime(2026, 8, 20, 10, 0, tzinfo=UTC)
     service = _service(db, trailing=True, pct=2.0)
-    service.fetcher.fetch_all.return_value = {
-        "THYAO.IS": pd.DataFrame({"close": [100.0, 108.0]})
-    }
+    service.fetcher.fetch_all.return_value = {"THYAO.IS": pd.DataFrame({"close": [100.0, 108.0]})}
 
     service.update_open_trades(now=now)  # watermark 108
 
-    service.fetcher.fetch_all.return_value = {
-        "THYAO.IS": pd.DataFrame({"close": [100.0, 94.0]})
-    }
+    service.fetcher.fetch_all.return_value = {"THYAO.IS": pd.DataFrame({"close": [100.0, 94.0]})}
     service.update_open_trades(now=now)  # 94 <= original stop 95
 
     db.close_paper_trade.assert_called_once_with(

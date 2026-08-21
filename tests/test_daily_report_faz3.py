@@ -202,9 +202,7 @@ def test_rollup_includes_liquidity_column(tmp_path):
     sig.reasons.append("Likidite: TL3,200,000 ort. islem degeri")  # below 5M gate
     repo.save_signal(sig)
 
-    report = generate_daily_report(
-        day=date(2026, 8, 20), repo=repo, save_to_disk=False
-    )
+    report = generate_daily_report(day=date(2026, 8, 20), repo=repo, save_to_disk=False)
 
     assert "Liq (20g ort.)" in report
     assert "₺3.2M ⚠️" in report
