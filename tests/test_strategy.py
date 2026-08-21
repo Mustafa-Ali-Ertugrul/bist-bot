@@ -45,6 +45,7 @@ class FakeRiskLevels:
     correlation_scale = 1.0
     correlated_tickers = []
     blocked_by_correlation = False
+    blocked_by_liquidity = False
     signal_probability: float | None = None
     kelly_fraction: float = 0.0
     liquidity_value: float = 0.0
@@ -577,6 +578,40 @@ def test_rejection_telemetry_emits_single_event_for_portfolio_risk_block(bullish
     assert payload["stage"] == "risk"
     assert payload["blocked_by_correlation"] is True
     assert payload["position_size"] == 0
+
+
+def test_rejection_telemetry_emits_liquidity_below_min_for_liquidity_block(bullish_frame):
+    """Faz 3 P4: blocked_by_liquidity gets its own reason code in the breakdown."""
+
+    class LiquidityBlockingRiskManager(FakeRiskManager):
+        def apply_portfolio_risk(self, ticker: str, df: pd.DataFrame, levels: FakeRiskLevels):
+            levels.position_size = 0
+            levels.blocked_by_liquidity = True
+            levels.blocked_by_correlation = False
+            levels.liquidity_value = 3_200_000.0
+            return levels
+
+    engine = StrategyEngine(
+        indicators=cast(Any, IdentityIndicators()),
+        risk_manager=cast(Any, LiquidityBlockingRiskManager()),
+    )
+
+    with patch("bist_bot.strategy.engine.logger") as mock_logger:
+        signal = engine.analyze("TEST.IS", {"trend": bullish_frame, "trigger": bullish_frame})
+
+    assert signal is None
+    rejected_calls = [
+        call
+        for call in mock_logger.info.call_args_list
+        if call.args[0] == "strategy_candidate_rejected"
+    ]
+    assert len(rejected_calls) == 1
+    payload = rejected_calls[0].kwargs
+    assert payload["reason_code"] == "liquidity_below_min"
+    assert payload["stage"] == "risk"
+    assert payload["blocked_by_correlation"] is False
+    assert payload["liquidity_value"] == 3200000.0
+    assert "MIN_LIQUIDITY_VALUE_TL" in payload["reason_detail"]
 
 
 def test_scan_all_emits_rejections_only_for_failed_candidates(bullish_frame):
