@@ -3,7 +3,7 @@
 import csv
 from pathlib import Path
 
-from bist_bot.reports.score_correlation import compute_stats, generate_markdown, load_outcomes, run
+from bist_bot.reports.score_correlation import compute_stats, load_outcomes, run
 
 
 def _write_csv(path: Path, rows: list[dict]):

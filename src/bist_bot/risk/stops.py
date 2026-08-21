@@ -236,7 +236,7 @@ def determine_final_levels(
 
         _min_stop_pct = float(getattr(_z2s2, "MIN_STOP_LOSS_PCT", 1.5))
         _min_stop_price = price * (1 - _min_stop_pct / 100.0)
-        if levels.final_stop > _min_stop_price:
+        if 0 < levels.final_stop < price and levels.final_stop > _min_stop_price:
             levels.final_stop = _min_stop_price
     except Exception:
         pass

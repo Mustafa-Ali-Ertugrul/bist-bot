@@ -7,13 +7,11 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pandas as pd
-import pytest
 
 from bist_bot.db.database import DatabaseManager
 from bist_bot.db.repositories.signals_repository import SignalsRepository
-from bist_bot.services.signal_outcome_tracker import CSV_FIELDS, SignalOutcomeTracker
+from bist_bot.services.signal_outcome_tracker import SignalOutcomeTracker
 from bist_bot.strategy.signal_models import Signal, SignalType
-
 
 ENTRY_TIME = datetime(2026, 8, 20, 10, 0, tzinfo=UTC)
 
@@ -54,8 +52,8 @@ def _tracker(tmp_path: Path, **overrides):
 def _market_data(ticker: str, close: float, high: float | None = None, low: float | None = None):
     # 1-min bar varsayımı: high/low aynı bar içinde
     h = high if high is not None else close
-    l = low if low is not None else close
-    df = pd.DataFrame({"close": [close], "high": [h], "low": [l]})
+    low_val = low if low is not None else close
+    df = pd.DataFrame({"close": [close], "high": [h], "low": [low_val]})
     return {ticker: {"trigger": df}}
 
 
