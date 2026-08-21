@@ -71,7 +71,9 @@ def main():
                 print(f"Hata: Geçersiz tarih formatı '{sys.argv[idx + 1]}'. YYYY-MM-DD bekleniyor.")
                 return
 
-        report_md = generate_daily_report(day=target_date, repo=container.signals_repo)
+        # AppContainer has no signals_repo; the report builds its own
+        # SignalsRepository on the shared DatabaseManager when repo=None.
+        report_md = generate_daily_report(day=target_date)
         print(report_md)
     elif "--backtest" in sys.argv:
         run_backtest(container.fetcher)
