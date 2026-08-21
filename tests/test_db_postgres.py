@@ -160,7 +160,10 @@ def test_live_postgres_optional() -> None:
     url = (os.environ.get("DATABASE_URL") or os.environ.get("BIST_BOT_DATABASE_URL") or "").strip()
     if not url or url.startswith("sqlite"):
         pytest.skip("DATABASE_URL not configured for live Postgres")
-    manager = DatabaseManager(database_url=url)
+    try:
+        manager = DatabaseManager(database_url=url)
+    except (RuntimeError, Exception) as exc:  # pragma: no cover - env dependent
+        pytest.skip(f"Postgres not available: {exc}")
     try:
         with manager.engine.connect() as conn:
             conn.exec_driver_sql("SELECT 1")
