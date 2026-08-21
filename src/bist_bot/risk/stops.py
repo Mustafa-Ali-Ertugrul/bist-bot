@@ -214,7 +214,7 @@ def determine_final_levels(
                     levels.final_target = _fallback
                     target_method = "ATR-fallback"
         except Exception:
-            pass
+            pass  # intentionally silent — fallback is best-effort, no log spam
 
     # ── H8: ±günlük fiyat limiti clamp ────────────────────────────────────
     # BIST %10 günlük fiyat sınırları vardır. Hedef/reference dışındaki
@@ -239,7 +239,7 @@ def determine_final_levels(
         if 0 < levels.final_stop < price and levels.final_stop > _min_stop_price:
             levels.final_stop = _min_stop_price
     except Exception:
-        pass
+        pass  # intentionally silent — MIN_STOP is best-effort
 
     # ── H8: BIST tick rounding (round(x,2) yerine) ────────────────────────
     # Stop BUY yönünde (aşağı), target SELL yönünde (yukarı) yuvarlanır.
