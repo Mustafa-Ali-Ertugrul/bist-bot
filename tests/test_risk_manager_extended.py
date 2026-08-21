@@ -223,6 +223,54 @@ def test_get_correlated_positions_uses_global_cache():
     assert isinstance(correlated, list)
 
 
+def test_get_correlated_positions_excludes_self_ticker():
+    """A ticker must never correlate with itself, in cache or pairwise paths."""
+    manager = RiskManager(capital=10000)
+    manager.correlation_threshold = 0.5
+
+    candidate_df = build_test_df(base_price=100.0)
+    own_history = build_test_df(base_price=100.0)  # identical series -> corr == 1.0
+    other_history = build_test_df(base_price=300.0)
+    manager._portfolio_history = {
+        "THYAO.IS": own_history,
+        "AKBNK.IS": other_history,
+        "GARAN.IS": other_history,
+    }
+
+    # Cache path: diagonal self-correlation must be ignored, case-insensitively.
+    mock_corr = pd.DataFrame(
+        [[1.0, 0.9, 0.9], [0.9, 1.0, 0.9], [0.9, 0.9, 1.0]],
+        index=["thyao.is", "AKBNK.IS", "GARAN.IS"],
+        columns=["thyao.is", "AKBNK.IS", "GARAN.IS"],
+    )
+    manager._global_corr_cache = mock_corr
+    correlated = manager._get_correlated_positions("THYAO.IS", candidate_df)
+    assert "THYAO.IS" not in correlated
+    assert "thyao.is" not in [t.lower() for t in correlated if t.upper() == "THYAO.IS"]
+    assert sorted(correlated) == ["AKBNK.IS", "GARAN.IS"]
+
+    # Pairwise path (no cache): self-match must also be excluded.
+    manager._global_corr_cache = None
+    correlated = manager._get_correlated_positions("thyao.is", candidate_df)
+    assert all(t.strip().upper() != "THYAO.IS" for t in correlated)
+
+
+def test_get_correlated_positions_dedupes_normalized_dupes():
+    """Duplicate portfolio entries differing only by case count once."""
+    manager = RiskManager(capital=10000)
+    manager.correlation_threshold = 0.5
+    manager._global_corr_cache = None
+
+    candidate = build_test_df(base_price=150.0)
+    duplicate_a = build_test_df(base_price=200.0)
+    duplicate_b = build_test_df(base_price=250.0)
+    manager._portfolio_history = {"GALE.IS": duplicate_a, "gale.is": duplicate_b}
+
+    correlated = manager._get_correlated_positions("NEWCO.IS", candidate)
+    assert len(correlated) == 1
+    assert correlated[0].strip().upper() == "GALE.IS"
+
+
 def test_sector_limit_functionality():
     """Test sector limit checking functionality."""
     manager = RiskManager(capital=10000)

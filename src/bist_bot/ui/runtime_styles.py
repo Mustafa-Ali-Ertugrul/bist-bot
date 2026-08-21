@@ -32,7 +32,7 @@ def inject_styles() -> None:
                 --bb-radius-sm:18px;
                 --bb-shadow:0 30px 80px rgba(0, 0, 0, .36);
             }
-            [data-testid="stHeader"], [data-testid="stToolbar"], footer, #MainMenu {
+            [data-testid="stHeader"], [data-testid="stToolbar"], #MainMenu {
                 display:none !important;
             }
             html, body, [class*="css"] {
@@ -48,7 +48,7 @@ def inject_styles() -> None:
             }
             .block-container {
                 max-width:1520px;
-                padding:5.5rem 2.5rem 3rem 2rem;
+                padding:5.5rem 2.5rem 6rem 2rem;
             }
             [data-testid="stVerticalBlock"] > [style*="flex-direction: column"] {
                 gap:1rem;
@@ -77,42 +77,17 @@ def inject_styles() -> None:
                 align-items:center;
                 gap:12px;
             }
-            #bb-sidebar-toggle-client {
-                position:fixed;
-                top:18px;
-                left:188px;
-                z-index:1002;
-                width:32px;
-                height:32px;
-                border-radius:10px;
-                display:inline-flex;
-                align-items:center;
-                justify-content:center;
-                cursor:pointer;
-                color:var(--bb-muted) !important;
-                background:rgba(255,255,255,.08) !important;
-                border:1px solid rgba(255,255,255,.10) !important;
-                font-family:'Space Grotesk',sans-serif;
-                font-size:15px;
-                font-weight:900;
-                letter-spacing:-.08em;
-                user-select:none;
-            }
-            #bb-sidebar-toggle-client:hover {
-                color:var(--bb-text) !important;
-                border-color:rgba(138,180,255,.28) !important;
-                background:rgba(138,180,255,.14) !important;
-            }
-            body.bb-sidebar-collapsed section[data-testid="stSidebar"] {
+            /* Sidebar kaldirildi: yerel Streamlit sidebar + ac/kapat kontrolleri gizlenir */
+            section[data-testid="stSidebar"],
+            section[data-testid="stSidebar"][aria-expanded="true"],
+            section[data-testid="stSidebar"][aria-expanded="true"] > div,
+            section[data-testid="stSidebar"] div[data-testid="stSidebarContent"],
+            [data-testid="stSidebarCollapsedControl"],
+            [data-testid="stSidebarCollapseButton"],
+            button[data-testid="stSidebarCollapseButton"],
+            [data-testid="collapsedControl"] {
                 display:none !important;
-                width:0 !important;
-                min-width:0 !important;
-                max-width:0 !important;
-            }
-            body.bb-sidebar-collapsed .block-container {
-                max-width:1520px !important;
-                padding-left:2.5rem !important;
-                padding-right:2.5rem !important;
+                visibility:hidden !important;
             }
             .bb-brand-mark {
                 width:44px;
@@ -704,6 +679,103 @@ def inject_styles() -> None:
                 }
                 section[data-testid="stSidebar"] .stButton > button {
                     min-height:44px;
+                }
+            }
+            :root {
+                color-scheme: dark;
+            }
+            .st-key-footer_navigation {
+                position: fixed;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                z-index: 9999;
+                background: rgba(10, 15, 22, 0.95);
+                backdrop-filter: blur(16px);
+                -webkit-backdrop-filter: blur(16px);
+                border-top: 1px solid rgba(173, 198, 255, 0.12);
+                box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.6);
+                padding: 8px max(1rem, calc((100vw - 1520px) / 2));
+                pointer-events: auto !important;
+            }
+            .st-key-footer_navigation [data-testid="stHorizontalBlock"] {
+                gap: 8px;
+            }
+            .st-key-footer_navigation .stButton > button {
+                min-height: 34px;
+                padding: 6px 14px;
+                border-radius: 999px;
+                font-family: 'Space Grotesk', sans-serif;
+                font-size: 11px;
+                font-weight: 700;
+                letter-spacing: .08em;
+                text-transform: uppercase;
+                transition: all .15s ease;
+                cursor: pointer !important;
+                white-space: nowrap;
+            }
+            .st-key-footer_navigation .stButton > button:hover {
+                color: #ffffff !important;
+                border-color: rgba(138, 180, 255, 0.45) !important;
+                background: rgba(138, 180, 255, 0.14) !important;
+                transform: translateY(-1px);
+            }
+            .st-key-footer_navigation .stButton > button[kind="primary"] {
+                color: #ffffff !important;
+                border-color: var(--bb-secondary) !important;
+                background: rgba(77, 226, 191, 0.16) !important;
+                box-shadow: 0 0 12px rgba(77, 226, 191, 0.2);
+            }
+            .bb-footer-meta {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 8px;
+                margin-top: 5px;
+                font-size: 11px;
+                letter-spacing: .06em;
+                text-transform: uppercase;
+                color: var(--bb-faint);
+                white-space: nowrap;
+                flex-shrink: 0;
+                pointer-events: auto !important;
+            }
+            .bb-footer-brand {
+                color: var(--bb-secondary);
+                font-weight: 800;
+                font-size: 11px;
+            }
+            .bb-footer-sep {
+                color: rgba(176, 191, 216, 0.28);
+            }
+            .bb-footer-copy {
+                color: var(--bb-muted);
+                font-size: 10px;
+            }
+            .bb-footer-link {
+                color: var(--bb-primary);
+                cursor: pointer;
+                transition: color .15s ease;
+                text-decoration: none;
+                pointer-events: auto !important;
+            }
+            .bb-footer-link:hover {
+                color: #ffffff;
+                text-decoration: underline;
+            }
+            @media (max-width: 900px) {
+                .bb-footer-meta {
+                    display: none;
+                }
+            }
+            @media (max-width: 600px) {
+                .st-key-footer_navigation {
+                    padding: 7px .5rem;
+                }
+                .st-key-footer_navigation .stButton > button {
+                    padding: 5px 10px;
+                    font-size: 10px;
+                    letter-spacing: .04em;
                 }
             }
         </style>

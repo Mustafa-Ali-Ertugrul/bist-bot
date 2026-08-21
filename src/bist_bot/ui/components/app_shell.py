@@ -3,7 +3,6 @@ from __future__ import annotations
 import html
 
 import streamlit as st
-import streamlit.components.v1 as components
 
 PAGE_META = {
     "dashboard": {"label": "Dashboard", "icon": "dashboard"},
@@ -13,6 +12,8 @@ PAGE_META = {
     "analysis": {"label": "Analysis", "icon": "analytics"},
     "settings": {"label": "Settings", "icon": "settings"},
 }
+
+FOOTER_NAV_PAGES = ["dashboard", "signals", "analysis", "settings"]
 
 
 def set_active_page(page: str) -> None:
@@ -40,10 +41,7 @@ def get_active_page(default: str = "dashboard") -> str:
 
 def render_sidebar_nav(active_page: str) -> None:
     st.sidebar.markdown(
-        (
-            "<div class='bb-sidebar-kicker'>Navigation</div>"
-            "<div class='bb-sidebar-note'>Dashboard ana katman; diger ekranlar alt katmandir.</div>"
-        ),
+        "<div class='bb-sidebar-kicker'>Menü / Sayfalar</div>",
         unsafe_allow_html=True,
     )
     for page, meta in PAGE_META.items():
@@ -55,14 +53,6 @@ def render_sidebar_nav(active_page: str) -> None:
             use_container_width=True,
         ):
             set_active_page(page)
-    if active_page != "dashboard":
-        st.sidebar.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
-        if st.sidebar.button(
-            "Dashboard'a Don",
-            key="nav_back_dashboard",
-            use_container_width=True,
-        ):
-            set_active_page("dashboard")
 
 
 def render_shell(active_page: str, email: str = "") -> str | None:
@@ -88,32 +78,37 @@ def render_shell(active_page: str, email: str = "") -> str | None:
         ),
         unsafe_allow_html=True,
     )
-    components.html(
-        """
-        <script>
-        const doc = window.parent.document;
-        let btn = doc.getElementById("bb-sidebar-toggle-client");
-        if (!btn) {
-          btn = doc.createElement("button");
-          btn.id = "bb-sidebar-toggle-client";
-          btn.type = "button";
-          btn.title = "Sidebar ac/kapat";
-          btn.addEventListener("click", () => {
-            doc.body.classList.toggle("bb-sidebar-collapsed");
-            btn.textContent = doc.body.classList.contains("bb-sidebar-collapsed") ? ">>" : "<<";
-          });
-          doc.body.appendChild(btn);
-        }
-        btn.textContent = doc.body.classList.contains("bb-sidebar-collapsed") ? ">>" : "<<";
-        </script>
-        """,
-        height=0,
-        width=0,
-    )
 
+    # Sidebar navigasyonu kaldirildi: sayfa gecisleri yalnizca footer uzerinden yapilir.
     action: str | None = None
-    render_sidebar_nav(active_page)
     return action
+
+
+def render_footer(active_page: str = "dashboard") -> None:
+    with st.container(key="footer_navigation"):
+        cols = st.columns(len(FOOTER_NAV_PAGES), gap="small")
+        for i, pg in enumerate(FOOTER_NAV_PAGES):
+            meta = PAGE_META[pg]
+            with cols[i]:
+                is_active = pg == active_page
+                if st.button(
+                    meta["label"],
+                    key=f"footer_nav_{pg}",
+                    type="primary" if is_active else "secondary",
+                    use_container_width=True,
+                ):
+                    set_active_page(pg)
+
+        st.markdown(
+            '<div class="bb-footer-meta">'
+            '<span class="bb-footer-brand">BIST Bot</span>'
+            '<span class="bb-footer-sep">·</span>'
+            '<span class="bb-footer-copy">Paper Trading Console</span>'
+            '<span class="bb-footer-sep">·</span>'
+            '<a class="bb-footer-link" href="https://github.com/aliertugrul/bist-bot" target="_blank" rel="noopener">GitHub</a>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
 
 
 def render_page_hero(

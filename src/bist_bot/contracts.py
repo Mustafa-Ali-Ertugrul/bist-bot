@@ -70,7 +70,11 @@ class StrategyEngineProtocol(Protocol):
 class NotifierProtocol(Protocol):
     def send_message(self, text: str, parse_mode: str = ...) -> bool: ...
     def send_signal(self, signal: Signal) -> bool: ...
+    def send_signal_to_group(self, signal: Signal) -> bool: ...
     def send_scan_summary(self, signals: list[Signal], total_scanned: int) -> bool: ...
+    def send_scan_summary_to_group(
+        self, signals: list[Signal], total_scanned: int
+    ) -> bool: ...
     def send_signal_change(self, ticker: str, old_signal: Signal, new_signal: Signal) -> bool: ...
     def send_startup_message(self) -> bool: ...
 
@@ -82,7 +86,13 @@ class SilentNotifier:
     def send_signal(self, signal: Signal) -> bool:
         return True
 
+    def send_signal_to_group(self, signal: Signal) -> bool:
+        return True
+
     def send_scan_summary(self, signals: list[Signal], total_scanned: int) -> bool:
+        return True
+
+    def send_scan_summary_to_group(self, signals: list[Signal], total_scanned: int) -> bool:
         return True
 
     def send_signal_change(self, ticker: str, old_signal: Signal, new_signal: Signal) -> bool:
@@ -121,8 +131,11 @@ class SignalRepositoryProtocol(Protocol):
         signal_type: str,
         signal_price: float,
         signal_time: Any = ...,
+        stop_loss: float | None = ...,
+        target_price: float | None = ...,
         score: int = ...,
         regime: str = ...,
+        direction: str = ...,
     ) -> None: ...
     def get_open_paper_trades(self) -> list[Any]: ...
     def get_active_position_tickers(self) -> list[str]: ...

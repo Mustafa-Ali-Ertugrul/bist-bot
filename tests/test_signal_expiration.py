@@ -187,6 +187,8 @@ def test_null_expires_at_backward_compatible(signals_repo):
 
 
 def test_expired_signal_not_sent_to_notifier():
+    from types import SimpleNamespace
+
     from bist_bot.services.notification_service import NotificationDispatchService
 
     sent = []
@@ -216,7 +218,11 @@ def test_expired_signal_not_sent_to_notifier():
         ),
     ]
 
-    service = NotificationDispatchService(FakeNotifier(), sleeper=lambda _: None)
+    service = NotificationDispatchService(
+        FakeNotifier(),
+        settings=SimpleNamespace(TELEGRAM_GROUP_CHAT_ID=""),
+        sleeper=lambda _: None,
+    )
     service.notify_scan_results(actionable, actionable, 100)
 
     assert len(sent) == 1
@@ -224,6 +230,8 @@ def test_expired_signal_not_sent_to_notifier():
 
 
 def test_notification_sends_positive_scores_only():
+    from types import SimpleNamespace
+
     from bist_bot.services.notification_service import NotificationDispatchService
 
     sent = []
@@ -241,7 +249,11 @@ def test_notification_sends_positive_scores_only():
         Signal(ticker="SELL.IS", signal_type=SignalType.STRONG_SELL, score=-60.0, price=100.0),
     ]
 
-    service = NotificationDispatchService(FakeNotifier(), sleeper=lambda _: None)
+    service = NotificationDispatchService(
+        FakeNotifier(),
+        settings=SimpleNamespace(TELEGRAM_GROUP_CHAT_ID=""),
+        sleeper=lambda _: None,
+    )
     service.notify_scan_results(actionable, actionable, 100)
 
     assert [signal.ticker for signal in sent] == ["LOW.IS", "MIN.IS"]

@@ -9,6 +9,7 @@ from bist_bot.state.session_state import init_session_state
 from bist_bot.ui.components.app_shell import (
     PAGE_META,
     get_active_page,
+    render_footer,
     render_shell,
     set_active_page,
 )
@@ -103,13 +104,50 @@ def _handle_query_actions() -> None:
     st.rerun()
 
 
-def _complete_auth(email: str, token: str) -> None:
+def _restore_session_from_cookies() -> bool:
+    """Check cookies for saved session and restore if valid."""
+    # This runs on every page load
+    import os
+    cookies = os.environ.get("HTTP_COOKIE", "")
+    if "bist_bot_token=" in cookies:
+        # Extract token and email from cookie string
+        token = ""
+        email = ""
+        for cookie in cookies.split("; "):
+            if cookie.startswith("bist_bot_token="):
+                token = cookie[len("bist_bot_token="):]
+            elif cookie.startswith("bist_bot_email="):
+                email = cookie[len("bist_bot_email="):]
+        if token and email:
+            # Verify token is still valid by calling API
+            try:
+                response = api_request("GET", "/api/auth/verify")
+                if response.ok:
+                    st.session_state.auth_token = token
+                    st.session_state.auth_email = email
+                    st.session_state.is_authenticated = True
+                    st.session_state.app_bootstrapped = False
+                    st.session_state.just_logged_in = False
+                    return True
+            except Exception:
+                pass
+            # Token invalid, clear cookies
+            st.markdown(
+                """<script>document.cookie="bist_bot_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";document.cookie="bist_bot_email=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";</script>""",
+                unsafe_allow_html=True,
+            )
+    return False
+
+
+def _complete_auth(email: str, token: str, return_page: str = "") -> None:
     st.session_state.auth_token = token
     st.session_state.auth_email = email
     st.session_state.is_authenticated = True
     st.session_state.app_bootstrapped = False
     st.session_state.just_logged_in = True
-    st.query_params["page"] = "dashboard"
+    # Preserve intended page if specified, otherwise default to dashboard
+    page_to_navigate = return_page if return_page in PAGE_META else "dashboard"
+    st.query_params["page"] = page_to_navigate
     st.rerun()
 
 
@@ -160,10 +198,11 @@ def _login_form() -> bool:
         except Exception as exc:
             st.error(f"API erisimi basarisiz: {exc}")
             return False
+        intended_page = str(st.query_params.get("page", "dashboard")).strip()
         if response.ok:
             token = _extract_token(response)
             if token:
-                _complete_auth(str(email), token)
+                _complete_auth(str(email), token, intended_page)
             else:
                 st.error("Giris yaniti token icermiyor. Lutfen tekrar deneyin.")
         else:
@@ -200,7 +239,7 @@ def _login_form() -> bool:
             if response.ok:
                 token = _extract_token(response)
                 if token:
-                    _complete_auth(str(register_email), token)
+                    _complete_auth(str(register_email), token, "dashboard")
                 else:
                     st.error("Kayit yaniti token icermiyor. Lutfen tekrar deneyin.")
             else:
@@ -217,6 +256,11 @@ def _handle_shell_action(action: str | None) -> None:
         st.session_state.is_authenticated = False
         st.session_state.app_bootstrapped = False
         st.session_state.just_logged_in = False
+        # Clear sessionStorage so next page load shows login
+        st.markdown(
+            """<script>sessionStorage.removeItem('bist_bot_email');sessionStorage.removeItem('bist_bot_token');</script>""",
+            unsafe_allow_html=True,
+        )
         set_active_page("dashboard")
         return
     if action.startswith("page:"):
@@ -238,10 +282,41 @@ def _ensure_market_data_ready() -> bool:
     return True
 
 
+def _auto_restore_session() -> None:
+    """Restore session from localStorage by auto-submitting the login form."""
+    # Check if we have saved credentials in session state (set by JS before render)
+    email = st.session_state.get("_pending_email")
+    password = st.session_state.get("_pending_password")
+    if not email or not password:
+        return
+    # Re-trigger login with saved credentials
+    try:
+        response = api_request(
+            "POST",
+            "/api/auth/login",
+            json={"email": email, "password": password},
+        )
+    except Exception:
+        st.session_state._pending_email = None
+        st.session_state._pending_password = None
+        return
+    if response.ok:
+        token = _extract_token(response)
+        if token:
+            intended_page = str(st.query_params.get("page", "dashboard")).strip()
+            _complete_auth(email, token, intended_page)
+    st.session_state._pending_email = None
+    st.session_state._pending_password = None
+
+
 def main() -> None:
     """Render the Streamlit UI pages and initialize shared runtime state."""
     init_session_state()
     _handle_query_actions()
+
+    # Auto-restore session from sessionStorage if available
+    _auto_restore_session()
+
     if not st.session_state.get("is_authenticated"):
         inject_styles()
         _login_form()
@@ -275,6 +350,7 @@ def main() -> None:
     else:
         render_settings_page()
 
+    render_footer(page)
     finalize_streamlit_runtime()
 
 

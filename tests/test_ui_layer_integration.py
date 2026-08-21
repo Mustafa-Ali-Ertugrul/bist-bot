@@ -507,3 +507,35 @@ def test_overview_api_failure_shows_warning_and_returns() -> None:
 
     mock_hero.assert_not_called()
     assert mock_st.warning.called
+
+
+def test_footer_renders_navigation_buttons_and_meta() -> None:
+    """Footer bar tüm sayfaları buton olarak basmalı ve aktif sayfayı işaretlemelidir."""
+    with patch.object(app_shell, "st") as mock_st:
+        app_shell.render_footer(active_page="signals")
+        rendered_html = mock_st.markdown.call_args[0][0]
+
+    rendered_buttons = {
+        call.kwargs["key"]: call.kwargs["type"] for call in mock_st.button.call_args_list
+    }
+    assert rendered_buttons == {
+        "footer_nav_dashboard": "secondary",
+        "footer_nav_signals": "primary",
+        "footer_nav_analysis": "secondary",
+        "footer_nav_settings": "secondary",
+    }
+    mock_st.container.assert_called_once_with(key="footer_navigation")
+    assert 'class="bb-footer-meta"' in rendered_html
+
+
+def test_sidebar_renders_all_page_meta_buttons() -> None:
+    """Sidebar tüm sayfaları buton olarak listelemelidir."""
+    with patch.object(app_shell, "st") as mock_st:
+        mock_st.sidebar = MagicMock()
+        app_shell.render_sidebar_nav(active_page="dashboard")
+
+    rendered_keys = [
+        call.kwargs.get("key") for call in mock_st.sidebar.button.call_args_list
+    ]
+    for page in app_shell.PAGE_META:
+        assert f"nav_{page}" in rendered_keys

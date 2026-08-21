@@ -743,6 +743,30 @@ def create_dashboard_app(
         signals = get_db().get_recent_signals(limit=limit, ticker=ticker)
         return jsonify({"status": "ok", "signals": signals})
 
+    @app.route("/api/v1/signals/active")
+    @limiter.limit("60 per minute")
+    def api_mobile_active_signals():
+        """Public, minimal endpoint for the Android prototype app.
+
+        Returns a top-level JSON array of non-expired signals with the fields
+        the mobile app expects (`ticker`, `price`, `type`, `confidence`).
+        Unauthenticated by design for the prototype client; rate-limited and
+        restricted to a minimal read-only payload (no reasons/scores).
+        """
+        signals = get_db().get_recent_signals(limit=200)
+        payload = [
+            {
+                "ticker": signal.get("ticker"),
+                "price": _round_value(signal.get("price")),
+                "type": str(signal.get("signal_type") or "BUY").upper(),
+                "confidence": signal.get("confidence"),
+                "timestamp": signal.get("timestamp"),
+            }
+            for signal in signals
+            if not signal.get("is_expired")
+        ][:50]
+        return jsonify(payload)
+
     @app.route("/api/stats")
     @jwt_required()
     def api_stats():

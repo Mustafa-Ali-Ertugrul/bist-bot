@@ -228,7 +228,7 @@ def run_initial_scan(force_clear: bool = False, limited: bool = False) -> bool:
     fetcher, engine, _notifier, _db, last_scan_time = _session_dependencies()
     limited_tickers = None
     if limited:
-        limit = int(getattr(settings, "STREAMLIT_INITIAL_SCAN_LIMIT", 10))
+        limit = int(getattr(settings, "STREAMLIT_INITIAL_SCAN_LIMIT", 100))
         watchlist = list(getattr(settings, "WATCHLIST", []))
         limited_tickers = watchlist[:limit] if watchlist else None
 
@@ -278,7 +278,7 @@ def check_scan_timeout() -> bool:
     scan_started_at = st.session_state.get("scan_started_at")
     if scan_started_at is None:
         return False
-    timeout_seconds = int(getattr(settings, "STREAMLIT_BACKGROUND_SCAN_TIMEOUT_SECONDS", 90))
+    timeout_seconds = int(getattr(settings, "STREAMLIT_BACKGROUND_SCAN_TIMEOUT_SECONDS", 300))
     elapsed = (datetime.now(TR) - scan_started_at).total_seconds()
     if elapsed < timeout_seconds:
         return False
@@ -320,7 +320,7 @@ def start_background_scan(force_clear: bool = False, limited: bool = False) -> b
 
     limited_tickers = None
     if limited:
-        limit = int(getattr(settings, "STREAMLIT_INITIAL_SCAN_LIMIT", 20))
+        limit = int(getattr(settings, "STREAMLIT_INITIAL_SCAN_LIMIT", 100))
         watchlist = list(getattr(settings, "WATCHLIST", []))
         limited_tickers = watchlist[:limit] if watchlist else None
 
@@ -344,7 +344,7 @@ def start_background_scan(force_clear: bool = False, limited: bool = False) -> b
         if ctx:
             add_script_run_ctx(threading.current_thread(), ctx)
         result = _empty_scan_result(last_scan_time, "scan did not complete")
-        timeout_seconds = int(getattr(settings, "STREAMLIT_BACKGROUND_SCAN_TIMEOUT_SECONDS", 45))
+        timeout_seconds = int(getattr(settings, "STREAMLIT_BACKGROUND_SCAN_TIMEOUT_SECONDS", 300))
         if not limited:
             timeout_seconds = max(timeout_seconds, 300)
         try:

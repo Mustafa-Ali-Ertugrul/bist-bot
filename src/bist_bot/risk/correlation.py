@@ -58,24 +58,35 @@ def get_correlated_positions(
 ) -> list[str]:
     if not portfolio_history:
         return []
+    normalized_target = ticker.strip().upper()
     correlated: list[str] = []
+    seen: set[str] = set()
 
     if global_corr_cache is not None and ticker in global_corr_cache.columns:
         for existing_ticker in portfolio_history:
-            if existing_ticker in global_corr_cache.columns:
-                corr = global_corr_cache.loc[ticker, existing_ticker]
-                if pd.notna(corr) and abs(float(corr)) >= correlation_threshold:
-                    correlated.append(existing_ticker)
+            normalized_existing = existing_ticker.strip().upper()
+            if normalized_existing == normalized_target or normalized_existing in seen:
+                continue
+            if existing_ticker not in global_corr_cache.columns:
+                continue
+            corr = global_corr_cache.loc[ticker, existing_ticker]
+            if pd.notna(corr) and abs(float(corr)) >= correlation_threshold:
+                seen.add(normalized_existing)
+                correlated.append(existing_ticker)
         return correlated
 
     candidate_close = candidate_df[["close"]].rename(columns={"close": ticker}).astype(float)
     for existing_ticker, history in portfolio_history.items():
+        normalized_existing = existing_ticker.strip().upper()
+        if normalized_existing == normalized_target or normalized_existing in seen:
+            continue
         existing_close = history[["close"]].rename(columns={"close": existing_ticker}).astype(float)
         aligned = pd.concat([candidate_close, existing_close], axis=1, join="inner").dropna()
         if aligned.empty or len(aligned) < 10:
             continue
         corr = aligned.pct_change().dropna().corr().iloc[0, 1]
         if pd.notna(corr) and abs(float(corr)) >= correlation_threshold:
+            seen.add(normalized_existing)
             correlated.append(existing_ticker)
     return correlated
 

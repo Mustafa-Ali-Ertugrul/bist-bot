@@ -26,6 +26,17 @@ from bist_bot.backtest.report import (
     compare_benchmark,
     generate_report,
 )
+from bist_bot.backtest.signal_replay import (
+    ReplaySignal,
+    ReplayTrade,
+    SignalReplayEngine,
+    build_cost_scenarios,
+    build_dataset_episodes,
+    build_dataset_first_actionable,
+    build_dataset_raw,
+    calculate_cell_metrics,
+    evaluate_indicator_filters,
+)
 from bist_bot.backtest.strategy import StrategyBacktester
 from bist_bot.backtest.walkforward import WalkForwardValidator
 
@@ -39,7 +50,10 @@ __all__ = [
     "CostBreakdown",
     "CostModel",
     "IntrabarExit",
+    "ReplaySignal",
+    "ReplayTrade",
     "SignalBuilder",
+    "SignalReplayEngine",
     "StrategyBacktester",
     "VectorizedSignals",
     "WalkForwardResult",
@@ -53,7 +67,13 @@ __all__ = [
     "_summarize_trades_and_equity",
     "_to_datetime",
     "_to_float",
+    "build_cost_scenarios",
+    "build_dataset_episodes",
+    "build_dataset_first_actionable",
+    "build_dataset_raw",
+    "calculate_cell_metrics",
     "calculate_metrics",
     "compare_benchmark",
+    "evaluate_indicator_filters",
     "generate_report",
 ]

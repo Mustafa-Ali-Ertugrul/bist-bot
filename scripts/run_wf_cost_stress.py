@@ -36,26 +36,22 @@ warnings.filterwarnings("ignore")
 
 # Keep in sync with scripts/run_walk_forward_bist30.py
 BIST30_TICKERS: list[str] = [
+    "AEFES.IS",
     "AKBNK.IS",
-    "ARCLK.IS",
     "ASELS.IS",
     "ASTOR.IS",
     "BIMAS.IS",
+    "DSTKF.IS",
     "EKGYO.IS",
     "ENKAI.IS",
     "EREGL.IS",
     "FROTO.IS",
     "GARAN.IS",
     "GUBRF.IS",
-    "HEKTS.IS",
     "ISCTR.IS",
     "KCHOL.IS",
-    "KONTR.IS",
-    "KOZAA.IS",
-    "KOZAL.IS",
     "KRDMD.IS",
-    "ODAS.IS",
-    "OYAKC.IS",
+    "MGROS.IS",
     "PETKM.IS",
     "PGSUS.IS",
     "SAHOL.IS",
@@ -65,7 +61,11 @@ BIST30_TICKERS: list[str] = [
     "TCELL.IS",
     "THYAO.IS",
     "TOASO.IS",
+    "TRALT.IS",
+    "TTKOM.IS",
     "TUPRS.IS",
+    "VAKBN.IS",
+    "YKBNK.IS",
 ]
 
 REPO_ROOT = Path(__file__).resolve().parents[1]

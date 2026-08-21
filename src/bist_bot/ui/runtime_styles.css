@@ -20,7 +20,7 @@
                 --bb-radius-sm:18px;
                 --bb-shadow:0 30px 80px rgba(0, 0, 0, .36);
             }}
-            [data-testid="stHeader"], [data-testid="stToolbar"], footer, #MainMenu {{
+            [data-testid="stHeader"], [data-testid="stToolbar"], #MainMenu {{
                 display:none !important;
             }}
             html, body, [class*="css"] {{

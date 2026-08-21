@@ -1,14 +1,14 @@
 {
-  "ASTOR.IS": {
-    "ticker": "ASTOR.IS",
-    "entry_price": 310.0,
-    "entry_time": "2026-08-05T13:48:27.498282+00:00",
-    "stop": 306.4,
-    "target": 334.8,
-    "score": 20.0,
-    "agreement_ratio": 1.0,
-    "reasons": "RSI nötr (60.0) | Stochastic Bullish Cross (K:63, D:62) | yükseliş trendi (EMA200 üzerinde + eğim pozitif) | SMA trend yukarı | MACD Histogram zayıflıyor (-0.24) | Güçlü yükseliş trendi (ADX:39, +DI>18) | Hacim azalıyor 📊 | OBV yükseliş trendi → Akış var | Bollinger Squeeze → Patlama bekleniyor ⚠️ | Fiyat desteğe yakın (%1.5) | Güçlü trend ride → skor 20 ile sınırlandı | Aşırı uzama chase koruması → uzun skor 20 ile sınırlandı | R/R: 1:6.9 | Stop: Fibonacci | Hedef: Yüzdelik | Pozisyon: 290 lot | Risk Bütçesi: TL2000.00 | Volatilite throttle: x1.00 | ATR%: %0.61",
+  "EKGYO.IS": {
+    "ticker": "EKGYO.IS",
+    "entry_price": 18.600000381469727,
+    "entry_time": "2026-08-17T13:30:14.342387+00:00",
+    "stop": 18.4,
+    "target": 20.1,
+    "score": 21.2,
+    "agreement_ratio": 0.75,
+    "reasons": "RSI yüksek-nötr (60.4) | yükseliş trendi (EMA200 üzerinde + eğim pozitif) | SMA trend yukarı | MACD Histogram zayıflıyor (-0.01) | Güçlü yükseliş trendi (ADX:29, +DI>15) | Düşük hacimli geri çekilme | Hacim azalıyor 📊 | OBV yükseliş trendi → Akış var | Fiyat desteğe yakın (%2.0) | R/R: 1:7.5 | Stop: ATR | Hedef: Yüzdelik | Pozisyon: 4838 lot | Risk Bütçesi: TL2000.00 | Volatilite throttle: x1.00 | ATR%: %0.54",
     "holding_days": 5,
-    "quantity": 290.0
+    "quantity": 4838.0
   }
 }
