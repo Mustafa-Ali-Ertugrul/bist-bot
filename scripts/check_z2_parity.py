@@ -26,7 +26,9 @@ import argparse
 import sys
 
 # Windows cp1252 cannot encode Turkish characters in --help output; force UTF-8 where possible.
-if getattr(sys.stdout, "encoding", None) and sys.stdout.encoding.lower() != "utf-8":  # pragma: no cover
+if (
+    getattr(sys.stdout, "encoding", None) and sys.stdout.encoding.lower() != "utf-8"
+):  # pragma: no cover
     try:
         sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
         sys.stderr.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
@@ -66,9 +68,9 @@ def _run_walk_forward(label: str, output_csv: Path, extra_args: list[str]) -> No
     cmd = [sys.executable, str(WALK_FORWARD), "--output", str(output_csv), *extra_args]
     # Make the repo importable even when `bist_bot` is not pip-installed in the venv.
     env = dict(os.environ)
-    env["PYTHONPATH"] = (
-        str(REPO_ROOT / "src") + os.pathsep + env.get("PYTHONPATH", "")
-    ).rstrip(os.pathsep)
+    env["PYTHONPATH"] = (str(REPO_ROOT / "src") + os.pathsep + env.get("PYTHONPATH", "")).rstrip(
+        os.pathsep
+    )
     print(f"\n[{label}] running: {' '.join(cmd)}")
     result = subprocess.run(cmd, cwd=REPO_ROOT, env=env)
     if result.returncode != 0:
@@ -112,8 +114,10 @@ def _compare(before: dict, after: dict) -> list[str]:
 
 def _write_report(before_ref: str, after_ref: str, deltas: list[str], duration_s: float) -> None:
     stamp = datetime.now(UTC).astimezone().isoformat(timespec="seconds")
-    verdict = "PASS — delta=0 (beklenen: Z2 yalnızca canlı risk yolunu değiştirir)" if not deltas else (
-        "FAIL — walk-forward çıktısında fark var; kök nedene bakılmalı"
+    verdict = (
+        "PASS — delta=0 (beklenen: Z2 yalnızca canlı risk yolunu değiştirir)"
+        if not deltas
+        else ("FAIL — walk-forward çıktısında fark var; kök nedene bakılmalı")
     )
     lines = [
         "# Z2 Parity Check — Walk-Forward A/B",
@@ -154,7 +158,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--before-commit", default="300723d", help="Z2 öncesi commit")
     parser.add_argument("--after-commit", default="10a630e", help="Z2 sonrası commit")
-    parser.add_argument("--limit", type=int, default=0, help="Yalnızca ilk N ticker (0 = tüm BIST30)")
+    parser.add_argument(
+        "--limit", type=int, default=0, help="Yalnızca ilk N ticker (0 = tüm BIST30)"
+    )
     parser.add_argument("--period", default="3y", help="yfinance period (default: 3y)")
     parser.add_argument(
         "--force-download", action="store_true", help="İki koşuda da cache'i yok say"
@@ -197,7 +203,12 @@ def main(argv: list[str] | None = None) -> int:
     print(f"\nKarşılaştırma: {len(before)} ticker (before) x {len(after)} ticker (after)")
     deltas = _compare(before, after)
     duration = (datetime.now(UTC) - started).total_seconds()
-    _write_report(_git("rev-parse", args.before_commit), _git("rev-parse", args.after_commit), deltas, duration)
+    _write_report(
+        _git("rev-parse", args.before_commit),
+        _git("rev-parse", args.after_commit),
+        deltas,
+        duration,
+    )
 
     if deltas:
         print(f"\n❌ FAIL — {len(deltas)} fark bulundu:")

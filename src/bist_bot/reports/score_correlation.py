@@ -1,4 +1,4 @@
-"""Score vs return correlation report (Z3)."""
+"""Score vs return correlation report (Z3) + P5 calibration trigger status."""
 
 from __future__ import annotations
 
@@ -14,11 +14,17 @@ try:
 except ImportError:
     HAS_PANDAS = False
 
+from bist_bot.market_calendar import TR
 
 BUCKETS = [(25, 30), (30, 35), (35, 40), (40, 100)]
 BUCKET_LABELS = ["25-30", "30-35", "35-40", "40+"]
 HOUR_BUCKETS = [(10, 12), (12, 14), (14, 16), (16, 18)]
 HOUR_LABELS = ["10-12", "12-14", "14-16", "16-18"]
+
+# P5 calibration trigger thresholds (results/score_calibration_protocol.md):
+# first run is MANDATORY once either condition is met ("hangisi önce olursa").
+P5_MIN_OUTCOMES = 30
+P5_MIN_TRADING_DAYS = 10
 
 
 def _bucket_score(score: float) -> str | None:
@@ -72,6 +78,56 @@ def load_outcomes(csv_path: Path) -> list[dict[str, Any]]:
             except Exception:
                 continue
     return rows
+
+
+def _p5_local_tr_date(row: dict[str, Any]) -> Any:
+    """Session date (TR) of a closed outcome row; None when unparseable.
+
+    Prefers exit_ts (the day the outcome closed), falls back to entry_ts.
+    Naive timestamps are assumed UTC; "Z" suffix is normalized for fromisoformat.
+    """
+    for key in ("exit_ts", "entry_ts"):
+        raw = str(row.get(key) or "").strip()
+        if not raw:
+            continue
+        try:
+            if raw.endswith("Z"):
+                raw = raw[:-1] + "+00:00"
+            dt = datetime.fromisoformat(raw)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=UTC)
+            return dt.astimezone(TR).date()
+        except ValueError:
+            continue
+    return None
+
+
+def compute_p5_trigger(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """P5 calibration trigger status per the pre-committed protocol.
+
+    Fired when closed outcomes >= 30 OR distinct TR trading days >= 10
+    (whichever comes first). Trading days are proxied by distinct local
+    (TR) dates in the CSV — weekends/holidays never produce rows, so the
+    proxy is conservative (only ever undercounts).
+    """
+    dates = set()
+    for row in rows:
+        d = _p5_local_tr_date(row)
+        if d is not None:
+            dates.add(d)
+    outcomes = len(rows)
+    trading_days = len(dates)
+    fired_by: list[str] = []
+    if outcomes >= P5_MIN_OUTCOMES:
+        fired_by.append(f"outcome {outcomes}/{P5_MIN_OUTCOMES}")
+    if trading_days >= P5_MIN_TRADING_DAYS:
+        fired_by.append(f"işlem günü {trading_days}/{P5_MIN_TRADING_DAYS}")
+    return {
+        "fired": bool(fired_by),
+        "outcomes": outcomes,
+        "trading_days": trading_days,
+        "fired_by": fired_by,
+    }
 
 
 def compute_stats(rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -155,7 +211,31 @@ def compute_stats(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "score_pnl_corr": score_pnl_corr,
         "score_mfe_corr": score_mfe_corr,
         "total": len(rows),
+        "p5": compute_p5_trigger(rows),
     }
+
+
+def _p5_markdown(p5: dict[str, Any]) -> list[str]:
+    out_mark = "✅" if p5["outcomes"] >= P5_MIN_OUTCOMES else "—"
+    day_mark = "✅" if p5["trading_days"] >= P5_MIN_TRADING_DAYS else "—"
+    lines = [
+        "",
+        "## P5 Kalibrasyon Tetiği",
+        "",
+        f"- Kapanan outcome: {p5['outcomes']} / {P5_MIN_OUTCOMES} {out_mark}",
+        f"- İşlem günü: {p5['trading_days']} / {P5_MIN_TRADING_DAYS} "
+        f"(CSV'de distinct TR tarih) {day_mark}",
+    ]
+    if p5["fired"]:
+        lines.append(
+            f"- Tetik: ATEŞLENDİ ({', '.join(p5['fired_by'])}) → kalibrasyon koşusu zorunlu"
+        )
+    else:
+        lines.append(
+            f"- Tetik: HAZIR DEĞİL (outcome {p5['outcomes']}/{P5_MIN_OUTCOMES}, "
+            f"gün {p5['trading_days']}/{P5_MIN_TRADING_DAYS})"
+        )
+    return lines
 
 
 def generate_markdown(stats: dict[str, Any]) -> str:
@@ -164,12 +244,17 @@ def generate_markdown(stats: dict[str, Any]) -> str:
         "# Skor\u2194Getiri Korelasyon Raporu",
         "",
         f"Toplam outcome kayd\u0131: **{total}**",
-        "",
-        "## Skor Bucket'lar\u0131",
-        "",
-        "| Skor | Adet | Win-rate | Ort. Net PnL | Ort. MFE | Ort. MAE | Ort. Tutma (dk) |",
-        "|---|---|---|---|---|---|---|",
     ]
+    lines.extend(_p5_markdown(stats["p5"]))
+    lines.extend(
+        [
+            "",
+            "## Skor Bucket'lar\u0131",
+            "",
+            "| Skor | Adet | Win-rate | Ort. Net PnL | Ort. MFE | Ort. MAE | Ort. Tutma (dk) |",
+            "|---|---|---|---|---|---|---|",
+        ]
+    )
     for label in BUCKET_LABELS:
         bs = stats["bucket_stats"][label]
         lines.append(
