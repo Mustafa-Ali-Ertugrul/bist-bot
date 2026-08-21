@@ -48,6 +48,12 @@ def main():
 
     _signal.signal(_signal.SIGINT, shutdown)
 
+    if "--score-correlation" in sys.argv:
+        from bist_bot.reports.score_correlation import run as run_score_corr
+
+        md = run_score_corr()
+        print(md)
+        return
     if "--once" in sys.argv:
         scanner.scan_once()
     elif "--daily-report" in sys.argv:
