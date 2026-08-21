@@ -252,3 +252,81 @@ def test_original_stop_wins_over_trail():
     db.close_paper_trade.assert_called_once_with(
         "THYAO.IS", 94.0, "STOP_HIT", actual_profit_pct=ANY
     )
+
+
+# ---------------------------------------------------------------------------
+# Faz 3 P1.1 — scanner post-close pass (production trigger path)
+# ---------------------------------------------------------------------------
+
+
+def test_scanner_close_positions_at_eod_closes_with_fetch_price(tmp_path):
+    """EOD pass closes BOTH paper trades and tracked outcomes at fetched close."""
+    import csv
+
+    from bist_bot.scanner import ScanService
+    from bist_bot.services.signal_outcome_tracker import SignalOutcomeTracker
+
+    db = MagicMock()
+    db.get_open_paper_trades.return_value = [_make_trade()]
+    fetcher = MagicMock()
+    fetcher.fetch_all.return_value = {"THYAO.IS": pd.DataFrame({"close": [100.0, 104.0]})}
+
+    cfg = SimpleNamespace(
+        PAPER_MODE=True,
+        TRAILING_STOP_ENABLED=False,
+        TRAILING_STOP_PCT=2.0,
+        PAPER_COOLDOWN_DAYS=0,
+        OUTCOME_TRACKING_ENABLED=True,
+    )
+    paper = PaperTradeService(fetcher, db, settings=cfg)
+    tracker = SignalOutcomeTracker(settings=cfg, results_dir=tmp_path)
+    tracker._write_json(
+        tracker.open_path,
+        {
+            "THYAO.IS": {
+                "signal_id": 7,
+                "ticker": "THYAO.IS",
+                "score": 30.0,
+                "entry_ts": "2026-08-20T07:00:00+00:00",
+                "side": "long",
+                "entry_price": 100.0,
+                "stop": 95.0,
+                "target": 110.0,
+                "quantity": 100.0,
+                "mfe_pct": 0.0,
+                "mae_pct": 0.0,
+                "max_high": 100.0,
+                "min_low": 100.0,
+            }
+        },
+    )
+
+    service = ScanService(
+        fetcher=fetcher,
+        engine=MagicMock(),
+        notifier=MagicMock(),
+        db=db,
+        paper_trade_service=paper,
+        signal_outcome_tracker=tracker,
+        settings=cfg,
+    )
+
+    # 17:32 TR Thursday — inside the scheduler's post-close window.
+    now = datetime(2026, 8, 20, 14, 32, tzinfo=UTC)
+    service.close_positions_at_eod(now=now)
+
+    # Paper position closed with the FETCHED close price (104), not entry.
+    db.close_paper_trade.assert_called_once_with(
+        "THYAO.IS", 104.0, "EOD_CLOSE", actual_profit_pct=ANY
+    )
+
+    # Tracked outcome closed as EOD_CLOSE with the same real exit price.
+    assert tracker.csv_path.exists()
+    with tracker.csv_path.open(encoding="utf-8", newline="") as fh:
+        rows = list(csv.DictReader(fh))
+    assert len(rows) == 1
+    assert rows[0]["outcome"] == "EOD_CLOSE"
+    assert float(rows[0]["exit_price"]) == 104.0
+
+    # Open ledger is now empty -> next morning's pass cannot double-close.
+    assert tracker._load_json(tracker.open_path, {}) == {}

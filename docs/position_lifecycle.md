@@ -31,6 +31,20 @@ Bu, backtest ölçüm sözleşmesiyle aynıdır ("stop wins", konservatif).
 - Sözleşme `SignalOutcomeTracker._is_eod` ile **birebir aynıdır**: `market_calendar.bist_close_time(d)` tek kaynaktır; yarım gün tarihleri `_HALF_DAY_DATES` kümesinden gelir (şu an boş → tüm günler tam seans 17:30). Bilinen yarım günler eklendiğinde paper ve tracker otomatik hizalanır.
 - 16:30'da açılan pozisyon da aynı seansın kapanışında `EOD_CLOSE` olur; kısa tutma süresi `holding_min` kolonunda görünür. Bu bilinçli bir karardır: intraday stratejide gecike taşınan pozisyon ayrı bir strateji değildir.
 
+### P1.1 — Post-Close Hook (üretim tetikleyicisi)
+
+`_is_eod` yalnızca bir tarama çalıştığında değerlendirilir; scheduler normalde kapanışta
+ertesi seansa uyuduğu için üretimde EOD asla tetiklenmezdi. Bu yüzden:
+
+- `ScanService.close_positions_at_eod(now)` — sessiz pas: günlük kapanış fiyatlarını
+  fetch eder, paper pozisyonları (`update_open_trades(signals=None)`) ve tracked
+  outcome'ları (`process_scan([], market_data)`) gerçek fiyatla kapatır. Sinyal
+  kaydetmez, bildirim göndermez.
+- `MarketScheduler._pending_eod_close / _run_eod_close` — **tarih anahtarlı, günde 1**
+  tetik: `bist_close_time + EOD_CLOSE_DELAY_MINUTES` (default 2 dk → ~17:32). Hem ana
+  döngüde hem iki bekleme döngüsünde kontrol edilir; tatil/hafta sonu tetiklenmez,
+  ertesi sabah double-run olmaz. Hata durumunda bile "yapıldı" işaretlenir (spam önleme).
+
 ## Skor Decay Uyarısı (F3.4, rapor-only)
 
 - Günlük rapor §7'de açık pozisyonun **giriş skoru** güncel `buy_threshold`'un altına düştüyse ve TR saati ≥ 15:30 ise satır `⚠️ skor eşiğin altında (T+1 riski)` uyarısı alır.
