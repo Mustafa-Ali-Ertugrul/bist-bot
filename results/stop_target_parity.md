@@ -23,3 +23,12 @@
 
 ## Durum: AYRIK (canlı-only tick + backtest tick)
 Her iki yol da ayrı ayrı tick rounding uygular. Canlı yol ek olarak daily limit + ATR sanity içerir.
+
+## Z2: Faz 2 Yakınsama — Canlı Yol Volatilite-Adaptif
+
+- Canlı `determine_final_levels` artık **Yüzdelik fallback'i volatilite-adaptif**:
+  - `Yüzdelik` seçildiyse ve `ATR` geçerliyse → `target = price + max(ATR_TARGET_MULT*ATR, FALLBACK_TARGET_RR*risk)` clamp `[price*(1+ATR_TARGET_FLOOR_PCT), price*1.10]`
+  - `ATR_TARGET_MULT=1.5` (default), `FALLBACK_TARGET_RR=2.0` → backtest'in `close + risk*2.0` sözleşmesiyle yakınsar
+  - +8% kümelemesi kalkar: sığ vol hisselerde ATR hedefi + fallback RR tabanlı hedef (risk*2) ile değişir
+- **Stop tabanı:** `MIN_STOP_LOSS_PCT=1.5` → `final_stop = min(final_stop, price*(1-1.5%))` (limit clamp sonrası, tick öncesi); 1.1% tetik stopları genişler
+- **Backtest yolu ayrık kalır** (repo sözleşmesi): backtest kendi vektörel `close + risk*2.0` mantığını korur; Z2 değişikliği backtest'i etkilemez, walk-forward delta=0 beklenir
