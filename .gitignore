@@ -71,6 +71,15 @@ tmp/
 cache/
 test.txt
 
+# Runtime state files (generated at runtime; must stay out of git to prevent
+# checkout-in-return clobbering of live scanner state)
+results/shadow_open.json
+results/shadow_summary_state.json
+results/shadow_pnl.csv
+results/signal_outcome_open.json
+results/signal_outcomes.csv
+results/daily_report_*.md
+
 # Temp and generated files
 __temp_*
 *.bak

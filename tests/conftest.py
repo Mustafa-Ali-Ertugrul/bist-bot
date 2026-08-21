@@ -26,3 +26,23 @@ def _stub_default_outcome_tracker(monkeypatch):
         "SignalOutcomeTracker",
         lambda *args, **kwargs: MagicMock(),
     )
+
+
+@pytest.fixture(autouse=True)
+def _stub_default_shadow_trade_service(monkeypatch):
+    """Keep ScanService's default ShadowTradeService out of the real results/ dir.
+
+    ScanService builds ``ShadowTradeService(...)`` with the default
+    CWD-relative ``results_dir="results"``. Tests that run ``scan_once``
+    without injecting a service would otherwise write ``shadow_open.json`` /
+    ``shadow_pnl.csv`` / ``shadow_summary_state.json`` into the repository
+    tree. The service's own unit tests construct the class directly with
+    ``tmp_path`` and are unaffected.
+    """
+    import bist_bot.scanner as scanner_module
+
+    monkeypatch.setattr(
+        scanner_module,
+        "ShadowTradeService",
+        lambda *args, **kwargs: MagicMock(),
+    )
