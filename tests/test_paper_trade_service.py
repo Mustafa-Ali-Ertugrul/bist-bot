@@ -86,7 +86,7 @@ def test_paper_trade_service_keeps_trade_open_without_stop_or_target_hit():
     db.get_open_paper_trades.return_value = [_make_trade()]
     service = _service_with_close_price(db, "THYAO.IS", 104.0)
 
-    service.update_open_trades()
+    service.update_open_trades(now=datetime(2026, 8, 21, 9, 0, tzinfo=UTC))  # mid-session TR
 
     db.close_paper_trade.assert_not_called()
 
@@ -148,7 +148,7 @@ def test_short_trade_stays_open_between_levels():
     ]
     service = _service_with_close_price(db, "THYAO.IS", 97.0)
 
-    service.update_open_trades()
+    service.update_open_trades(now=datetime(2026, 8, 21, 9, 0, tzinfo=UTC))  # mid-session TR
 
     db.close_paper_trade.assert_not_called()
 
@@ -222,7 +222,9 @@ def test_long_trade_ignores_weak_opposite_signal_below_threshold():
         price=103.0,
     )
 
-    service.update_open_trades(signals=[weak_opposing])
+    service.update_open_trades(
+        signals=[weak_opposing], now=datetime(2026, 8, 21, 9, 0, tzinfo=UTC)
+    )  # mid-session TR
 
     db.close_paper_trade.assert_not_called()
 
@@ -270,7 +272,9 @@ def test_short_trade_ignores_buy_signal_below_threshold():
         price=97.0,
     )
 
-    service.update_open_trades(signals=[weak])
+    service.update_open_trades(
+        signals=[weak], now=datetime(2026, 8, 21, 9, 0, tzinfo=UTC)
+    )  # mid-session TR
 
     db.close_paper_trade.assert_not_called()
 
@@ -398,7 +402,9 @@ def test_update_open_trades_prefers_scan_price_over_fetch():
         Signal(ticker="GARAN.IS", signal_type=SignalType.BUY, score=30, price=54.0),
     ]
 
-    service.update_open_trades(signals=signals)
+    service.update_open_trades(
+        signals=signals, now=datetime(2026, 8, 21, 9, 0, tzinfo=UTC)
+    )  # mid-session TR
 
     # THYAO 94 <= 95 → STOP_HIT via scan price (not fetcher 105); GARAN 54 stays open (48 <54 <55)
     db.close_paper_trade.assert_called_once_with(
