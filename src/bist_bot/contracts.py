@@ -73,6 +73,8 @@ class NotifierProtocol(Protocol):
     def send_scan_summary(self, signals: list[Signal], total_scanned: int) -> bool: ...
     def send_signal_change(self, ticker: str, old_signal: Signal, new_signal: Signal) -> bool: ...
     def send_startup_message(self) -> bool: ...
+    def send_signal_to_group(self, signal: Signal) -> bool: ...
+    def send_scan_summary_to_group(self, signals: list[Signal], total_scanned: int) -> bool: ...
 
 
 class SilentNotifier:
@@ -89,6 +91,12 @@ class SilentNotifier:
         return True
 
     def send_startup_message(self) -> bool:
+        return True
+
+    def send_signal_to_group(self, signal: Signal) -> bool:
+        return True
+
+    def send_scan_summary_to_group(self, signals: list[Signal], total_scanned: int) -> bool:
         return True
 
 

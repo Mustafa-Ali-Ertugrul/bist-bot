@@ -146,15 +146,27 @@ def apply_buy_side_risk(
     if risk_levels.blocked_by_correlation or risk_levels.position_size <= 0:
         logger.debug("strategy_portfolio_risk_filtered", ticker=ticker)
         if reject_logger is not None:
+            # Faz 3 P4: liquidity gate is explicit — its own reason code so the
+            # scan rejection breakdown surfaces "liquidity_below_min" instead of
+            # hiding inside the generic portfolio bucket.
+            if risk_levels.blocked_by_liquidity:
+                reason_code = "liquidity_below_min"
+                reason_detail = (
+                    f"20g ort. islem degeri TL{risk_levels.liquidity_value:,.0f} "
+                    f"< MIN_LIQUIDITY_VALUE_TL -> pozisyon 0"
+                )
+            else:
+                reason_code = "portfolio_risk_blocked"
+                reason_detail = "portfolio correlation or sizing constraints blocked candidate"
             reject_logger(
                 stage="risk",
-                reason_code="portfolio_risk_blocked",
+                reason_code=reason_code,
                 score=round(float(score), 2),
                 signal_type=signal_type.name,
                 position_size=risk_levels.position_size,
                 blocked_by_correlation=risk_levels.blocked_by_correlation,
                 liquidity_value=round(float(risk_levels.liquidity_value), 2),
-                reason_detail="portfolio correlation or sizing constraints blocked candidate",
+                reason_detail=reason_detail,
             )
         return None
 

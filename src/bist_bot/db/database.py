@@ -93,6 +93,7 @@ class PaperTradeRecord(Base):
     score: Mapped[int | None] = mapped_column(Integer, nullable=True)
     regime: Mapped[str | None] = mapped_column(String, nullable=True)
     filled_at: Mapped[float | None] = mapped_column(Float, nullable=True)
+    direction: Mapped[str] = mapped_column(String, nullable=True)
     outcome: Mapped[str] = mapped_column(String, nullable=False, default="OPEN")
     actual_profit_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     exit_price: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -383,6 +384,7 @@ class DatabaseManager:
             ("exit_date", f"ALTER TABLE {quoted_paper_table} ADD COLUMN exit_date TEXT"),
             ("close_reason", f"ALTER TABLE {quoted_paper_table} ADD COLUMN close_reason TEXT"),
             ("close_time", f"ALTER TABLE {quoted_paper_table} ADD COLUMN close_time TEXT"),
+            ("direction", f"ALTER TABLE {quoted_paper_table} ADD COLUMN direction TEXT"),
         ]
         for column, sql in migrations:
             if column not in paper_columns:
@@ -527,8 +529,11 @@ class DatabaseManager:
             try:
                 conn.execute(
                     text(
+                        # Plain INSERT for cross-dialect compatibility (SQLite +
+                        # PostgreSQL). The email existence check above plus the
+                        # IntegrityError handler below cover the duplicate case.
                         """
-                        INSERT OR IGNORE INTO users (email, password_hash, role, created_at, updated_at)
+                        INSERT INTO users (email, password_hash, role, created_at, updated_at)
                         VALUES (:email, :password_hash, 'admin', :created_at, :updated_at)
                         """
                     ),

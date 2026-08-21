@@ -1,6 +1,7 @@
 """Scan orchestration service shared by CLI and dashboard flows."""
 
 import time
+from datetime import UTC, datetime
 from typing import cast
 
 from bist_bot.app_logging import get_logger
@@ -327,3 +328,43 @@ class ScanService:
     def update_paper_trades(self, signals: list["Signal"] | None = None) -> None:
         """Refresh open paper trades and close only triggered positions."""
         self.paper_trade_service.update_open_trades(signals=signals)
+
+    def close_positions_at_eod(self, *, now: datetime | None = None) -> None:
+        """Faz 3 P1.1 — post-close discipline pass (silent, no signals/notifications).
+
+        The scheduler calls this once per trading day shortly after
+        ``bist_close_time``; without it the EOD contract in
+        ``paper_trade_service._is_eod`` / ``SignalOutcomeTracker._is_eod``
+        would never fire in production because no scan runs after market
+        close.
+
+        Behavior:
+        - fetches fresh daily closes so ``EOD_CLOSE`` uses real exit prices;
+        - paper positions close via ``update_open_trades(signals=None)``
+          (fetch fallback supplies prices);
+        - tracked AL outcomes close via ``process_scan([], market_data)``
+          (empty signal list -> no new positions open);
+        - failures are logged, never raised (best-effort discipline pass).
+        """
+        effective_now = now or datetime.now(UTC)
+        try:
+            market_data = self.fetcher.fetch_all(period="1d", force=False) or {}
+        except Exception as exc:
+            logger.warning(
+                "eod_close_fetch_failed",
+                error_type=type(exc).__name__,
+                error=str(exc),
+            )
+            market_data = {}
+
+        try:
+            self.paper_trade_service.update_open_trades(signals=None, now=effective_now)
+        except Exception as exc:
+            logger.exception("eod_paper_close_failed", error=exc)
+
+        try:
+            self.signal_outcome_tracker.process_scan([], market_data, now=effective_now)
+        except Exception as exc:
+            logger.exception("eod_outcome_close_failed", error=exc)
+
+        logger.info("eod_close_pass_completed")

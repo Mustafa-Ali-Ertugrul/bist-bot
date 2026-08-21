@@ -1,11 +1,17 @@
 """Market-hours scheduler for the CLI bot runtime."""
 
-from datetime import datetime
+import datetime as _datetime_mod
+from datetime import date, datetime, timedelta
 from time import sleep
 
 from bist_bot.app_logging import get_logger
 from bist_bot.config.settings import settings as default_settings
-from bist_bot.market_calendar import is_bist_open, next_bist_session
+from bist_bot.market_calendar import (
+    bist_close_time,
+    is_bist_holiday,
+    is_bist_open,
+    next_bist_session,
+)
 from bist_bot.notifier import TR
 
 logger = get_logger(__name__, component="scheduler")
@@ -18,9 +24,47 @@ class MarketScheduler:
         self.settings = settings
         self.trading_agent = trading_agent
         self.running = False
+        # Faz 3 P1.1: post-close position pass fires once per trading day.
+        self._eod_close_done_date: date | None = None
 
     def _now(self) -> datetime:
         return datetime.now(TR)
+
+    def _eod_trigger_time(self, d: date) -> datetime | None:
+        """close+ε trigger for the daily EOD pass; None on holidays/weekends."""
+        if is_bist_holiday(d):
+            return None
+        grace = max(0, int(getattr(self.settings, "EOD_CLOSE_DELAY_MINUTES", 2)))
+        # Use the real datetime module (not the patchable module-level name)
+        # so combine() works even when tests stub `datetime` with a minimal class.
+        close_dt = _datetime_mod.datetime.combine(d, bist_close_time(d), tzinfo=TR)
+        return close_dt + timedelta(minutes=grace)
+
+    def _pending_eod_close(self, now: datetime) -> bool:
+        """True exactly once per trading day, at/after close+EOD_CLOSE_DELAY_MINUTES."""
+        trigger = self._eod_trigger_time(now.date())
+        return self._eod_close_done_date != now.date() and trigger is not None and now >= trigger
+
+    def _run_eod_close(self, now: datetime) -> None:
+        """Run the scanner's silent post-close pass; marked done even on failure."""
+        if not self._pending_eod_close(now):
+            return
+        logger.info("scheduler_eod_close_started", date=now.date().isoformat())
+        try:
+            closer = getattr(self.scanner, "close_positions_at_eod", None)
+            if callable(closer):
+                closer()
+            else:
+                logger.warning("scheduler_eod_close_unavailable")
+        except Exception as exc:
+            logger.error(
+                "scheduler_eod_close_failed",
+                error_type=type(exc).__name__,
+                error=str(exc),
+            )
+        finally:
+            self._eod_close_done_date = now.date()
+        logger.info("scheduler_eod_close_completed")
 
     def _sleep_until_next_session(self) -> None:
         """Sleep until the next BIST session opens, checking self.running periodically for clean shutdown."""
@@ -34,6 +78,10 @@ class MarketScheduler:
         )
         deadline = now.timestamp() + wait_seconds
         while self.running and datetime.now(TR).timestamp() < deadline:
+            # Faz 3 P1.1: hand control back when the EOD pass comes due,
+            # so a position never survives the session while we idle.
+            if self._pending_eod_close(datetime.now(TR)):
+                return
             sleep(10)
 
     def _scan_once(self):
@@ -51,6 +99,13 @@ class MarketScheduler:
         while self.running:
             try:
                 now = self._now()
+
+                # Faz 3 P1.1: post-close pass — must be evaluated BEFORE the
+                # idle-sleep branch, otherwise the scheduler would jump
+                # straight to tomorrow and the EOD contract could never fire.
+                if self._pending_eod_close(now):
+                    self._run_eod_close(now)
+                    continue
 
                 if not is_bist_open(now):
                     self._sleep_until_next_session()
@@ -120,6 +175,10 @@ class MarketScheduler:
                     wait_seconds = interval_seconds
                 deadline = now.timestamp() + wait_seconds
                 while self.running and self._now().timestamp() < deadline:
+                    # Faz 3 P1.1: a scan finishing just before close must not
+                    # sleep through the EOD pass window.
+                    if self._pending_eod_close(self._now()):
+                        break
                     sleep(CHECK_INTERVAL_SECONDS)
 
             except Exception as exc:

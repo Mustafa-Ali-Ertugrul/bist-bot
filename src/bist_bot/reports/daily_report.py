@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import re
 from collections import defaultdict
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -14,6 +16,64 @@ from bist_bot.strategy.params import StrategyParams
 from bist_bot.strategy.signal_models import SignalCategory, SignalType, categorize
 
 ISTANBUL_TZ = ZoneInfo("Europe/Istanbul")
+
+_OPEN_POSITIONS_PATH = Path("results") / "signal_outcome_open.json"
+_LIQUIDITY_RE = re.compile(r"Likidite:\s*TL([\d.,]+)")
+_DECAY_WARNING_FROM = (15, 30)  # 15:30 TR — intraday score-decay window opens
+
+
+def _load_open_positions(path: Path | None = None) -> list[dict[str, Any]]:
+    """Load SignalOutcomeTracker's open-position JSON (best-effort, [] on error)."""
+    p = path or _OPEN_POSITIONS_PATH
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+        return data if isinstance(data, list) else []
+    except (OSError, ValueError):
+        return []
+
+
+def _parse_liquidity_tl(reasons: Any) -> float | None:
+    """Extract ADTV (TL) from engine_meta's 'Likidite: TL{X} ort. islem degeri' reason."""
+    for reason in reasons or []:
+        match = _LIQUIDITY_RE.search(str(reason))
+        if match:
+            try:
+                return float(match.group(1).replace(",", ""))
+            except ValueError:
+                return None
+    return None
+
+
+def _format_liquidity(value: float | None, min_threshold: float) -> str:
+    """Render the rollup Liq cell: '₺X.XM' plus ⚠️ when below the gate."""
+    if value is None or value <= 0:
+        return "-"
+    display = f"₺{value / 1e6:.1f}M"
+    if value < min_threshold:
+        display += " ⚠️"
+    return display
+
+
+def _holding_minutes(entry_raw: Any, now: datetime) -> int:
+    try:
+        entry = _parse_row_datetime(entry_raw)
+        return max(0, int((now - entry).total_seconds() // 60))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _format_holding(minutes: int) -> str:
+    if minutes >= 60:
+        return f"{minutes // 60}s {minutes % 60}dk"
+    return f"{minutes}dk"
+
+
+def _decay_warning(score: float, buy_threshold: float, now_local: datetime) -> str:
+    """Faz 3 P3 (F3.4): entry score fell below the AL threshold late in session."""
+    after_time = (now_local.hour, now_local.minute) >= _DECAY_WARNING_FROM
+    if score < buy_threshold and after_time:
+        return "⚠️ skor eşiğin altında (T+1 riski)"
+    return ""
 
 
 def _parse_row_datetime(raw: Any) -> datetime:
@@ -34,9 +94,20 @@ def generate_daily_report(
     repo: SignalsRepository | None = None,
     params: StrategyParams | None = None,
     save_to_disk: bool = True,
+    *,
+    open_positions: list[dict[str, Any]] | None = None,
+    prices: dict[str, float] | None = None,
+    now: datetime | None = None,
 ) -> str:
-    """Generate a markdown daily report for `day` (default today in Europe/Istanbul)."""
+    """Generate a markdown daily report for `day` (default today in Europe/Istanbul).
+
+    Faz 3 P3: ``open_positions`` (default: SignalOutcomeTracker's
+    results/signal_outcome_open.json) renders section 7 with holding time,
+    MFE/MAE, unrealized PnL (when ``prices`` supplies a last price) and the
+    15:30+ score-decay warning. ``now`` is injectable for deterministic tests.
+    """
     target_day = day or datetime.now(ISTANBUL_TZ).date()
+    effective_now = now or datetime.now(ISTANBUL_TZ)
     signals_repo = repo or SignalsRepository()
     strategy_params = params or (
         StrategyParams.conservative()
@@ -192,10 +263,12 @@ def generate_daily_report(
             "",
             "## 3.1. AL Rollup (Hisse Bazlı)",
             "",
-            "| Hisse | AL Tekrar | Maks Skor | İlk/Son | Son Fiyat | Stop | Hedef | R/R |",
-            "|---|---|---|---|---|---|---|---|",
+            "| Hisse | AL Tekrar | Maks Skor | İlk/Son | Son Fiyat | Stop | Hedef | R/R | Liq (20g ort.) |",
+            "|---|---|---|---|---|---|---|---|---|",
         ]
     )
+
+    min_liquidity_tl = float(getattr(settings, "MIN_LIQUIDITY_VALUE_TL", 5_000_000.0))
 
     def _format_price(v: Any) -> str:
         try:
@@ -241,14 +314,15 @@ def generate_daily_report(
             last_price = sorted_entries[-1].get("price", 0)
             best = max(entries, key=lambda x: x["score_float"])
             rr = _compute_rr(best)
+            liq_cell = _format_liquidity(_parse_liquidity_tl(best.get("reasons")), min_liquidity_tl)
             ticker_display = ticker.replace(".IS", "")
             if len(entries) >= 2:
                 ticker_display += " 🔁"
             lines.append(
-                f"| **{ticker_display}** | {len(entries)} | {best['score_float']:+.1f} | {ilk_son} | {_format_price(last_price)} | {_format_price(best.get('stop_loss'))} | {_format_price(best.get('target_price'))} | {rr} |"
+                f"| **{ticker_display}** | {len(entries)} | {best['score_float']:+.1f} | {ilk_son} | {_format_price(last_price)} | {_format_price(best.get('stop_loss'))} | {_format_price(best.get('target_price'))} | {rr} | {liq_cell} |"
             )
     else:
-        lines.append("| - | - | - | - | - | - | - | - |")
+        lines.append("| - | - | - | - | - | - | - | - | - |")
 
     lines.extend(
         [
@@ -320,6 +394,66 @@ def generate_daily_report(
         lines.extend(transitions[:25])
     else:
         lines.append("Gün içinde kategori değiştiren hisse tespit edilmedi.")
+
+    # ── Faz 3 P3: §7 Açık Pozisyonlar (outcome tracker open JSON) ─────────
+    positions = open_positions if open_positions is not None else _load_open_positions()
+    last_prices = prices or {}
+    lines.extend(
+        [
+            "",
+            "## 7. Açık Pozisyonlar",
+            "",
+            "| Hisse | Yön | Giriş (TR) | Tutma | Son Fiyat | Stop | Hedef | MFE% | MAE% | U.PnL% | Uyarı |",
+            "|---|---|---|---|---|---|---|---|---|---|---|",
+        ]
+    )
+    if not positions:
+        lines.append("| - | - | - | - | - | - | - | - | - | - | Açık pozisyon yok |")
+    else:
+        for pos in positions:
+            ticker = str(pos.get("ticker", "-")).replace(".IS", "")
+            side = str(pos.get("side", "long"))
+            entry_raw = pos.get("entry_ts")
+            try:
+                entry_local = (
+                    _parse_row_datetime(entry_raw).astimezone(ISTANBUL_TZ).strftime("%H:%M")
+                )
+            except Exception:
+                entry_local = "-"
+            holding = _format_holding(_holding_minutes(entry_raw, effective_now))
+            entry_price = float(pos.get("entry_price", 0) or 0)
+            stop = float(pos.get("stop", 0) or 0)
+            target = float(pos.get("target", 0) or 0)
+            mfe = f"{float(pos.get('mfe_pct', 0) or 0):+.1f}"
+            mae = f"{float(pos.get('mae_pct', 0) or 0):+.1f}"
+
+            last_price = last_prices.get(str(pos.get("ticker", "")))
+            if last_price is not None and entry_price > 0:
+                direction_sign = -1.0 if side == "short" else 1.0
+                upnl = f"{direction_sign * (last_price - entry_price) / entry_price * 100:+.2f}"
+                last_display = f"₺{last_price:.2f}"
+            else:
+                upnl = "N/A"
+                last_display = "N/A"
+
+            warning = _decay_warning(
+                float(pos.get("score", 0) or 0),
+                buy_threshold,
+                effective_now.astimezone(ISTANBUL_TZ),
+            )
+
+            def _fmt_level(value: float) -> str:
+                return f"₺{value:.2f}" if value > 0 else "N/A"
+
+            lines.append(
+                f"| **{ticker}** | {side} | {entry_local} | {holding} | {last_display} "
+                f"| {_fmt_level(stop)} | {_fmt_level(target)} | {mfe} | {mae} | {upnl} | {warning or '-'} |"
+            )
+        lines.append("")
+        lines.append(
+            "*Kaynak: `results/signal_outcome_open.json` (SignalOutcomeTracker). U.PnL yalnızca güncel fiyat verildiğinde hesaplanır; "
+            "⚠️ = giriş skoru AL eşiğinin altına düştü ve saat ≥15:30 (gün içi elde tutma/T+1 riski).*"
+        )
 
     lines.extend(
         [
