@@ -138,6 +138,12 @@ class PaperTradeService:
         Short: stop hits when price >= stop, target when price <= target.
         When both levels are crossed by the same price the stop wins (conservative,
         matching the backtest measurement contract).
+
+        Price-source contract (single source of truth):
+        current scan ``signals`` are the primary price source (zero-latency);
+        only tickers missing from the scan are fetched via ``fetcher.fetch_all``.
+        When ``signals`` is None/empty the fetch fallback is used for all tickers
+        (result identical, only optimization skipped).
         """
         if not getattr(self.settings, "PAPER_MODE", False):
             return
@@ -147,22 +153,40 @@ class PaperTradeService:
             return
 
         unique_tickers = list({trade.ticker for trade in open_trades})
-        batch = self.fetcher.fetch_all(period="1d", force=False)
+        unique_set = set(unique_tickers)
 
-        prices: dict[str, float] = {}
-        for ticker in unique_tickers:
-            df = batch.get(ticker)
-            if df is not None and len(df) > 0:
-                prices[ticker] = float(df["close"].iloc[-1])
-
-        if not prices:
-            return
-
-        # Build a quick lookup of current signals per ticker (for opposite_signal check)
+        # Primary price source: scan signals (zero-latency); build lookup for
+        # opposite-signal check at the same time.
         signal_lookup: dict[str, Signal] = {}
+        prices: dict[str, float] = {}
         if signals:
             for sig in signals:
                 signal_lookup[sig.ticker] = sig
+                if sig.ticker in unique_set:
+                    try:
+                        prices[sig.ticker] = float(sig.price)
+                    except (TypeError, ValueError):
+                        pass
+
+        # Fetch only missing tickers (fallback). Documented fallback: if
+        # test_broker_paper mocks fetch_all, the result is unchanged — only the
+        # optimization is skipped when signals are absent.
+        missing = [t for t in unique_tickers if t not in prices]
+        if missing:
+            try:
+                batch = self.fetcher.fetch_all(period="1d", force=False) or {}
+            except Exception:
+                batch = {}
+            for ticker in missing:
+                df = batch.get(ticker)
+                if df is not None and len(df) > 0 and "close" in df.columns:
+                    try:
+                        prices[ticker] = float(df["close"].iloc[-1])
+                    except (TypeError, ValueError, KeyError, IndexError):
+                        pass
+
+        if not prices:
+            return
 
         for trade in open_trades:
             current = prices.get(trade.ticker)

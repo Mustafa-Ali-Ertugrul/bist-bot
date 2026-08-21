@@ -120,6 +120,11 @@ def generate_daily_report(
     score_sat_min = min((s["score_float"] for s in sat_signals), default=0.0)
     score_sat_max = max((s["score_float"] for s in sat_signals), default=0.0)
 
+    # RADAR range is dynamic: from weakest positive threshold to just below AL threshold
+    radar_min = float(getattr(strategy_params, "weak_buy_threshold", 8.0))
+    radar_max = buy_threshold - 0.1
+    radar_range_str = f"+{radar_min:.1f} ile +{radar_max:.1f}"
+
     lines: list[str] = [
         f"# BIST Bot Günlük Sinyal ve Tarama Raporu — {target_day.isoformat()}",
         "",
@@ -134,9 +139,11 @@ def generate_daily_report(
         "| Kategori | Sinyal Sayısı | Oran | Skor Aralığı |",
         "|---|---|---|---|",
         f"| **AL (Aksiyon Alınabilir)** | {len(al_signals)} | %{len(al_signals) / max(len(categorized_signals), 1) * 100:.1f} | {score_al_min:+.1f} ile {score_al_max:+.1f} |",
-        f"| **RADAR (İzleme Havuzu)** | {len(radar_signals)} | %{len(radar_signals) / max(len(categorized_signals), 1) * 100:.1f} | +8.0 ile +24.9 |",
+        f"| **RADAR (İzleme Havuzu)** | {len(radar_signals)} | %{len(radar_signals) / max(len(categorized_signals), 1) * 100:.1f} | {radar_range_str} |",
         f"| **SAT (Negatif / Baskı)** | {len(sat_signals)} | %{len(sat_signals) / max(len(categorized_signals), 1) * 100:.1f} | {score_sat_min:+.1f} ile {score_sat_max:+.1f} |",
         f"| **HOLD (Nötr)** | {len(hold_signals)} | %{len(hold_signals) / max(len(categorized_signals), 1) * 100:.1f} | 0.0 |",
+        "",
+        "*Kategori bazlı görünüm: AL ≥ buy_threshold, RADAR = 0 < skor < AL eşiği (pozitif izleme), SAT = sat yönü, HOLD = nötr — tek sözleşme `categorize()`*",
         "",
         "## 2. Seans İçi Dağılım (Zaman Çizelgesi)",
         "",
@@ -174,9 +181,8 @@ def generate_daily_report(
     if not al_signals:
         lines.append("| - | Yok | - | - | - | - |")
 
-    # Per-ticker AL rollup: repeat count, max score, and risk/reward of the
-    # strongest AL entry for each name.  R:R uses the stored stop_loss and
-    # target_price so it reflects the actual simulated paper order levels.
+    # Per-ticker AL rollup: Hisse | AL Tekrar | Maks Skor | İlk/Son | Son Fiyat | Stop | Hedef | R/R
+    # Sorted by repeat count ↓ then max score ↓; AL Tekrar ≥2 → 🔁; R/R = (hedef-giriş)/(giriş-stop), stop/hedef eksik veya stop≥giriş → N/A
     al_by_ticker: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for s in al_signals:
         al_by_ticker[s["ticker"]].append(s)
@@ -186,31 +192,63 @@ def generate_daily_report(
             "",
             "## 3.1. AL Rollup (Hisse Bazlı)",
             "",
-            "| Hisse | AL Tekrar | Maks Skor | R-R (En Güçlü Sinyal) |",
-            "|---|---|---|---|",
+            "| Hisse | AL Tekrar | Maks Skor | İlk/Son | Son Fiyat | Stop | Hedef | R/R |",
+            "|---|---|---|---|---|---|---|---|",
         ]
     )
 
+    def _format_price(v: Any) -> str:
+        try:
+            f = float(v or 0)
+            return f"₺{f:.2f}" if f > 0 else "N/A"
+        except (TypeError, ValueError):
+            return "N/A"
+
     def _compute_rr(sig: dict[str, Any]) -> str:
-        """Risk/reward ratio from stored stop/target; '-' when levels are absent."""
-        price = float(sig.get("price", 0.0) or 0.0)
-        stop = float(sig.get("stop_loss", 0.0) or 0.0)
-        target = float(sig.get("target_price", 0.0) or 0.0)
+        """R/R = (hedef - giriş)/(giriş - stop); N/A when levels absent or stop>=giriş."""
+        try:
+            price = float(sig.get("price", 0) or 0)
+            stop = float(sig.get("stop_loss", 0) or 0)
+            target = float(sig.get("target_price", 0) or 0)
+        except (TypeError, ValueError):
+            return "N/A"
         if price <= 0 or stop <= 0 or target <= 0:
-            return "-"
-        reward = abs(target - price) / price
-        risk = abs(price - stop) / price
+            return "N/A"
+        if stop >= price:
+            return "N/A"
+        reward = target - price
+        risk = price - stop
         if risk <= 0:
-            return "-"
+            return "N/A"
         return f"{reward / risk:.2f}"
 
-    for ticker in sorted(al_by_ticker.keys()):
-        entries = al_by_ticker[ticker]
-        best = max(entries, key=lambda x: x["score_float"])
-        rr = _compute_rr(best)
-        lines.append(
-            f"| **{ticker.replace('.IS', '')}** | {len(entries)} | {best['score_float']:+.1f} | {rr} |"
-        )
+    def _rollup_sort_key(item: tuple[str, list[dict[str, Any]]]) -> tuple[int, float]:
+        entries = item[1]
+        max_score = max(e["score_float"] for e in entries)
+        return (-len(entries), -max_score)
+
+    if al_by_ticker:
+        for ticker, entries in sorted(al_by_ticker.items(), key=_rollup_sort_key):
+            sorted_entries = sorted(entries, key=lambda x: str(x.get("timestamp", "")))
+            first_raw = sorted_entries[0].get("timestamp", "")
+            last_raw = sorted_entries[-1].get("timestamp", "")
+            try:
+                first_str = _parse_row_datetime(first_raw).astimezone(ISTANBUL_TZ).strftime("%H:%M")
+                last_str = _parse_row_datetime(last_raw).astimezone(ISTANBUL_TZ).strftime("%H:%M")
+            except Exception:
+                first_str = last_str = "-"
+            ilk_son = f"{first_str}/{last_str}" if len(entries) > 1 else first_str
+            last_price = sorted_entries[-1].get("price", 0)
+            best = max(entries, key=lambda x: x["score_float"])
+            rr = _compute_rr(best)
+            ticker_display = ticker.replace(".IS", "")
+            if len(entries) >= 2:
+                ticker_display += " 🔁"
+            lines.append(
+                f"| **{ticker_display}** | {len(entries)} | {best['score_float']:+.1f} | {ilk_son} | {_format_price(last_price)} | {_format_price(best.get('stop_loss'))} | {_format_price(best.get('target_price'))} | {rr} |"
+            )
+    else:
+        lines.append("| - | - | - | - | - | - | - | - |")
 
     lines.extend(
         [
