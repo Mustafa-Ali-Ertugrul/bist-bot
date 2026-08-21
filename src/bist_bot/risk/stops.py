@@ -5,8 +5,11 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from bist_bot.app_logging import get_logger
 from bist_bot.risk.models import RiskLevels
 from bist_bot.risk.ticks import round_to_tick
+
+logger = get_logger(__name__, component="risk_stops")
 
 
 def calc_atr_levels(
@@ -213,8 +216,8 @@ def determine_final_levels(
                 if _fallback > price:
                     levels.final_target = _fallback
                     target_method = "ATR-fallback"
-        except Exception:
-            pass  # intentionally silent — fallback is best-effort, no log spam
+        except Exception as exc:
+            logger.debug("Z2 ATR-fallback hesaplanamadi (best-effort)", exc_info=exc)
 
     # ── H8: ±günlük fiyat limiti clamp ────────────────────────────────────
     # BIST %10 günlük fiyat sınırları vardır. Hedef/reference dışındaki
@@ -238,8 +241,8 @@ def determine_final_levels(
         _min_stop_price = price * (1 - _min_stop_pct / 100.0)
         if 0 < levels.final_stop < price and levels.final_stop > _min_stop_price:
             levels.final_stop = _min_stop_price
-    except Exception:
-        pass  # intentionally silent — MIN_STOP is best-effort
+    except Exception as exc:
+        logger.debug("Z2 MIN_STOP tabani hesaplanamadi (best-effort)", exc_info=exc)
 
     # ── H8: BIST tick rounding (round(x,2) yerine) ────────────────────────
     # Stop BUY yönünde (aşağı), target SELL yönünde (yukarı) yuvarlanır.
