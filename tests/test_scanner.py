@@ -76,7 +76,7 @@ def test_scan_once_orchestrates_side_effect_services():
     signal_change_service.check_signal_changes.assert_called_once_with([signal])
     execution_service.auto_execute_signals.assert_called_once_with([signal])
     paper_trade_service.queue_actionable_signals.assert_called_once_with([signal])
-    paper_trade_service.update_open_trades.assert_called_once_with()
+    paper_trade_service.update_open_trades.assert_called_once_with(signals=[signal])
     notification_service.notify_scan_results.assert_called_once_with([signal], [signal], 1)
     db.save_signals.assert_called_once_with([signal])
     db.save_scan_log.assert_called_once_with(
@@ -156,7 +156,7 @@ def test_scan_service_backwards_compatible_wrappers_delegate():
 
     signal_change_service.check_signal_changes.assert_called_once_with([signal])
     execution_service.auto_execute_signals.assert_called_once_with([signal])
-    paper_trade_service.update_open_trades.assert_called_once_with()
+    paper_trade_service.update_open_trades.assert_called_once_with(signals=None)
 
 
 def test_scan_once_force_refresh_uses_selective_invalidation():
