@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import os
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -54,8 +55,13 @@ def _git_raw(*args: str) -> subprocess.CompletedProcess:
 
 def _run_walk_forward(label: str, output_csv: Path, extra_args: list[str]) -> None:
     cmd = [sys.executable, str(WALK_FORWARD), "--output", str(output_csv), *extra_args]
+    # Make the repo importable even when `bist_bot` is not pip-installed in the venv.
+    env = dict(os.environ)
+    env["PYTHONPATH"] = (
+        str(REPO_ROOT / "src") + os.pathsep + env.get("PYTHONPATH", "")
+    ).rstrip(os.pathsep)
     print(f"\n[{label}] running: {' '.join(cmd)}")
-    result = subprocess.run(cmd, cwd=REPO_ROOT)
+    result = subprocess.run(cmd, cwd=REPO_ROOT, env=env)
     if result.returncode != 0:
         raise SystemExit(f"[{label}] walk-forward failed (exit {result.returncode})")
     if not output_csv.exists():
