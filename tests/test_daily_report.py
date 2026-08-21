@@ -151,3 +151,10 @@ def test_generate_daily_report_structure(repo, tmp_path, monkeypatch):
     report_file = tmp_path / "results" / "daily_report_2026-08-20.md"
     assert report_file.exists()
     assert report_file.read_text(encoding="utf-8") == report_md
+
+    # HOLD column appears in the session table header and rows.
+    assert "| Saat (TR) | Toplam | AL | RADAR | SAT | HOLD | AL Veren Hisseler |" in report_md
+
+    # Per-ticker AL rollup renders AL names with max score and R-R.
+    assert "## 3.1. AL Rollup (Hisse Bazlı)" in report_md
+    assert "| **THYAO** | 1 | +35.0 |" in report_md

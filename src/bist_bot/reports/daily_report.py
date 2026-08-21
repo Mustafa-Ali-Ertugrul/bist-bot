@@ -140,8 +140,8 @@ def generate_daily_report(
         "",
         "## 2. Seans İçi Dağılım (Zaman Çizelgesi)",
         "",
-        "| Saat (TR) | Toplam | AL | RADAR | SAT | AL Veren Hisseler |",
-        "|---|---|---|---|---|---|",
+        "| Saat (TR) | Toplam | AL | RADAR | SAT | HOLD | AL Veren Hisseler |",
+        "|---|---|---|---|---|---|---|",
     ]
 
     for time_str in sorted(session_buckets.keys()):
@@ -151,7 +151,7 @@ def generate_daily_report(
             tickers_str += f" (+{len(b['tickers']) - 5})"
         tickers_display = tickers_str if tickers_str else "-"
         lines.append(
-            f"| {time_str} | {b['total']} | **{b['AL']}** | {b['RADAR']} | {b['SAT']} | {tickers_display} |"
+            f"| {time_str} | {b['total']} | **{b['AL']}** | {b['RADAR']} | {b['SAT']} | {b['HOLD']} | {tickers_display} |"
         )
 
     lines.extend(
@@ -173,6 +173,44 @@ def generate_daily_report(
         )
     if not al_signals:
         lines.append("| - | Yok | - | - | - | - |")
+
+    # Per-ticker AL rollup: repeat count, max score, and risk/reward of the
+    # strongest AL entry for each name.  R:R uses the stored stop_loss and
+    # target_price so it reflects the actual simulated paper order levels.
+    al_by_ticker: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for s in al_signals:
+        al_by_ticker[s["ticker"]].append(s)
+
+    lines.extend(
+        [
+            "",
+            "## 3.1. AL Rollup (Hisse Bazlı)",
+            "",
+            "| Hisse | AL Tekrar | Maks Skor | R-R (En Güçlü Sinyal) |",
+            "|---|---|---|---|",
+        ]
+    )
+
+    def _compute_rr(sig: dict[str, Any]) -> str:
+        """Risk/reward ratio from stored stop/target; '-' when levels are absent."""
+        price = float(sig.get("price", 0.0) or 0.0)
+        stop = float(sig.get("stop_loss", 0.0) or 0.0)
+        target = float(sig.get("target_price", 0.0) or 0.0)
+        if price <= 0 or stop <= 0 or target <= 0:
+            return "-"
+        reward = abs(target - price) / price
+        risk = abs(price - stop) / price
+        if risk <= 0:
+            return "-"
+        return f"{reward / risk:.2f}"
+
+    for ticker in sorted(al_by_ticker.keys()):
+        entries = al_by_ticker[ticker]
+        best = max(entries, key=lambda x: x["score_float"])
+        rr = _compute_rr(best)
+        lines.append(
+            f"| **{ticker.replace('.IS', '')}** | {len(entries)} | {best['score_float']:+.1f} | {rr} |"
+        )
 
     lines.extend(
         [

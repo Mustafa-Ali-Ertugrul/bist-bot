@@ -108,6 +108,16 @@ TICKER_NAMES = {
     "LKMNH.IS": "Lokman",
     "MAKIM.IS": "Makim",
     "MGROS.IS": "Migros",
+    "AEFES.IS": "Anadolu Efes",
+    "TTKOM.IS": "Türk Telekom",
+    "TRALT.IS": "Türk Altın",
+    "DSTKF.IS": "Destek Faktoring",
+    "GUBRF.IS": "Gübretaş",
+    "ENKAI.IS": "ENKA",
+    "EKGYO.IS": "Emlak GYO",
+    "ASTOR.IS": "Astor Enerji",
+    "AKBNK.IS": "Akbank",
+    "PGSUS.IS": "Pegasus",
     "MRGYO.IS": "Merit Gayrimenkul",
     "ODAS.IS": "Odas",
     "PNLSN.IS": "Pınar",
@@ -159,10 +169,12 @@ SECTOR_MAP = {
     "TKFEN.IS": "İNŞAAT",
     "TCELL.IS": "TELEKOM",
     "TTKOM.IS": "TELEKOM",
-    "KOZAL.IS": "MADENCİLİK",
-    "KOZAA.IS": "MADENCİLİK",
     "ISGYO.IS": "GYO",
     "EKGYO.IS": "GYO",
+    "TRALT.IS": "MADENCİLİK",
+    "DSTKF.IS": "FİNANS",
+    "GUBRF.IS": "KİMYA",
+    "ASTOR.IS": "ENERJİ",
 }
 
 
@@ -211,8 +223,8 @@ class TradingSettings:
     SHADOW_ENABLED: bool = _get_bool_env("SHADOW_ENABLED", True)
     SHADOW_HOLDING_DAYS: int = _get_int_env("SHADOW_HOLDING_DAYS", 5)
     SHADOW_ONLY_ROBUST: bool = _get_bool_env("SHADOW_ONLY_ROBUST", True)
-    SHADOW_MIN_SCORE: int = _get_int_env("SHADOW_MIN_SCORE", 15)
-    SHADOW_COOLDOWN_DAYS: int = _get_int_env("SHADOW_COOLDOWN_DAYS", 3)
+    SHADOW_MIN_SCORE: int = _get_int_env("SHADOW_MIN_SCORE", 20)
+    SHADOW_COOLDOWN_DAYS: int = _get_int_env("SHADOW_COOLDOWN_DAYS", 5)
     COMMISSION_BUY: float = _get_float_env("COMMISSION_BUY", 0.0002)
     COMMISSION_SELL: float = _get_float_env("COMMISSION_SELL", 0.0002)
     BSMV: float = _get_float_env("BSMV", 0.0005)
@@ -319,14 +331,14 @@ class ServerSettings:
     RATE_LIMIT_STORAGE_URI: str = _get_str_env("RATE_LIMIT_STORAGE_URI", "memory://")
     SENTRY_DSN: str | None = _get_str_env("SENTRY_DSN") or None
     ENVIRONMENT: str = _get_str_env("ENVIRONMENT", "production")
-    SCAN_TIMEOUT_SECONDS: int = _get_int_env("SCAN_TIMEOUT_SECONDS", 30)
-    SCAN_API_TIMEOUT_SECONDS: float = _get_float_env("SCAN_API_TIMEOUT_SECONDS", 60.0)
+    SCAN_TIMEOUT_SECONDS: int = _get_int_env("SCAN_TIMEOUT_SECONDS", 300)
+    SCAN_API_TIMEOUT_SECONDS: float = _get_float_env("SCAN_API_TIMEOUT_SECONDS", 300.0)
     STREAMLIT_SCAN_COOLDOWN_SECONDS: float = _get_float_env("STREAMLIT_SCAN_COOLDOWN_SECONDS", 8.0)
     STREAMLIT_ANALYZE_COOLDOWN_SECONDS: float = _get_float_env(
         "STREAMLIT_ANALYZE_COOLDOWN_SECONDS", 4.0
     )
     STREAMLIT_BACKGROUND_SCAN_TIMEOUT_SECONDS: int = _get_int_env(
-        "STREAMLIT_BACKGROUND_SCAN_TIMEOUT_SECONDS", 180
+        "STREAMLIT_BACKGROUND_SCAN_TIMEOUT_SECONDS", 300
     )
     API_REQUEST_TIMEOUT_SECONDS: int = _get_int_env("API_REQUEST_TIMEOUT_SECONDS", 30)
     SCAN_INTERVAL_MINUTES: int = _get_int_env("SCAN_INTERVAL_MINUTES", 15)
@@ -343,7 +355,7 @@ class ServerSettings:
 class BrokerSettings:
     BROKER_MODE: str = _get_str_env("BROKER_MODE", "paper").lower()
     BROKER_PROVIDER: str = _get_str_env("BROKER_PROVIDER", "paper").lower()
-    WATCHLIST_SOURCE: str = _get_str_env("WATCHLIST_SOURCE", "bist30")
+    WATCHLIST_SOURCE: str = _get_str_env("WATCHLIST_SOURCE", "bist100")
     ALGOLAB_API_KEY: str = _get_str_env("ALGOLAB_API_KEY")
     ALGOLAB_USERNAME: str = _get_str_env("ALGOLAB_USERNAME")
     ALGOLAB_PASSWORD: str = _get_str_env("ALGOLAB_PASSWORD")
@@ -416,6 +428,17 @@ class NotificationSettings:
     NOTIFICATION_MAX_RETRIES: int = _get_int_env("NOTIFICATION_MAX_RETRIES", 3)
     TELEGRAM_GROUP_BATCH_THRESHOLD: int = _get_int_env("TELEGRAM_GROUP_BATCH_THRESHOLD", 5)
     NOTIFICATION_RETRY_DELAY: int = _get_int_env("NOTIFICATION_RETRY_DELAY", 5)
+    # Global Telegram send-rate safety budget (messages per minute) enforced by a
+    # sliding-window limiter. Bots are capped at ~30 msg/min per bot; 18 keeps
+    # headroom for both owner and group traffic without tripping 429s.
+    TELEGRAM_RATE_LIMIT_PER_MINUTE: int = _get_int_env("TELEGRAM_RATE_LIMIT_PER_MINUTE", 18)
     # How long a generated signal remains fresh/actionable (minutes).
     # Signals older than this are marked expired and skipped for notifications.
     SIGNAL_TTL_MINUTES: int = _get_int_env("SIGNAL_TTL_MINUTES", 60)
+    # Minimum score movement required for a user-facing signal-change
+    # notification when neither the old nor the new signal is actionable.
+    # 0 = legacy behaviour (notify on every signal-type change).
+    # Valid range 0-100 (score is bounded ±100).
+    SIGNAL_CHANGE_MIN_SCORE_DELTA: int = max(
+        0, min(100, _get_int_env("SIGNAL_CHANGE_MIN_SCORE_DELTA", 15))
+    )
