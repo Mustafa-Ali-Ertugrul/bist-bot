@@ -22,6 +22,7 @@ from bist_bot.services.notification_service import NotificationDispatchService
 from bist_bot.services.paper_trade_service import PaperTradeService
 from bist_bot.services.shadow_trade_service import ShadowTradeService
 from bist_bot.services.signal_change_service import SignalChangeService
+from bist_bot.services.signal_outcome_tracker import SignalOutcomeTracker
 from bist_bot.strategy.params import StrategyParams
 from bist_bot.strategy.signal_models import (
     Signal,
@@ -67,6 +68,7 @@ class ScanService:
         paper_trade_service: PaperTradeService | None = None,
         notification_service: NotificationDispatchService | None = None,
         shadow_trade_service: ShadowTradeService | None = None,
+        signal_outcome_tracker: SignalOutcomeTracker | None = None,
         circuit_breaker: CircuitBreaker | None = None,
     ) -> None:
         """Create a scan service with explicit runtime dependencies."""
@@ -93,6 +95,9 @@ class ScanService:
         )
         self.shadow_trade_service = shadow_trade_service or ShadowTradeService(
             settings=self.settings
+        )
+        self.signal_outcome_tracker = signal_outcome_tracker or SignalOutcomeTracker(
+            settings=self.settings, db=self.db
         )
         self.last_scan_stats: dict[str, int] = {
             "scanned": 0,
@@ -122,6 +127,13 @@ class ScanService:
             )
         except Exception as exc:
             logger.exception("shadow_trade_processing_failed", error=exc)
+
+    def _process_signal_outcomes(self, signals: list[Signal], market_data: dict) -> None:
+        """Run outcome tracking for AL signals (shadow pattern, isolated)."""
+        try:
+            self.signal_outcome_tracker.process_scan(signals, market_data)
+        except Exception as exc:
+            logger.exception("signal_outcome_processing_failed", error=exc)
 
     def scan_once(self, force_refresh: bool = False) -> list[Signal]:
         """Run one complete scan and return all generated signals.
@@ -231,6 +243,7 @@ class ScanService:
 
             self._check_signal_changes(signals)
             self.db.save_signals(signals)
+            self._process_signal_outcomes(signals, all_data)
 
             # BUG-5 fix: skip auto_execute when agent owns entries
             agent_enabled = bool(getattr(self.settings, "AGENT_ENABLED", False)) or bool(

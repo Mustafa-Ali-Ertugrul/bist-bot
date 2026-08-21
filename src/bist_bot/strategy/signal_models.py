@@ -148,6 +148,8 @@ class Signal:
     """EMA200 value at signal time (for shadow trend filtering)."""
     ema_200_slope: float | None = field(default=None)
     """Direction of EMA200: >0 rising, <0 falling, 0 flat."""
+    record_id: int | None = field(default=None)
+    """DB primary key of the persisted SignalRecord (populated by save_signal)."""
 
     def __post_init__(self) -> None:
         if self.expires_at is None:
@@ -189,6 +191,7 @@ class Signal:
             score_breakdown=dict(self.score_breakdown) if self.score_breakdown else None,
             ema_200=self.ema_200,
             ema_200_slope=self.ema_200_slope,
+            record_id=self.record_id,
         )
 
     def top_contributors(self, *, count: int = 3) -> list[tuple[str, float]]:

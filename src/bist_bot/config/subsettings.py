@@ -220,6 +220,7 @@ class TradingSettings:
     INITIAL_CAPITAL: float = _get_float_env("INITIAL_CAPITAL", 100000.0)
     PAPER_MODE: bool = _get_bool_env("PAPER_MODE", False)
     PAPER_TRADES_TABLE: str = _get_str_env("PAPER_TRADES_TABLE", "paper_trades")
+    OUTCOME_TRACKING_ENABLED: bool = _get_bool_env("OUTCOME_TRACKING_ENABLED", True)
     SHADOW_ENABLED: bool = _get_bool_env("SHADOW_ENABLED", True)
     SHADOW_HOLDING_DAYS: int = _get_int_env("SHADOW_HOLDING_DAYS", 5)
     SHADOW_ONLY_ROBUST: bool = _get_bool_env("SHADOW_ONLY_ROBUST", True)
