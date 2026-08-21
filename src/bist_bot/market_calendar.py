@@ -5,7 +5,7 @@ Turkey abolished DST in 2016, so TR = UTC+3 year-round.
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Any
 
 try:
@@ -45,6 +45,17 @@ def is_bist_open(dt: datetime | None = None) -> bool:
     else:
         close_t = (datetime.min + _MARKET_CLOSE).time()
     return open_t <= t < close_t
+
+
+def bist_close_time(d: date) -> time:
+    """Return the official BIST close time for the given date (half-day aware).
+
+    Hardcoded times are not repeated elsewhere — callers must use this accessor
+    so session-end logic stays single-sourced.
+    """
+    if is_bist_half_day(d):
+        return (datetime.min + _HALF_DAY_CLOSE).time()
+    return (datetime.min + _MARKET_CLOSE).time()
 
 
 def next_bist_session(after: datetime | None = None) -> datetime:

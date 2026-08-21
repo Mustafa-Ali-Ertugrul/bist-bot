@@ -20,6 +20,9 @@ from bist_bot.strategy.engine_filters import (
     is_buy_signal,
     passes_adx_filter,
 )
+from bist_bot.strategy.engine_filters import (
+    is_trade_actionable as signal_is_trade_actionable,
+)
 from bist_bot.strategy.engine_meta import (
     append_signal_reasons,
     apply_buy_side_risk,
@@ -36,6 +39,7 @@ from bist_bot.strategy.regime import (
     get_trend_bias,
 )
 from bist_bot.strategy.scoring import (
+    _compute_ema_slope,
     score_momentum,
     score_structure,
     score_trend,
@@ -396,8 +400,9 @@ class StrategyEngine:
         fallback_confidence: str,
         agreement_ratio: float | None = None,
         score_breakdown: dict[str, float] | None = None,
+        trigger_df: pd.DataFrame | None = None,
     ) -> Signal:
-        return Signal(
+        signal = Signal(
             ticker=ticker,
             signal_type=signal_type,
             score=score,
@@ -411,9 +416,21 @@ class StrategyEngine:
             confidence=fallback_confidence,
             agreement_ratio=agreement_ratio,
             buy_threshold=self.params.buy_threshold,
-            is_actionable=score >= self.params.buy_threshold,
+            sell_threshold=self.params.sell_threshold,
             score_breakdown=score_breakdown,
+            ema_200=float(last.get(f"ema_{settings.EMA_LONG}", last.get("ema_200")) or 0.0),
+            ema_200_slope=self._get_ema200_slope(trigger_df),
         )
+        # Single source of actionable truth: engine computes, downstream reads.
+        signal.is_actionable = signal_is_trade_actionable(signal, self.params)
+        return signal
+
+    def _get_ema200_slope(self, df: pd.DataFrame | None) -> float | None:
+        """Return EMA200 direction: >0 rising, <0 falling, None if insufficient data."""
+        if df is None or len(df) < 41:
+            return None
+        slope = _compute_ema_slope(df, 40)
+        return float(slope) if slope is not None else None
 
     def _append_signal_reasons(self, signal: Signal, risk_levels: RiskLevels) -> None:
         append_signal_reasons(signal, risk_levels)
@@ -436,10 +453,26 @@ class StrategyEngine:
             return signal.signal_type
 
         # Logic Tuning Phase 4A: Check for RADAR (watchlist) eligibility
-        # If bias is neutral (soft fail) but score is high, we keep it as RADAR
-        if trend_bias == TrendBias.NEUTRAL and abs(signal.score) >= self.BUY_THRESHOLD:
-            logger.debug("strategy_confluence_soft_fail_radar", ticker=ticker, score=signal.score)
-            return SignalType.RADAR
+        # If bias is neutral (soft fail) but score is positive and strong, keep as RADAR.
+        # Negative (short/sell) candidates that fail confluence must be rejected as HOLD, not RADAR.
+        if trend_bias == TrendBias.NEUTRAL:
+            if signal.score >= self.BUY_THRESHOLD:
+                logger.debug(
+                    "strategy_confluence_soft_fail_radar", ticker=ticker, score=signal.score
+                )
+                return SignalType.RADAR
+            if signal.score < 0:
+                self._log_candidate_rejected(
+                    ticker,
+                    stage="confluence",
+                    reason_code="confluence_soft_fail_short",
+                    multi_timeframe=multi_timeframe,
+                    trigger_candle_count=trigger_candle_count,
+                    trend_bias=trend_bias.value,
+                    score=signal.score,
+                    reason_detail="short candidate with neutral HTF bias soft-failed to HOLD",
+                )
+                return SignalType.HOLD
 
         self._log_candidate_rejected(
             ticker,
@@ -545,6 +578,7 @@ class StrategyEngine:
             fallback_confidence=confidence,
             agreement_ratio=_agreement,
             score_breakdown=score_breakdown,
+            trigger_df=df,
         )
         self._append_signal_reasons(signal, risk_levels)
 
@@ -576,6 +610,7 @@ class StrategyEngine:
             return None
 
         signal.signal_type = final_signal_type
+        signal.is_actionable = signal_is_trade_actionable(signal, self.params)
         if self._is_buy_signal(signal.signal_type):
             self.risk_manager.register_position(ticker, df)
         return signal
@@ -637,6 +672,7 @@ class StrategyEngine:
         for signal in signals:
             if signal.signal_type in buy_family:
                 signal.signal_type = SignalType.RADAR
+                signal.is_actionable = signal_is_trade_actionable(signal, self.params)
                 signal.reasons.append("Makro rejim BEAR → alım sinyali RADAR'a düşürüldü")
                 demoted += 1
         if demoted:
@@ -678,13 +714,23 @@ class StrategyEngine:
             self._current_scan_id = None
         return signals
 
-    def get_actionable_signals(self, signals: list[Signal]) -> list[Signal]:
-        """Filter out hold and radar signals from the actionable list.
+    def is_trade_actionable(self, signal: Signal) -> bool:
+        """Check whether `signal` crosses the directional trade thresholds.
 
-        Actionable signals are those intended for immediate trade execution.
-        RADAR signals are for watchlist observation only.
+        Delegates to :func:`engine_filters.is_trade_actionable` using this
+        engine's params — the single actionable contract for scanner,
+        paper-trade, metrics, and notification layers.
         """
-        return [s for s in signals if s.signal_type not in (SignalType.HOLD, SignalType.RADAR)]
+        return signal_is_trade_actionable(signal, self.params)
+
+    def get_actionable_signals(self, signals: list[Signal]) -> list[Signal]:
+        """Return only signals intended for immediate trade execution.
+
+        Actionable = directional threshold cross (buy: score >= buy_threshold,
+        sell: score <= sell_threshold). HOLD/RADAR and weak sub-threshold
+        signals are observation-only (handled by the shadow ledger).
+        """
+        return [s for s in signals if self.is_trade_actionable(s)]
 
     # ------------------------------------------------------------------
     # Plugin registry API

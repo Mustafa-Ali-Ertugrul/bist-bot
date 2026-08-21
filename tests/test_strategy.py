@@ -285,6 +285,87 @@ def test_non_buy_signal_does_not_expose_long_trade_plan():
     assert signal.reasons == ["Long trade plan not generated: signal is not buy-side"]
 
 
+def test_sell_signal_generates_short_trade_plan_reasons():
+    price = 100.0
+    df = pd.DataFrame({"close": [price, price], "atr": [2.0, 2.0]})
+
+    adjusted = apply_buy_side_risk(
+        cast(Any, FakeRiskManager()),
+        None,
+        "TEST.IS",
+        df,
+        signal_type=SignalType.SELL,
+        enforce_sector_limit=False,
+        last=pd.Series({"close": price}),
+        score=-30.0,
+        trend_bias=TrendBias.NEUTRAL,
+        risk_levels=RiskLevels(),
+    )
+
+    assert adjusted is not None
+    assert adjusted.final_stop == pytest.approx(104.0)  # price + 2.0 * ATR
+    assert adjusted.final_target == pytest.approx(94.0)  # price - 3.0 * ATR
+    assert adjusted.risk_reward_ratio == pytest.approx(1.5)  # 6 / 4
+    assert adjusted.risk_pct == pytest.approx(-4.0)
+    assert adjusted.reward_pct == pytest.approx(6.0)
+    assert adjusted.position_size == 0
+
+    signal = Signal(
+        ticker="TEST.IS",
+        signal_type=SignalType.SELL,
+        score=-30.0,
+        price=price,
+    )
+    append_signal_reasons(signal, adjusted)
+
+    expected = "R/R: 1:1.5 | Short trade plan: ATR-based (stop=+2.0*ATR, target=-3.0*ATR)"
+    assert signal.reasons == [expected]
+
+
+def test_sell_signal_short_plan_fallback_without_atr():
+    price = 100.0
+    df = pd.DataFrame({"close": [price, price]})  # no ATR column
+
+    adjusted = apply_buy_side_risk(
+        cast(Any, FakeRiskManager()),
+        None,
+        "TEST.IS",
+        df,
+        signal_type=SignalType.SELL,
+        enforce_sector_limit=False,
+        last=pd.Series({"close": price}),
+        score=-30.0,
+        trend_bias=TrendBias.NEUTRAL,
+        risk_levels=RiskLevels(),
+    )
+
+    assert adjusted is not None
+    assert adjusted.final_stop == pytest.approx(105.0)
+    assert adjusted.final_target == pytest.approx(92.0)
+    assert adjusted.risk_reward_ratio == pytest.approx(1.6)  # reward 8 / risk 5
+    assert adjusted.risk_pct == pytest.approx(-5.0)
+    assert adjusted.reward_pct == pytest.approx(8.0)
+
+
+def test_sell_signal_reasons_flag_invalid_geometry():
+    price = 100.0
+    broken_levels = RiskLevels(
+        final_stop=95.0,  # stop below price -> inverted short geometry
+        final_target=105.0,  # target above price
+        method_used="broken plan",
+    )
+
+    signal = Signal(
+        ticker="TEST.IS",
+        signal_type=SignalType.SELL,
+        score=-30.0,
+        price=price,
+    )
+    append_signal_reasons(signal, broken_levels)
+
+    assert signal.reasons == ["Short trade plan unavailable | invalid geometry"]
+
+
 def test_volume_price_confirmation_scores_directionally():
     params = StrategyParams()
     base = {

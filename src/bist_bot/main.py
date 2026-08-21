@@ -48,8 +48,31 @@ def main():
 
     _signal.signal(_signal.SIGINT, shutdown)
 
+    if "--score-correlation" in sys.argv:
+        from bist_bot.reports.score_correlation import run as run_score_corr
+
+        md = run_score_corr()
+        print(md)
+        return
     if "--once" in sys.argv:
         scanner.scan_once()
+    elif "--daily-report" in sys.argv:
+        from datetime import datetime
+
+        from bist_bot.reports.daily_report import generate_daily_report
+
+        target_date = None
+        idx = sys.argv.index("--daily-report")
+        if idx + 1 < len(sys.argv) and not sys.argv[idx + 1].startswith("--"):
+            try:
+                target_date = datetime.strptime(sys.argv[idx + 1], "%Y-%m-%d").date()
+            except ValueError:
+                logger.error("invalid_date_format", value=sys.argv[idx + 1], expected="YYYY-MM-DD")
+                print(f"Hata: Geçersiz tarih formatı '{sys.argv[idx + 1]}'. YYYY-MM-DD bekleniyor.")
+                return
+
+        report_md = generate_daily_report(day=target_date, repo=container.signals_repo)
+        print(report_md)
     elif "--backtest" in sys.argv:
         run_backtest(container.fetcher)
     elif "--dashboard" in sys.argv:

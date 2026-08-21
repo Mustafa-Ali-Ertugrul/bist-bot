@@ -379,15 +379,15 @@ class Settings:
         raise RuntimeError(message)
 
     SCAN_TIMEOUT_SECONDS: int = field(
-        default_factory=lambda: int(os.environ.get("SCAN_TIMEOUT_SECONDS", "30"))
+        default_factory=lambda: int(os.environ.get("SCAN_TIMEOUT_SECONDS", "300"))
     )
     STREAMLIT_INITIAL_SCAN_LIMIT: int = field(
-        default_factory=lambda: int(os.environ.get("STREAMLIT_INITIAL_SCAN_LIMIT", "10"))
+        default_factory=lambda: int(os.environ.get("STREAMLIT_INITIAL_SCAN_LIMIT", "100"))
     )
     # Keep aligned with ServerSettings default so UI/worker budgets stay consistent.
     STREAMLIT_BACKGROUND_SCAN_TIMEOUT_SECONDS: int = field(
         default_factory=lambda: int(
-            os.environ.get("STREAMLIT_BACKGROUND_SCAN_TIMEOUT_SECONDS", "180")
+            os.environ.get("STREAMLIT_BACKGROUND_SCAN_TIMEOUT_SECONDS", "300")
         )
     )
 

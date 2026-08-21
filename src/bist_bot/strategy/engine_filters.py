@@ -96,11 +96,30 @@ def _apply_chase_cap(
 
 def is_buy_signal(signal_type: SignalType) -> bool:
     """Return whether a signal opens or adds a long position."""
-    return signal_type in {
-        SignalType.STRONG_BUY,
-        SignalType.BUY,
-        SignalType.WEAK_BUY,
-    }
+    return signal_type.is_buy
+
+
+def is_sell_signal(signal_type: SignalType) -> bool:
+    """Return whether a signal belongs to the short direction."""
+    return signal_type.is_sell
+
+
+def is_trade_actionable(signal: Signal, params: StrategyParams) -> bool:
+    """Return True when `signal` crosses the directional trade thresholds.
+
+    This is THE actionable contract shared by scanner, paper-trade, metrics,
+    and notification layers. The decision is explicitly directional so the
+    buy/sell asymmetry can never be confused:
+
+    - buy side: ``score >= params.buy_threshold``
+    - sell side: ``score <= params.sell_threshold``
+    - HOLD / RADAR / any other type: never actionable
+    """
+    if signal.signal_type.is_buy:
+        return params.buy_actionable_score(signal.score)
+    if signal.signal_type.is_sell:
+        return params.sell_actionable_score(signal.score)
+    return False
 
 
 def classify_signal(

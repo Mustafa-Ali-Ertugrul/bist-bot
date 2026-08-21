@@ -67,7 +67,7 @@ def _market_close(price: float):
 
 
 def test_radar_robust_creates_entry_without_broker_call(tmp_path):
-    shadow = _service(tmp_path)
+    shadow = _service(tmp_path, SHADOW_MIN_SCORE=15)
     broker = MagicMock()
     db = MagicMock()
     execution = ExecutionService(db, broker=broker, settings=_settings())
@@ -139,7 +139,7 @@ def test_non_robust_radar_is_not_shadowed(tmp_path):
 
 
 def test_subthreshold_weak_buy_is_observed_as_radar(tmp_path):
-    service = _service(tmp_path)
+    service = _service(tmp_path, SHADOW_MIN_SCORE=15)
 
     service.process_scan([_signal(score=15, signal_type=SignalType.WEAK_BUY)])
 
@@ -158,9 +158,11 @@ def test_below_min_score_is_rejected(tmp_path):
 
 def test_at_min_score_boundary_is_accepted(tmp_path):
     """Signals at exactly SHADOW_MIN_SCORE pass the floor filter."""
-    service = _service(tmp_path)
+    service = _service(tmp_path, SHADOW_MIN_SCORE=20)
 
-    service.process_scan([_signal(score=15, signal_type=SignalType.WEAK_BUY)])
+    sig = _signal(score=20, signal_type=SignalType.WEAK_BUY)
+    sig.buy_threshold = 48.0
+    service.process_scan([sig])
 
     rows = json.loads(service.open_path.read_text(encoding="utf-8"))
     assert list(rows) == [ROBUST]
@@ -178,7 +180,7 @@ def test_custom_min_score_override(tmp_path):
 
 def test_stop_cooldown_blocks_reopening(tmp_path):
     """A ticker that recently stopped must not be reopened within COOLDOWN_DAYS."""
-    service = _service(tmp_path, SHADOW_COOLDOWN_DAYS=3)
+    service = _service(tmp_path, SHADOW_COOLDOWN_DAYS=3, SHADOW_MIN_SCORE=15)
     service.process_scan([_signal()], now=ENTRY_TIME)
     # stop-hit close
     service.process_scan([], _market_close(94.0), now=ENTRY_TIME + timedelta(hours=1))
@@ -191,7 +193,7 @@ def test_stop_cooldown_blocks_reopening(tmp_path):
 
 def test_cooldown_expires_after_window(tmp_path):
     """After COOLDOWN_DAYS the ticker becomes eligible again."""
-    service = _service(tmp_path, SHADOW_COOLDOWN_DAYS=3)
+    service = _service(tmp_path, SHADOW_COOLDOWN_DAYS=3, SHADOW_MIN_SCORE=15)
     service.process_scan([_signal()], now=ENTRY_TIME)
     service.process_scan([], _market_close(94.0), now=ENTRY_TIME + timedelta(hours=1))
     # 4 days later: cooldown expired, new entry allowed
@@ -203,7 +205,7 @@ def test_cooldown_expires_after_window(tmp_path):
 
 def test_target_close_does_not_trigger_cooldown(tmp_path):
     """Cooldown only applies to stop hits, not target (profitable exits)."""
-    service = _service(tmp_path, SHADOW_COOLDOWN_DAYS=3)
+    service = _service(tmp_path, SHADOW_COOLDOWN_DAYS=3, SHADOW_MIN_SCORE=15)
     service.process_scan([_signal()], now=ENTRY_TIME)
     # target-hit close
     service.process_scan([], _market_close(111.0), now=ENTRY_TIME + timedelta(hours=1))
@@ -216,7 +218,7 @@ def test_target_close_does_not_trigger_cooldown(tmp_path):
 
 def test_cooldown_disabled_when_zero(tmp_path):
     """SHADOW_COOLDOWN_DAYS=0 disables cooldown entirely."""
-    service = _service(tmp_path, SHADOW_COOLDOWN_DAYS=0)
+    service = _service(tmp_path, SHADOW_COOLDOWN_DAYS=0, SHADOW_MIN_SCORE=15)
     service.process_scan([_signal()], now=ENTRY_TIME)
     service.process_scan([], _market_close(94.0), now=ENTRY_TIME + timedelta(hours=1))
     # No cooldown: immediate reopen allowed
@@ -228,7 +230,7 @@ def test_cooldown_disabled_when_zero(tmp_path):
 
 def test_same_scan_closed_ticker_not_reopened(tmp_path):
     """A ticker closed within the same scan must not immediately reopen."""
-    service = _service(tmp_path)
+    service = _service(tmp_path, SHADOW_MIN_SCORE=15)
     # Open with score 15
     service.process_scan([_signal()], now=ENTRY_TIME)
     # Next scan: same ticker with market data that triggers a stop, AND a new
@@ -247,7 +249,7 @@ def test_same_scan_closed_ticker_not_reopened(tmp_path):
 
 
 def test_holding_expiry_writes_exit_and_pnl_csv(tmp_path):
-    service = _service(tmp_path)
+    service = _service(tmp_path, SHADOW_MIN_SCORE=15)
     service.process_scan([_signal()], now=ENTRY_TIME)
 
     closed = service.process_scan(
@@ -273,7 +275,7 @@ def test_holding_expiry_writes_exit_and_pnl_csv(tmp_path):
     [(94.0, "stop"), (111.0, "target")],
 )
 def test_stop_and_target_close_shadow_position(tmp_path, close, expected_hit):
-    service = _service(tmp_path)
+    service = _service(tmp_path, SHADOW_MIN_SCORE=15)
     service.process_scan([_signal()], now=ENTRY_TIME)
 
     closed = service.process_scan([], _market_close(close), now=ENTRY_TIME + timedelta(hours=1))
@@ -282,7 +284,7 @@ def test_stop_and_target_close_shadow_position(tmp_path, close, expected_hit):
 
 
 def test_duplicate_radar_does_not_create_second_open_position(tmp_path):
-    service = _service(tmp_path)
+    service = _service(tmp_path, SHADOW_MIN_SCORE=15)
     service.process_scan([_signal()], now=ENTRY_TIME)
     service.process_scan([_signal(price=101.0)], now=ENTRY_TIME + timedelta(hours=1))
 
@@ -300,7 +302,7 @@ def test_shadow_disabled_writes_nothing(tmp_path):
 
 
 def test_daily_summary_sent_once_and_only_after_close(tmp_path):
-    service = _service(tmp_path)
+    service = _service(tmp_path, SHADOW_MIN_SCORE=15)
     notifier = MagicMock()
     notifier.send_message.return_value = True
     service.process_scan([_signal()], now=ENTRY_TIME)
@@ -382,7 +384,7 @@ def test_cooldown_tickers_filters_only_recent_stops(tmp_path):
 
 def test_opposite_signal_closes_shadow_position(tmp_path):
     """A shadow position must be closed when an opposite sell signal is received."""
-    service = _service(tmp_path)
+    service = _service(tmp_path, SHADOW_MIN_SCORE=15)
     service.process_scan([_signal(ticker=ROBUST, score=15)], now=ENTRY_TIME)
 
     # Send a sell signal
