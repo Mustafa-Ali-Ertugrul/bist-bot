@@ -11,6 +11,9 @@
 - `results/signal_outcomes.csv` içinde **≥ 30 kapanmış outcome**, **veya**
 - tracker devreden beri **10 işlem günü** geçti (hangisi önce olursa).
 
+> Tetik durumu P5.0'dan itibaren `--score-correlation` çıktısındaki
+> "P5 Kalibrasyon Tetiği" bloğunda görünür (gün sayacı = CSV'de distinct TR tarih).
+
 ## Koşu
 
 ```bash
