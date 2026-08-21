@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
 from bist_bot.app_logging import get_logger
 from bist_bot.config.settings import settings as default_settings
+from bist_bot.market_calendar import TR, bist_close_time, is_bist_holiday
 from bist_bot.strategy.regime import detect_regime
 from bist_bot.strategy.signal_models import Signal, SignalType
 
@@ -27,6 +29,10 @@ class PaperTradeService:
         self.db = db
         self.settings = settings or default_settings
         self.costs = costs
+        # Faz 3 P2: in-memory trailing extremes (ticker -> max price for long,
+        # min price for short). Restart-safe degradation: on restart the map is
+        # empty and the original stop applies until prices re-ratchet it.
+        self._trail_extremes: dict[str, float] = {}
 
     @staticmethod
     def net_profit_pct(
@@ -131,13 +137,31 @@ class PaperTradeService:
             return direction
         return paper_direction_from_signal_type(getattr(trade, "signal_type", ""))
 
-    def update_open_trades(self, signals: list[Signal] | None = None) -> None:
+    def update_open_trades(
+        self, signals: list[Signal] | None = None, *, now: datetime | None = None
+    ) -> None:
         """Lifecycle update with direction-aware stop/target checks.
 
         Long:  stop hits when price <= stop, target when price >= target.
         Short: stop hits when price >= stop, target when price <= target.
         When both levels are crossed by the same price the stop wins (conservative,
         matching the backtest measurement contract).
+
+        Close priority: OPPOSITE_SIGNAL > STOP_HIT > TRAIL_STOP_HIT > TARGET_HIT
+        > EOD_CLOSE.
+
+        Faz 3 P1 (EOD discipline): after ``bist_close_time(date)`` (17:30 full
+        day, 12:30 half-day, holidays excluded) every still-open paper position
+        closes with reason ``EOD_CLOSE`` — same contract as
+        ``SignalOutcomeTracker._is_eod``. ``now`` is injectable for tests;
+        defaults to ``datetime.now(UTC)``.
+
+        Faz 3 P2 (trailing stop): when ``TRAILING_STOP_ENABLED`` is true, an
+        in-memory extreme (high-water for long / low-water for short, seeded at
+        entry price) ratchets a trail at ``TRAILING_STOP_PCT`` percent. The
+        trail only ever tightens the original stop; crossing it closes with
+        ``TRAIL_STOP_HIT``. In-memory by design: restart degrades safely to the
+        original stop.
 
         Price-source contract (single source of truth):
         current scan ``signals`` are the primary price source (zero-latency);
@@ -151,6 +175,13 @@ class PaperTradeService:
         open_trades = self.db.get_open_paper_trades()
         if not open_trades:
             return
+
+        effective_now = now or datetime.now(UTC)
+        trail_enabled = bool(getattr(self.settings, "TRAILING_STOP_ENABLED", False))
+        try:
+            trail_pct = float(getattr(self.settings, "TRAILING_STOP_PCT", 2.0))
+        except (TypeError, ValueError):
+            trail_pct = 2.0
 
         unique_tickers = list({trade.ticker for trade in open_trades})
         unique_set = set(unique_tickers)
@@ -209,21 +240,78 @@ class PaperTradeService:
 
             if opposite_signal:
                 self._close_trade(trade, current, "OPPOSITE_SIGNAL", direction)
+                self._trail_extremes.pop(trade.ticker, None)
                 continue
+
+            # === Faz 3 P2: trailing stop extreme ratchet (in-memory) ===
+            trail_stop: float | None = None
+            if trail_enabled and trail_pct > 0:
+                seeded = self._trail_extremes.get(trade.ticker)
+                if seeded is None:
+                    seeded = trade.signal_price
+                if direction == "short":
+                    extreme = min(seeded, current)
+                    trail_stop = extreme * (1 + trail_pct / 100.0)
+                else:
+                    extreme = max(seeded, current)
+                    trail_stop = extreme * (1 - trail_pct / 100.0)
+                self._trail_extremes[trade.ticker] = extreme
 
             if direction == "short":
                 stop_hit = trade.stop_loss and current >= trade.stop_loss
                 target_hit = trade.target_price and current <= trade.target_price
+                # Trail only classifies as TRAIL when it is tighter than the
+                # original stop; otherwise the original STOP_HIT contract wins.
+                trail_hit = (
+                    trail_stop is not None
+                    and (not trade.stop_loss or trail_stop < trade.stop_loss)
+                    and current >= trail_stop
+                )
             else:
                 stop_hit = trade.stop_loss and current <= trade.stop_loss
                 target_hit = trade.target_price and current >= trade.target_price
+                trail_hit = (
+                    trail_stop is not None
+                    and (not trade.stop_loss or trail_stop > trade.stop_loss)
+                    and current <= trail_stop
+                )
 
+            closed = False
             if stop_hit:
                 self._close_trade(trade, current, "STOP_HIT", direction)
+                closed = True
+            elif trail_hit:
+                self._close_trade(trade, current, "TRAIL_STOP_HIT", direction)
+                closed = True
             elif target_hit:
                 self._close_trade(trade, current, "TARGET_HIT", direction)
+                closed = True
+            elif self._is_eod(effective_now):
+                # === Faz 3 P1: EOD discipline — no intraday position survives
+                # the session; mirrors SignalOutcomeTracker's EOD contract.
+                self._close_trade(trade, current, "EOD_CLOSE", direction)
+                closed = True
+
+            if closed:
+                self._trail_extremes.pop(trade.ticker, None)
 
         logger.info("paper_trade_update_completed", ticker_count=len(prices))
+
+    def _is_eod(self, now: datetime) -> bool:
+        """Session-end check — identical contract to SignalOutcomeTracker._is_eod.
+
+        Uses market_calendar.bist_close_time (half-day aware) and excludes
+        holidays/weekends. Any error degrades to "not EOD" (fail-open keeps the
+        position under its normal stop/target contract).
+        """
+        try:
+            local_now = now.astimezone(TR)
+            d = local_now.date()
+            if is_bist_holiday(d):
+                return False
+            return local_now.time() >= bist_close_time(d)
+        except Exception:
+            return False
 
     def _close_trade(self, trade: Any, current: float, reason: str, direction: str) -> None:
         """Close a paper trade with direction-aware net PnL recorded."""
@@ -238,6 +326,8 @@ class PaperTradeService:
             "STOP_HIT": "paper_trade_stop_hit",
             "TARGET_HIT": "paper_trade_target_hit",
             "OPPOSITE_SIGNAL": "paper_trade_opposite_signal_exit",
+            "TRAIL_STOP_HIT": "paper_trade_trail_stop_hit",
+            "EOD_CLOSE": "paper_trade_eod_close",
         }.get(reason, "paper_trade_closed")
         logger.info(
             event,

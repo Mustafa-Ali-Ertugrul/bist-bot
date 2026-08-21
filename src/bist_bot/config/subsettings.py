@@ -351,6 +351,9 @@ class ServerSettings:
     MARKET_CLOSE_HOUR: int = _get_int_env("MARKET_CLOSE_HOUR", 18)
     MARKET_WARMUP_MINUTES: int = _get_int_env("MARKET_WARMUP_MINUTES", 15)
     MARKET_HALF_DAY_HOUR: int = _get_int_env("MARKET_HALF_DAY_HOUR", 13)
+    # Post-close EOD pass fires at bist_close_time + this many minutes (~17:32 default).
+    # Scheduler clamps negatives to 0 via max(0, int(...)).
+    EOD_CLOSE_DELAY_MINUTES: int = _get_int_env("EOD_CLOSE_DELAY_MINUTES", 2)
     METRICS_ALLOWED_IPS: tuple[str, ...] = field(
         default_factory=lambda: _get_csv_env("METRICS_ALLOWED_IPS")
     )
