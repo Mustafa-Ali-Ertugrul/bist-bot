@@ -156,9 +156,7 @@ def test_short_trade_stays_open_between_levels():
 def test_stop_wins_over_target_when_both_crossed():
     """Same-bar ambiguity resolved conservatively: stop exits first."""
     db = MagicMock()
-    db.get_open_paper_trades.return_value = [
-        _make_trade(stop_loss=95.0, target_price=104.0)
-    ]
+    db.get_open_paper_trades.return_value = [_make_trade(stop_loss=95.0, target_price=104.0)]
     service = _service_with_close_price(db, "THYAO.IS", 94.0)
 
     service.update_open_trades()
@@ -374,3 +372,84 @@ def test_queue_actionable_sell_signal_records_short_direction(monkeypatch):
 
     _, kwargs = db.add_paper_trade.call_args
     assert kwargs["direction"] == "short"
+
+
+# ---------------------------------------------------------------------------
+# F3: scan price priority (zero-latency) + fetch fallback
+# ---------------------------------------------------------------------------
+
+
+def test_update_open_trades_prefers_scan_price_over_fetch():
+    """Scan signals are the primary price source; fetch is fallback only."""
+    db = MagicMock()
+    db.get_open_paper_trades.return_value = [
+        _make_trade(ticker="THYAO.IS", stop_loss=95.0, target_price=110.0, signal_price=100.0),
+        _make_trade(ticker="GARAN.IS", stop_loss=48.0, target_price=55.0, signal_price=50.0),
+    ]
+    # Fetcher would return non-triggering prices if used (105 for THYAO would NOT hit stop)
+    fetcher = MagicMock()
+    fetcher.fetch_all.return_value = {
+        "THYAO.IS": pd.DataFrame({"close": [105.0]}),
+        "GARAN.IS": pd.DataFrame({"close": [48.0]}),
+    }
+    service = PaperTradeService(fetcher, db, settings=settings.replace(PAPER_MODE=True))
+    signals = [
+        Signal(ticker="THYAO.IS", signal_type=SignalType.BUY, score=30, price=94.0),
+        Signal(ticker="GARAN.IS", signal_type=SignalType.BUY, score=30, price=54.0),
+    ]
+
+    service.update_open_trades(signals=signals)
+
+    # THYAO 94 <= 95 → STOP_HIT via scan price (not fetcher 105); GARAN 54 stays open (48 <54 <55)
+    db.close_paper_trade.assert_called_once_with(
+        "THYAO.IS", 94.0, "STOP_HIT", actual_profit_pct=ANY
+    )
+    # fetcher.fetch_all should NOT have been needed for THYAO/GARAN (both in signals), so either not called or called only for missing
+    # In this case both tickers are in signals → missing==[] → fetch_all not called
+    fetcher.fetch_all.assert_not_called()
+
+
+def test_update_open_trades_fetches_only_missing_tickers():
+    """Only tickers missing from scan signals are fetched."""
+    db = MagicMock()
+    db.get_open_paper_trades.return_value = [
+        _make_trade(ticker="THYAO.IS", stop_loss=95.0, target_price=110.0, signal_price=100.0),
+        _make_trade(ticker="ASELS.IS", stop_loss=78.0, target_price=88.0, signal_price=80.0),
+    ]
+    fetcher = MagicMock()
+    fetcher.fetch_all.return_value = {
+        "ASELS.IS": pd.DataFrame({"close": [77.0]}),
+    }
+    service = PaperTradeService(fetcher, db, settings=settings.replace(PAPER_MODE=True))
+    signals = [
+        Signal(ticker="THYAO.IS", signal_type=SignalType.BUY, score=30, price=94.0),
+    ]
+
+    service.update_open_trades(signals=signals)
+
+    # THYAO via scan 94 → STOP_HIT, ASELS via fetch 77 → STOP_HIT
+    assert db.close_paper_trade.call_count == 2
+    calls = {c.args[0]: c.args for c in db.close_paper_trade.call_args_list}
+    assert calls["THYAO.IS"][1] == 94.0
+    assert calls["ASELS.IS"][1] == 77.0
+    fetcher.fetch_all.assert_called_once()
+
+
+def test_update_open_trades_fallback_when_no_signals():
+    """signals=None → all prices via fetch fallback (documented fallback)."""
+    db = MagicMock()
+    db.get_open_paper_trades.return_value = [
+        _make_trade(ticker="THYAO.IS", stop_loss=95.0, target_price=110.0, signal_price=100.0),
+    ]
+    fetcher = MagicMock()
+    fetcher.fetch_all.return_value = {
+        "THYAO.IS": pd.DataFrame({"close": [111.0]}),
+    }
+    service = PaperTradeService(fetcher, db, settings=settings.replace(PAPER_MODE=True))
+
+    service.update_open_trades(signals=None)
+
+    db.close_paper_trade.assert_called_once_with(
+        "THYAO.IS", 111.0, "TARGET_HIT", actual_profit_pct=ANY
+    )
+    fetcher.fetch_all.assert_called_once()

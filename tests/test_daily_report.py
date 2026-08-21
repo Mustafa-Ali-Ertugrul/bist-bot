@@ -158,3 +158,124 @@ def test_generate_daily_report_structure(repo, tmp_path, monkeypatch):
     # Per-ticker AL rollup renders AL names with max score and R-R.
     assert "## 3.1. AL Rollup (Hisse Bazlı)" in report_md
     assert "| **THYAO** | 1 | +35.0 |" in report_md
+
+
+def test_daily_report_rollup_repeat_and_sort(repo, tmp_path, monkeypatch):
+    """AL Tekrar >=2 → 🔁 and sort is tekrar↓ then maks skor↓."""
+    monkeypatch.chdir(tmp_path)
+    target_day = date(2026, 8, 21)
+    ts1 = datetime(2026, 8, 21, 8, 0, tzinfo=UTC)
+    ts2 = datetime(2026, 8, 21, 9, 0, tzinfo=UTC)
+    # THYAO 2x AL (tekrar 2, max 30), GARAN 1x AL (tekrar 1, max 40) → THYAO first due to repeat despite lower max
+    for sig in [
+        Signal(
+            ticker="THYAO.IS",
+            signal_type=SignalType.BUY,
+            score=25.0,
+            price=100.0,
+            stop_loss=95.0,
+            target_price=110.0,
+            timestamp=ts1,
+        ),
+        Signal(
+            ticker="THYAO.IS",
+            signal_type=SignalType.BUY,
+            score=30.0,
+            price=102.0,
+            stop_loss=96.0,
+            target_price=112.0,
+            timestamp=ts2,
+        ),
+        Signal(
+            ticker="GARAN.IS",
+            signal_type=SignalType.BUY,
+            score=40.0,
+            price=50.0,
+            stop_loss=48.0,
+            target_price=55.0,
+            timestamp=ts1,
+        ),
+    ]:
+        repo.save_signal(sig)
+    repo.save_scan_log(total=100, generated=3, buys=3, sells=0, actionable=3)
+    md = generate_daily_report(
+        day=target_day, repo=repo, params=StrategyParams(buy_threshold=25), save_to_disk=False
+    )
+    assert "THYAO \U0001f501" in md  # 🔁
+    assert md.index("THYAO") < md.index("GARAN")
+    # header has 8 cols including İlk/Son | Son Fiyat | Stop | Hedef | R/R
+    assert "| Hisse | AL Tekrar | Maks Skor | \u0130lk/Son | Son Fiyat | Stop | Hedef | R/R |" in md
+
+
+def test_daily_report_rollup_rr_value_and_na(repo, tmp_path, monkeypatch):
+    """R/R is (hedef-giris)/(giris-stop); N/A when stop/hedef missing or stop>=giris."""
+    monkeypatch.chdir(tmp_path)
+    target_day = date(2026, 8, 22)
+    ts = datetime(2026, 8, 22, 9, 0, tzinfo=UTC)
+    # Valid R/R: entry 100, stop 95, target 110 → (10)/(5)=2.00
+    repo.save_signal(
+        Signal(
+            ticker="VALID.IS",
+            signal_type=SignalType.BUY,
+            score=30,
+            price=100.0,
+            stop_loss=95.0,
+            target_price=110.0,
+            timestamp=ts,
+        )
+    )
+    # Invalid: stop 100 >= entry 100 → N/A
+    repo.save_signal(
+        Signal(
+            ticker="BAD.IS",
+            signal_type=SignalType.BUY,
+            score=30,
+            price=100.0,
+            stop_loss=100.0,
+            target_price=110.0,
+            timestamp=ts,
+        )
+    )
+    # Missing: stop 0 → N/A
+    repo.save_signal(
+        Signal(
+            ticker="NOSTOP.IS",
+            signal_type=SignalType.BUY,
+            score=30,
+            price=100.0,
+            stop_loss=0,
+            target_price=110.0,
+            timestamp=ts,
+        )
+    )
+    repo.save_scan_log(total=100, generated=3, buys=3, sells=0, actionable=3)
+    md = generate_daily_report(
+        day=target_day, repo=repo, params=StrategyParams(buy_threshold=25), save_to_disk=False
+    )
+    # VALID row should contain 2.00
+    assert "VALID" in md and "2.00" in md
+    # BAD and NOSTOP rows should contain N/A in R/R column
+    assert md.count("N/A") >= 2
+
+
+def test_daily_report_rollup_dynamic_radar_and_note(repo, tmp_path, monkeypatch):
+    """RADAR range is dynamic and kategori notu exists."""
+    monkeypatch.chdir(tmp_path)
+    target_day = date(2026, 8, 23)
+    ts = datetime(2026, 8, 23, 9, 0, tzinfo=UTC)
+    repo.save_signal(
+        Signal(
+            ticker="THYAO.IS",
+            signal_type=SignalType.BUY,
+            score=30,
+            price=100.0,
+            stop_loss=95.0,
+            target_price=110.0,
+            timestamp=ts,
+        )
+    )
+    repo.save_scan_log(total=100, generated=1, buys=1, sells=0, actionable=1)
+    params = StrategyParams(buy_threshold=30, weak_buy_threshold=10)
+    md = generate_daily_report(day=target_day, repo=repo, params=params, save_to_disk=False)
+    assert "+10.0 ile +29.9" in md
+    assert "Kategori bazl" in md
