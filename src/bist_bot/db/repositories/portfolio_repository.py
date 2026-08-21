@@ -197,9 +197,7 @@ class PortfolioRepository:
 
         self.manager.run_session(_write)
 
-    def get_recent_closed_trades(
-        self, ticker: str, days: int = 5
-    ) -> list[PaperTrade]:
+    def get_recent_closed_trades(self, ticker: str, days: int = 5) -> list[PaperTrade]:
         """Return closed trades for a ticker within the last N days."""
         from datetime import timedelta as _td
 
