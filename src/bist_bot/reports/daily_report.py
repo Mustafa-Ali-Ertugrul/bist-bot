@@ -44,6 +44,29 @@ def _parse_liquidity_tl(reasons: Any) -> float | None:
     return None
 
 
+_MACRO_GATE_MARKER = "Makro rejim BEAR"
+_CONFLUENCE_GATE_MARKER = "MTF confluence zayıf"
+
+
+def _detect_gate_tag(reasons: Any, score: float, buy_threshold: float) -> str | None:
+    """Gate-demotion tag for RADAR signals whose score is at/above the AL threshold.
+
+    ``categorize()`` promotes buy-family signals to AL only when the score clears
+    the threshold; the engine can also demote buy-family candidates back to RADAR
+    while preserving the score (confluence soft-fail on a neutral higher-timeframe
+    bias, or the macro BEAR gate). Such rows are a distinct statistical population
+    from organic RADAR (0 < score < threshold) and must be labelled in the report.
+    """
+    if score < buy_threshold:
+        return None
+    reason_list = [str(r) for r in (reasons or [])]
+    if any(_MACRO_GATE_MARKER in r for r in reason_list):
+        return "[Macro Bear]"
+    if any(_CONFLUENCE_GATE_MARKER in r for r in reason_list):
+        return "[HTF Neutral]"
+    return "[Gate]"
+
+
 def _format_liquidity(value: float | None, min_threshold: float) -> str:
     """Render the rollup Liq cell: '₺X.XM' plus ⚠️ when below the gate."""
     if value is None or value <= 0:
@@ -135,17 +158,23 @@ def generate_daily_report(
         enriched["category"] = cat
         enriched["parsed_st"] = st
         enriched["score_float"] = score
+        enriched["gate_tag"] = _detect_gate_tag(row.get("reasons"), score, buy_threshold)
         categorized_signals.append(enriched)
 
     al_signals = [s for s in categorized_signals if s["category"] is SignalCategory.AL]
     radar_signals = [s for s in categorized_signals if s["category"] is SignalCategory.RADAR]
     sat_signals = [s for s in categorized_signals if s["category"] is SignalCategory.SAT]
     hold_signals = [s for s in categorized_signals if s["category"] is SignalCategory.HOLD]
+    # Gate-demotion split: a RADAR row with score >= AL threshold can only arise
+    # when a risk gate demoted a buy-family candidate while preserving the score;
+    # organic RADAR lives strictly below the threshold. Separate populations.
+    radar_demoted = [s for s in radar_signals if s["score_float"] >= buy_threshold]
+    radar_organic = [s for s in radar_signals if s["score_float"] < buy_threshold]
 
-    # Radar tiers: A (+20 to 24.9), B (+15 to 19.9), C (+8 to 14.9)
-    radar_tier_a = [s for s in radar_signals if s["score_float"] >= 20.0]
-    radar_tier_b = [s for s in radar_signals if 15.0 <= s["score_float"] < 20.0]
-    radar_tier_c = [s for s in radar_signals if s["score_float"] < 15.0]
+    # Radar tiers (organic only): A (+20 to threshold), B (+15 to 19.9), C (<15)
+    radar_tier_a = [s for s in radar_organic if s["score_float"] >= 20.0]
+    radar_tier_b = [s for s in radar_organic if 15.0 <= s["score_float"] < 20.0]
+    radar_tier_c = [s for s in radar_organic if s["score_float"] < 15.0]
 
     # Session buckets (15-min or hourly depending on timestamps)
     session_buckets: dict[str, dict[str, Any]] = defaultdict(
@@ -170,17 +199,23 @@ def generate_daily_report(
                 "time": dt_local.strftime("%H:%M"),
                 "category": s["category"],
                 "score": s["score_float"],
+                "gate_tag": s.get("gate_tag"),
             }
         )
 
     transitions: list[str] = []
+    demotion_seen = False
     for ticker, hist in sorted(ticker_history.items()):
         categories = [h["category"].value for h in hist]
         if len(set(categories)) > 1:
-            seq = " -> ".join(
-                [f"{h['category'].value} ({h['time']}, {h['score']:+.1f})" for h in hist]
-            )
-            transitions.append(f"- **{ticker}**: {seq}")
+            parts: list[str] = []
+            for h in hist:
+                label = h["category"].value
+                if h["category"] is SignalCategory.RADAR and h.get("gate_tag"):
+                    label = f"RADARe {h['gate_tag']}"
+                    demotion_seen = True
+                parts.append(f"{label} ({h['time']}, {h['score']:+.1f})")
+            transitions.append(f"- **{ticker}**: {' -> '.join(parts)}")
 
     # Build markdown report
     scan_count = len(scan_logs)
@@ -195,6 +230,11 @@ def generate_daily_report(
     radar_min = float(getattr(strategy_params, "weak_buy_threshold", 8.0))
     radar_max = buy_threshold - 0.1
     radar_range_str = f"+{radar_min:.1f} ile +{radar_max:.1f}"
+    if radar_demoted:
+        demoted_scores = [s["score_float"] for s in radar_demoted]
+        demoted_range_str = f"{min(demoted_scores):+.1f} ile {max(demoted_scores):+.1f}"
+    else:
+        demoted_range_str = "-"
 
     lines: list[str] = [
         f"# BIST Bot Günlük Sinyal ve Tarama Raporu — {target_day.isoformat()}",
@@ -211,10 +251,13 @@ def generate_daily_report(
         "|---|---|---|---|",
         f"| **AL (Aksiyon Alınabilir)** | {len(al_signals)} | %{len(al_signals) / max(len(categorized_signals), 1) * 100:.1f} | {score_al_min:+.1f} ile {score_al_max:+.1f} |",
         f"| **RADAR (İzleme Havuzu)** | {len(radar_signals)} | %{len(radar_signals) / max(len(categorized_signals), 1) * 100:.1f} | {radar_range_str} |",
+        f"| **RADAR (Gate-Demoted)** | {len(radar_demoted)} | %{len(radar_demoted) / max(len(categorized_signals), 1) * 100:.1f} | {demoted_range_str} |",
         f"| **SAT (Negatif / Baskı)** | {len(sat_signals)} | %{len(sat_signals) / max(len(categorized_signals), 1) * 100:.1f} | {score_sat_min:+.1f} ile {score_sat_max:+.1f} |",
         f"| **HOLD (Nötr)** | {len(hold_signals)} | %{len(hold_signals) / max(len(categorized_signals), 1) * 100:.1f} | 0.0 |",
         "",
-        "*Kategori bazlı görünüm: AL ≥ buy_threshold, RADAR = 0 < skor < AL eşiği (pozitif izleme), SAT = sat yönü, HOLD = nötr — tek sözleşme `categorize()`*",
+        "*Kategori bazlı sınıflandırma sözleşmesi (`categorize()`): AL = alım yönü tipi **ve** skor ≥ eşik **ve** risk kapıları geçti. "
+        "Confluence (HTF nötr) veya makro BEAR kapısı devreye girerse skor korunur ve sinyal RADAR'a düşer "
+        "(raporda **RADAR (Gate-Demoted)** / `RADARe`); organik RADAR = 0 < skor < eşik. SAT = sat yönü, HOLD = nötr — tek sözleşme `categorize()`*",
         "",
         "## 2. Seans İçi Dağılım (Zaman Çizelgesi)",
         "",
@@ -329,7 +372,28 @@ def generate_daily_report(
             "",
             "## 4. RADAR Kademeleri (Takip Havuzu)",
             "",
-            f"### Kademe A (Yakın Takip / Eşik Sınırı: +20.0 – +24.9) — Toplam: {len(radar_tier_a)}",
+            f"### Gate-Demoted (skor ≥ {buy_threshold:.1f} ama kapı RADAR'a düşürdü) — Toplam: {len(radar_demoted)}",
+            "",
+        ]
+    )
+    if radar_demoted:
+        top_demoted = sorted(radar_demoted, key=lambda x: -x["score_float"])[:15]
+        demoted_cells = []
+        for s in top_demoted:
+            tag = s.get("gate_tag") or "[Gate]"
+            demoted_cells.append(f"**{s['ticker'].replace('.IS', '')}** ({s['score_float']:+.1f}) {tag}")
+        lines.append(", ".join(demoted_cells))
+        lines.append("")
+        lines.append(
+            "*Bu sinyaller AL eşiğini skor olarak geçti ancak confluence/makro kapısı tipi RADAR'a düşürdü; organik RADAR'dan ayrı popülasyondur.*"
+        )
+    else:
+        lines.append("Yok")
+
+    lines.extend(
+        [
+            "",
+            f"### Kademe A (Yakın Takip / Eşik Sınırı: +20.0 – +{buy_threshold - 0.1:.1f}) — Toplam: {len(radar_tier_a)}",
             "",
         ]
     )
@@ -392,6 +456,11 @@ def generate_daily_report(
     )
     if transitions:
         lines.extend(transitions[:25])
+        if demotion_seen:
+            lines.append("")
+            lines.append(
+                "*`RADARe` = gate-demotion: skor AL eşiğinde/üstündeyken confluence `[HTF Neutral]` veya makro `[Macro Bear]` kapısı sinyali RADAR'a düşürdü (skor korunur).*"
+            )
     else:
         lines.append("Gün içinde kategori değiştiren hisse tespit edilmedi.")
 
