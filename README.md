@@ -373,6 +373,11 @@ Migration note:
 - `LOG_FORMAT=json` ayari ile loglar JSON olarak akar; varsayilan `console` modu lokal gelistirmede daha okunaklidir.
 - `LOG_LEVEL=INFO` veya `DEBUG` ile detay seviyesi ayarlanabilir.
 - Flask API `GET /metrics` endpoint'i uzerinden JWT auth ile Prometheus text format metrikler sunar.
+- Lokal gozlemlenebilirlik araclari (Grafana 3000, Prometheus 9090, Postgres 5432) varsayilan olarak yalnizca `127.0.0.1` uzerine bind edilir; uzaktan erisim icin SSH tunnel kullanin:
+
+```bash
+ssh -L 3000:127.0.0.1:3000 -L 9090:127.0.0.1:9090 kullanici@sunucu
+```
 - Metrik katmani thread-safe tutulur; `prometheus_client` mevcutsa resmi registry/exporter kullanilir, degilse uyumlu fallback registry devreye girer.
 
 ## Streamlit Cooldown
