@@ -65,7 +65,8 @@ def test_paper_trade_service_updates_open_trades():
     service.update_open_trades()
 
     db.close_paper_trade.assert_called_once_with(
-        "THYAO.IS", 94.0, "STOP_HIT", actual_profit_pct=ANY
+        "THYAO.IS", 94.0, "STOP_HIT", actual_profit_pct=ANY,
+        trade_id=ANY,
     )
 
 
@@ -77,7 +78,8 @@ def test_paper_trade_service_closes_target_hit():
     service.update_open_trades()
 
     db.close_paper_trade.assert_called_once_with(
-        "THYAO.IS", 111.0, "TARGET_HIT", actual_profit_pct=ANY
+        "THYAO.IS", 111.0, "TARGET_HIT", actual_profit_pct=ANY,
+        trade_id=ANY,
     )
 
 
@@ -112,7 +114,8 @@ def test_short_trade_closes_when_price_rises_to_stop():
     service.update_open_trades()
 
     db.close_paper_trade.assert_called_once_with(
-        "THYAO.IS", 105.5, "STOP_HIT", actual_profit_pct=ANY
+        "THYAO.IS", 105.5, "STOP_HIT", actual_profit_pct=ANY,
+        trade_id=ANY,
     )
 
 
@@ -132,7 +135,8 @@ def test_short_trade_closes_when_price_falls_to_target():
     service.update_open_trades()
 
     db.close_paper_trade.assert_called_once_with(
-        "THYAO.IS", 89.5, "TARGET_HIT", actual_profit_pct=ANY
+        "THYAO.IS", 89.5, "TARGET_HIT", actual_profit_pct=ANY,
+        trade_id=ANY,
     )
 
 
@@ -162,7 +166,8 @@ def test_stop_wins_over_target_when_both_crossed():
     service.update_open_trades()
 
     db.close_paper_trade.assert_called_once_with(
-        "THYAO.IS", 94.0, "STOP_HIT", actual_profit_pct=ANY
+        "THYAO.IS", 94.0, "STOP_HIT", actual_profit_pct=ANY,
+        trade_id=ANY,
     )
 
 
@@ -182,7 +187,8 @@ def test_legacy_rows_fallback_to_signal_type_direction():
     service.update_open_trades()
 
     db.close_paper_trade.assert_called_once_with(
-        "THYAO.IS", 89.0, "TARGET_HIT", actual_profit_pct=ANY
+        "THYAO.IS", 89.0, "TARGET_HIT", actual_profit_pct=ANY,
+        trade_id=ANY,
     )
     assert paper_direction_from_signal_type(SignalType.STRONG_SELL.value) == "short"
     assert paper_direction_from_signal_type("not-a-signal") == "long"
@@ -207,7 +213,8 @@ def test_long_trade_closes_on_strong_sell_signal():
     service.update_open_trades(signals=[opposing])
 
     db.close_paper_trade.assert_called_once_with(
-        "THYAO.IS", 103.0, "OPPOSITE_SIGNAL", actual_profit_pct=ANY
+        "THYAO.IS", 103.0, "OPPOSITE_SIGNAL", actual_profit_pct=ANY,
+        trade_id=ANY,
     )
 
 
@@ -250,7 +257,8 @@ def test_short_trade_closes_on_strong_buy_signal():
     service.update_open_trades(signals=[opposing])
 
     db.close_paper_trade.assert_called_once_with(
-        "THYAO.IS", 97.0, "OPPOSITE_SIGNAL", actual_profit_pct=ANY
+        "THYAO.IS", 97.0, "OPPOSITE_SIGNAL", actual_profit_pct=ANY,
+        trade_id=ANY,
     )
 
 
@@ -312,7 +320,7 @@ def test_close_records_direction_aware_profit_with_costs():
     service.update_open_trades()
 
     db.close_paper_trade.assert_called_once_with(
-        "THYAO.IS", 111.0, "TARGET_HIT", actual_profit_pct=11.0
+        "THYAO.IS", 111.0, "TARGET_HIT", actual_profit_pct=11.0, trade_id=ANY
     )
 
 
@@ -408,7 +416,8 @@ def test_update_open_trades_prefers_scan_price_over_fetch():
 
     # THYAO 94 <= 95 → STOP_HIT via scan price (not fetcher 105); GARAN 54 stays open (48 <54 <55)
     db.close_paper_trade.assert_called_once_with(
-        "THYAO.IS", 94.0, "STOP_HIT", actual_profit_pct=ANY
+        "THYAO.IS", 94.0, "STOP_HIT", actual_profit_pct=ANY,
+        trade_id=ANY,
     )
     # fetcher.fetch_all should NOT have been needed for THYAO/GARAN (both in signals), so either not called or called only for missing
     # In this case both tickers are in signals → missing==[] → fetch_all not called
@@ -456,6 +465,7 @@ def test_update_open_trades_fallback_when_no_signals():
     service.update_open_trades(signals=None)
 
     db.close_paper_trade.assert_called_once_with(
-        "THYAO.IS", 111.0, "TARGET_HIT", actual_profit_pct=ANY
+        "THYAO.IS", 111.0, "TARGET_HIT", actual_profit_pct=ANY,
+        trade_id=ANY,
     )
     fetcher.fetch_all.assert_called_once()

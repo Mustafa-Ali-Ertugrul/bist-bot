@@ -75,6 +75,10 @@ class SignalRecord(Base):
     )
     expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     score_breakdown: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Outcome provenance: 'live_tracker' (intraday canli izleme) vs
+    # 'backfill_daily' (gecmis replay) sonuctemel kalibrasyon karismasin.
+    outcome_source: Mapped[str | None] = mapped_column(String, nullable=True)
+    backfilled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class PaperTradeRecord(Base):
@@ -351,6 +355,8 @@ class DatabaseManager:
             ("position_size", "ALTER TABLE signals ADD COLUMN position_size INTEGER"),
             ("expires_at", "ALTER TABLE signals ADD COLUMN expires_at TEXT"),
             ("score_breakdown", "ALTER TABLE signals ADD COLUMN score_breakdown TEXT"),
+            ("outcome_source", "ALTER TABLE signals ADD COLUMN outcome_source TEXT"),
+            ("backfilled_at", "ALTER TABLE signals ADD COLUMN backfilled_at TEXT"),
         ]
         for column, sql in migrations:
             if column not in signal_columns:
@@ -436,12 +442,15 @@ class DatabaseManager:
             self._create_indexes(conn)
 
     def _normalize_timestamp_columns(self, conn) -> None:
-        """Convert legacy TEXT timestamps to ISO-8601 so SQLAlchemy DateTime can parse them.
+        """Normalize legacy TEXT timestamps to SQLAlchemy's SQLite storage format.
 
-        SQLite stores DateTime as TEXT in ISO format. Older rows may use
-        non-ISO formats (e.g. ``YYYY-MM-DD HH:MM:SS``) or non-date values
-        (e.g. ``STOP_HIT`` mistakenly stored in ``exit_date``). This migration
-        normalizes them in-place.
+        SQLAlchemy's SQLite DateTime dialect stores, parses, and compares
+        values as ``YYYY-MM-DD HH:MM:SS.ffffff`` (space separator). Legacy
+        rows may use a ``T`` separator (``YYYY-MM-DDTHH:MM:SS``), which
+        breaks both string range comparisons in day-scoped queries and the
+        dialect's result parsing. Non-date values (e.g. ``STOP_HIT``
+        mistakenly stored in ``exit_date``) are NULLed. This migration
+        normalizes rows in-place and is idempotent.
         """
         paper_trades_table = _validate_table_name(settings.PAPER_TRADES_TABLE)
         migrations = {
@@ -472,8 +481,8 @@ class DatabaseManager:
                         f"  WHEN {quoted_col} IS NULL OR {quoted_col} = '' THEN NULL "
                         f"  WHEN {quoted_col} GLOB '*[a-zA-Z]*' "
                         f"AND {quoted_col} NOT GLOB '*[0-9]*' THEN NULL "
-                        f"  WHEN substr({quoted_col}, 11, 1) = ' ' THEN "
-                        f"    substr({quoted_col}, 1, 10) || 'T' || substr({quoted_col}, 12) "
+                        f"  WHEN substr({quoted_col}, 11, 1) = 'T' THEN "
+                        f"    substr({quoted_col}, 1, 10) || ' ' || substr({quoted_col}, 12) "
                         f"  ELSE {quoted_col} "
                         f"END "
                         f"WHERE {quoted_col} IS NOT NULL AND {quoted_col} != ''"

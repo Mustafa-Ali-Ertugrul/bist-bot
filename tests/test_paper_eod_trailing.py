@@ -77,26 +77,27 @@ def _price_service(db, ticker: str, price: float, **kwargs) -> PaperTradeService
 
 
 def test_paper_eod_close_after_market_close():
-    """17:31 TR on a full trading day -> position closes with EOD_CLOSE."""
+    """18:01 TR on a full trading day -> position closes with EOD_CLOSE (continuous close 18:00)."""
     db = MagicMock()
     db.get_open_paper_trades.return_value = [_make_trade()]
-    # 2026-08-20 is a Thursday; 14:31 UTC == 17:31 TR (after 17:30 close)
-    now = datetime(2026, 8, 20, 14, 31, tzinfo=UTC)
+    # 2026-08-20 is a Thursday; 15:01 UTC == 18:01 TR (after 18:00 close)
+    now = datetime(2026, 8, 20, 15, 1, tzinfo=UTC)
     service = _price_service(db, "THYAO.IS", 104.0)  # between stop 95 / target 110
 
     service.update_open_trades(now=now)
 
     db.close_paper_trade.assert_called_once_with(
-        "THYAO.IS", 104.0, "EOD_CLOSE", actual_profit_pct=ANY
+        "THYAO.IS", 104.0, "EOD_CLOSE", actual_profit_pct=ANY,
+        trade_id=ANY,
     )
 
 
 def test_paper_eod_half_day_closes_at_1230():
-    """Known half-day date injected into the calendar -> closes at 12:31 TR."""
+    """Known half-day date injected into the calendar -> closes at 13:01 TR (half-day close 13:00)."""
     db = MagicMock()
     db.get_open_paper_trades.return_value = [_make_trade()]
     half_day = datetime(2026, 8, 21, tzinfo=UTC).date()  # Friday test fixture date
-    now = datetime(2026, 8, 21, 9, 31, tzinfo=UTC)  # 12:31 TR
+    now = datetime(2026, 8, 21, 10, 1, tzinfo=UTC)  # 13:01 TR
     service = _price_service(db, "THYAO.IS", 104.0)
 
     monkey_half_day = pytest.MonkeyPatch()
@@ -107,7 +108,8 @@ def test_paper_eod_half_day_closes_at_1230():
         monkey_half_day.undo()
 
     db.close_paper_trade.assert_called_once_with(
-        "THYAO.IS", 104.0, "EOD_CLOSE", actual_profit_pct=ANY
+        "THYAO.IS", 104.0, "EOD_CLOSE", actual_profit_pct=ANY,
+        trade_id=ANY,
     )
 
 
@@ -127,7 +129,7 @@ def test_paper_no_eod_on_weekend():
     """Weekend is a holiday -> no EOD trigger even after close time."""
     db = MagicMock()
     db.get_open_paper_trades.return_value = [_make_trade()]
-    now = datetime(2026, 8, 22, 14, 31, tzinfo=UTC)  # Saturday 17:31 TR
+    now = datetime(2026, 8, 22, 15, 31, tzinfo=UTC)  # Saturday 18:31 TR
     service = _price_service(db, "THYAO.IS", 104.0)
 
     service.update_open_trades(now=now)
@@ -139,13 +141,14 @@ def test_eod_priority_after_stop_hit():
     """Stop hit and EOD same tick -> STOP_HIT wins (conservative order)."""
     db = MagicMock()
     db.get_open_paper_trades.return_value = [_make_trade()]  # stop 95
-    now = datetime(2026, 8, 20, 14, 31, tzinfo=UTC)
+    now = datetime(2026, 8, 20, 15, 1, tzinfo=UTC)
     service = _price_service(db, "THYAO.IS", 94.0)  # breaches stop
 
     service.update_open_trades(now=now)
 
     db.close_paper_trade.assert_called_once_with(
-        "THYAO.IS", 94.0, "STOP_HIT", actual_profit_pct=ANY
+        "THYAO.IS", 94.0, "STOP_HIT", actual_profit_pct=ANY,
+        trade_id=ANY,
     )
 
 
@@ -170,7 +173,8 @@ def test_trailing_tightens_stop_on_rise_long():
     service.update_open_trades(now=now)  # 101 <= 101.92 -> trail hit
 
     db.close_paper_trade.assert_called_once_with(
-        "THYAO.IS", 101.0, "TRAIL_STOP_HIT", actual_profit_pct=ANY
+        "THYAO.IS", 101.0, "TRAIL_STOP_HIT", actual_profit_pct=ANY,
+        trade_id=ANY,
     )
 
 
@@ -189,7 +193,8 @@ def test_trailing_never_loosens_on_fall_long():
     service.update_open_trades(now=now)  # trail stays 105.84 (not 103-based)
 
     db.close_paper_trade.assert_called_once_with(
-        "THYAO.IS", 103.0, "TRAIL_STOP_HIT", actual_profit_pct=ANY
+        "THYAO.IS", 103.0, "TRAIL_STOP_HIT", actual_profit_pct=ANY,
+        trade_id=ANY,
     )
 
 
@@ -215,7 +220,8 @@ def test_trailing_short_mirror():
     service.update_open_trades(now=now)  # 98 >= 97.92 -> trail hit
 
     db.close_paper_trade.assert_called_once_with(
-        "THYAO.IS", 98.0, "TRAIL_STOP_HIT", actual_profit_pct=ANY
+        "THYAO.IS", 98.0, "TRAIL_STOP_HIT", actual_profit_pct=ANY,
+        trade_id=ANY,
     )
 
 
@@ -250,7 +256,8 @@ def test_original_stop_wins_over_trail():
     service.update_open_trades(now=now)  # 94 <= original stop 95
 
     db.close_paper_trade.assert_called_once_with(
-        "THYAO.IS", 94.0, "STOP_HIT", actual_profit_pct=ANY
+        "THYAO.IS", 94.0, "STOP_HIT", actual_profit_pct=ANY,
+        trade_id=ANY,
     )
 
 
@@ -311,13 +318,14 @@ def test_scanner_close_positions_at_eod_closes_with_fetch_price(tmp_path):
         settings=cfg,
     )
 
-    # 17:32 TR Thursday — inside the scheduler's post-close window.
-    now = datetime(2026, 8, 20, 14, 32, tzinfo=UTC)
+    # 18:05 TR Thursday — continuous trading closed, EOD window.
+    now = datetime(2026, 8, 20, 15, 5, tzinfo=UTC)
     service.close_positions_at_eod(now=now)
 
     # Paper position closed with the FETCHED close price (104), not entry.
     db.close_paper_trade.assert_called_once_with(
-        "THYAO.IS", 104.0, "EOD_CLOSE", actual_profit_pct=ANY
+        "THYAO.IS", 104.0, "EOD_CLOSE", actual_profit_pct=ANY,
+        trade_id=ANY,
     )
 
     # Tracked outcome closed as EOD_CLOSE with the same real exit price.

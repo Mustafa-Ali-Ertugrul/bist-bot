@@ -246,7 +246,13 @@ class SignalsRepository:
 
         self.manager.run_session(_write)
 
-    def update_outcome(self, signal_id: int, outcome: str, outcome_price: float) -> None:
+    def update_outcome(
+        self,
+        signal_id: int,
+        outcome: str,
+        outcome_price: float,
+        source: str | None = None,
+    ) -> None:
         def _write(session):
             row = session.get(SignalRecord, signal_id)
             if row is None:
@@ -256,6 +262,8 @@ class SignalsRepository:
             row.outcome_price = outcome_price
             row.outcome_date = datetime.now(UTC)
             row.profit_pct = round((outcome_price - original_price) / original_price * 100, 2)
+            if source is not None:
+                row.outcome_source = source
             return None
 
         self.manager.run_session(_write)

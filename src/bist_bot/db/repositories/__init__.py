@@ -80,20 +80,14 @@ class AppRepository:
     def get_recent_scan_logs(self, limit: int = 20):
         return self.signals.get_recent_scan_logs(limit=limit)
 
-    def update_outcome(self, signal_id: int, outcome: str, outcome_price: float):
-        return self.signals.update_outcome(signal_id, outcome, outcome_price)
+    def update_outcome(self, signal_id: int, outcome: str, outcome_price: float, source=None):
+        return self.signals.update_outcome(signal_id, outcome, outcome_price, source=source)
 
     def get_performance_stats(self):
         return self.signals.get_performance_stats()
 
     def add_paper_trade(self, *args, **kwargs):
         return self.portfolio.add_paper_trade(*args, **kwargs)
-
-    def update_paper_close(self, *args, **kwargs):
-        return self.portfolio.update_paper_close(*args, **kwargs)
-
-    def update_all_paper_close(self, *args, **kwargs):
-        return self.portfolio.update_all_paper_close(*args, **kwargs)
 
     def get_open_paper_trades(self):
         return self.portfolio.get_open_paper_trades()
