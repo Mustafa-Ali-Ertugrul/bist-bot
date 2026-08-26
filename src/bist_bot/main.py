@@ -40,13 +40,19 @@ def main():
 
     def shutdown(signum, frame):
         _ = signum, frame
-        logger.info("shutdown_requested")
+        logger.info(
+            "shutdown_requested",
+            signal="SIGINT" if signum == _signal.SIGINT else "SIGTERM",
+        )
         scheduler.running = False
         order_tracker.stop()
 
     import signal as _signal
 
+    # C1: docker stop SIGTERM gonderir — yakalanmazsa surec aninda olur,
+    # acik tarama/DB islemi yarim kalir. SIGINT ile ayni graceful yol.
     _signal.signal(_signal.SIGINT, shutdown)
+    _signal.signal(_signal.SIGTERM, shutdown)
 
     if "--score-correlation" in sys.argv:
         from bist_bot.reports.score_correlation import run as run_score_corr
@@ -86,8 +92,19 @@ def main():
             use_reloader=settings.FLASK_DEBUG,
         )
     elif "--worker" in sys.argv:
+        from bist_bot.worker_http import WorkerHealthServer
+
+        worker_http = WorkerHealthServer(
+            scheduler,
+            port=int(getattr(settings, "WORKER_METRICS_PORT", 9101)),
+            settings=settings,
+        )
+        worker_http.start()
         order_tracker.start()
-        scheduler.run_loop()
+        try:
+            scheduler.run_loop()
+        finally:
+            worker_http.stop()
     else:
         order_tracker.start()
         app = create_default_dashboard_app(container)

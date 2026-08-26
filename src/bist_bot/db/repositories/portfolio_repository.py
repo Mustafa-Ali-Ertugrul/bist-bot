@@ -90,38 +90,6 @@ class PortfolioRepository:
 
         self.manager.run_session(_write)
 
-    def update_paper_close(
-        self, ticker: str, close_price: float, actual_profit_pct: float | None = None
-    ) -> None:
-        def _write(session):
-            trade = session.scalar(
-                select(PaperTradeRecord)
-                .where(
-                    PaperTradeRecord.ticker == ticker,
-                    PaperTradeRecord.outcome == "OPEN",
-                )
-                .order_by(PaperTradeRecord.id.desc())
-                .limit(1)
-            )
-            if trade is None:
-                return
-            direction = _resolve_direction(trade.signal_type, trade.direction)
-            trade.close_price = close_price
-            trade.outcome = "CLOSED"
-            if actual_profit_pct is not None:
-                trade.actual_profit_pct = actual_profit_pct
-            else:
-                trade.actual_profit_pct = _gross_profit_pct(
-                    trade.signal_price, close_price, direction
-                )
-            return None
-
-        self.manager.run_session(_write)
-
-    def update_all_paper_close(self, prices: dict[str, float]) -> None:
-        for ticker, close_price in prices.items():
-            self.update_paper_close(ticker, close_price)
-
     def get_open_paper_trades(self) -> list[PaperTrade]:
         rows = self.manager.run_session(
             lambda session: session.scalars(
@@ -167,17 +135,35 @@ class PortfolioRepository:
         exit_price: float,
         close_reason: str,
         actual_profit_pct: float | None = None,
+        trade_id: int | None = None,
     ) -> None:
+        """Close an open paper trade.
+
+        ``trade_id`` (Faz 4 B3): close exactly that position. Without it the
+        legacy fallback closes the newest OPEN row for the ticker — kept only
+        for callers without a trade reference; same-ticker double-OPEN rows
+        must go through the id path so levels and PnL never mix across
+        sibling trades.
+        """
+
         def _write(session):
-            trade = session.scalar(
-                select(PaperTradeRecord)
-                .where(
-                    PaperTradeRecord.ticker == ticker,
-                    PaperTradeRecord.outcome == "OPEN",
+            if trade_id is not None:
+                trade = session.scalar(
+                    select(PaperTradeRecord).where(
+                        PaperTradeRecord.id == trade_id,
+                        PaperTradeRecord.outcome == "OPEN",
+                    )
                 )
-                .order_by(PaperTradeRecord.id.desc())
-                .limit(1)
-            )
+            else:
+                trade = session.scalar(
+                    select(PaperTradeRecord)
+                    .where(
+                        PaperTradeRecord.ticker == ticker,
+                        PaperTradeRecord.outcome == "OPEN",
+                    )
+                    .order_by(PaperTradeRecord.id.desc())
+                    .limit(1)
+                )
             if trade is None:
                 return
             now = datetime.now(UTC)

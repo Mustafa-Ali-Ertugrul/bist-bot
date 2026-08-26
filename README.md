@@ -111,6 +111,33 @@ python -m bist_bot.backtest_compare --tickers THYAO.IS ASELS.IS
 python scripts/benchmark_backtest.py       # Iterative vs vectorized benchmark
 ```
 
+### Lokal araclar ve Docker Postgres
+
+`.env` icindeki `DATABASE_URL`, Docker network icindeki `postgres` hostname'ini
+kullanir; bu adres sadece konteynerlarin icinden cozumlenir. Host uzerinde
+calisan lokal araclar (rapor uretimi, backfill scriptleri vb.) ayni
+Postgres'e `localhost:5432` uzerinden erisebilir. `.env` dosyasini
+degistirmeden, sadece o surec icin override edin:
+
+```powershell
+# PowerShell
+$env:DATABASE_URL = "postgresql+psycopg2://bist:bist@localhost:5432/bist_bot"
+python main.py --daily-report 2026-08-25
+```
+
+```bash
+# bash
+DATABASE_URL="postgresql+psycopg2://bist:bist@localhost:5432/bist_bot" \
+  python main.py --daily-report 2026-08-25
+```
+
+Alternatif olarak ayni komutu konteyner icinde calistirabilirsiniz
+(Docker network icinde `postgres` hostname'i gecerlidir):
+
+```bash
+docker exec bist-bot-worker python main.py --daily-report 2026-08-25
+```
+
 ## Docker Compose
 
 - `docker-compose.yml` servis bazli yapidadir:

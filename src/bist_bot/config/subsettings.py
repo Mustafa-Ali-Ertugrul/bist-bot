@@ -8,6 +8,14 @@ from pathlib import Path
 
 from bist_bot.data.bist100 import BIST100_TICKERS
 
+# D3: hatali env degerleri sessizce default'a dusmek yerine kayda gecer;
+# CONFIG_STRICT=true iken settings preflight bunlari FATAL yapar.
+MALFORMED_ENV_VALUES: list[tuple[str, str, str]] = []  # (name, raw_value, expected_type)
+
+
+def get_malformed_env_values() -> list[tuple[str, str, str]]:
+    return list(MALFORMED_ENV_VALUES)
+
 
 def _get_bool_env(name: str, default: bool = False) -> bool:
     value = os.getenv(name)
@@ -18,6 +26,7 @@ def _get_bool_env(name: str, default: bool = False) -> bool:
         return True
     if normalized in {"0", "false", "no", "off"}:
         return False
+    MALFORMED_ENV_VALUES.append((name, value, "bool"))
     return default
 
 
@@ -28,6 +37,7 @@ def _get_int_env(name: str, default: int) -> int:
     try:
         return int(value)
     except ValueError:
+        MALFORMED_ENV_VALUES.append((name, value, "int"))
         return default
 
 
@@ -38,6 +48,7 @@ def _get_float_env(name: str, default: float) -> float:
     try:
         return float(value)
     except ValueError:
+        MALFORMED_ENV_VALUES.append((name, value, "float"))
         return default
 
 
@@ -351,9 +362,25 @@ class ServerSettings:
     MARKET_CLOSE_HOUR: int = _get_int_env("MARKET_CLOSE_HOUR", 18)
     MARKET_WARMUP_MINUTES: int = _get_int_env("MARKET_WARMUP_MINUTES", 15)
     MARKET_HALF_DAY_HOUR: int = _get_int_env("MARKET_HALF_DAY_HOUR", 13)
-    # Post-close EOD pass fires at bist_close_time + this many minutes (~17:32 default).
-    # Scheduler clamps negatives to 0 via max(0, int(...)).
+    # BIST: continuous trading ends at MARKET_CLOSE_HOUR; the closing/single-price
+    # session runs SESSION_CLOSE_BUFFER_MINUTES longer (18:00-18:10). EOD pass
+    # triggers at session close + EOD_CLOSE_DELAY_MINUTES (~18:12 default).
+    SESSION_CLOSE_BUFFER_MINUTES: int = _get_int_env("SESSION_CLOSE_BUFFER_MINUTES", 10)
     EOD_CLOSE_DELAY_MINUTES: int = _get_int_env("EOD_CLOSE_DELAY_MINUTES", 2)
+    EOD_MAX_ATTEMPTS: int = _get_int_env("EOD_MAX_ATTEMPTS", 2)
+    EOD_RETRY_MINUTES: int = _get_int_env("EOD_RETRY_MINUTES", 8)
+    # C3 watchdog: alert when no successful scan for this long during market hours.
+    WATCHDOG_STALE_MINUTES: int = _get_int_env("WATCHDOG_STALE_MINUTES", 30)
+    WATCHDOG_ALERT_COOLDOWN_MINUTES: int = _get_int_env("WATCHDOG_ALERT_COOLDOWN_MINUTES", 60)
+    # C5: minimum spacing between consecutive scans (startup scan vs next grid slot).
+    SCAN_MIN_SEPARATION_MINUTES: int = _get_int_env("SCAN_MIN_SEPARATION_MINUTES", 5)
+    # B3: alert after this many consecutive price misses for an open paper trade.
+    PAPER_CLOSE_SKIP_WARN_THRESHOLD: int = _get_int_env("PAPER_CLOSE_SKIP_WARN_THRESHOLD", 5)
+    # B4: candle freshness gate — max trigger-bar age during market hours and
+    # stale-ratio bands (warn publishes a daily warning; halt aborts the scan).
+    STALE_BAR_MAX_AGE_MINUTES: int = _get_int_env("STALE_BAR_MAX_AGE_MINUTES", 30)
+    STALE_SYMBOL_WARN_RATIO: float = _get_float_env("STALE_SYMBOL_WARN_RATIO", 0.20)
+    STALE_SYMBOL_HALT_RATIO: float = _get_float_env("STALE_SYMBOL_HALT_RATIO", 0.40)
     METRICS_ALLOWED_IPS: tuple[str, ...] = field(
         default_factory=lambda: _get_csv_env("METRICS_ALLOWED_IPS")
     )

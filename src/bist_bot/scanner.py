@@ -1,8 +1,10 @@
 """Scan orchestration service shared by CLI and dashboard flows."""
 
 import time
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import cast
+
+import pandas as pd
 
 from bist_bot.app_logging import get_logger
 from bist_bot.app_metrics import inc_counter, set_gauge
@@ -15,6 +17,7 @@ from bist_bot.contracts import (
     SignalRepositoryProtocol,
     StrategyEngineProtocol,
 )
+from bist_bot.market_calendar import TR, is_bist_open
 from bist_bot.observability.logging import log_signal
 from bist_bot.observability.metrics import record_signal
 from bist_bot.risk.circuit_breaker import CircuitBreaker
@@ -89,7 +92,7 @@ class ScanService:
             db, broker=broker, settings=self.settings
         )
         self.paper_trade_service = paper_trade_service or PaperTradeService(
-            fetcher, db, settings=self.settings
+            fetcher, db, settings=self.settings, alerter=notifier.send_message
         )
         self.notification_service = notification_service or NotificationDispatchService(
             notifier, settings=self.settings
@@ -109,6 +112,8 @@ class ScanService:
         self.last_side_effects: dict[str, bool] = {"paper_trades_queued": False}
         self.last_rejection_breakdown: dict[str, object] = dict(EMPTY_REJECTION_BREAKDOWN)
         self.circuit_breaker = circuit_breaker
+        # B4: gunluk bir kez stale-warning spam onlemi.
+        self._last_stale_warn_date: date | None = None
 
     def _auto_execute_signals(self, signals: list[Signal]) -> None:
         """Submit actionable signals to the configured execution service."""
@@ -201,6 +206,10 @@ class ScanService:
                     skipped_count=len(skipped_tickers),
                     skipped_tickers=",".join(skipped_tickers[:20]),
                 )
+
+            # B4: bayat veriyle sinyal uretilmesin — taze olmayan ticker'lar
+            # atilir, oran kritikse tarama tamamen durdurulur.
+            all_data = self._apply_freshness_gate(all_data)
 
             if not all_data:
                 duration_ms = round((time.perf_counter() - started_at) * 1000, 2)
@@ -329,6 +338,102 @@ class ScanService:
         """Refresh open paper trades and close only triggered positions."""
         self.paper_trade_service.update_open_trades(signals=signals)
 
+    # ------------------------------------------------------------------
+    # B4 — candle freshness gate
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _last_bar_age_minutes(df: pd.DataFrame | None) -> float | None:
+        """Age of the newest bar in minutes; None when undeterminable."""
+        if df is None or getattr(df, "empty", True):
+            return None
+        ts = None
+        try:
+            if "date" in getattr(df, "columns", []):
+                ts = pd.Timestamp(df["date"].iloc[-1])
+            elif isinstance(df.index, pd.DatetimeIndex) or len(df.index) > 0:
+                ts = pd.Timestamp(df.index[-1])
+        except Exception:
+            return None
+        if ts is None or pd.isna(ts):
+            return None
+        if ts.tzinfo is None:
+            ts = ts.tz_localize("UTC")
+        now = pd.Timestamp.now(tz="UTC")
+        return (now - ts.tz_convert("UTC")).total_seconds() / 60.0
+
+    def _apply_freshness_gate(
+        self, all_data: dict[str, dict[str, pd.DataFrame]]
+    ) -> dict[str, dict[str, pd.DataFrame]]:
+        """Drop tickers whose trigger bars are stale (B4).
+
+        Only active during market hours — outside the session all bars are
+        "old" by definition. Ratio bands (settings):
+        - >= STALE_SYMBOL_WARN_RATIO: Telegram warning (once/day).
+        - >= STALE_SYMBOL_HALT_RATIO: scan aborted entirely — publishing
+          signals built on a mostly-stale dataset would fake confidence.
+        """
+        if not is_bist_open():
+            return all_data
+        max_age = max(1, int(getattr(self.settings, "STALE_BAR_MAX_AGE_MINUTES", 30)))
+        warn_ratio = float(getattr(self.settings, "STALE_SYMBOL_WARN_RATIO", 0.20))
+        halt_ratio = float(getattr(self.settings, "STALE_SYMBOL_HALT_RATIO", 0.40))
+
+        total = len(all_data)
+        if total == 0:
+            return all_data
+
+        stale: list[str] = []
+        for ticker, frames in all_data.items():
+            trigger_df = frames.get("trigger") if isinstance(frames, dict) else None
+            age = self._last_bar_age_minutes(trigger_df)
+            if age is not None and age > max_age:
+                stale.append(ticker)
+
+        ratio = len(stale) / total
+        inc_counter("bist_stale_data_total", len(stale))
+        set_gauge("bist_stale_symbol_ratio", round(ratio, 4))
+        if stale:
+            logger.warning(
+                "scan_stale_tickers",
+                stale_count=len(stale),
+                total=total,
+                ratio=round(ratio, 3),
+                max_age_minutes=max_age,
+                stale_sample=",".join(sorted(stale)[:10]),
+            )
+
+        if ratio >= halt_ratio:
+            inc_counter("bist_scan_fail_total")
+            logger.error(
+                "scan_failed",
+                error_type="stale_data_halt",
+                stale_count=len(stale),
+                total=total,
+                ratio=round(ratio, 3),
+            )
+            try:
+                self.notifier.send_message(
+                    f"🛑 <b>Tarama durduruldu:</b> {len(stale)}/{total} hissenin verisi "
+                    f"bayat (>{max_age} dk). Veri kaynağı bozuk — sinyal üretilmedi."
+                )
+            except Exception:
+                logger.warning("stale_halt_alert_send_failed")
+            return {}
+
+        if ratio >= warn_ratio and self._last_stale_warn_date != datetime.now(TR).date():
+            self._last_stale_warn_date = datetime.now(TR).date()
+            try:
+                self.notifier.send_message(
+                    f"⚠️ <b>Veri tazeliği:</b> {len(stale)}/{total} hisse bayat "
+                    f"(>{max_age} dk). Bu hisseler tarama dışı bırakıldı."
+                )
+            except Exception:
+                logger.warning("stale_warn_alert_send_failed")
+
+        for ticker in stale:
+            all_data.pop(ticker, None)
+        return all_data
+
     def close_positions_at_eod(self, *, now: datetime | None = None) -> None:
         """Faz 3 P1.1 — post-close discipline pass (silent, no signals/notifications).
 
@@ -344,7 +449,8 @@ class ScanService:
           (fetch fallback supplies prices);
         - tracked AL outcomes close via ``process_scan([], market_data)``
           (empty signal list -> no new positions open);
-        - failures are logged, never raised (best-effort discipline pass).
+        - sub-pass failures are logged AND surfaced (B2: the scheduler needs
+          the failure to schedule a retry; EOD FAILED != EOD DONE).
         """
         effective_now = now or datetime.now(UTC)
         try:
@@ -357,14 +463,22 @@ class ScanService:
             )
             market_data = {}
 
+        # B2: best-effort degil — hata scheduler'a yukselir ki retry/devamsizlik
+        # takibi (EOD FAILED != EOD DONE) calissin. Her iki alt-pass da denenir.
+        failures: list[str] = []
         try:
             self.paper_trade_service.update_open_trades(signals=None, now=effective_now)
         except Exception as exc:
+            failures.append("paper_close")
             logger.exception("eod_paper_close_failed", error=exc)
 
         try:
             self.signal_outcome_tracker.process_scan([], market_data, now=effective_now)
         except Exception as exc:
+            failures.append("outcome_close")
             logger.exception("eod_outcome_close_failed", error=exc)
+
+        if failures:
+            raise RuntimeError(f"EOD pass kismi basarisiz: {', '.join(failures)}")
 
         logger.info("eod_close_pass_completed")
