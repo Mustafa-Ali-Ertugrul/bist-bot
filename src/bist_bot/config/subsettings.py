@@ -237,6 +237,8 @@ class TradingSettings:
     SHADOW_ONLY_ROBUST: bool = _get_bool_env("SHADOW_ONLY_ROBUST", True)
     SHADOW_MIN_SCORE: int = _get_int_env("SHADOW_MIN_SCORE", 20)
     SHADOW_COOLDOWN_DAYS: int = _get_int_env("SHADOW_COOLDOWN_DAYS", 5)
+    # Sprint 1: daily-report RADAR listing budget (gate-demoted + tier A + tier B combined).
+    RADAR_REPORT_TOP_N: int = _get_int_env("RADAR_REPORT_TOP_N", 50)
     COMMISSION_BUY: float = _get_float_env("COMMISSION_BUY", 0.0002)
     COMMISSION_SELL: float = _get_float_env("COMMISSION_SELL", 0.0002)
     BSMV: float = _get_float_env("BSMV", 0.0005)

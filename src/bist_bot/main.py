@@ -79,7 +79,12 @@ def main():
 
         # AppContainer has no signals_repo; the report builds its own
         # SignalsRepository on the shared DatabaseManager when repo=None.
-        report_md = generate_daily_report(day=target_date)
+        from bist_bot.db.repositories.portfolio_repository import PortfolioRepository
+
+        report_md = generate_daily_report(
+            day=target_date,
+            portfolio_repo=PortfolioRepository(container.db),
+        )
         print(report_md)
     elif "--backtest" in sys.argv:
         run_backtest(container.fetcher)

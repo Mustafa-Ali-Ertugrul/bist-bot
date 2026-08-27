@@ -98,6 +98,9 @@ class AppRepository:
     def get_paper_performance(self):
         return self.portfolio.get_paper_performance()
 
+    def get_closed_paper_trades(self, since=None):
+        return self.portfolio.get_closed_trades(since=since)
+
     def create_order(self, *args, **kwargs):
         return self.orders.create_order(*args, **kwargs)
 
