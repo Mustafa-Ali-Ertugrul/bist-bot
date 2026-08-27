@@ -203,6 +203,22 @@ class PortfolioRepository:
         rows = self.manager.run_session(_read, read_only=True)
         return [self._to_paper_trade(row) for row in rows]
 
+    def get_closed_trades(self, since: datetime | None = None) -> list[PaperTrade]:
+        """Return all closed paper trades, optionally only those closed at/after ``since``."""
+
+        def _read(session):
+            stmt = (
+                select(PaperTradeRecord)
+                .where(PaperTradeRecord.outcome == "CLOSED")
+                .order_by(PaperTradeRecord.id.asc())
+            )
+            if since is not None:
+                stmt = stmt.where(PaperTradeRecord.close_time >= since)
+            return session.scalars(stmt).all()
+
+        rows = self.manager.run_session(_read, read_only=True)
+        return [self._to_paper_trade(row) for row in rows]
+
     def get_paper_performance(self) -> dict[str, Any]:
         trades = self.manager.run_session(
             lambda session: session.scalars(
