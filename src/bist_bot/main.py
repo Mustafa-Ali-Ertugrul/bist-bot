@@ -40,13 +40,19 @@ def main():
 
     def shutdown(signum, frame):
         _ = signum, frame
-        logger.info("shutdown_requested")
+        logger.info(
+            "shutdown_requested",
+            signal="SIGINT" if signum == _signal.SIGINT else "SIGTERM",
+        )
         scheduler.running = False
         order_tracker.stop()
 
     import signal as _signal
 
+    # C1: docker stop SIGTERM gonderir — yakalanmazsa surec aninda olur,
+    # acik tarama/DB islemi yarim kalir. SIGINT ile ayni graceful yol.
     _signal.signal(_signal.SIGINT, shutdown)
+    _signal.signal(_signal.SIGTERM, shutdown)
 
     if "--score-correlation" in sys.argv:
         from bist_bot.reports.score_correlation import run as run_score_corr
@@ -73,27 +79,47 @@ def main():
 
         # AppContainer has no signals_repo; the report builds its own
         # SignalsRepository on the shared DatabaseManager when repo=None.
-        report_md = generate_daily_report(day=target_date)
+        from bist_bot.db.repositories.portfolio_repository import PortfolioRepository
+
+        report_md = generate_daily_report(
+            day=target_date,
+            portfolio_repo=PortfolioRepository(container.db),
+        )
         print(report_md)
     elif "--backtest" in sys.argv:
         run_backtest(container.fetcher)
     elif "--dashboard" in sys.argv:
         app = create_default_dashboard_app(container)
+        # nosec B104: container entrypoint; exposure via compose/Cloud Run.
         app.run(
-            host="0.0.0.0",
+            host="0.0.0.0",  # nosec B104
             port=settings.FLASK_PORT,
             debug=False,
             use_reloader=settings.FLASK_DEBUG,
         )
     elif "--worker" in sys.argv:
+        from bist_bot.worker_http import WorkerHealthServer
+
+        worker_http = WorkerHealthServer(
+            scheduler,
+            port=int(getattr(settings, "WORKER_METRICS_PORT", 9101)),
+            settings=settings,
+        )
+        worker_http.start()
         order_tracker.start()
-        scheduler.run_loop()
+        try:
+            scheduler.run_loop()
+        finally:
+            worker_http.stop()
     else:
         order_tracker.start()
         app = create_default_dashboard_app(container)
         t = Thread(
             target=lambda: app.run(
-                host="0.0.0.0", port=settings.FLASK_PORT, debug=False, use_reloader=False
+                host="0.0.0.0",  # nosec B104: container-local; see above.
+                port=settings.FLASK_PORT,
+                debug=False,
+                use_reloader=False,
             ),
             daemon=True,
         )

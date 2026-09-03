@@ -112,10 +112,53 @@ def _make_service(
     ``_make_signal`` already uses a far-future timestamp so the real
     ``is_expired`` returns False without patching.
     """
-    with settings.override(TELEGRAM_GROUP_CHAT_ID="mock-group"):
+    with settings.override(TELEGRAM_GROUP_CHAT_ID="mock-group", TELEGRAM_GROUP_ENABLED=True):
         svc = NotificationDispatchService(notifier, sleeper=lambda _: None)
     assert svc._group_chat_id == "mock-group"
     return svc
+
+
+# ============================================================================
+# TELEGRAM_GROUP_ENABLED flag gating
+# ============================================================================
+
+
+def test_group_mirroring_skipped_when_flag_disabled():
+    """TELEGRAM_GROUP_ENABLED=false iken chat id dolu olsa bile grup kopyasi gitmez."""
+    notifier, captured = _make_notifier_with_fake_sender()
+    with settings.override(TELEGRAM_GROUP_CHAT_ID="mock-group", TELEGRAM_GROUP_ENABLED=False):
+        svc = NotificationDispatchService(notifier, sleeper=lambda _: None)
+        assert svc._group_chat_id is None
+
+        signal = _make_signal(ticker="TUPRS.IS", score=30.0, is_actionable=True)
+        svc.notify_scan_results([signal], [signal], total_scanned=1)
+
+    summaries = [t for t in captured if "TARAMA RAPORU" in t]
+    assert len(summaries) == 1  # sadece ozel sohbet; grup kopyasi yok
+
+
+def test_group_mirroring_sends_when_flag_enabled():
+    notifier, captured = _make_notifier_with_fake_sender()
+    with settings.override(TELEGRAM_GROUP_CHAT_ID="mock-group", TELEGRAM_GROUP_ENABLED=True):
+        svc = NotificationDispatchService(notifier, sleeper=lambda _: None)
+        signal = _make_signal(ticker="TUPRS.IS", score=30.0, is_actionable=True)
+        svc.notify_scan_results([signal], [signal], total_scanned=1)
+
+    summaries = [t for t in captured if "TARAMA RAPORU" in t]
+    assert len(summaries) == 2  # ozel + grup
+
+
+def test_notifier_group_chat_id_gated_by_flag():
+    with settings.override(TELEGRAM_GROUP_CHAT_ID="mock-group", TELEGRAM_GROUP_ENABLED=False):
+        notifier = TelegramNotifier(
+            token="mock-token", chat_id="mock-chat", sender=lambda **k: True
+        )
+        assert notifier.group_chat_id is None
+    with settings.override(TELEGRAM_GROUP_CHAT_ID="mock-group", TELEGRAM_GROUP_ENABLED=True):
+        notifier = TelegramNotifier(
+            token="mock-token", chat_id="mock-chat", sender=lambda **k: True
+        )
+        assert notifier.group_chat_id == "mock-group"
 
 
 # ============================================================================

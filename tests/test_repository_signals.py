@@ -312,6 +312,34 @@ def test_update_outcome_signal_not_found(signals_repo):
     # If we get here without exception, the test passed
 
 
+def test_update_outcome_short_signal_profit_is_inverted(signals_repo):
+    """Direction-aware profit: for SELL-family signals the realized move is
+    (entry - exit), so profit_pct must be computed short-side."""
+    short_signal = Signal(
+        ticker="KUYAS.IS",
+        signal_type=SignalType.SELL,
+        score=-20.0,
+        price=100.0,
+        reasons=["Sell setup"],
+        stop_loss=105.0,
+        target_price=90.0,
+        timestamp=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
+    )
+    signals_repo.save_signal(short_signal)
+    signals = signals_repo.get_signals(limit=1, ticker="KUYAS.IS")
+    signal_id = signals[0]["id"]
+
+    # Short wins when price FALLS: entry 100 -> exit 94 = +6% profit.
+    signals_repo.update_outcome(signal_id=signal_id, outcome="TP_HIT", outcome_price=94.0)
+    updated = signals_repo.get_latest_signal("KUYAS.IS")
+    assert updated["profit_pct"] == 6.0  # (100-94)/100 * 100
+
+    # Short loses when price RISES: entry 100 -> exit 103 = -3% profit.
+    signals_repo.update_outcome(signal_id=signal_id, outcome="STOP_HIT", outcome_price=103.0)
+    updated = signals_repo.get_latest_signal("KUYAS.IS")
+    assert updated["profit_pct"] == -3.0  # (100-103)/100 * 100
+
+
 def test_get_performance_stats(signals_repo):
     """Test getting performance statistics."""
     # Start with empty stats
@@ -354,3 +382,117 @@ def test_signal_to_dict_conversion():
     # This is harder to test without access to the private method and a SignalRecord
     # We'll skip this for now since it's tested indirectly through other tests
     pass
+
+
+def test_get_last_signal_times_respects_since_filter(signals_repo):
+    """AL cooldown lookup: only signals at/after `since` are returned, per
+    ticker the latest timestamp, sell-family excluded."""
+    base = datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC)
+
+    # THYAO: old buy (08:00) + recent buy (10:30) -> only recent is >= since
+    signals_repo.save_signal(
+        Signal(
+            ticker="THYAO.IS",
+            signal_type=SignalType.BUY,
+            score=25.0,
+            price=100.0,
+            timestamp=base.replace(hour=8),
+        )
+    )
+    signals_repo.save_signal(
+        Signal(
+            ticker="THYAO.IS",
+            signal_type=SignalType.BUY,
+            score=30.0,
+            price=101.0,
+            timestamp=base.replace(hour=10, minute=30),
+        )
+    )
+    # GARAN: recent sell — must NOT be returned for buy-family lookup
+    signals_repo.save_signal(
+        Signal(
+            ticker="GARAN.IS",
+            signal_type=SignalType.SELL,
+            score=-20.0,
+            price=80.0,
+            timestamp=base.replace(hour=10, minute=15),
+        )
+    )
+    # ASELS: buy just before the window -> excluded
+    signals_repo.save_signal(
+        Signal(
+            ticker="ASELS.IS",
+            signal_type=SignalType.BUY,
+            score=28.0,
+            price=150.0,
+            timestamp=base.replace(hour=9, minute=0),
+        )
+    )
+
+    since = base.replace(hour=10)  # 10:00 cutoff
+    buy_values = [t.value for t in SignalType if t.is_buy]
+    result = signals_repo.get_last_signal_times(
+        tickers=["THYAO.IS", "GARAN.IS", "ASELS.IS"],
+        signal_types=buy_values,
+        since=since,
+    )
+
+    # THYAO has a buy in-window; latest timestamp returned (10:30).
+    # SQLite returns naive UTC datetimes (documented repo boundary); compare
+    # against the naive form.
+    expected = base.replace(hour=10, minute=30).replace(tzinfo=None)
+    got = result["THYAO.IS"]
+    assert got.replace(tzinfo=None) == expected
+
+
+def test_get_last_signal_times_min_score_filters_radar_persists(signals_repo):
+    """AL cooldown lookup: with min_score set, sub-threshold (RADAR) buy
+    persists must NOT arm the cooldown — only actionable persists count."""
+    base = datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC)
+
+    # HALKB: recent WEAK_BUY with score 15 (below buy_threshold 20) — RADAR.
+    signals_repo.save_signal(
+        Signal(
+            ticker="HALKB.IS",
+            signal_type=SignalType.WEAK_BUY,
+            score=15.0,
+            price=46.0,
+            timestamp=base.replace(hour=10, minute=15),
+        )
+    )
+    # THYAO: recent BUY with score 30 (above threshold) — actionable.
+    signals_repo.save_signal(
+        Signal(
+            ticker="THYAO.IS",
+            signal_type=SignalType.BUY,
+            score=30.0,
+            price=100.0,
+            timestamp=base.replace(hour=10, minute=30),
+        )
+    )
+
+    since = base.replace(hour=10)
+    buy_values = [t.value for t in SignalType if t.is_buy]
+    result = signals_repo.get_last_signal_times(
+        tickers=["HALKB.IS", "THYAO.IS"],
+        signal_types=buy_values,
+        since=since,
+        min_score=20.0,
+    )
+
+    # HALKB's RADAR persist is filtered out by min_score.
+    assert "HALKB.IS" not in result
+    # THYAO's actionable persist is returned.
+    assert "THYAO.IS" in result
+
+    # Without min_score, the RADAR persist WOULD be counted (legacy behaviour).
+    result_legacy = signals_repo.get_last_signal_times(
+        tickers=["HALKB.IS", "THYAO.IS"],
+        signal_types=buy_values,
+        since=since,
+    )
+    assert "HALKB.IS" in result_legacy
+    # GARAN's in-window signal is a SELL — filtered out by signal_types
+    assert "GARAN.IS" not in result
+    # ASELS's buy is before `since` — filtered out
+    assert "ASELS.IS" not in result

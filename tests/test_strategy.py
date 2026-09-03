@@ -237,7 +237,7 @@ def test_negative_score_requires_momentum_confirmation():
         last=last,
         prev=prev,
         momentum_scorer=lambda _last, _prev: (-55.0, ["bearish momentum"]),
-        trend_scorer=lambda _last, _prev, _df=None: (0.0, []),
+        trend_scorer=lambda _last, _prev, _df=None: (0.0, []),  # type: ignore[misc]  # default arg blocks inference; matches scorer signature at runtime
         volume_scorer=lambda _last, _prev: (0.0, []),
         structure_scorer=lambda _last: (0.0, []),
         momentum_checker=lambda _df, _threshold: False,

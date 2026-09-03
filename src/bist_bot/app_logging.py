@@ -50,6 +50,25 @@ def _serialize_event(payload: dict[str, Any]) -> str:
     return " ".join(ordered)
 
 
+def _make_console_safe(stream: Any) -> Any:
+    """Make the log stream lossless-safe for consoles with a limited encoding.
+
+    Windows consoles default to a legacy codepage (e.g. cp1252) where emoji-heavy
+    log lines raise ``UnicodeEncodeError`` inside ``StreamHandler.emit``. Reconfiguring
+    with ``errors="replace"`` keeps the existing encoding (so locale text such as
+    Turkish renders unchanged) and degrades unencodable characters to ``?`` instead
+    of raising.
+    """
+    reconfigure = getattr(stream, "reconfigure", None)
+    if reconfigure is None:
+        return stream
+    try:
+        reconfigure(errors="replace")
+    except (OSError, ValueError, AttributeError):  # pragma: no cover - env dependent
+        pass
+    return stream
+
+
 def configure_logging(
     *,
     stream: io.TextIOBase | None = None,
@@ -58,10 +77,12 @@ def configure_logging(
     fmt: str | None = None,
 ) -> None:
     _configure_sentry()
-    target = stream or sys.stdout
+    target = _make_console_safe(stream or sys.stdout)
     handlers: list[logging.Handler] = []
     if log_file:
-        handlers.append(logging.FileHandler(log_file))
+        # File logs default to the locale codepage otherwise; force UTF-8 so any
+        # character written via ensure_ascii=False survives round-trips.
+        handlers.append(logging.FileHandler(log_file, encoding="utf-8"))
     else:
         handlers.append(logging.StreamHandler(target))
     if _json_enabled():

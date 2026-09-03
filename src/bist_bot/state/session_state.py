@@ -39,7 +39,7 @@ def init_session_state(container=None) -> None:
         "scan_error": None,
         "initial_background_scan_started": False,
         "rejection_breakdown": {},
-        "auth_token": None,
+        "auth_token": None,  # nosec B105: session default, not a credential.
         "auth_email": "",
         "is_authenticated": False,
         "app_bootstrapped": False,

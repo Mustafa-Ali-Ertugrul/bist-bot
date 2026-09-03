@@ -115,11 +115,13 @@ class TestHoldingDaysRule:
             }
         ]
 
-        # Mock data fetcher to return price
-        df_mock = MagicMock()
-        df_mock.empty = False
-        df_mock.iloc = MagicMock()
-        df_mock.iloc.__getitem__ = MagicMock(return_value={"close": 10.5})
+        # DataFrame with close/high/low so _fetch_exit_data can process it
+        import pandas as pd
+
+        df_mock = pd.DataFrame(
+            {"close": [10.5, 10.4], "high": [10.6, 10.5], "low": [10.4, 10.3]},
+            index=pd.to_datetime(["2026-08-26", "2026-08-27"]),
+        )
 
         data_fetcher = MagicMock()
         data_fetcher.fetch_single.return_value = df_mock

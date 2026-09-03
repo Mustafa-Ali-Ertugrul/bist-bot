@@ -8,6 +8,14 @@ from pathlib import Path
 
 from bist_bot.data.bist100 import BIST100_TICKERS
 
+# D3: hatali env degerleri sessizce default'a dusmek yerine kayda gecer;
+# CONFIG_STRICT=true iken settings preflight bunlari FATAL yapar.
+MALFORMED_ENV_VALUES: list[tuple[str, str, str]] = []  # (name, raw_value, expected_type)
+
+
+def get_malformed_env_values() -> list[tuple[str, str, str]]:
+    return list(MALFORMED_ENV_VALUES)
+
 
 def _get_bool_env(name: str, default: bool = False) -> bool:
     value = os.getenv(name)
@@ -18,6 +26,7 @@ def _get_bool_env(name: str, default: bool = False) -> bool:
         return True
     if normalized in {"0", "false", "no", "off"}:
         return False
+    MALFORMED_ENV_VALUES.append((name, value, "bool"))
     return default
 
 
@@ -28,6 +37,7 @@ def _get_int_env(name: str, default: int) -> int:
     try:
         return int(value)
     except ValueError:
+        MALFORMED_ENV_VALUES.append((name, value, "int"))
         return default
 
 
@@ -38,6 +48,7 @@ def _get_float_env(name: str, default: float) -> float:
     try:
         return float(value)
     except ValueError:
+        MALFORMED_ENV_VALUES.append((name, value, "float"))
         return default
 
 
@@ -223,9 +234,11 @@ class TradingSettings:
     OUTCOME_TRACKING_ENABLED: bool = _get_bool_env("OUTCOME_TRACKING_ENABLED", True)
     SHADOW_ENABLED: bool = _get_bool_env("SHADOW_ENABLED", True)
     SHADOW_HOLDING_DAYS: int = _get_int_env("SHADOW_HOLDING_DAYS", 5)
-    SHADOW_ONLY_ROBUST: bool = _get_bool_env("SHADOW_ONLY_ROBUST", True)
+    SHADOW_ONLY_ROBUST: bool = _get_bool_env("SHADOW_ONLY_ROBUST", False)
     SHADOW_MIN_SCORE: int = _get_int_env("SHADOW_MIN_SCORE", 20)
-    SHADOW_COOLDOWN_DAYS: int = _get_int_env("SHADOW_COOLDOWN_DAYS", 5)
+    SHADOW_COOLDOWN_DAYS: int = _get_int_env("SHADOW_COOLDOWN_DAYS", 2)
+    # Sprint 1: daily-report RADAR listing budget (gate-demoted + tier A + tier B combined).
+    RADAR_REPORT_TOP_N: int = _get_int_env("RADAR_REPORT_TOP_N", 50)
     COMMISSION_BUY: float = _get_float_env("COMMISSION_BUY", 0.0002)
     COMMISSION_SELL: float = _get_float_env("COMMISSION_SELL", 0.0002)
     BSMV: float = _get_float_env("BSMV", 0.0005)
@@ -250,9 +263,10 @@ class RiskSettings:
     MIN_SIGNAL_PROBABILITY: float = _get_float_env("MIN_SIGNAL_PROBABILITY", 0.50)
     MIN_LIQUIDITY_VALUE_TL: float = _get_float_env("MIN_LIQUIDITY_VALUE_TL", 5_000_000.0)
     DAILY_LOSS_CAP_PCT: float = _get_float_env("DAILY_LOSS_CAP_PCT", 3.0)
-    MIN_STOP_LOSS_PCT: float = _get_float_env("MIN_STOP_LOSS_PCT", 1.5)
+    MIN_STOP_LOSS_PCT: float = _get_float_env("MIN_STOP_LOSS_PCT", 1.8)
     ATR_TARGET_FLOOR_PCT: float = _get_float_env("ATR_TARGET_FLOOR_PCT", 2.0)
     FALLBACK_TARGET_RR: float = _get_float_env("FALLBACK_TARGET_RR", 2.0)
+    MAX_SIGNAL_SCORE: float = _get_float_env("MAX_SIGNAL_SCORE", 33.0)
     ATR_TARGET_MULT: float = _get_float_env("ATR_TARGET_MULT", 1.5)
 
 
@@ -312,7 +326,8 @@ class DataSettings:
 @dataclass(frozen=True)
 class DatabaseSettings:
     DATABASE_URL: str = _get_str_env("DATABASE_URL")
-    DB_PATH: str = _get_str_env("DB_PATH", "/tmp/bist_signals.db")
+    # nosec B108: Cloud Run ephemeral default; override via DB_PATH/DATABASE_URL.
+    DB_PATH: str = _get_str_env("DB_PATH", "/tmp/bist_signals.db")  # nosec B108
 
 
 @dataclass(frozen=True)
@@ -351,9 +366,27 @@ class ServerSettings:
     MARKET_CLOSE_HOUR: int = _get_int_env("MARKET_CLOSE_HOUR", 18)
     MARKET_WARMUP_MINUTES: int = _get_int_env("MARKET_WARMUP_MINUTES", 15)
     MARKET_HALF_DAY_HOUR: int = _get_int_env("MARKET_HALF_DAY_HOUR", 13)
-    # Post-close EOD pass fires at bist_close_time + this many minutes (~17:32 default).
-    # Scheduler clamps negatives to 0 via max(0, int(...)).
+    # BIST: continuous trading ends at MARKET_CLOSE_HOUR; the closing/single-price
+    # session runs SESSION_CLOSE_BUFFER_MINUTES longer (18:00-18:10). EOD pass
+    # triggers at session close + EOD_CLOSE_DELAY_MINUTES (~18:12 default).
+    SESSION_CLOSE_BUFFER_MINUTES: int = _get_int_env("SESSION_CLOSE_BUFFER_MINUTES", 10)
     EOD_CLOSE_DELAY_MINUTES: int = _get_int_env("EOD_CLOSE_DELAY_MINUTES", 2)
+    EOD_MAX_ATTEMPTS: int = _get_int_env("EOD_MAX_ATTEMPTS", 2)
+    EOD_RETRY_MINUTES: int = _get_int_env("EOD_RETRY_MINUTES", 8)
+    # C3 watchdog: alert when no successful scan for this long during market hours.
+    WATCHDOG_STALE_MINUTES: int = _get_int_env("WATCHDOG_STALE_MINUTES", 30)
+    WATCHDOG_ALERT_COOLDOWN_MINUTES: int = _get_int_env("WATCHDOG_ALERT_COOLDOWN_MINUTES", 60)
+    # C5: minimum spacing between consecutive scans (startup scan vs next grid slot).
+    SCAN_MIN_SEPARATION_MINUTES: int = _get_int_env("SCAN_MIN_SEPARATION_MINUTES", 5)
+    # B3: alert after this many consecutive price misses for an open paper trade.
+    PAPER_CLOSE_SKIP_WARN_THRESHOLD: int = _get_int_env("PAPER_CLOSE_SKIP_WARN_THRESHOLD", 5)
+    # B4: candle freshness gate — max trigger-bar age during market hours and
+    # stale-ratio bands (warn publishes a daily warning; halt aborts the scan).
+    STALE_BAR_MAX_AGE_MINUTES: int = _get_int_env("STALE_BAR_MAX_AGE_MINUTES", 30)
+    STALE_SYMBOL_WARN_RATIO: float = _get_float_env("STALE_SYMBOL_WARN_RATIO", 0.20)
+    STALE_SYMBOL_HALT_RATIO: float = _get_float_env("STALE_SYMBOL_HALT_RATIO", 0.40)
+    # Cooldown between stale-halt Telegram alerts (halt recurs every scan otherwise).
+    STALE_HALT_ALERT_COOLDOWN_MINUTES: int = _get_int_env("STALE_HALT_ALERT_COOLDOWN_MINUTES", 120)
     METRICS_ALLOWED_IPS: tuple[str, ...] = field(
         default_factory=lambda: _get_csv_env("METRICS_ALLOWED_IPS")
     )
@@ -373,8 +406,12 @@ class BrokerSettings:
     ALPACA_SECRET_KEY: str = _get_str_env("ALPACA_SECRET_KEY")
     ALPACA_PAPER: bool = _get_bool_env("ALPACA_PAPER", True)
     ALPACA_DRY_RUN: bool = _get_bool_env("ALPACA_DRY_RUN", False)
-    MAX_OPEN_POSITIONS: int = _get_int_env("MAX_OPEN_POSITIONS", 5)
-    MAX_POSITION_SIZE: float = _get_float_env("MAX_POSITION_SIZE", 0.20)
+    # Deney J (docs/retail_abone_ekonomisi.md §Deney J): 8 slots x 12.5% beats
+    # 5 x 20% on every subscriber metric on the live BIST100 universe
+    # (+2,350 vs +1,538 TL/mo, 64% vs 50% positive months, worst month and DD
+    # roughly halved). Diversification, not concentration, is the edge here.
+    MAX_OPEN_POSITIONS: int = _get_int_env("MAX_OPEN_POSITIONS", 8)
+    MAX_POSITION_SIZE: float = _get_float_env("MAX_POSITION_SIZE", 0.125)
     MAX_DAILY_LOSS: float = _get_float_env("MAX_DAILY_LOSS", 0.03)
     MAX_ACCOUNT_DRAWDOWN: float = _get_float_env("MAX_ACCOUNT_DRAWDOWN", 0.15)
     AUTO_EXECUTE: bool = _get_bool_env("AUTO_EXECUTE", False)
@@ -405,15 +442,34 @@ class MLSettings:
 
 @dataclass(frozen=True)
 class AgentSettings:
-    AGENT_ENABLED: bool = _get_bool_env("AGENT_ENABLED", False)
+    # Agent path (live_positions book) owns the multi-day strategy the
+    # backtests optimize (mh28 ~ 20 trading sessions, 8 slots, risk parity).
+    # Enabled by default since the max-income activation (Deney M: trail3).
+    AGENT_ENABLED: bool = _get_bool_env("AGENT_ENABLED", True)
     EMERGENCY_CLOSE_ON_HALT: bool = _get_bool_env("EMERGENCY_CLOSE_ON_HALT", False)
-    MAX_OPEN_POSITIONS: int = _get_int_env("MAX_OPEN_POSITIONS", 5)
+    # Keep in sync with BrokerSettings.MAX_OPEN_POSITIONS (Deney J: 8 slots).
+    MAX_OPEN_POSITIONS: int = _get_int_env("MAX_OPEN_POSITIONS", 8)
     MAX_DAILY_TRADES: int = _get_int_env("MAX_DAILY_TRADES", 10)
     POSITION_MONITOR_ENABLED: bool = _get_bool_env("POSITION_MONITOR_ENABLED", False)
     POSITION_CHECK_INTERVAL_SECONDS: int = _get_int_env("POSITION_CHECK_INTERVAL_SECONDS", 60)
-    TRAILING_STOP_ENABLED: bool = _get_bool_env("TRAILING_STOP_ENABLED", False)
+    # Deney M (docs/retail_abone_ekonomisi.md §17): ATR trailing stop
+    # (peak_close - k * ATR14) dominates the fixed stop at every DD level;
+    # k=3.0 is the optimum. TRAILING_STOP_PCT is legacy (percent trail, only
+    # used by paths that set it explicitly); the agent book uses the ATR trail.
+    TRAILING_STOP_ENABLED: bool = _get_bool_env("TRAILING_STOP_ENABLED", True)
+    TRAILING_ATR_MULT: float = _get_float_env("TRAILING_ATR_MULT", 3.0)
     TRAILING_STOP_PCT: float = _get_float_env("TRAILING_STOP_PCT", 2.0)
-    MAX_HOLDING_DAYS: int = _get_int_env("MAX_HOLDING_DAYS", 5)
+    # Entry score floor for the agent book. Entries are already restricted to
+    # STRONG_BUY (score >= STRONG_BUY_THRESHOLD = 48) by _entry_signal_types,
+    # so the default 0 trusts the signal engine's own gating; raise it via env
+    # to require higher-confidence entries.
+    MIN_SCORE_THRESHOLD: int = _get_int_env("MIN_SCORE_THRESHOLD", 0)
+    # Calendar-day hold limit for live positions (position_manager counts
+    # (now - entry_time).days). 28 calendar days ~= 20 trading sessions, which
+    # matched the best per-signal/portfolio economics in Deney H analysis
+    # (docs/retail_abone_ekonomisi.md). The previous default 5 calendar days
+    # ~= 3 trading sessions forced exits before targets could develop.
+    MAX_HOLDING_DAYS: int = _get_int_env("MAX_HOLDING_DAYS", 28)
     RESTART_RECOVERY_ENABLED: bool = _get_bool_env("RESTART_RECOVERY_ENABLED", False)
     EXIT_ORDER_TYPE: str = _get_str_env("EXIT_ORDER_TYPE", "MARKET")
     AUDIT_LOG_ENABLED: bool = _get_bool_env("AUDIT_LOG_ENABLED", False)
@@ -427,6 +483,10 @@ class NotificationSettings:
         "TELEGRAM_MIN_SCORE", _get_int_env("STRONG_BUY_THRESHOLD", 48)
     )
     TELEGRAM_GROUP_CHAT_ID: str = _get_str_env("TELEGRAM_GROUP_CHAT_ID")
+    # Master switch for group mirroring. Historically a non-empty chat id alone
+    # enabled dispatch; this flag now gates it (default True keeps old behavior
+    # for deployments that only set the chat id).
+    TELEGRAM_GROUP_ENABLED: bool = _get_bool_env("TELEGRAM_GROUP_ENABLED", True)
     TELEGRAM_GROUP_MIN_SCORE: int = _get_int_env(
         "TELEGRAM_GROUP_MIN_SCORE", _get_int_env("STRONG_BUY_THRESHOLD", 48)
     )
@@ -450,3 +510,8 @@ class NotificationSettings:
     SIGNAL_CHANGE_MIN_SCORE_DELTA: int = max(
         0, min(100, _get_int_env("SIGNAL_CHANGE_MIN_SCORE_DELTA", 15))
     )
+    # AL-signal per-ticker cooldown (minutes). A ticker that already produced
+    # an actionable buy-family signal within this window will not persist a
+    # new AL signal (notifications/tracking still see the full list).
+    # 0 disables the cooldown (legacy behaviour).
+    AL_SIGNAL_COOLDOWN_MINUTES: int = max(0, _get_int_env("AL_SIGNAL_COOLDOWN_MINUTES", 60))

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import concurrent.futures
+import re
+import secrets
 import threading
 import time
 from collections.abc import Callable
@@ -52,6 +54,10 @@ def _coerce_bool(value: Any) -> bool:
     if value is None:
         return False
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+_DUMMY_PASSWORD = secrets.token_urlsafe(24)
+_DUMMY_HASH = hash_password(_DUMMY_PASSWORD)
 
 
 def _mask_email(email: str) -> str:
@@ -234,6 +240,7 @@ def create_dashboard_app(
     app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(hours=1)
     app.config["RATELIMIT_STORAGE_URI"] = settings.RATE_LIMIT_STORAGE_URI
     app.config["ALLOW_PUBLIC_REGISTRATION"] = settings.ALLOW_PUBLIC_REGISTRATION
+    app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024  # 1MB payload cap to mitigate DoS
 
     JWTManager(app)
     limiter = Limiter(get_remote_address, app=app, default_limits=["60 per minute"])
@@ -289,6 +296,7 @@ def create_dashboard_app(
             return False
         if row is None:
             logger.info("login_user_not_found", email=_mask_email(email))
+            verify_and_rehash_password(_DUMMY_PASSWORD, _DUMMY_HASH)
             return False
         logger.info("verify_admin_password_check_start", email=_mask_email(email))
         verified, upgraded_hash = verify_and_rehash_password(password, str(row["password_hash"]))
@@ -591,15 +599,28 @@ def create_dashboard_app(
             )
             return jsonify({"status": "error", "message": "scan provider unavailable"}), 500
 
+    _TICKER_BASE_RE = re.compile(r"^[A-Z0-9]{1,10}$")
+
     @app.route("/api/analyze/<ticker>")
     @jwt_required()
     @limiter.limit("30 per minute")
     def api_analyze(ticker: str):
         start_time = time.time()
         try:
+            raw = (ticker or "").strip().upper()
+            if raw.endswith(".IS"):
+                raw = raw[:-3]
+            if not _TICKER_BASE_RE.fullmatch(raw):
+                return jsonify({"status": "error", "message": "Invalid ticker symbol format"}), 400
+            normalized_ticker = f"{raw}.IS"
+
+            # Check universe membership if fetcher has watchlist
             runtime_fetcher = get_fetcher()
+            watchlist = getattr(runtime_fetcher, "watchlist", None)
+            if watchlist and normalized_ticker not in watchlist and raw not in watchlist:
+                # Still allow analysis if universe is not strictly enforced, but log
+                logger.debug("api_analyze_external_ticker", ticker=normalized_ticker)
             runtime_engine = get_engine()
-            normalized_ticker = ticker if ticker.endswith(".IS") else f"{ticker}.IS"
             force_refresh = _coerce_bool(request.args.get("force_refresh"))
             mtf_enabled = bool(getattr(settings, "MTF_ENABLED", True))
             fetch_mtf = cast(
@@ -738,7 +759,8 @@ def create_dashboard_app(
     @jwt_required()
     @limiter.limit("60 per minute")
     def api_signal_history():
-        limit = request.args.get("limit", 50, type=int)
+        raw_limit = request.args.get("limit", 50, type=int)
+        limit = max(1, min(raw_limit if raw_limit is not None else 50, 200))
         ticker = request.args.get("ticker")
         signals = get_db().get_recent_signals(limit=limit, ticker=ticker)
         return jsonify({"status": "ok", "signals": signals})
@@ -814,13 +836,16 @@ def main() -> None:
     """Run the standalone Flask API process."""
     configure_logging()
     app = create_default_dashboard_app()
+    # Container entrypoint must listen on all interfaces; external exposure
+    # is controlled by compose ports / Cloud Run ingress.
+    bind_host = "0.0.0.0"  # nosec B104
     logger.info(
         "api_listening",
-        host="0.0.0.0",
+        host=bind_host,
         port=settings.FLASK_PORT,
     )
     app.run(
-        host="0.0.0.0",
+        host=bind_host,
         port=settings.FLASK_PORT,
         debug=False,
         use_reloader=False,

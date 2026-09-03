@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-import subprocess
+import subprocess  # nosec B404: only fixed-argv git introspection below.
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -185,7 +185,10 @@ def _classification_metrics(labels: np.ndarray, probabilities: np.ndarray) -> di
 def _git_commit() -> str:
     root = Path(__file__).resolve().parents[3]
     try:
-        output = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True)
+        # nosec B603/B607: fixed argv, no shell, no user input.
+        output = subprocess.check_output(  # nosec B603 B607
+            ["git", "rev-parse", "HEAD"], cwd=root, text=True
+        )
         return output.strip()
     except Exception:
         return "unknown"

@@ -40,6 +40,7 @@ class ShadowTradeService:
         settings: Any | None = None,
         results_dir: str | Path = "results",
         robust_tickers: set[str] | None = None,
+        db: Any | None = None,
     ) -> None:
         self.settings = settings or default_settings
         self.results_dir = Path(results_dir)
@@ -49,6 +50,7 @@ class ShadowTradeService:
         self.robust_tickers = (
             set(load_watchlist("robust")) if robust_tickers is None else set(robust_tickers)
         )
+        self.db = db
         self._lock = threading.RLock()
 
     def process_scan(
@@ -89,6 +91,7 @@ class ShadowTradeService:
                     continue
                 positions[signal.ticker] = self._entry_from_signal(signal)
                 opened += 1
+                self._ledger_record_open(signal)
                 logger.info(
                     "shadow_position_opened",
                     ticker=signal.ticker,
@@ -98,6 +101,8 @@ class ShadowTradeService:
                 self._write_json(self.open_path, positions)
             if closed:
                 self._append_closed(closed)
+            for row in closed:
+                self._ledger_close_row(row)
             logger.info(
                 "shadow_scan",
                 candidates=len(candidates),
@@ -152,6 +157,63 @@ class ShadowTradeService:
 
     def _is_in_cooldown(self, ticker: str, now: datetime) -> bool:
         return ticker in self._cooldown_tickers(now)
+
+    def _ledger_record_open(self, signal: Signal) -> None:
+        """Sprint 2: dual-write the shadow open into the unified trade ledger.
+
+        Shadow candidates are buy-side radar signals (sell family is filtered
+        by score), so direction is always "long". Failure is isolated — a
+        ledger problem must never break the file-based shadow ledger.
+        """
+        try:
+            recorder = getattr(self.db, "record_ledger_open", None)
+            if not callable(recorder):
+                return
+            recorder(
+                kind="SHADOW",
+                ticker=signal.ticker,
+                signal_type=signal.signal_type.value,
+                direction="long",
+                score=float(signal.score),
+                entry_price=float(signal.price),
+                entry_time=self._aware_utc(signal.timestamp),
+                stop_loss=float(signal.stop_loss) if signal.stop_loss else None,
+                target_price=float(signal.target_price) if signal.target_price else None,
+                agreement_ratio=signal.agreement_ratio,
+                source="live",
+            )
+        except Exception as exc:
+            logger.warning(
+                "ledger_open_write_failed",
+                ticker=signal.ticker,
+                error_type=type(exc).__name__,
+                error=str(exc),
+            )
+
+    def _ledger_close_row(self, row: dict[str, Any]) -> None:
+        """Sprint 2: mirror a shadow close into the unified trade ledger.
+
+        Shadow PnL is fee-free (gross only) — ``net_pnl_pct`` stays NULL.
+        """
+        try:
+            closer = getattr(self.db, "record_ledger_close", None)
+            if not callable(closer):
+                return
+            closer(
+                "SHADOW",
+                ticker=row["ticker"],
+                exit_price=float(row["exit_price"]),
+                exit_time=self._aware_utc(datetime.fromisoformat(row["exit_time"])),
+                close_reason=str(row.get("hit") or ""),
+                gross_pnl_pct=float(row["pnl_pct"]),
+            )
+        except Exception as exc:
+            logger.warning(
+                "ledger_close_write_failed",
+                ticker=row.get("ticker"),
+                error_type=type(exc).__name__,
+                error=str(exc),
+            )
 
     def _cooldown_tickers(self, now: datetime) -> set[str]:
         cooldown_days = int(getattr(self.settings, "SHADOW_COOLDOWN_DAYS", 3))

@@ -94,3 +94,39 @@ notes.md
 task_plan.md
 PROJECT_ACTIVITY_REPORT.md
 custom.db
+.env.*
+!.env.example
+
+# Presentations / personal scratch (Faz 4 temizlik)
+*.pptx
+*.pptx.inspect.ndjson
+BIST_BOT_Mentor_Sunumu/
+.codex_tmp/
+backups/*.sql
+patches/
+scratch_test_nav.js
+today_msgs.py
+_show_pnl.py
+export_telegram_messages.py
+telegram_messages_last_week.md
+scripts/*_full.txt
+scripts/ppt_analysis.txt
+scripts/extract_*.py
+scripts/inspect_*.py
+scripts/create_pitch_deck*.py
+scripts/create_inveo_gedik_deck.py
+scripts/glm_report.py
+scripts/compare_analysis.py
+scripts/clean_analysis.py
+
+# Auto-generated report artifacts
+results/haftalik_rapor_*.md
+results/*_gunluk_performans_raporu.md
+results/signal_replay_*.json
+results/signal_replay_*.csv
+
+# Regenerable local caches / scratch exports (never commit)
+data/cache_ohlcv/
+results/*.parquet
+numbers_check_summary.md
+telegram_messages_TODAY_*.md

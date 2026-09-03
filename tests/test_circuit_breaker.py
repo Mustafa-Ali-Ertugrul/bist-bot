@@ -1,5 +1,9 @@
 """Tests for the circuit breaker safety mechanism."""
 
+# mypy: disable-error-code="comparison-overlap"
+# (Tests assert successive breaker states; Literal narrowing after each
+# transition makes the next comparison look non-overlapping to mypy.)
+
 from __future__ import annotations
 
 import threading

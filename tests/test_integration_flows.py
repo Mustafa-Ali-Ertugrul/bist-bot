@@ -232,6 +232,28 @@ def test_api_analyze_returns_signal_payload(tmp_path) -> None:
     assert len(payload["price_data"]) == 60
 
 
+def test_api_analyze_rejects_invalid_ticker_format(tmp_path) -> None:
+    client, _db, _manager, token = _build_client(tmp_path, ApiFetcherStub(), ApiEngineStub())
+
+    res = client.get(
+        "/api/analyze/A..IS",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res.status_code == 400
+    assert "Invalid ticker" in res.get_json()["message"]
+
+
+def test_api_signals_history_clamps_limit(tmp_path) -> None:
+    client, _db, _manager, token = _build_client(tmp_path, ApiFetcherStub(), ApiEngineStub())
+
+    res = client.get(
+        "/api/signals/history?limit=99999",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res.status_code == 200
+    assert "signals" in res.get_json()
+
+
 def test_api_analyze_uses_batch_fallback_when_single_fetch_fails(tmp_path) -> None:
     signal = Signal(
         ticker="THYAO.IS",
@@ -392,7 +414,7 @@ def test_scan_orchestration_auto_execute_creates_sent_order(tmp_path) -> None:
                 {"notify_scan_results": lambda self, signals, actionable, total: None},
             )(),
         ),
-        settings=settings.replace(AUTO_EXECUTE=True, PAPER_MODE=False),
+        settings=settings.replace(AUTO_EXECUTE=True, PAPER_MODE=False, AGENT_ENABLED=False),
     )
 
     result = service.scan_once()
@@ -453,7 +475,7 @@ def test_scan_orchestration_marks_order_rejected_when_broker_fails(tmp_path) -> 
                 {"notify_scan_results": lambda self, signals, actionable, total: None},
             )(),
         ),
-        settings=settings.replace(AUTO_EXECUTE=True, PAPER_MODE=False),
+        settings=settings.replace(AUTO_EXECUTE=True, PAPER_MODE=False, AGENT_ENABLED=False),
     )
 
     service.scan_once()

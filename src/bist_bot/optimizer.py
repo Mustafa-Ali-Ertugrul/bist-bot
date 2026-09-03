@@ -125,7 +125,7 @@ class StrategyOptimizer:
                     progress_pct=round((i / n_iter) * 100, 1),
                 )
 
-            param_dict = {key: random.choice(values) for key, values in param_grid.items()}
+            param_dict = {key: random.choice(values) for key, values in param_grid.items()}  # nosec B311: search sampling, not crypto.
             self._evaluate_combination(param_dict)
 
         logger.info("optimizer_random_search_finished")

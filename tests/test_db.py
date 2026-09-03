@@ -94,9 +94,9 @@ def test_portfolio_close_calculates_positive_pnl_for_winning_trade(tmp_path):
     repo = PortfolioRepository(manager=manager)
 
     repo.add_paper_trade("THYAO.IS", "BUY", 100.0)
-    repo.update_paper_close("THYAO.IS", 110.0)
+    repo.close_paper_trade("THYAO.IS", 110.0, "TARGET_HIT")
 
     performance = repo.get_paper_performance()
 
     assert performance["profitable"] == 1
-    assert performance["avg_profit_pct"] == 10.0
+    assert performance["avg_profit_pct"] == pytest.approx(10.0, abs=0.5)

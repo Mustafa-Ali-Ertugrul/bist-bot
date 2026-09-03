@@ -2,6 +2,9 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
+rule_files:
+  - /etc/prometheus/alerts/*.yml
+
 scrape_configs:
   - job_name: bist-bot-api
     metrics_path: /metrics
@@ -10,3 +13,10 @@ scrape_configs:
         labels:
           service: bot
     # Local compose sets METRICS_PUBLIC=true so scrape needs no JWT.
+
+  - job_name: bist-bot-worker
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["scanner-worker:9101"]
+        labels:
+          service: scanner-worker

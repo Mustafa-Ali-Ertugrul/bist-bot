@@ -103,7 +103,10 @@ class SignalOutcomeTracker:
                     try:
                         if self.db is not None and row.get("signal_id") is not None:
                             self.db.update_outcome(
-                                int(row["signal_id"]), str(row["outcome"]), float(row["exit_price"])
+                                int(row["signal_id"]),
+                                str(row["outcome"]),
+                                float(row["exit_price"]),
+                                source="live_tracker",
                             )
                         elif self.db is not None:
                             # fallback via ticker+time lookup not needed for test

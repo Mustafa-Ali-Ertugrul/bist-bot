@@ -44,11 +44,35 @@ class StrategyParams:
     chase_resist_pct: float = 1.0
     chase_strong_trend_adx: float = 30.0
     mtf_confluence_block_enabled: bool = True
+    # P1-B deneyi (Deney C): aşırı satım bileşenleri için trend onayı.
+    # Açıkken BB BELOW_LOWER ve CCI < -100 puanları, close > SMA20 veya
+    # plus_di > minus_di (yönlü yükseliş teyidi) koşullarından hiçbiri
+    # sağlanmıyorsa ``oversold_unconfirmed_score_multiplier`` ile çarpılır.
+    # ADX tek başına yetmez (yönsüz güç ölçüsü). Ölçüm: 0.5 çarpanı hiçbir
+    # skoru eşik altına düşürmedi (etkisiz) → 0.0 varyantı da test edilir.
+    # Varsayılanlar kapalı/0.5 → mevcut davranış değişmez.
+    oversold_requires_trend_confirm: bool = False
+    oversold_unconfirmed_score_multiplier: float = 0.5
+    # Deney F (P0/P1 kanıtı): long adaylar için fiyat-hacim boğa teyidi şartı.
+    # Açıkken skoru buy_threshold'u geçen long aday
+    # ``price_volume_direction != BULLISH_CONFIRMATION`` ise reddedilir.
+    # Kanıt: 508 sinyalde pv_bull=0 alt kümesi (n=153) mean -%1.51, up %39;
+    # pv_bull=1 (n=355) mean +%1.03, up %56. Varsayılan kapalı → davranış değişmez.
+    pv_confirmation_required: bool = False
     counter_trend_multiplier: float = 0.3
     agreement_gate_enabled: bool = False
     agreement_gate_threshold: float = 0.5
     agreement_low_cap: float = 30.0
     score_sma_death_cross: float = 12.0
+
+    # ------------------------------------------------------------------
+    # Research profile — normalized component scoring (additive, opt-in)
+    # ------------------------------------------------------------------
+    normalized_component_scoring: bool = False
+    component_weight_momentum: float = 0.15
+    component_weight_trend: float = 0.60
+    component_weight_volume: float = 0.15
+    component_weight_structure: float = 0.10
 
     # RSI Parametreleri
     rsi_oversold_extreme: float = 25.0
@@ -129,9 +153,25 @@ class StrategyParams:
         )
 
     @classmethod
+    def research_v1(cls) -> StrategyParams:
+        """Research profile — inherits conservative semantics, enables normalized scoring.
+
+        All conservative thresholds (buy 25 / sell -25, conservative RSI/stochastic,
+        counter-trend 0, OBV cap, etc.) are preserved verbatim. The only behavioral
+        addition is ``normalized_component_scoring=True`` which switches the
+        component-combination math to a weighted, normalized form (see
+        ``scoring.combine_component_scores``).
+        """
+        params = cls.conservative()
+        params.normalized_component_scoring = True
+        return params
+
+    @classmethod
     def from_settings(cls) -> StrategyParams:
         """Return the right profile instance based on STRATEGY_PROFILE."""
         profile = getattr(settings, "STRATEGY_PROFILE", "conservative")
         if profile == "conservative":
             return cls.conservative()
+        if profile == "research_v1":
+            return cls.research_v1()
         return cls()

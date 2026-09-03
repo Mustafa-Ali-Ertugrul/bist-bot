@@ -49,8 +49,34 @@ class Backtester:
         fractional_kelly: float | None = None,
         max_position_cap_pct: float | None = None,
         strategy_params: Any | None = None,
+        macro_regime_series: pd.Series | None = None,
+        macro_regime_mode: str = "off",
     ):
         from bist_bot.strategy.params import StrategyParams
+
+        if macro_regime_mode not in {"off", "observe", "enforce"}:
+            raise ValueError(
+                f"macro_regime_mode must be one of off/observe/enforce, got {macro_regime_mode!r}"
+            )
+        if macro_regime_mode != "off" and macro_regime_series is None:
+            raise ValueError(
+                f"macro_regime_mode={macro_regime_mode!r} requires a macro_regime_series"
+            )
+        if macro_regime_mode == "off" and macro_regime_series is not None:
+            raise ValueError(
+                "macro_regime_series was provided but macro_regime_mode='off'; "
+                "pass the series together with mode 'observe' or 'enforce'"
+            )
+        if macro_regime_series is not None:
+            series_index = pd.DatetimeIndex(macro_regime_series.index)
+            if not series_index.is_monotonic_increasing:
+                raise ValueError("macro_regime_series index must be monotonic increasing")
+            macro_regime_series = macro_regime_series.copy()
+            macro_regime_series.index = series_index
+        self.macro_regime_series = macro_regime_series
+        self.macro_regime_mode = macro_regime_mode
+        self.last_macro_bear_bars: int = 0
+        self.last_macro_bear_entry_candidates: int = 0
 
         self.initial_capital = float(
             initial_capital
@@ -192,6 +218,14 @@ class Backtester:
         df["enter_signal"] = df["score"] >= self.buy_threshold
         df["exit_signal"] = df["score"] <= self.sell_threshold
 
+        # Deney D: macro regime entry gate. Applied as the LAST entry-side
+        # modification, right before the existing shift(1) below, so the
+        # gated candidate set is exactly the would-be entries for the next
+        # bar. observe counts candidates without changing anything; enforce
+        # clears them. score/exit/stop/target columns are never touched.
+        if self.macro_regime_mode in {"observe", "enforce"}:
+            df = self._apply_macro_entry_gate(df)
+
         score_series = cast(pd.Series, df["score"])
         stop_series = cast(pd.Series, df["calculated_stop"])
         target_series = cast(pd.Series, df["target_price"])
@@ -221,6 +255,40 @@ class Backtester:
             cast(pd.Series, df["high"]) >= cast(pd.Series, df["target_price"])
         )
 
+        return df
+
+    def _apply_macro_entry_gate(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Count (observe) or remove (enforce) new long entries on BEAR days.
+
+        ``df`` still holds *raw* (pre-shift) per-bar signals: an
+        ``enter_signal`` at bar ``t`` is decided at the close of ``t`` and
+        executed at bar ``t+1``. The macro regime at date ``t`` is therefore
+        the correct gate value. The regime series is aligned with
+        ``reindex(method="ffill")`` (no bfill — never look ahead); dates
+        before the series start, or NaN values, are treated as
+        ``MarketRegime.UNKNOWN``: they never block and are not counted as
+        BEAR bars. ``score``/``exit_signal``/stop/target columns are not
+        modified.
+        """
+        from bist_bot.strategy.regime import MarketRegime
+
+        series = self.macro_regime_series
+        assert series is not None  # constructor enforce this in gate modes
+
+        index = pd.DatetimeIndex(df.index)
+        if index.tz is not None:
+            index = index.tz_convert("UTC").tz_localize(None)
+        aligned = series.reindex(index, method="ffill")
+        is_bear = aligned.eq(MarketRegime.BEAR).fillna(False).to_numpy(dtype=bool)
+        self.last_macro_bear_bars = int(is_bear.sum())
+
+        enter = df["enter_signal"].to_numpy(dtype=bool)
+        candidates = is_bear & enter
+        self.last_macro_bear_entry_candidates = int(candidates.sum())
+
+        if self.macro_regime_mode == "enforce" and candidates.any():
+            df = df.copy()
+            df.loc[df.index[candidates], "enter_signal"] = False
         return df
 
     def _build_vectorized_signals(self, df: pd.DataFrame) -> VectorizedSignals:
@@ -330,6 +398,21 @@ class Backtester:
             logger.warning("insufficient_data", row_count=len(df) if df is not None else 0)
             return None
 
+        if self.macro_regime_mode != "off":
+            if self.signal_builder is not None:
+                raise ValueError(
+                    "macro_regime gate modes are only supported on the canonical "
+                    "daily score path (no custom signal_builder)"
+                )
+            idx = pd.DatetimeIndex(df.index)
+            if (idx != idx.normalize()).any():
+                raise ValueError(
+                    "macro_regime gate modes require daily bars; intraday index detected"
+                )
+            # Diagnostics are per-run; reset before any gate application.
+            self.last_macro_bear_bars = 0
+            self.last_macro_bear_entry_candidates = 0
+
         df = df.copy()
         if "rsi" not in df.columns or f"sma_{settings.SMA_SLOW}" not in df.columns:
             df = self.indicators.add_all(df)
@@ -410,6 +493,8 @@ class Backtester:
             fractional_kelly=self.fractional_kelly,
             max_position_cap_pct=self.max_position_cap_pct,
             strategy_params=self.strategy_params,
+            macro_regime_series=self.macro_regime_series,
+            macro_regime_mode=self.macro_regime_mode,
         )
         clone.signal_builder = self.signal_builder
         return clone
@@ -920,15 +1005,10 @@ class Backtester:
             entry_commission = entry_fee_tl
             entry_exchange = entry_exchange_fee_tl
         else:
-            # Entry fees: commission + exchange fee + spread only; no stamp/BSMV on buy.
+            # Entry cash fees: commission + exchange fee only. Spread and slippage
+            # are price impact (already inside the fill) and are reported separately.
             unit_cost = entry_price * (
-                1
-                + (
-                    self.cost_model.commission_bps
-                    + self.cost_model.exchange_fee_bps
-                    + self.cost_model.spread_bps
-                )
-                / 10_000
+                1 + (self.cost_model.commission_bps + self.cost_model.exchange_fee_bps) / 10_000
             )
             shares = int(capital_to_deploy / unit_cost) if unit_cost > 0 else 0
             entry_notional = shares * entry_price
@@ -936,7 +1016,7 @@ class Backtester:
             entry_exchange = entry_notional * (self.cost_model.exchange_fee_bps / 10_000)
             entry_stamp_tax_tl = 0.0
             entry_bsmv_tl = 0.0
-            entry_spread_tl = entry_notional * (self.cost_model.spread_bps / 10_000)
+            entry_spread_tl = shares * reference_price * (self.cost_model.spread_bps / 10_000)
         if shares <= 0:
             return None
 
@@ -949,9 +1029,12 @@ class Backtester:
                 + entry_bsmv_tl
                 + entry_exchange
                 + entry_stamp_tax_tl
-                + entry_spread_tl
             )
-        entry_slippage_tl = shares * max(entry_price - reference_price, 0.0)
+        if self.cost_model is None:
+            entry_slippage_tl = shares * max(entry_price - reference_price, 0.0)
+        else:
+            spread_per_share = reference_price * (self.cost_model.spread_bps / 10_000)
+            entry_slippage_tl = shares * max(entry_price - reference_price - spread_per_share, 0.0)
         return {
             "entry_date": entry_date,
             "entry_price": entry_price,
@@ -1046,21 +1129,22 @@ class Backtester:
             exit_bsmv_tl = fee_components["bsmv"]
             exit_exchange_fee_tl = fee_components["exchange_fee"]
             exit_stamp_tax_tl = fee_components["stamp_tax"]
-            exit_spread_tl = fee_components["spread"]
+            exit_spread_tl = (
+                position["shares"] * reference_price * (self.cost_model.spread_bps / 10_000)
+            )
 
-        revenue = (
-            notional
-            - exit_fee_tl
-            - exit_bsmv_tl
-            - exit_exchange_fee_tl
-            - exit_stamp_tax_tl
-            - exit_spread_tl
-        )
+        revenue = notional - exit_fee_tl - exit_bsmv_tl - exit_exchange_fee_tl - exit_stamp_tax_tl
         profit_tl = revenue - position["cost"]
         profit_pct = (profit_tl / position["cost"]) * 100 if position["cost"] else 0.0
         holding_days = max((exit_date - position["entry_date"]).days, 0)
         gross_profit_tl = position["shares"] * (reference_price - position["reference_entry_price"])
-        exit_slippage_tl = position["shares"] * max(reference_price - fill_price, 0.0)
+        if self.cost_model is None:
+            exit_slippage_tl = position["shares"] * max(reference_price - fill_price, 0.0)
+        else:
+            spread_per_share = reference_price * (self.cost_model.spread_bps / 10_000)
+            exit_slippage_tl = position["shares"] * max(
+                reference_price - fill_price - spread_per_share, 0.0
+            )
         total_commission_tl = position["entry_fee_tl"] + exit_fee_tl
         total_bsmv_tl = position["entry_bsmv_tl"] + exit_bsmv_tl
         total_exchange_fee_tl = position["entry_exchange_fee_tl"] + exit_exchange_fee_tl

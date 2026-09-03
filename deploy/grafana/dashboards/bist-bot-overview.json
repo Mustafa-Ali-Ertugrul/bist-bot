@@ -1,0 +1,81 @@
+{
+  "title": "BIST Bot Overview",
+  "uid": "bist-bot-overview",
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Son başarılı tarama yaşı (sn)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        { "expr": "time() - bist_last_scan_success_timestamp{job=\"bist-bot-worker\"}", "legendFormat": "scan age" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 900 },
+              { "color": "red", "value": 1800 }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "title": "Tarama / hata oranı",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        { "expr": "rate(bist_scan_total{job=\"bist-bot-worker\"}[15m]) * 60", "legendFormat": "scan/min" },
+        { "expr": "rate(bist_scan_fail_total{job=\"bist-bot-worker\"}[15m]) * 60", "legendFormat": "fail/min" }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Bayat veri oranı",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        { "expr": "bist_stale_symbol_ratio{job=\"bist-bot-worker\"}", "legendFormat": "stale ratio" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.2 },
+              { "color": "red", "value": 0.4 }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "title": "Alarm kanalı / EOD hataları",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        { "expr": "increase(bist_alert_send_fail_total{job=\"bist-bot-worker\"}[30m])", "legendFormat": "alert fail (30m)" },
+        { "expr": "increase(bist_eod_fail_total{job=\"bist-bot-worker\"}[1h])", "legendFormat": "EOD fail (1h)" },
+        { "expr": "increase(bist_scan_retry_exhausted_total{job=\"bist-bot-worker\"}[1h])", "legendFormat": "retry exhausted (1h)" }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Hedef durumu (up)",
+      "type": "stat",
+      "gridPos": { "h": 5, "w": 24, "x": 0, "y": 16 },
+      "targets": [{ "expr": "up", "legendFormat": "{{job}}" }]
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 """Market data fetching helpers for BIST symbols."""
 
 # Standard library imports
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
@@ -53,24 +54,27 @@ class QuoteResolutionMeta:
 
 
 class RateLimiter:
-    """Basit rate limiter.
+    """Thread-safe rate limiter with monotonic/wall-clock time reservation.
 
-    Her domain icin son istek zamanini izler ve minimum bekleme suresi
-    uygulanarak ardisik isteklerin cok sik gonderilmesini engeller.
+    Prevents concurrent threads from bursting requests to the same domain.
+    The reservation lock is released immediately so threads sleep outside the lock.
     """
 
     def __init__(self):
         self.last_request: dict[str, float] = {}
+        self._lock = threading.Lock()
 
     def wait_if_needed(self, domain: str) -> None:
-        current_time = time.time()
         min_interval = float(getattr(settings, "RATE_LIMIT_SECONDS", 2.0))
-        last_request = self.last_request.get(domain)
-        if last_request is not None:
-            elapsed = current_time - last_request
-            if elapsed < min_interval:
-                time.sleep(min_interval - elapsed)
-        self.last_request[domain] = time.time()
+        # Use time.time() to remain patchable and compatible with test fixtures.
+        with self._lock:
+            now = time.time()
+            last = self.last_request.get(domain, 0.0)
+            slot = max(now, last + min_interval)
+            self.last_request[domain] = slot
+        delay = slot - time.time()
+        if delay > 0:
+            time.sleep(delay)
 
 
 _rate_limiter = RateLimiter()

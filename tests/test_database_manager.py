@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import os
 import sys
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from unittest.mock import MagicMock, patch
+from zoneinfo import ZoneInfo
 
 import pytest
+from sqlalchemy import text
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:
@@ -49,7 +51,10 @@ def test_signal_database_saves_and_reads_signal(tmp_path):
     assert latest["target_price"] == 135.0
 
 
-def test_database_manager_uses_database_url_for_non_sqlite_backends():
+def test_database_manager_uses_database_url_for_non_sqlite_backends(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr("bist_bot.db.connection._postgres_driver_available", lambda: True)
     mock_engine = MagicMock()
     mock_engine.begin.return_value.__enter__.return_value = MagicMock()
     mock_engine.begin.return_value.__exit__.return_value = False
@@ -101,3 +106,63 @@ def test_validate_table_name_valid(name, expected):
 def test_validate_table_name_invalid(name):
     with pytest.raises(ValueError):
         _validate_table_name(name)
+
+
+def test_signals_day_query_survives_database_reinit(tmp_path):
+    """Restart senaryosu: ayni SQLite dosyasi uzerinde ikinci DatabaseManager
+    init'i sonrasi gun sorgusu calismaya devam etmeli.
+
+    Eski migration ORM'in yazdigi space-separator degerleri 'T'ye cevirdigi
+    icin ikinci init sonrasi gun araligi karsilastirmalari sessizce satir
+    dusuruyordu; migration idempotent olmali ve ORM formatini bozmamali.
+    """
+    db_path = str(tmp_path / "restart.db")
+    repo = SignalsRepository(manager=DatabaseManager(sqlite_path=db_path))
+    repo.save_signal(
+        Signal(
+            ticker="THYAO.IS",
+            signal_type=SignalType.BUY,
+            score=30.0,
+            price=100.0,
+            timestamp=datetime(2026, 8, 20, 9, 0, tzinfo=UTC),  # 12:00 TR
+        )
+    )
+
+    # Surec restart'i simule et: ayni dosyada migration yeniden calisir.
+    repo2 = SignalsRepository(manager=DatabaseManager(sqlite_path=db_path))
+
+    rows = repo2.get_signals_for_day(date(2026, 8, 20), tz=ZoneInfo("Europe/Istanbul"))
+    assert [row["ticker"] for row in rows] == ["THYAO.IS"]
+    assert repo2.get_latest_signal("THYAO.IS") is not None
+
+
+def test_legacy_t_separator_timestamps_repaired_by_migration(tmp_path):
+    """Legacy 'T' separatorlu satirlar re-init'te SQLAlchemy'nin space
+    formatina normalize edilmeli ve gun sorgularinda bulunabilmeli."""
+    db_path = str(tmp_path / "legacy.db")
+    manager = DatabaseManager(sqlite_path=db_path)
+    repo = SignalsRepository(manager=manager)
+    repo.save_signal(
+        Signal(
+            ticker="GARAN.IS",
+            signal_type=SignalType.WEAK_BUY,
+            score=18.0,
+            price=50.0,
+            timestamp=datetime(2026, 8, 12, 10, 15, tzinfo=UTC),  # 13:15 TR
+        )
+    )
+
+    # Legacy veriyi simule et: ORM'in yazdigi space formati raw SQL ile 'T'ye cevir.
+    with manager.engine.begin() as conn:
+        conn.execute(
+            text(
+                "UPDATE signals SET timestamp = "
+                "substr(timestamp, 1, 10) || 'T' || substr(timestamp, 12)"
+            )
+        )
+
+    # Re-init: _normalize_timestamp_columns 'T' -> space donusumu yapmali.
+    repo2 = SignalsRepository(manager=DatabaseManager(sqlite_path=db_path))
+
+    rows = repo2.get_signals_for_day(date(2026, 8, 12), tz=ZoneInfo("Europe/Istanbul"))
+    assert [row["ticker"] for row in rows] == ["GARAN.IS"]

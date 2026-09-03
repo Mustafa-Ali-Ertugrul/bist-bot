@@ -19,9 +19,9 @@ def test_min_stop_widens_shallow_stop():
     lv = _levels(price, stop_percent=98.9)  # 1.1% stop
     lv.target_percent = 108.0
     result = determine_final_levels(price, lv)
-    # MIN_STOP 1.5% → 98.5, should be <=98.9
+    # MIN_STOP_LOSS_PCT=1.8 → floor at 98.2, should be <= 98.9 (widened)
     assert result.final_stop <= 98.9
-    assert result.final_stop == 98.5 or result.final_stop <= 98.6  # tick rounded
+    assert abs(result.final_stop - 98.2) < 0.06  # tick rounding tolerance
 
 
 def test_high_vol_stop_unchanged():

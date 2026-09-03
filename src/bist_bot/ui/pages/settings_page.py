@@ -131,8 +131,8 @@ def render_settings_page() -> None:
                 "adx_threshold": st.session_state.ind_adx_threshold,
             }
             user_settings["telegram"] = {
-                "bot_token": "",
-                "chat_id": "",
+                "bot_token": "",  # nosec B105: never persist secrets.
+                "chat_id": "",  # nosec B105: never persist secrets.
                 "notify_min_score": st.session_state.notify_min_score,
                 "enabled": st.session_state.notify_telegram,
             }

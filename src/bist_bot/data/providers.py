@@ -18,6 +18,10 @@ from bist_bot.data.scraper import scrape_bist_quote
 
 logger = get_logger(__name__, component="providers")
 
+# Yahoo blocks the default python-requests User-Agent (429/HTML); the v8 chart
+# API only answers reliably with a browser UA.
+_YAHOO_CHART_HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+
 
 class RateLimiterProtocol(Protocol):
     def wait_if_needed(self, domain: str) -> None: ...
@@ -156,6 +160,7 @@ class YFinanceProvider:
         response = requests.get(
             f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}",
             params={"range": period, "interval": interval},
+            headers=_YAHOO_CHART_HEADERS,
             timeout=6,
         )
         response.raise_for_status()

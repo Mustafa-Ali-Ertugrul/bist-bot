@@ -89,24 +89,24 @@ class DummyColumn:
     def __enter__(self) -> DummyColumn:
         return self
 
-    def __exit__(self, exc_type, exc, tb) -> bool:
-        return False
+    def __exit__(self, exc_type, exc, tb) -> None:
+        return None
 
 
 class DummyTab:
     def __enter__(self) -> DummyTab:
         return self
 
-    def __exit__(self, exc_type, exc, tb) -> bool:
-        return False
+    def __exit__(self, exc_type, exc, tb) -> None:
+        return None
 
 
 class DummyContainer:
     def __enter__(self) -> DummyContainer:
         return self
 
-    def __exit__(self, exc_type, exc, tb) -> bool:
-        return False
+    def __exit__(self, exc_type, exc, tb) -> None:
+        return None
 
 
 def _patch_streamlit_layout(mock_st: MagicMock) -> None:
