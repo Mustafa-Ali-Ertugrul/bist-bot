@@ -1,6 +1,8 @@
-import pytest
-from bist_bot.data.providers import validate_ticker_symbol, YFinanceProvider
 from unittest.mock import MagicMock
+
+import pytest
+
+from bist_bot.data.providers import YFinanceProvider, validate_ticker_symbol
 
 
 def test_validate_ticker_symbol_valid():

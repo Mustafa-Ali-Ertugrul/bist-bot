@@ -1,5 +1,4 @@
-import json
-from bist_bot.app_logging import redact_sensitive_data, _serialize_event
+from bist_bot.app_logging import _serialize_event, redact_sensitive_data
 
 
 def test_redact_sensitive_data():
