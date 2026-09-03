@@ -481,13 +481,13 @@ def create_dashboard_app(
         )
 
     @app.route("/ready")
+    def legacy_readiness_check():
+        """Legacy lightweight readiness probe (non-blocking)."""
+        return jsonify({"status": "ready", "timestamp": datetime.now(TR).isoformat()}), 200
+
     @app.route("/readyz")
     def readiness_check():
-        """Readiness probe for traffic admission.
-
-        Performs deep dependency checks: Database connectivity, Broker configuration,
-        and Circuit Breaker state.
-        """
+        """Readiness probe for traffic admission with deep dependency checks."""
         circuit = app.config.get("circuit_breaker")
         db = get_db()
         db_ok = False
