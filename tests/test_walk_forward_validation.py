@@ -10,7 +10,6 @@ flag assertions below consciously.
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 
 import pandas as pd
@@ -26,7 +25,7 @@ from bist_bot.validation.walk_forward import (
 def build_synthetic_ohlcv(days: int = 500, start: str = "2023-01-01") -> pd.DataFrame:
     """Monotonic rising series with enough history for multi-window WF."""
     dates = pd.date_range(start=start, periods=days, freq="D")
-    rows: list[dict[str, float | datetime]] = []
+    rows: list[dict[str, object]] = []
     for idx, date in enumerate(dates):
         base = 100.0 + idx * 0.15
         rows.append(

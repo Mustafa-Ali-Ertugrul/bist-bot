@@ -16,6 +16,7 @@ from bist_bot.strategy.regime import (
     check_momentum_confirmation,
     detect_regime,
 )
+from bist_bot.strategy.scoring import combine_component_scores
 from bist_bot.strategy.signal_models import Signal, SignalType
 
 logger = get_logger(__name__, component="strategy")
@@ -222,7 +223,9 @@ def calculate_score_and_reasons(
     s4, r4 = structure_scorer(last)
     reasons.extend(r1 + r2 + r3 + r4)
 
-    raw_score = s1 + s2 + s3 + s4
+    raw_score, _raw_components = combine_component_scores(params, s1, s2, s3, s4)
+    if getattr(params, "normalized_component_scoring", False):
+        reasons.append("Araştırma profili: bileşen skorları normalize edildi")
     trend_dir = component_direction(s2)
     momentum_dir = component_direction(s1)
     raw_dir = component_direction(raw_score)
@@ -242,7 +245,7 @@ def calculate_score_and_reasons(
             f"(trend {trend_label}, momentum x{counter_trend_multiplier:g})"
         )
 
-    score = s1 + s2 + s3 + s4
+    score, _post_components = combine_component_scores(params, s1, s2, s3, s4)
     score = _apply_chase_cap(
         params,
         last,
@@ -346,6 +349,31 @@ def calculate_score_and_reasons(
                 f"Bileşen uyumu düşük ({agreement_ratio:.2f}) → skor {cap:g} ile sınırlandı"
             )
         score = capped
+
+    # Deney F — pv confirmation gate (opt-in, default off = mevcut davranış).
+    # Son giriş filtresi: long aday (skor buy_threshold üstünde) fakat
+    # fiyat-hacim boğa teyidi yoksa reddet. P0/P1 kanıtı: pv_bull=0 alt
+    # kümesi mean -%1.51 (n=153), pv_bull=1 mean +%1.03 (n=355).
+    if params.pv_confirmation_required and score >= params.buy_threshold:
+        pv_direction = last.get("price_volume_direction", "NONE")
+        if pv_direction != "BULLISH_CONFIRMATION":
+            logger.debug(
+                "strategy_pv_confirmation_filtered",
+                ticker=ticker,
+                score=round(float(score), 2),
+                pv_direction=pv_direction,
+            )
+            if reject_logger is not None:
+                reject_logger(
+                    stage="scoring",
+                    reason_code="score_filtered_pv_confirmation",
+                    score=round(float(score), 2),
+                    reason_detail=(
+                        "long candidate without bullish price-volume confirmation "
+                        f"(pv_direction={pv_direction})"
+                    ),
+                )
+            return None
 
     score = max(-100, min(100, score))
     if score == 0:

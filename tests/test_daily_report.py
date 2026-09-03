@@ -5,7 +5,9 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
+from bist_bot.config.settings import settings
 from bist_bot.db.database import DatabaseManager
+from bist_bot.db.repositories.portfolio_repository import PortfolioRepository
 from bist_bot.db.repositories.signals_repository import SignalsRepository
 from bist_bot.reports.daily_report import generate_daily_report
 from bist_bot.strategy.params import StrategyParams
@@ -279,3 +281,163 @@ def test_daily_report_rollup_dynamic_radar_and_note(repo, tmp_path, monkeypatch)
     md = generate_daily_report(day=target_day, repo=repo, params=params, save_to_disk=False)
     assert "+10.0 ile +29.9" in md
     assert "Kategori bazl" in md
+
+
+def test_daily_report_gate_demoted_radar_split(repo, tmp_path, monkeypatch):
+    """RADAR rows with score >= threshold are gate-demotion: labelled and split.
+
+    Gate-demotion (score preserved, type demoted by confluence/macro gate) is a
+    distinct population from organic RADAR (0 < score < threshold) and must not
+    pollute Kademe A or the 'AL >= threshold' report contract.
+    """
+    monkeypatch.chdir(tmp_path)
+    target_day = date(2026, 8, 24)
+    ts = datetime(2026, 8, 24, 7, 45, tzinfo=UTC)  # 10:45 TR
+
+    # AL first, then gate-demoted RADAR (score preserved, HTF-neutral reason)
+    repo.save_signal(
+        Signal(
+            ticker="GSRAY.IS",
+            signal_type=SignalType.BUY,
+            score=34.0,
+            price=100.0,
+            reasons=["MTF confluence: günlük trend LONG, 15dk tetik destekliyor"],
+            timestamp=ts,
+        )
+    )
+    repo.save_signal(
+        Signal(
+            ticker="GSRAY.IS",
+            signal_type=SignalType.RADAR,
+            score=28.6,
+            price=101.0,
+            reasons=["MTF confluence zayıf: üst zaman dilimi nötr (RADAR adayı)"],
+            timestamp=ts + timedelta(hours=2),  # 12:45 TR
+        )
+    )
+    # Macro-bear demoted RADAR on another ticker
+    repo.save_signal(
+        Signal(
+            ticker="TUPRS.IS",
+            signal_type=SignalType.RADAR,
+            score=31.0,
+            price=150.0,
+            reasons=["Makro rejim BEAR → alım sinyali RADAR'a düşürüldü"],
+            timestamp=ts,
+        )
+    )
+    # Organic RADAR (below threshold) must stay in tiers, not the demoted list
+    repo.save_signal(
+        Signal(
+            ticker="PETKM.IS",
+            signal_type=SignalType.WEAK_BUY,
+            score=22.0,
+            price=20.0,
+            timestamp=ts,
+        )
+    )
+    repo.save_scan_log(total=100, generated=4, buys=1, sells=0, actionable=1)
+
+    params = StrategyParams.conservative()  # buy_threshold=25.0
+    md = generate_daily_report(day=target_day, repo=repo, params=params, save_to_disk=False)
+
+    # Section 1: separate Gate-Demoted cohort row
+    assert "**RADAR (Gate-Demoted)** | 2 |" in md
+    assert "+28.6 ile +31.0" in md
+    # No double-count: organic row shows only organic count (1), not organic+demoted (3).
+    # Rows AL(1)+Organik(1)+Demoted(2)+SAT(0)+HOLD(0) must partition the 4 signals.
+    assert "**RADAR (Organik İzleme)** | 1 |" in md
+
+    # Section 4: demoted subsection lists both with gate tags, not organic PETKM
+    assert "Gate-Demoted (skor ≥ 25.0 ama kapı RADAR'a düşürdü) — Toplam: 2" in md
+    demoted_section = md.split("### Gate-Demoted")[1].split("### Kademe A")[0]
+    assert "TUPRS** (+31.0) [Macro Bear]" in demoted_section
+    assert "GSRAY** (+28.6) [HTF Neutral]" in demoted_section
+    assert "PETKM" not in demoted_section
+
+    # Organic RADAR stays in Kademe A
+    tier_a_section = md.split("### Kademe A")[1].split("### Kademe B")[0]
+    assert "PETKM" in tier_a_section
+    assert "GSRAY" not in tier_a_section
+
+    # Section 6: transition shows RADARe marker with the gate reason + footnote
+    assert "AL (10:45, +34.0) -> RADARe [HTF Neutral] (12:45, +28.6)" in md
+    assert "`RADARe` = gate-demotion" in md
+
+
+def test_daily_report_no_performance_section_without_portfolio_repo(repo, tmp_path, monkeypatch):
+    """Section 8 is opt-in: absent unless a portfolio_repo is supplied."""
+    monkeypatch.chdir(tmp_path)
+    repo.save_scan_log(total=100, generated=0, buys=0, sells=0, actionable=0)
+    md = generate_daily_report(
+        day=date(2026, 8, 25),
+        repo=repo,
+        params=StrategyParams.conservative(),
+        save_to_disk=False,
+    )
+    assert "## 8." not in md
+    assert "Performans Özeti" not in md
+
+
+def test_daily_report_performance_section_with_portfolio_repo(
+    repo, memory_db, tmp_path, monkeypatch
+):
+    """Closed paper trades render section 8 with the n<30 disclaimer."""
+    monkeypatch.chdir(tmp_path)
+    port_repo = PortfolioRepository(memory_db)
+    port_repo.add_paper_trade(ticker="THYAO.IS", signal_type="BUY", signal_price=100.0, score=30)
+    port_repo.close_paper_trade(
+        ticker="THYAO.IS", exit_price=105.0, close_reason="TARGET", actual_profit_pct=5.0
+    )
+    port_repo.add_paper_trade(ticker="GARAN.IS", signal_type="BUY", signal_price=50.0, score=28)
+    port_repo.close_paper_trade(
+        ticker="GARAN.IS", exit_price=49.1, close_reason="STOP", actual_profit_pct=-1.8
+    )
+    repo.save_scan_log(total=100, generated=0, buys=0, sells=0, actionable=0)
+
+    md = generate_daily_report(
+        day=date(2026, 8, 25),
+        repo=repo,
+        params=StrategyParams.conservative(),
+        save_to_disk=False,
+        portfolio_repo=port_repo,
+    )
+    assert "## 8. Performans Özeti (Paper Trading)" in md
+    assert "- Actionable kapalı işlem: 2" in md
+    assert "ÖRNEKLEM YETERSİZ" in md
+    # Section 8 must precede the report footer.
+    assert md.index("## 8.") < md.index("Rapor bist_bot kanonik")
+
+
+def test_daily_report_radar_top_n_budget(repo, tmp_path, monkeypatch):
+    """RADAR listing respects RADAR_REPORT_TOP_N: top-N by score + truncation note."""
+    monkeypatch.chdir(tmp_path)
+    target_day = date(2026, 8, 26)
+    ts = datetime(2026, 8, 26, 9, 0, tzinfo=UTC)
+    for ticker, score in [
+        ("AAA.IS", 24.0),
+        ("BBB.IS", 23.0),
+        ("CCC.IS", 22.0),
+        ("DDD.IS", 21.0),
+        ("EEE.IS", 20.0),
+    ]:
+        repo.save_signal(
+            Signal(
+                ticker=ticker,
+                signal_type=SignalType.WEAK_BUY,
+                score=score,
+                price=10.0,
+                timestamp=ts,
+            )
+        )
+    repo.save_scan_log(total=100, generated=5, buys=0, sells=0, actionable=0)
+
+    params = StrategyParams.conservative()
+    with settings.override(RADAR_REPORT_TOP_N=2):
+        md = generate_daily_report(day=target_day, repo=repo, params=params, save_to_disk=False)
+
+    tier_a_section = md.split("### Kademe A")[1].split("### Kademe B")[0]
+    assert "**AAA** (+24.0)" in tier_a_section
+    assert "**BBB** (+23.0)" in tier_a_section
+    assert "CCC" not in tier_a_section
+    assert "(+3 Kademe A sinyali listelenmedi)" in tier_a_section

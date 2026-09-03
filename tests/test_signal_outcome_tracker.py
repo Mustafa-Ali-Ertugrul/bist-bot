@@ -97,8 +97,8 @@ def test_eod_close(tmp_path):
     tracker, db = _tracker(tmp_path)
     sig = _al_signal()
     tracker.process_scan([sig], _market_data("THYAO.IS", 100.0), now=ENTRY_TIME)
-    # 20 Aug 2026 TR 17:31 → after close (17:30) → EOD
-    eod = datetime(2026, 8, 20, 14, 31, tzinfo=UTC)  # 17:31 TR
+    # 20 Aug 2026 TR 18:01 → after continuous close (18:00) → EOD (B1)
+    eod = datetime(2026, 8, 20, 15, 1, tzinfo=UTC)  # 18:01 TR
     closed = tracker.process_scan([], _market_data("THYAO.IS", 101.0), now=eod)
     assert closed[0]["outcome"] == "EOD_CLOSE"
 

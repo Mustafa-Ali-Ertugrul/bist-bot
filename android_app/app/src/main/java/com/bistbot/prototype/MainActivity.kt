@@ -135,7 +135,12 @@ class MainActivity : AppCompatActivity() {
             (function() {
                 const tl = '&#8378;';
 
-                // --- %100 GERCEK VE RESMI BIST 100 KAPANIS VERILERI (22.04.2026) ---
+                // --- DEMO FALLBACK (22.04.2026 snapshot): shown only when the
+                // live API is unreachable. NOTE: fetchLiveData() calls
+                // GET /api/v1/signals/active which the Flask API does not
+                // expose (all /api/* signal routes require JWT), so this
+                // static list is currently ALWAYS shown. Wire app auth +
+                // a real endpoint before any non-prototype use. ---
                 if (!window.masterStockList) {
                     window.masterStockList = [
                         {ticker:'TCELL', name:'Turkcell', price:114.10, type:'BUY', conf:98},

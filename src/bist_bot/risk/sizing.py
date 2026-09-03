@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from bist_bot.app_logging import get_logger
 from bist_bot.risk.models import RiskLevels
+
+logger = get_logger(__name__, component="risk_sizing")
 
 
 def calculate_atr_pct(levels: RiskLevels, price: float, atr_stop_mult: float) -> float:
@@ -92,8 +95,12 @@ def apply_probability_sizing(
                 level=AlertLevel.CRITICAL,
                 error="daily_loss_cap",
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning(
+                "risk_alert_failed",
+                alert="daily_loss_cap",
+                error_type=type(exc).__name__,
+            )
         return levels
 
     if levels.liquidity_value and levels.liquidity_value < min_liquidity_value:
@@ -104,8 +111,12 @@ def apply_probability_sizing(
             from bist_bot.observability.logging import log_risk_reject
 
             log_risk_reject("liquidity", ticker="")
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning(
+                "risk_reject_telemetry_failed",
+                reason="liquidity",
+                error_type=type(exc).__name__,
+            )
         return levels
 
     if levels.signal_probability < min_signal_probability:
@@ -116,8 +127,12 @@ def apply_probability_sizing(
             from bist_bot.observability.logging import log_risk_reject
 
             log_risk_reject("low_probability", ticker="")
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning(
+                "risk_reject_telemetry_failed",
+                reason="low_probability",
+                error_type=type(exc).__name__,
+            )
         return levels
 
     risk_per_share = price - levels.final_stop

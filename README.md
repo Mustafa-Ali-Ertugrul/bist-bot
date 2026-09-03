@@ -111,6 +111,33 @@ python -m bist_bot.backtest_compare --tickers THYAO.IS ASELS.IS
 python scripts/benchmark_backtest.py       # Iterative vs vectorized benchmark
 ```
 
+### Lokal araclar ve Docker Postgres
+
+`.env` icindeki `DATABASE_URL`, Docker network icindeki `postgres` hostname'ini
+kullanir; bu adres sadece konteynerlarin icinden cozumlenir. Host uzerinde
+calisan lokal araclar (rapor uretimi, backfill scriptleri vb.) ayni
+Postgres'e `localhost:5432` uzerinden erisebilir. `.env` dosyasini
+degistirmeden, sadece o surec icin override edin:
+
+```powershell
+# PowerShell
+$env:DATABASE_URL = "postgresql+psycopg2://bist:bist@localhost:5432/bist_bot"
+python main.py --daily-report 2026-08-25
+```
+
+```bash
+# bash
+DATABASE_URL="postgresql+psycopg2://bist:bist@localhost:5432/bist_bot" \
+  python main.py --daily-report 2026-08-25
+```
+
+Alternatif olarak ayni komutu konteyner icinde calistirabilirsiniz
+(Docker network icinde `postgres` hostname'i gecerlidir):
+
+```bash
+docker exec bist-bot-worker python main.py --daily-report 2026-08-25
+```
+
 ## Docker Compose
 
 - `docker-compose.yml` servis bazli yapidadir:
@@ -346,6 +373,11 @@ Migration note:
 - `LOG_FORMAT=json` ayari ile loglar JSON olarak akar; varsayilan `console` modu lokal gelistirmede daha okunaklidir.
 - `LOG_LEVEL=INFO` veya `DEBUG` ile detay seviyesi ayarlanabilir.
 - Flask API `GET /metrics` endpoint'i uzerinden JWT auth ile Prometheus text format metrikler sunar.
+- Lokal gozlemlenebilirlik araclari (Grafana 3000, Prometheus 9090, Postgres 5432) varsayilan olarak yalnizca `127.0.0.1` uzerine bind edilir; uzaktan erisim icin SSH tunnel kullanin:
+
+```bash
+ssh -L 3000:127.0.0.1:3000 -L 9090:127.0.0.1:9090 kullanici@sunucu
+```
 - Metrik katmani thread-safe tutulur; `prometheus_client` mevcutsa resmi registry/exporter kullanilir, degilse uyumlu fallback registry devreye girer.
 
 ## Streamlit Cooldown

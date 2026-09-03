@@ -6,6 +6,7 @@ from collections.abc import Sequence
 
 from bist_bot.db.database import DatabaseManager
 from bist_bot.db.repositories.config_repository import ConfigRepository
+from bist_bot.db.repositories.ledger_repository import LedgerRepository
 from bist_bot.db.repositories.orders_repository import OrdersRepository
 from bist_bot.db.repositories.portfolio_repository import PortfolioRepository
 from bist_bot.db.repositories.signals_repository import SignalsRepository
@@ -19,6 +20,7 @@ class AppRepository:
         self.manager = manager or DatabaseManager()
         self.signals = SignalsRepository(self.manager)
         self.portfolio = PortfolioRepository(self.manager)
+        self.ledger = LedgerRepository(self.manager)
         self.config = ConfigRepository(self.manager)
         self.orders = OrdersRepository(self.manager)
 
@@ -40,6 +42,13 @@ class AppRepository:
 
     def signal_exists(self, ticker: str, signal_type: str | None = None) -> bool:
         return self.signals.signal_exists(ticker, signal_type=signal_type)
+
+    def get_signal_tickers_for_day(self, signal_types, day, tz=None):
+        if tz is None:
+            from zoneinfo import ZoneInfo
+
+            tz = ZoneInfo("Europe/Istanbul")
+        return self.signals.get_signal_tickers_for_day(signal_types, day, tz=tz)
 
     def get_latest_signal(self, ticker: str):
         return self.signals.get_latest_signal(ticker)
@@ -80,20 +89,14 @@ class AppRepository:
     def get_recent_scan_logs(self, limit: int = 20):
         return self.signals.get_recent_scan_logs(limit=limit)
 
-    def update_outcome(self, signal_id: int, outcome: str, outcome_price: float):
-        return self.signals.update_outcome(signal_id, outcome, outcome_price)
+    def update_outcome(self, signal_id: int, outcome: str, outcome_price: float, source=None):
+        return self.signals.update_outcome(signal_id, outcome, outcome_price, source=source)
 
     def get_performance_stats(self):
         return self.signals.get_performance_stats()
 
     def add_paper_trade(self, *args, **kwargs):
         return self.portfolio.add_paper_trade(*args, **kwargs)
-
-    def update_paper_close(self, *args, **kwargs):
-        return self.portfolio.update_paper_close(*args, **kwargs)
-
-    def update_all_paper_close(self, *args, **kwargs):
-        return self.portfolio.update_all_paper_close(*args, **kwargs)
 
     def get_open_paper_trades(self):
         return self.portfolio.get_open_paper_trades()
@@ -103,6 +106,21 @@ class AppRepository:
 
     def get_paper_performance(self):
         return self.portfolio.get_paper_performance()
+
+    def get_closed_paper_trades(self, since=None):
+        return self.portfolio.get_closed_trades(since=since)
+
+    def record_ledger_open(self, *args, **kwargs):
+        return self.ledger.record_open(*args, **kwargs)
+
+    def record_ledger_close(self, kind, **kwargs):
+        return self.ledger.close_entry(kind, **kwargs)
+
+    def get_ledger_open(self, kind=None):
+        return self.ledger.get_open(kind=kind)
+
+    def get_ledger_closed(self, kind=None, since=None):
+        return self.ledger.get_closed(kind=kind, since=since)
 
     def create_order(self, *args, **kwargs):
         return self.orders.create_order(*args, **kwargs)

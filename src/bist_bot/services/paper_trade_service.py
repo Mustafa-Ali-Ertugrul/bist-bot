@@ -24,15 +24,27 @@ def paper_direction_from_signal_type(signal_type: str) -> str:
 
 
 class PaperTradeService:
-    def __init__(self, fetcher, db, settings: Any | None = None, costs: Any | None = None) -> None:
+    def __init__(
+        self,
+        fetcher,
+        db,
+        settings: Any | None = None,
+        costs: Any | None = None,
+        alerter: Any | None = None,
+    ) -> None:
         self.fetcher = fetcher
         self.db = db
         self.settings = settings or default_settings
         self.costs = costs
+        # B3: ops alert callback (scanner, notifier.send_message ile baglar).
+        self._alerter = alerter
         # Faz 3 P2: in-memory trailing extremes (ticker -> max price for long,
         # min price for short). Restart-safe degradation: on restart the map is
         # empty and the original stop applies until prices re-ratchet it.
         self._trail_extremes: dict[str, float] = {}
+        # B3: per-ticker consecutive price-miss counters (delist/kirik veri).
+        self._price_skip_counts: dict[str, int] = {}
+        self._price_skip_warned: set[str] = set()
 
     @staticmethod
     def net_profit_pct(
@@ -75,59 +87,153 @@ class PaperTradeService:
         if not getattr(self.settings, "PAPER_MODE", False):
             return False
 
+        processed = 0
+        failed = 0
         for signal in signals:
-            # === Faz 3: cooldown kontrolü ===
-            if self._is_in_paper_cooldown(signal.ticker):
-                logger.info(
-                    "paper_trade_cooldown",
+            # B3: tek bozuk hisse taramanin kalanini durdurmasin — izole +
+            # sayaclanir (processed/failed ozeti logda).
+            try:
+                self._queue_single_signal(signal)
+                processed += 1
+            except Exception as exc:
+                failed += 1
+                logger.exception(
+                    "paper_trade_queue_signal_failed",
                     ticker=signal.ticker,
-                    reason="recently closed within cooldown window",
+                    error_type=type(exc).__name__,
+                    error=str(exc),
                 )
-                continue
-
-            regime_frame = self.fetcher.fetch_single(signal.ticker, period="3mo")
-            fetch_meta_getter = getattr(self.fetcher, "get_last_history_fetch_meta", None)
-            fetch_meta_raw = (
-                fetch_meta_getter(
-                    signal.ticker, "3mo", getattr(self.settings, "DATA_INTERVAL", "1d")
-                )
-                if callable(fetch_meta_getter)
-                else None
+        if processed or failed:
+            logger.info(
+                "paper_trade_queue_summary",
+                processed=processed,
+                failed=failed,
             )
-            fetch_meta = fetch_meta_raw if isinstance(fetch_meta_raw, dict) else {}
-            if regime_frame is None:
-                logger.warning(
-                    "paper_trade_regime_data_unavailable",
-                    ticker=signal.ticker,
-                    fetch_source=fetch_meta.get("source", "unknown"),
-                    fetch_status=fetch_meta.get("status", "unknown"),
-                    fetch_reason=fetch_meta.get("reason"),
-                )
-            regime_enum = detect_regime(regime_frame)
-            regime = regime_enum.value if regime_enum else "UNKNOWN"
-            if regime == "UNKNOWN":
-                logger.info(
-                    "paper_trade_regime_unknown",
-                    ticker=signal.ticker,
-                    fetch_source=fetch_meta.get("source", "unknown"),
-                    fetch_status=fetch_meta.get("status", "unknown"),
-                    fetch_reason=fetch_meta.get("reason"),
-                    has_frame=regime_frame is not None,
-                    candle_count=len(regime_frame) if regime_frame is not None else 0,
-                )
-            direction = "short" if signal.signal_type.is_sell else "long"
-            self.db.add_paper_trade(
+        return failed == 0
+
+    def _queue_single_signal(self, signal) -> None:
+        # === Faz 3: cooldown kontrolü ===
+        if self._is_in_paper_cooldown(signal.ticker):
+            logger.info(
+                "paper_trade_cooldown",
+                ticker=signal.ticker,
+                reason="recently closed within cooldown window",
+            )
+            return
+
+        regime_frame = self.fetcher.fetch_single(signal.ticker, period="3mo")
+        fetch_meta_getter = getattr(self.fetcher, "get_last_history_fetch_meta", None)
+        fetch_meta_raw = (
+            fetch_meta_getter(signal.ticker, "3mo", getattr(self.settings, "DATA_INTERVAL", "1d"))
+            if callable(fetch_meta_getter)
+            else None
+        )
+        fetch_meta = fetch_meta_raw if isinstance(fetch_meta_raw, dict) else {}
+        if regime_frame is None:
+            logger.warning(
+                "paper_trade_regime_data_unavailable",
+                ticker=signal.ticker,
+                fetch_source=fetch_meta.get("source", "unknown"),
+                fetch_status=fetch_meta.get("status", "unknown"),
+                fetch_reason=fetch_meta.get("reason"),
+            )
+        regime_enum = detect_regime(regime_frame)
+        regime = regime_enum.value if regime_enum else "UNKNOWN"
+        if regime == "UNKNOWN":
+            logger.info(
+                "paper_trade_regime_unknown",
+                ticker=signal.ticker,
+                fetch_source=fetch_meta.get("source", "unknown"),
+                fetch_status=fetch_meta.get("status", "unknown"),
+                fetch_reason=fetch_meta.get("reason"),
+                has_frame=regime_frame is not None,
+                candle_count=len(regime_frame) if regime_frame is not None else 0,
+            )
+        direction = "short" if signal.signal_type.is_sell else "long"
+        trade_id = self.db.add_paper_trade(
+            ticker=signal.ticker,
+            signal_type=signal.signal_type.value,
+            signal_price=signal.price,
+            signal_time=signal.timestamp,
+            stop_loss=signal.stop_loss,
+            target_price=signal.target_price,
+            score=int(signal.score),
+            regime=regime,
+            direction=direction,
+        )
+        self._record_ledger_open(trade_id, signal, regime, direction)
+
+    def _record_ledger_open(
+        self, paper_trade_id: Any, signal: Signal, regime: str, direction: str
+    ) -> None:
+        """Sprint 2: dual-write the paper open into the unified trade ledger.
+
+        Failure is isolated — ledger problems must never break paper trading
+        (same B3 isolation contract as the rest of the queue path).
+        """
+        try:
+            recorder = getattr(self.db, "record_ledger_open", None)
+            if not callable(recorder):
+                return
+            recorder(
+                kind="PAPER",
                 ticker=signal.ticker,
                 signal_type=signal.signal_type.value,
-                signal_price=signal.price,
-                signal_time=signal.timestamp,
+                direction=direction,
+                score=float(signal.score),
+                regime=regime,
+                entry_price=float(signal.price),
+                entry_time=signal.timestamp,
                 stop_loss=signal.stop_loss,
                 target_price=signal.target_price,
-                score=int(signal.score),
-                regime=regime,
-                direction=direction,
+                paper_trade_id=paper_trade_id if isinstance(paper_trade_id, int) else None,
+                source="live",
             )
-        return True
+        except Exception as exc:
+            logger.warning(
+                "ledger_open_write_failed",
+                ticker=signal.ticker,
+                error_type=type(exc).__name__,
+                error=str(exc),
+            )
+
+    def _record_ledger_close(
+        self, trade: Any, exit_price: float, reason: str, direction: str, net_pct: float
+    ) -> None:
+        """Sprint 2: mirror a paper close into the unified trade ledger.
+
+        Records both gross (fee-free) and net (fee-adjusted) PnL so the
+        historical net/gross ambiguity of ``actual_profit_pct`` never recurs.
+        """
+        try:
+            closer = getattr(self.db, "record_ledger_close", None)
+            if not callable(closer):
+                return
+            entry = float(trade.signal_price)
+            if entry > 0:
+                if direction == "short":
+                    gross_pct = (entry - exit_price) / entry * 100.0
+                else:
+                    gross_pct = (exit_price - entry) / entry * 100.0
+                gross_pct = round(gross_pct, 6)
+            else:
+                gross_pct = None
+            closer(
+                "PAPER",
+                paper_trade_id=getattr(trade, "id", None),
+                ticker=trade.ticker,
+                exit_price=exit_price,
+                close_reason=reason,
+                gross_pnl_pct=gross_pct,
+                net_pnl_pct=net_pct,
+            )
+        except Exception as exc:
+            logger.warning(
+                "ledger_close_write_failed",
+                ticker=trade.ticker,
+                error_type=type(exc).__name__,
+                error=str(exc),
+            )
 
     @staticmethod
     def _trade_direction(trade: Any) -> str:
@@ -206,23 +312,38 @@ class PaperTradeService:
         if missing:
             try:
                 batch = self.fetcher.fetch_all(period="1d", force=False) or {}
-            except Exception:
+            except Exception as exc:
+                logger.error(
+                    "paper_price_fetch_empty",
+                    error=str(exc),
+                    missing_tickers=missing,
+                )
                 batch = {}
             for ticker in missing:
                 df = batch.get(ticker)
                 if df is not None and len(df) > 0 and "close" in df.columns:
                     try:
                         prices[ticker] = float(df["close"].iloc[-1])
-                    except (TypeError, ValueError, KeyError, IndexError):
-                        pass
+                    except (TypeError, ValueError, KeyError, IndexError) as exc:
+                        logger.warning(
+                            "paper_price_parse_skipped",
+                            ticker=ticker,
+                            error_type=type(exc).__name__,
+                        )
 
-        if not prices:
-            return
-
+        # B3: "if not prices: return" erken cikisi kaldirildi — fiyat hic
+        # gelmediginde her acik pozisyon miss sayacina dusmeli (sessiz OPEN
+        # kalmasin). Dongu bos fiyat sozlugunde de guvenle calisir.
         for trade in open_trades:
             current = prices.get(trade.ticker)
             if current is None:
+                # B3: sessiz continue YOK — kirik veri sayaclanir, esik sonrasi
+                # bir kez uyarilir (spamsiz), fiyat geri gelince sifirlanir.
+                self._record_price_skip(trade.ticker)
                 continue
+
+            self._price_skip_counts.pop(trade.ticker, None)
+            self._price_skip_warned.discard(trade.ticker)
 
             direction = self._trade_direction(trade)
 
@@ -297,6 +418,31 @@ class PaperTradeService:
 
         logger.info("paper_trade_update_completed", ticker_count=len(prices))
 
+    def _record_price_skip(self, ticker: str) -> None:
+        """Count consecutive price misses; alert once past the threshold."""
+        from bist_bot.app_metrics import inc_counter
+
+        count = self._price_skip_counts.get(ticker, 0) + 1
+        self._price_skip_counts[ticker] = count
+        inc_counter("bist_paper_close_skip_total")
+        threshold = max(1, int(getattr(self.settings, "PAPER_CLOSE_SKIP_WARN_THRESHOLD", 5)))
+        if count >= threshold and ticker not in self._price_skip_warned:
+            self._price_skip_warned.add(ticker)
+            logger.error(
+                "paper_trade_price_missing",
+                ticker=ticker,
+                consecutive_misses=count,
+                hint="delist veya kirik veri — pozisyon kapanamiyor",
+            )
+            if callable(self._alerter):
+                try:
+                    self._alerter(
+                        f"⚠️ <b>{ticker}</b> için {count} taramadır fiyat gelmiyor "
+                        f"(delist/kırık veri?). Paper pozisyonu kapanamıyor — kontrol et!"
+                    )
+                except Exception:
+                    logger.warning("paper_trade_skip_alert_failed", ticker=ticker)
+
     def _is_eod(self, now: datetime) -> bool:
         """Session-end check — identical contract to SignalOutcomeTracker._is_eod.
 
@@ -314,14 +460,20 @@ class PaperTradeService:
             return False
 
     def _close_trade(self, trade: Any, current: float, reason: str, direction: str) -> None:
-        """Close a paper trade with direction-aware net PnL recorded."""
+        """Close a paper trade with direction-aware net PnL recorded.
+
+        B3: trade.id ile kapatilir — ayni ticker'da iki acik pozisyon varken
+        seviyeler/PnL kardes isleme karismaz.
+        """
         profit_pct = self.net_profit_pct(trade.signal_price, current, self.costs, direction)
         self.db.close_paper_trade(
             trade.ticker,
             current,
             reason,
             actual_profit_pct=profit_pct,
+            trade_id=getattr(trade, "id", None),
         )
+        self._record_ledger_close(trade, current, reason, direction, profit_pct)
         event = {
             "STOP_HIT": "paper_trade_stop_hit",
             "TARGET_HIT": "paper_trade_target_hit",

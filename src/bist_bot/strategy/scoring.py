@@ -6,6 +6,52 @@ import pandas as pd
 
 from bist_bot.config.settings import settings
 
+# ----------------------------------------------------------------------
+# Per-component theoretical maxima (single source of truth for clamps
+# and for the normalized research profile).
+# ----------------------------------------------------------------------
+MOMENTUM_SCORE_CAP: float = 45.0
+TREND_SCORE_CAP: float = 70.0
+VOLUME_SCORE_CAP: float = 26.0
+STRUCTURE_SCORE_CAP: float = 50.0
+
+
+def _oversold_trend_confirmed(params, last) -> bool:
+    """Return True when the current bar shows bullish trend confirmation.
+
+    Confirmation = close above SMA20 OR bullish directional movement
+    (``plus_di > minus_di``). ADX alone is deliberately NOT accepted: it
+    measures trend *strength* regardless of direction, so a strong
+    falling-knife decline would otherwise pass as "confirmed" (measured in
+    tmp diagnostics: ~50-70% of oversold rows had ADX >= 20 while falling).
+    Missing/NaN indicator values count as unconfirmed (conservative).
+    Used by the opt-in ``oversold_requires_trend_confirm`` experiment (P1-B).
+    """
+    _ = params  # kept for API consistency; threshold not needed for DI compare
+    close = last.get("close")
+    sma20 = last.get("sma_20")
+    if pd.notna(close) and pd.notna(sma20) and float(close) > float(sma20):
+        return True
+    plus_di = last.get("plus_di")
+    minus_di = last.get("minus_di")
+    if pd.notna(plus_di) and pd.notna(minus_di):
+        return float(plus_di) > float(minus_di)
+    return False
+
+
+def _oversold_gate(params, last, points: float, reason: str) -> tuple[float, str]:
+    """Scale oversold points when trend confirmation is required but absent.
+
+    The scale factor is ``params.oversold_unconfirmed_score_multiplier``
+    (default 0.5; measured no-op at 0.5, so the 0.0 variant is also tested).
+    """
+    if getattr(params, "oversold_requires_trend_confirm", False) and not _oversold_trend_confirmed(
+        params, last
+    ):
+        multiplier = float(getattr(params, "oversold_unconfirmed_score_multiplier", 0.5))
+        return points * multiplier, reason + " [trend onayı yok → puan kısıldı]"
+    return points, reason
+
 
 def score_momentum(params, last, _prev) -> tuple[float, list[str]]:
     score = 0.0
@@ -62,8 +108,11 @@ def score_momentum(params, last, _prev) -> tuple[float, list[str]]:
     cci = last.get("cci")
     if pd.notna(cci):
         if cci < -100:
-            score += params.score_cci_extreme
-            reasons.append(f"CCI aşırı satım ({cci:.0f})")
+            points, reason = _oversold_gate(
+                params, last, float(params.score_cci_extreme), f"CCI aşırı satım ({cci:.0f})"
+            )
+            score += points
+            reasons.append(reason)
         elif cci < -50:
             score += params.score_cci_normal
             reasons.append(f"CCI düşük ({cci:.0f})")
@@ -75,8 +124,7 @@ def score_momentum(params, last, _prev) -> tuple[float, list[str]]:
             reasons.append(f"CCI yüksek ({cci:.0f})")
 
     # Theorik max: rsi_extreme(18) + stoch_cross(8) + stoch_extreme(6) + stoch_trend(3) + cci_extreme(8) = 43
-    MAX_MOMENTUM_SCORE = 45
-    score = max(-MAX_MOMENTUM_SCORE, min(MAX_MOMENTUM_SCORE, score))
+    score = max(-MOMENTUM_SCORE_CAP, min(MOMENTUM_SCORE_CAP, score))
     return score, reasons
 
 
@@ -220,8 +268,7 @@ def score_trend(params, last, prev, df=None) -> tuple[float, list[str]]:
         reasons.append("+DI/-DI Bearish Cross")
 
     # Theorik max: ema_cross(10) + ema_initial_cross(10) + sma_golden(12) + macd_cross(12) + macd_hist_strong(5) + adx_strong(8) + di_cross(6) = 63
-    MAX_TREND_SCORE = 70
-    score = max(-MAX_TREND_SCORE, min(MAX_TREND_SCORE, score))
+    score = max(-TREND_SCORE_CAP, min(TREND_SCORE_CAP, score))
     return score, reasons
 
 
@@ -283,8 +330,7 @@ def score_volume(params, last, prev) -> tuple[float, list[str]]:
         reasons.append("OBV düşüş trendi → Çıkış var")
 
     # Theorik max: vol_confirm(8) + vol_spike(8) + pv_confirm(2) + vol_trend(2) + obv_trend(4) = 24
-    MAX_VOLUME_SCORE = 26
-    score = max(-MAX_VOLUME_SCORE, min(MAX_VOLUME_SCORE, score))
+    score = max(-VOLUME_SCORE_CAP, min(VOLUME_SCORE_CAP, score))
     return score, reasons
 
 
@@ -297,8 +343,14 @@ def score_structure(params, last) -> tuple[float, list[str]]:
     bb_squeeze = last.get("bb_squeeze", False)
 
     if bb_pos == "BELOW_LOWER":
-        score += params.score_bollinger_extreme
-        reasons.append("Fiyat Bollinger alt bandının altında → Alım fırsatı")
+        points, reason = _oversold_gate(
+            params,
+            last,
+            float(params.score_bollinger_extreme),
+            "Fiyat Bollinger alt bandının altında → Alım fırsatı",
+        )
+        score += points
+        reasons.append(reason)
     elif bb_pos == "ABOVE_UPPER":
         score -= params.score_bollinger_extreme
         reasons.append("Fiyat Bollinger üst bandının üstünde → Aşırı uzamış")
@@ -340,6 +392,83 @@ def score_structure(params, last) -> tuple[float, list[str]]:
         reasons.append("🔥 MACD Bearish Divergence → Güçlü dönüş sinyali")
 
     # Theorik max: bb_extreme(10) + bb_percent(5) + sr_distance(6) + rsi_divergence(15) + macd_divergence(12) = 48
-    MAX_STRUCTURE_SCORE = 50
-    score = max(-MAX_STRUCTURE_SCORE, min(MAX_STRUCTURE_SCORE, score))
+    score = max(-STRUCTURE_SCORE_CAP, min(STRUCTURE_SCORE_CAP, score))
     return score, reasons
+
+
+# ----------------------------------------------------------------------
+# Component combination helper (legacy + research/normalized modes)
+# ----------------------------------------------------------------------
+_COMPONENT_CAPS: dict[str, float] = {
+    "momentum": MOMENTUM_SCORE_CAP,
+    "trend": TREND_SCORE_CAP,
+    "volume": VOLUME_SCORE_CAP,
+    "structure": STRUCTURE_SCORE_CAP,
+}
+
+
+def combine_component_scores(
+    params,
+    momentum: float,
+    trend: float,
+    volume: float,
+    structure: float,
+) -> tuple[float, dict[str, float]]:
+    """Combine the four component scores into a single total.
+
+    Two modes, selected by ``params.normalized_component_scoring``:
+
+    * **Legacy (default)**: returns the exact raw sum and the raw component
+      mapping. Behavior is identical to the historical ``s1+s2+s3+s4`` path.
+    * **Research / normalized**: each component is divided by its theoretical
+      cap and clamped to ``[-1, 1]``. Non-negative weights are normalized by
+      their total so they sum to 1, then each contribution is multiplied by
+      100. The returned mapping contains the per-component weighted
+      contributions (not the raw values) plus the total.
+
+    Raises ``ValueError`` when the research mode is active and the total
+    usable weight is zero (no component can contribute).
+    """
+    components = {
+        "momentum": float(momentum),
+        "trend": float(trend),
+        "volume": float(volume),
+        "structure": float(structure),
+    }
+
+    if not getattr(params, "normalized_component_scoring", False):
+        total = sum(components.values())
+        return total, dict(components)
+
+    weights = {
+        "momentum": float(getattr(params, "component_weight_momentum", 0.0)),
+        "trend": float(getattr(params, "component_weight_trend", 0.0)),
+        "volume": float(getattr(params, "component_weight_volume", 0.0)),
+        "structure": float(getattr(params, "component_weight_structure", 0.0)),
+    }
+
+    if any(weight < 0 for weight in weights.values()):
+        raise ValueError(
+            "combine_component_scores: component weights must be non-negative "
+            f"(got weights={weights!r})"
+        )
+
+    # Zero weight explicitly disables a component.
+    usable = {k: w for k, w in weights.items() if w > 0}
+    total_weight = sum(usable.values())
+    if total_weight <= 0:
+        raise ValueError(
+            f"combine_component_scores: total usable weight must be > 0 (got weights={weights!r})"
+        )
+
+    contributions: dict[str, float] = {}
+    total = 0.0
+    for name, raw in components.items():
+        cap = _COMPONENT_CAPS[name]
+        ratio = max(-1.0, min(1.0, raw / cap)) if cap > 0 else 0.0
+        weight = usable.get(name, 0.0) / total_weight
+        contribution = ratio * weight * 100.0
+        contributions[name] = contribution
+        total += contribution
+
+    return total, contributions

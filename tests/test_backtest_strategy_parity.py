@@ -68,7 +68,7 @@ def _live_score_row(
     i: int,
     *,
     momentum_checker: Callable = check_momentum_confirmation,
-) -> float | None:
+) -> tuple[float, list[str], float | None] | None:
     """Mirror of StrategyEngine._calculate_score_and_reasons for a single row."""
     last = df.iloc[i]
     prev = df.iloc[i - 1]

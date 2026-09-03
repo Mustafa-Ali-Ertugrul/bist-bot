@@ -362,6 +362,17 @@ class Settings:
             except RuntimeError as exc:
                 errors.append(str(exc))
         errors.extend(self.collect_preflight_errors())
+        # D3: hatali sayisal/bool env degerleri kayit altinda; strict modda
+        # (CONFIG_STRICT=true, uretim container'lari) fail-closed.
+        from bist_bot.config.subsettings import get_malformed_env_values
+
+        malformed = get_malformed_env_values()
+        if malformed:
+            rendered = ", ".join(f"{n}={v!r} ({t} bekleniyordu)" for n, v, t in malformed)
+            if str(os.getenv("CONFIG_STRICT", "false")).lower() in {"1", "true", "yes", "on"}:
+                errors.append(f"Configuration Error: hatali env degerleri: {rendered}")
+            else:
+                errors.append(f"UYARI (dev modu): hatali env degerleri default'a dustu: {rendered}")
         # Preserve stable ordering while removing duplicates.
         return list(dict.fromkeys(errors))
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 import time
 from datetime import datetime
 from typing import Protocol
@@ -15,6 +16,7 @@ logger = get_logger(__name__, component="data_quotes")
 
 _BIST100_CACHE: list[str] | None = None
 _BIST100_CACHE_TIME: datetime | None = None
+_BIST100_CACHE_LOCK = threading.Lock()
 
 
 class RateLimiter:
@@ -57,15 +59,16 @@ def get_bist100_tickers(
     global _BIST100_CACHE, _BIST100_CACHE_TIME
     _ = rate_limiter
 
-    if not force_refresh:
-        cached = _BIST100_CACHE
-        cached_time = _BIST100_CACHE_TIME
-        if cached and cached_time and (datetime.now() - cached_time).total_seconds() < 3600:
-            logger.info("watchlist_cache_hit", ticker_count=len(cached))
-            return cached
+    with _BIST100_CACHE_LOCK:
+        if not force_refresh:
+            cached = _BIST100_CACHE
+            cached_time = _BIST100_CACHE_TIME
+            if cached and cached_time and (datetime.now() - cached_time).total_seconds() < 3600:
+                logger.info("watchlist_cache_hit", ticker_count=len(cached))
+                return cached
 
-    fallback_clean = clean_ticker_list(BIST100_TICKERS)
-    _BIST100_CACHE = fallback_clean
-    _BIST100_CACHE_TIME = datetime.now()
-    logger.info("watchlist_static_loaded", ticker_count=len(fallback_clean))
-    return fallback_clean
+        fallback_clean = clean_ticker_list(BIST100_TICKERS)
+        _BIST100_CACHE = fallback_clean
+        _BIST100_CACHE_TIME = datetime.now()
+        logger.info("watchlist_static_loaded", ticker_count=len(fallback_clean))
+        return fallback_clean

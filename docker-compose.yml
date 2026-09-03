@@ -19,6 +19,7 @@ services:
       API_BASE_URL: http://bot:5000
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://bist:bist@postgres:5432/bist_bot}
       DB_PATH: /app/data/bist_signals.db
+      # C7: Prometheus ic agdan JWT'siz scrape icin (port host'a acilmadikca risk dusuk).
       METRICS_PUBLIC: ${METRICS_PUBLIC:-false}
       LOG_FORMAT: ${LOG_FORMAT:-json}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?JWT_SECRET_KEY must be set for secure startup}
@@ -27,8 +28,9 @@ services:
       BROKER_MODE: ${BROKER_MODE:-paper}
       BROKER_PROVIDER: ${BROKER_PROVIDER:-paper}
       ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
+      CONFIG_STRICT: ${CONFIG_STRICT:-true}
     ports:
-      - "5000:5000"
+      - "127.0.0.1:5000:5000"
     volumes:
       - bot-data:/app/data
       - ./results:/app/results
@@ -90,6 +92,7 @@ services:
       target: runtime
     container_name: bist-bot-worker
     command: ["python", "main.py", "--worker"]
+    stop_grace_period: 30s
     env_file:
       - path: .env
         required: false
@@ -102,7 +105,12 @@ services:
       BROKER_MODE: ${BROKER_MODE:-paper}
       BROKER_PROVIDER: ${BROKER_PROVIDER:-paper}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?JWT_SECRET_KEY must be set for secure startup}
-      MTF_ENABLED: "false"
+      # D1: MTF_ENABLED worker-only "false" kaldirildi (28.07 #108'de gerekcesiz
+      # eklenmisti). Veri zaten her iki zaman diliminde cekiliyor; ayar yalnizca
+      # motorun trend onayini kullanip kullanmadigini belirler — API/worker
+      # ayni piyasa icin ayni sinyali uretmeli. Baseline: results/baseline_after_mtf.md
+      # D3: hatali env degerleri uretimde fail-closed.
+      CONFIG_STRICT: ${CONFIG_STRICT:-true}
     volumes:
       - bot-data:/app/data
       - ./results:/app/results
@@ -116,11 +124,13 @@ services:
         limits:
           memory: 1g
     healthcheck:
-      test: ["CMD-SHELL", "kill -0 1 || exit 1"]
+      # C2: liveness = HTTP thread cevap veriyor (surec kill -0'dan daha anlamli;
+      # readiness is sagligi /readyz uzerinden ayri izlenir, restart tetiklemez).
+      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://127.0.0.1:9101/healthz', timeout=5)\" || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 20s
+      start_period: 30s
     restart: unless-stopped
     logging:
       driver: json-file
@@ -136,7 +146,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bist}
       POSTGRES_DB: ${POSTGRES_DB:-bist_bot}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -156,9 +166,10 @@ services:
       - --web.enable-lifecycle
     volumes:
       - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/prometheus/alerts:/etc/prometheus/alerts:ro
       - prometheus-data:/prometheus
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     depends_on:
       bot:
         condition: service_healthy
@@ -169,13 +180,14 @@ services:
     container_name: bist-bot-grafana
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD must be set — .env icinde tanimlayin}
       GF_USERS_ALLOW_SIGN_UP: "false"
     volumes:
       - grafana-data:/var/lib/grafana
       - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     depends_on:
       - prometheus
     restart: unless-stopped

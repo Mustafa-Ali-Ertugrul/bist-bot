@@ -1,5 +1,8 @@
 """Tests for OfficialProvider adapter: auth, fetch_history, fetch_quote, error handling, and fallback."""
 
+# mypy: disable-error-code="method-assign"
+# (Tests monkeypatch provider methods with MagicMock; safe at runtime.)
+
 from __future__ import annotations
 
 from datetime import datetime

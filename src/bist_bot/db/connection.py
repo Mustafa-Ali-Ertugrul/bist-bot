@@ -13,6 +13,7 @@ Environment:
 
 from __future__ import annotations
 
+import importlib.util
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,6 +22,10 @@ from urllib.parse import urlparse
 
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
+
+from bist_bot.app_logging import get_logger
+
+logger = get_logger(__name__, component="database")
 
 
 def _env(name: str, default: str = "") -> str:
@@ -42,6 +47,14 @@ def _env_int(name: str, default: int) -> int:
         return int(raw)
     except ValueError:
         return default
+
+
+def _postgres_driver_available() -> bool:
+    """Return True when the ``psycopg2`` DBAPI required by postgres URLs is importable."""
+    try:
+        return importlib.util.find_spec("psycopg2") is not None
+    except (ImportError, ValueError):  # pragma: no cover - defensive
+        return False
 
 
 @dataclass(frozen=True)
@@ -84,6 +97,18 @@ def resolve_database_url(
         url = "postgresql+psycopg2://" + url[len("postgres://") :]
 
     is_sqlite = url.startswith("sqlite:")
+    if not is_sqlite and not _postgres_driver_available():
+        # Postgres URL configured but its DBAPI is missing: warn loudly, run on SQLite.
+        logger.warning(
+            "postgres_driver_missing_sqlite_fallback",
+            message="DATABASE_URL points to PostgreSQL but the psycopg2 driver is not "
+            "installed. Falling back to local SQLite (DB_PATH). Install psycopg2-binary "
+            "to use PostgreSQL, or unset DATABASE_URL to silence this warning.",
+            db_path=path,
+        )
+        abs_path = Path(path).expanduser()
+        url = f"sqlite:///{abs_path.as_posix()}"
+        is_sqlite = True
     pool_size = _env_int("DB_POOL_SIZE", 10)
     max_overflow = _env_int("DB_MAX_OVERFLOW", 20)
     pool_timeout = _env_int("DB_POOL_TIMEOUT", 30)

@@ -1,0 +1,66 @@
+# BIST Bot — temel alert kurallari (C7).
+# Bildirim hedefi Alertmanager olmadan once Prometheus UI'da gorunur;
+# Telegram kanali scheduler watchdog'undan bagimsiz calisir.
+groups:
+  - name: bist-bot-core
+    rules:
+      - alert: BISTScanStaleDuringSession
+        expr: (time() - bist_last_scan_success_timestamp{job="bist-bot-worker"}) > 1800
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Worker taramasi 30+ dakikadir yok"
+          description: "Seans icinde son basarili tarama 30 dakikayi asti. Watchdog Telegram uyarisini da tetiklemis olmali."
+
+      - alert: BISTScanFailureRateHigh
+        expr: rate(bist_scan_fail_total{job="bist-bot-worker"}[15m]) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Tarama hata orani yuksek"
+          description: "Son 15 dakikada surekli tarama hatasi — veri saglayici/DB kontrol edilmeli."
+
+      - alert: BISTStaleDataRatioHigh
+        expr: bist_stale_symbol_ratio{job="bist-bot-worker"} > 0.2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Bayat veri orani >%20"
+          description: "Tarama verisinin buyuk kismi bayat; %40 uzerinde sinyal uretimi otomatik durur."
+
+      - alert: BISTStaleDataHalt
+        expr: bist_stale_symbol_ratio{job="bist-bot-worker"} >= 0.4
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Sinyal uretimi bayat veri nedeniyle DURDURULDU"
+          description: "Veri kaynagi bozuk gorunuyor — yfinance/saglayici kontrol edilmeli."
+
+      - alert: BISTEODFailure
+        expr: increase(bist_eod_fail_total{job="bist-bot-worker"}[1h]) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: "EOD kapanis pass'i basarisiz"
+          description: "Gun sonu pozisyon kapanisi hata verdi; retry var, surekli hata pozisyon birakir."
+
+      - alert: BISTWorkerDown
+        expr: up{job="bist-bot-worker"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Worker metrics endpoint'e erisilemiyor"
+          description: "Worker olmus veya asili kalmis olabilir."
+
+      - alert: BISTAlertChannelFailing
+        expr: increase(bist_alert_send_fail_total{job="bist-bot-worker"}[30m]) > 3
+        labels:
+          severity: critical
+        annotations:
+          summary: "Telegram alert kanali gonderimde basarisiz"
+          description: "Alarm kanalinin kendisi calismiyor — bot sessiz kalabilir!"
