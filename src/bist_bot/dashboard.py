@@ -535,16 +535,34 @@ def create_dashboard_app(
             )
             scan_service = get_scan_service()
             logger.info("api_scan_started", force_refresh=force_refresh)
-            with _scan_mutex, concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(scan_service.scan_once, force_refresh=force_refresh)
+            # Acquire the mutex with a non-blocking or bounded attempt to prevent
+            # stacking requests when a scan is already running.
+            acquired = _scan_mutex.acquire(blocking=False)
+            if not acquired:
+                logger.warning("api_scan_already_in_progress")
+                return jsonify(
+                    {
+                        "status": "error",
+                        "message": "A scan is already in progress. Please retry shortly.",
+                    }
+                ), 429
+
+            scan_future = None
+            executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+            try:
+                scan_future = executor.submit(scan_service.scan_once, force_refresh=force_refresh)
                 try:
-                    signals = future.result(timeout=settings.SCAN_TIMEOUT_SECONDS)
+                    signals = scan_future.result(timeout=settings.SCAN_TIMEOUT_SECONDS)
                 except concurrent.futures.TimeoutError:
                     logger.error(
                         "api_scan_timed_out",
                         timeout_seconds=settings.SCAN_TIMEOUT_SECONDS,
                         force_refresh=force_refresh,
                     )
+                    # Cancel future if still pending
+                    scan_future.cancel()
+                    # Shutdown executor immediately without waiting for running thread to block caller
+                    executor.shutdown(wait=False, cancel_futures=True)
                     return jsonify(
                         {
                             "status": "error",
@@ -552,6 +570,10 @@ def create_dashboard_app(
                             "timeout_seconds": settings.SCAN_TIMEOUT_SECONDS,
                         }
                     ), 504
+                else:
+                    executor.shutdown(wait=True)
+            finally:
+                _scan_mutex.release()
             scan_stats = scan_service.last_scan_stats
 
             results = [
