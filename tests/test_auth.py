@@ -472,7 +472,7 @@ def test_existing_db_users_do_not_block_admin_seed(tmp_path):
 
     db_path = str(tmp_path / "auth_other_users.db")
 
-    conn = sqlite3.connect(db_path)
+    conn: Any = sqlite3.connect(db_path)
     conn.execute(
         """CREATE TABLE users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -521,7 +521,7 @@ def test_existing_admin_email_blocks_duplicate_seed(tmp_path):
     admin_email = "bootstrap@bistbot.local"
     db_path = str(tmp_path / "auth_admin_exists.db")
 
-    conn = sqlite3.connect(db_path)
+    conn: Any = sqlite3.connect(db_path)
     conn.execute(
         """CREATE TABLE users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -695,7 +695,7 @@ def test_existing_admin_not_updated_by_default(tmp_path):
     admin_email = "bootstrap@bistbot.local"
     db_path = str(tmp_path / "auth_no_update.db")
 
-    conn = sqlite3.connect(db_path)
+    conn: Any = sqlite3.connect(db_path)
     conn.execute(
         """CREATE TABLE users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -739,7 +739,7 @@ def test_existing_admin_updated_when_flag_true(tmp_path):
     admin_email = "bootstrap@bistbot.local"
     db_path = str(tmp_path / "auth_update.db")
 
-    conn = sqlite3.connect(db_path)
+    conn: Any = sqlite3.connect(db_path)
     conn.execute(
         """CREATE TABLE users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -784,7 +784,7 @@ def test_updated_admin_can_login_with_new_password(tmp_path):
     admin_email = "bootstrap@bistbot.local"
     db_path = str(tmp_path / "auth_login_after_update.db")
 
-    conn = sqlite3.connect(db_path)
+    conn: Any = sqlite3.connect(db_path)
     conn.execute(
         """CREATE TABLE users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,

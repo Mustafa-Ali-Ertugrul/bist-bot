@@ -1,3 +1,5 @@
+import html
+import re
 import time
 from collections import deque
 from collections.abc import Callable
@@ -25,6 +27,12 @@ _DEFAULT_RATE_LIMIT_PER_MINUTE = 18
 _MAX_RETRY_AFTER_SECONDS = 30.0
 # Cap for the bounded exponential fallback backoff.
 _MAX_BACKOFF_SECONDS = 30.0
+_TOKEN_RE = re.compile(r"bot\d{5,}:[A-Za-z0-9_-]+")
+
+
+def _redact_telegram_url(msg: str) -> str:
+    """Redact bot tokens from error strings / URLs before logging."""
+    return _TOKEN_RE.sub("bot[REDACTED]", msg)
 
 
 class SlidingWindowRateLimiter:
@@ -219,7 +227,12 @@ class TelegramNotifier:
     ):
         self.token = token or settings.TELEGRAM_BOT_TOKEN
         self.chat_id = chat_id or settings.TELEGRAM_CHAT_ID
-        self.group_chat_id = getattr(settings, "TELEGRAM_GROUP_CHAT_ID", "") or None
+        # TELEGRAM_GROUP_ENABLED gates group routing; chat id alone must not enable it.
+        self.group_chat_id = (
+            (getattr(settings, "TELEGRAM_GROUP_CHAT_ID", "") or None)
+            if getattr(settings, "TELEGRAM_GROUP_ENABLED", True)
+            else None
+        )
         self.sender = sender
         self.base_url = f"https://api.telegram.org/bot{self.token}"
         self.enabled = bool(self.token and self.chat_id)
@@ -254,7 +267,7 @@ class TelegramNotifier:
             return False
 
         except requests.exceptions.RequestException as e:
-            logger.error("telegram_error", error=str(e))
+            logger.error("telegram_error", error=_redact_telegram_url(str(e))[:200])
             return False
 
     def send_message(self, text: str, parse_mode: str = "HTML") -> bool:
@@ -370,7 +383,7 @@ class TelegramNotifier:
         }
         emoji = emoji_map.get(signal.signal_type, "📊")
 
-        reasons_html = "\n".join([f"  • {r}" for r in signal.reasons])
+        reasons_html = "\n".join([f"  • {html.escape(r)}" for r in signal.reasons])
 
         diagnosis = self._build_diagnosis_block(signal)
 
@@ -501,7 +514,7 @@ class TelegramNotifier:
 
 ⏰ {datetime.now(TR).strftime("%d.%m.%Y %H:%M")}
 ━━━━━━━━━━━━━━━━━━━━
-⚠️ <i>Yatırım tavniyesi değildir!</i>
+⚠️ <i>Yatırım tavsiyesi değildir!</i>
 """
         return self.send_message(message.strip())
 

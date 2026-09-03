@@ -168,6 +168,41 @@ def test_scan_with_plugins_merges_and_deduplicates(monkeypatch):
     assert asels_signals[0].score == 60.0
 
 
+def test_scan_with_plugins_merges_and_deduplicates_sells(monkeypatch):
+    from bist_bot.strategy.base import BaseStrategy
+    from bist_bot.strategy.engine import StrategyEngine
+
+    class _SellStrategy(BaseStrategy):
+        @property
+        def name(self) -> str:
+            return "StrongerSellStrategy"
+
+        def analyze(
+            self, ticker: str, data: pd.DataFrame | dict[str, pd.DataFrame]
+        ) -> Signal | None:
+            return Signal(
+                ticker=ticker,
+                signal_type=SignalType.SELL,
+                score=-45.0,  # stronger than -25.0
+                price=50.0,
+            )
+
+    engine = StrategyEngine()
+    weak_sell = Signal(
+        ticker="THYAO.IS",
+        signal_type=SignalType.SELL,
+        score=-25.0,
+        price=50.0,
+    )
+    monkeypatch.setattr(engine, "scan_all", lambda data: [weak_sell])
+    engine.register_strategy(_SellStrategy())
+
+    result = engine.scan_with_plugins({"THYAO.IS": _make_df()})
+    thyao_sells = [s for s in result if s.ticker == "THYAO.IS" and s.signal_type == SignalType.SELL]
+    assert len(thyao_sells) == 1
+    assert thyao_sells[0].score == -45.0
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # MarketCandle Pydantic validation
 # ─────────────────────────────────────────────────────────────────────────────

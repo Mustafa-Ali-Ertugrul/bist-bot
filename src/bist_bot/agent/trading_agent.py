@@ -3,6 +3,8 @@ import time
 from datetime import UTC
 from typing import Any
 
+import pandas as pd
+
 from bist_bot.agent.audit_log import write_audit
 from bist_bot.agent.exit_service import ExitService
 from bist_bot.agent.position_manager import PositionManager
@@ -95,13 +97,15 @@ class TradingAgent:
                 return
 
             tickers = list({str(p["ticker"]) for p in open_positions})
-            prices = self._fetch_prices(tickers)
+            prices, atr_map, closes_map = self._fetch_exit_data(tickers)
 
             if not prices:
                 logger.warning("agent_no_prices_for_exit_check")
                 return
 
-            triggers = self.position_manager.check_exit_conditions(prices)
+            triggers = self.position_manager.check_exit_conditions(
+                prices, atr_map=atr_map, closes_map=closes_map
+            )
             for trigger in triggers:
                 ticker = trigger["ticker"]
                 position_id = trigger["position_id"]
@@ -263,6 +267,52 @@ class TradingAgent:
         except Exception:
             logger.exception("exit_price_fetch_failed")
         return prices
+
+    def _fetch_exit_data(
+        self, tickers: list[str]
+    ) -> tuple[dict[str, float], dict[str, float], dict[str, list[tuple[str, float]]]]:
+        """Latest price, ATR14 and daily closes per open-position ticker.
+
+        Feeds position_manager.check_exit_conditions (Deney M ATR trailing
+        stop): 3 months of daily bars are enough for ATR14 and the
+        peak-close-since-entry tracking (~28 calendar days hold max).
+        Failures degrade per ticker: the ticker is simply missing from the
+        maps and the exit check runs with the stored (original) stop.
+        """
+        from bist_bot.indicators import TechnicalIndicators
+
+        prices: dict[str, float] = {}
+        atr_map: dict[str, float] = {}
+        closes_map: dict[str, list[tuple[str, float]]] = {}
+        if not self.data_fetcher:
+            return prices, atr_map, closes_map
+        for ticker in tickers:
+            try:
+                df = self.data_fetcher.fetch_single(ticker, period="3mo")
+                if df is None or df.empty or "close" not in df.columns:
+                    continue
+                closes = df["close"]
+                prices[ticker] = float(closes.iloc[-1])
+                try:
+                    atr_df = TechnicalIndicators.add_atr(df.copy())
+                    atr_series = atr_df.get("atr")
+                    if atr_series is not None and len(atr_series) > 0:
+                        atr_val = float(atr_series.iloc[-1])
+                        if pd.notna(atr_val) and atr_val > 0:
+                            atr_map[ticker] = atr_val
+                except Exception:
+                    logger.exception("atr_compute_failed", ticker=ticker)
+                if "date" in df.columns:
+                    dates = pd.to_datetime(df["date"])
+                else:
+                    dates = df.index
+                closes_map[ticker] = [
+                    (str(pd.Timestamp(d).date()), float(c))
+                    for d, c in zip(dates, closes, strict=True)
+                ]
+            except Exception:
+                logger.exception("price_fetch_failed", ticker=ticker)
+        return prices, atr_map, closes_map
 
     def emergency_stop(self, reason: str = "manual") -> None:
         with self._lock:

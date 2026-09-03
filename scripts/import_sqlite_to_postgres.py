@@ -53,20 +53,25 @@ def _parse_dt(value: Any) -> datetime | None:
 
 def _coerce_row(row: dict[str, Any], dt_columns: set[str]) -> dict[str, Any]:
     coerced: dict[str, Any] = {}
-    for column, value in row.items():
-        if column in dt_columns:
-            coerced[column] = _parse_dt(value)
-        elif isinstance(value, str) and value.strip() == "" and column not in {
-            "reasons",
-            "conditions",
-            "rejection_breakdown",
-            "score_breakdown",
-            "metadata_json",
-            "value",
-        }:
-            coerced[column] = None
+    for col_name, value in row.items():
+        if col_name in dt_columns:
+            coerced[col_name] = _parse_dt(value)
+        elif (
+            isinstance(value, str)
+            and value.strip() == ""
+            and col_name
+            not in {
+                "reasons",
+                "conditions",
+                "rejection_breakdown",
+                "score_breakdown",
+                "metadata_json",
+                "value",
+            }
+        ):
+            coerced[col_name] = None
         else:
-            coerced[column] = value
+            coerced[col_name] = value
     return coerced
 
 
@@ -89,10 +94,7 @@ def import_table(
     dt_columns = DATETIME_COLUMNS[table_name]
     keys = DEDUPE_KEYS[table_name]
 
-    src_rows = [
-        dict(row)
-        for row in src_conn.execute(f"SELECT * FROM {table_name}")  # noqa: S608
-    ]
+    src_rows = [dict(row) for row in src_conn.execute(f"SELECT * FROM {table_name}")]
     if not src_rows:
         return 0, 0
 

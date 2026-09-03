@@ -87,7 +87,10 @@ def test_paper_eod_close_after_market_close():
     service.update_open_trades(now=now)
 
     db.close_paper_trade.assert_called_once_with(
-        "THYAO.IS", 104.0, "EOD_CLOSE", actual_profit_pct=ANY,
+        "THYAO.IS",
+        104.0,
+        "EOD_CLOSE",
+        actual_profit_pct=ANY,
         trade_id=ANY,
     )
 
@@ -108,7 +111,10 @@ def test_paper_eod_half_day_closes_at_1230():
         monkey_half_day.undo()
 
     db.close_paper_trade.assert_called_once_with(
-        "THYAO.IS", 104.0, "EOD_CLOSE", actual_profit_pct=ANY,
+        "THYAO.IS",
+        104.0,
+        "EOD_CLOSE",
+        actual_profit_pct=ANY,
         trade_id=ANY,
     )
 
@@ -147,7 +153,10 @@ def test_eod_priority_after_stop_hit():
     service.update_open_trades(now=now)
 
     db.close_paper_trade.assert_called_once_with(
-        "THYAO.IS", 94.0, "STOP_HIT", actual_profit_pct=ANY,
+        "THYAO.IS",
+        94.0,
+        "STOP_HIT",
+        actual_profit_pct=ANY,
         trade_id=ANY,
     )
 
@@ -173,7 +182,10 @@ def test_trailing_tightens_stop_on_rise_long():
     service.update_open_trades(now=now)  # 101 <= 101.92 -> trail hit
 
     db.close_paper_trade.assert_called_once_with(
-        "THYAO.IS", 101.0, "TRAIL_STOP_HIT", actual_profit_pct=ANY,
+        "THYAO.IS",
+        101.0,
+        "TRAIL_STOP_HIT",
+        actual_profit_pct=ANY,
         trade_id=ANY,
     )
 
@@ -193,7 +205,10 @@ def test_trailing_never_loosens_on_fall_long():
     service.update_open_trades(now=now)  # trail stays 105.84 (not 103-based)
 
     db.close_paper_trade.assert_called_once_with(
-        "THYAO.IS", 103.0, "TRAIL_STOP_HIT", actual_profit_pct=ANY,
+        "THYAO.IS",
+        103.0,
+        "TRAIL_STOP_HIT",
+        actual_profit_pct=ANY,
         trade_id=ANY,
     )
 
@@ -220,7 +235,10 @@ def test_trailing_short_mirror():
     service.update_open_trades(now=now)  # 98 >= 97.92 -> trail hit
 
     db.close_paper_trade.assert_called_once_with(
-        "THYAO.IS", 98.0, "TRAIL_STOP_HIT", actual_profit_pct=ANY,
+        "THYAO.IS",
+        98.0,
+        "TRAIL_STOP_HIT",
+        actual_profit_pct=ANY,
         trade_id=ANY,
     )
 
@@ -256,7 +274,10 @@ def test_original_stop_wins_over_trail():
     service.update_open_trades(now=now)  # 94 <= original stop 95
 
     db.close_paper_trade.assert_called_once_with(
-        "THYAO.IS", 94.0, "STOP_HIT", actual_profit_pct=ANY,
+        "THYAO.IS",
+        94.0,
+        "STOP_HIT",
+        actual_profit_pct=ANY,
         trade_id=ANY,
     )
 
@@ -324,7 +345,10 @@ def test_scanner_close_positions_at_eod_closes_with_fetch_price(tmp_path):
 
     # Paper position closed with the FETCHED close price (104), not entry.
     db.close_paper_trade.assert_called_once_with(
-        "THYAO.IS", 104.0, "EOD_CLOSE", actual_profit_pct=ANY,
+        "THYAO.IS",
+        104.0,
+        "EOD_CLOSE",
+        actual_profit_pct=ANY,
         trade_id=ANY,
     )
 

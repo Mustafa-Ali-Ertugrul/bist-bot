@@ -29,6 +29,7 @@ def _settings(**overrides):
         "INITIAL_CAPITAL": 100_000.0,
         "MAX_TOTAL_RISK_PCT": 2.0,
         "AUTO_EXECUTE": False,
+        "AGENT_ENABLED": False,
     }
     values.update(overrides)
     return settings.replace(**values)

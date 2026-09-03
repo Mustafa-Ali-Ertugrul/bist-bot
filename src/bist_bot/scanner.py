@@ -1,7 +1,7 @@
 """Scan orchestration service shared by CLI and dashboard flows."""
 
 import time
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import cast
 
 import pandas as pd
@@ -42,6 +42,35 @@ EMPTY_REJECTION_BREAKDOWN = {
     "by_stage": [],
     "scan_id": "",
 }
+
+
+def _interval_minutes(interval: str | None) -> float | None:
+    """Candle length in minutes for yfinance-style intervals (15m, 1h, 1d, 1wk...)."""
+    if not interval:
+        return None
+    s = interval.strip().lower()
+    num = ""
+    unit = ""
+    for ch in s:
+        if ch.isdigit() or ch == ".":
+            num += ch
+        else:
+            unit += ch
+    try:
+        n = float(num) if num else 1.0
+    except ValueError:
+        return None
+    if unit == "m":
+        return n
+    if unit == "h":
+        return n * 60
+    if unit == "d":
+        return n * 24 * 60
+    if unit == "wk":
+        return n * 7 * 24 * 60
+    if unit == "mo":
+        return n * 30 * 24 * 60
+    return None
 
 
 class ScanService:
@@ -98,7 +127,7 @@ class ScanService:
             notifier, settings=self.settings
         )
         self.shadow_trade_service = shadow_trade_service or ShadowTradeService(
-            settings=self.settings
+            settings=self.settings, db=db
         )
         self.signal_outcome_tracker = signal_outcome_tracker or SignalOutcomeTracker(
             settings=self.settings, db=self.db
@@ -114,6 +143,8 @@ class ScanService:
         self.circuit_breaker = circuit_breaker
         # B4: gunluk bir kez stale-warning spam onlemi.
         self._last_stale_warn_date: date | None = None
+        # Stale-halt Telegram alert cooldown (default 120 dk — settings override).
+        self._last_stale_halt_alert_at: datetime | None = None
 
     def _auto_execute_signals(self, signals: list[Signal]) -> None:
         """Submit actionable signals to the configured execution service."""
@@ -133,6 +164,110 @@ class ScanService:
             )
         except Exception as exc:
             logger.exception("shadow_trade_processing_failed", error=exc)
+
+    def _filter_duplicate_sats(self, signals: list[Signal]) -> list[Signal]:
+        """Drop sell-family signals whose ticker already has a sell persisted for
+        the current TR-local day. Also dedups within the same scan batch.
+
+        Scope: persistence only — notifications, paper trades, and outcome
+        tracking still see the full signal list (callers keep `signals`),
+        which is what the user asked: max 1 persisted SAT per ticker per day.
+        """
+        if not any(s.signal_type.is_sell for s in signals):
+            return signals
+        today_tr = datetime.now(UTC).astimezone(TR).date()
+        try:
+            sell_values = [t.value for t in SignalType if t.is_sell]
+            existing = self.db.get_signal_tickers_for_day(signal_types=sell_values, day=today_tr)
+        except Exception as exc:
+            logger.exception("sat_dedup_lookup_failed", error=exc)
+            existing = set()
+        seen: set[str] = set(existing)
+        kept: list[Signal] = []
+        dropped = 0
+        for s in signals:
+            if s.signal_type.is_sell:
+                if s.ticker in seen:
+                    dropped += 1
+                    continue
+                seen.add(s.ticker)
+            kept.append(s)
+        if dropped:
+            logger.info(
+                "sat_dedup",
+                dropped=dropped,
+                day=str(today_tr),
+                component="scanner",
+            )
+        return kept
+
+    def _filter_duplicate_als(self, signals: list[Signal]) -> list[Signal]:
+        """Drop AL (actionable buy) signals whose ticker produced another
+        actionable buy-family signal within the cooldown window (default 60
+        minutes). Persistence-only scope, mirroring _filter_duplicate_sats:
+        notifications, paper trades, and outcome tracking still see the full
+        list, which is what the user asked: no AL spam per ticker per hour.
+
+        DB-backed (survives restarts): looks up the latest persisted
+        buy-family signal timestamp per ticker within the window. Within the
+        same batch, the first AL signal per ticker wins and later ones are
+        dropped.
+        """
+        cooldown_minutes = int(getattr(self.settings, "AL_SIGNAL_COOLDOWN_MINUTES", 60))
+        if cooldown_minutes <= 0:
+            return signals
+        al_candidates = [
+            s for s in signals if s.signal_type.is_buy and categorize_signal(s) is SignalCategory.AL
+        ]
+        if not al_candidates:
+            return signals
+        # Identity-keyed: Signal is a dataclass (value-equality); two distinct
+        # AL signals with identical fields must not compare equal here.
+        al_ids: set[int] = {id(s) for s in al_candidates}
+
+        now = datetime.now(UTC)
+        since = now - timedelta(minutes=cooldown_minutes)
+        buy_values = [t.value for t in SignalType if t.is_buy]
+        # Only actionable persists arm the cooldown: RADAR/WEAK_BUY persists
+        # (score below the buy threshold) must not suppress a fresh AL.
+        # Guarded for injected third-party SignalChangeService stubs that do
+        # not expose StrategyParams — fall back to the canonical default.
+        change_service_params = getattr(self.signal_change_service, "params", None)
+        if change_service_params is None:
+            change_service_params = StrategyParams.from_settings()
+        buy_threshold = float(change_service_params.buy_threshold)
+        try:
+            recent = self.db.get_last_signal_times(
+                tickers=sorted({s.ticker for s in al_candidates}),
+                signal_types=buy_values,
+                since=since,
+                min_score=buy_threshold,
+            )
+        except Exception as exc:
+            logger.exception("al_cooldown_lookup_failed", error=exc)
+            recent = {}
+
+        seen: set[str] = set()
+        kept: list[Signal] = []
+        dropped = 0
+        for s in signals:
+            if id(s) in al_ids:
+                ticker = s.ticker
+                in_db = ticker in recent
+                in_batch = ticker in seen
+                if in_db or in_batch:
+                    dropped += 1
+                    continue
+                seen.add(ticker)
+            kept.append(s)
+        if dropped:
+            logger.info(
+                "al_cooldown",
+                dropped=dropped,
+                cooldown_minutes=cooldown_minutes,
+                component="scanner",
+            )
+        return kept
 
     def _process_signal_outcomes(self, signals: list[Signal], market_data: dict) -> None:
         """Run outcome tracking for AL signals (shadow pattern, isolated)."""
@@ -252,7 +387,9 @@ class ScanService:
             }
 
             self._check_signal_changes(signals)
-            self.db.save_signals(signals)
+            persisted = self._filter_duplicate_sats(signals)
+            persisted = self._filter_duplicate_als(persisted)
+            self.db.save_signals(persisted)
             self._process_signal_outcomes(signals, all_data)
 
             # BUG-5 fix: skip auto_execute when agent owns entries
@@ -342,8 +479,18 @@ class ScanService:
     # B4 — candle freshness gate
     # ------------------------------------------------------------------
     @staticmethod
-    def _last_bar_age_minutes(df: pd.DataFrame | None) -> float | None:
-        """Age of the newest bar in minutes; None when undeterminable."""
+    def _last_bar_age_minutes(
+        df: pd.DataFrame | None, *, interval: str | None = None
+    ) -> float | None:
+        """Age of the newest bar in minutes; None when undeterminable.
+
+        Intraday bars are measured from the bar *close* (start + interval):
+        bar timestamps are open-times, so a freshly-forming 15m candle is
+        already 0-15 min "old" by start-time and Yahoo's ~15-20 min BIST feed
+        delay would otherwise trip the gate on healthy data. Daily-or-slower
+        bars are judged per session: the current trading day's bar counts as
+        fresh (it only finalizes after the close); older sessions are stale.
+        """
         if df is None or getattr(df, "empty", True):
             return None
         ts = None
@@ -358,8 +505,19 @@ class ScanService:
             return None
         if ts.tzinfo is None:
             ts = ts.tz_localize("UTC")
+        ts = ts.tz_convert("UTC")
         now = pd.Timestamp.now(tz="UTC")
-        return (now - ts.tz_convert("UTC")).total_seconds() / 60.0
+        bar_minutes = _interval_minutes(interval)
+        if bar_minutes is None:
+            return (now - ts).total_seconds() / 60.0
+        if bar_minutes >= 24 * 60:
+            bar_day = ts.tz_convert(TR).date()
+            today = now.tz_convert(TR).date()
+            if bar_day >= today:
+                return 0.0
+            return (now - ts).total_seconds() / 60.0
+        bar_close = ts + pd.Timedelta(minutes=bar_minutes)
+        return (now - bar_close).total_seconds() / 60.0
 
     def _apply_freshness_gate(
         self, all_data: dict[str, dict[str, pd.DataFrame]]
@@ -383,9 +541,10 @@ class ScanService:
             return all_data
 
         stale: list[str] = []
+        trigger_interval = str(getattr(self.settings, "MTF_TRIGGER_INTERVAL", "15m") or "15m")
         for ticker, frames in all_data.items():
             trigger_df = frames.get("trigger") if isinstance(frames, dict) else None
-            age = self._last_bar_age_minutes(trigger_df)
+            age = self._last_bar_age_minutes(trigger_df, interval=trigger_interval)
             if age is not None and age > max_age:
                 stale.append(ticker)
 
@@ -411,13 +570,20 @@ class ScanService:
                 total=total,
                 ratio=round(ratio, 3),
             )
-            try:
-                self.notifier.send_message(
-                    f"🛑 <b>Tarama durduruldu:</b> {len(stale)}/{total} hissenin verisi "
-                    f"bayat (>{max_age} dk). Veri kaynağı bozuk — sinyal üretilmedi."
-                )
-            except Exception:
-                logger.warning("stale_halt_alert_send_failed")
+            # Throttle the halt alert — without it every aborted scan re-sends
+            # the same Telegram message (scan cadence ~15 min).
+            cooldown_min = float(getattr(self.settings, "STALE_HALT_ALERT_COOLDOWN_MINUTES", 120))
+            now_utc = datetime.now(UTC)
+            last_alert = getattr(self, "_last_stale_halt_alert_at", None)
+            if last_alert is None or (now_utc - last_alert).total_seconds() >= cooldown_min * 60:
+                self._last_stale_halt_alert_at = now_utc
+                try:
+                    self.notifier.send_message(
+                        f"🛑 <b>Tarama durduruldu:</b> {len(stale)}/{total} hissenin verisi "
+                        f"bayat (>{max_age} dk). Veri kaynağı bozuk — sinyal üretilmedi."
+                    )
+                except Exception:
+                    logger.warning("stale_halt_alert_send_failed")
             return {}
 
         if ratio >= warn_ratio and self._last_stale_warn_date != datetime.now(TR).date():

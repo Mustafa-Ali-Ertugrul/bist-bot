@@ -123,9 +123,7 @@ class BandMetrics:
     sufficient: bool
 
 
-def compute_band_metrics(
-    trades: Iterable[Any], min_sample: int = MIN_SAMPLE
-) -> list[BandMetrics]:
+def compute_band_metrics(trades: Iterable[Any], min_sample: int = MIN_SAMPLE) -> list[BandMetrics]:
     """Bucket actionable trades into ``SCORE_BANDS`` (lower <= score < upper).
 
     Always returns one ``BandMetrics`` per band, in ``SCORE_BANDS`` order,

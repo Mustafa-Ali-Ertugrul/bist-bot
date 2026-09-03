@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import xml.etree.ElementTree as ET
+import xml.etree.ElementTree as ET  # nosec B405: defusedxml primary; fallback capped.
 from datetime import UTC, datetime, timedelta, timezone
 from typing import cast
 
@@ -14,6 +14,26 @@ import streamlit as st
 from bist_bot.config.settings import settings
 from bist_bot.indicators import TechnicalIndicators
 from bist_bot.strategy.signal_models import Signal, SignalType
+
+try:  # XXE-safe RSS parsing when available (declared in requirements.txt).
+    from defusedxml.ElementTree import fromstring as _rss_fromstring
+except ImportError:  # pragma: no cover - fallback for minimal installs.
+
+    def _rss_fromstring(content: bytes) -> ET.Element:
+        return ET.fromstring(content)  # nosec B314: Google News RSS fallback path.
+
+
+#: RSS payload cap: Google News feeds are a few KB; anything larger is rejected
+#: before XML parsing (entity-expansion / billion-laughs guard).
+MAX_RSS_BYTES = 512 * 1024
+
+
+def _parse_rss(content: bytes) -> ET.Element:
+    """Parse an RSS payload with size cap + entity-forbidding parser."""
+    if len(content) > MAX_RSS_BYTES:
+        raise ValueError(f"RSS payload too large ({len(content)} bytes)")
+    return _rss_fromstring(content)
+
 
 TR = timezone(timedelta(hours=3))
 INDEX_DATA_CACHE_VERSION = "v2"
@@ -30,11 +50,13 @@ def map_cached_signals(rows: list[dict]) -> list[Signal]:
         except Exception:
             signal_type = SignalType.HOLD
         try:
-            timestamp = datetime.fromisoformat(row["created_at"])
+            timestamp = datetime.fromisoformat(
+                str(row.get("created_at") or "").replace("Z", "+00:00")
+            )
             if timestamp.tzinfo is None:
                 timestamp = timestamp.replace(tzinfo=UTC)
         except Exception:
-            timestamp = datetime.now(TR)
+            timestamp = datetime.now(UTC)
         mapped.append(
             Signal(
                 ticker=row["ticker"],
@@ -62,7 +84,7 @@ def fetch_stock_news(ticker, max_results=5):
         url = f"https://news.google.com/rss/search?q={name}+hisse+senedi&hl=tr&gl=TR&ceid=TR:tr"
         response = requests.get(url, timeout=8, headers={"User-Agent": "Mozilla/5.0"})
         response.raise_for_status()
-        root = ET.fromstring(response.content)
+        root = _parse_rss(response.content)
         items = root.findall(".//item")
         for item in items[:max_results]:
             title = (
@@ -94,7 +116,7 @@ def fetch_bist100_news(max_results: int = 5) -> list[dict[str, str]]:
         url = f"https://news.google.com/rss/search?q={query}&hl=tr&gl=TR&ceid=TR:tr"
         response = requests.get(url, timeout=8, headers={"User-Agent": "Mozilla/5.0"})
         response.raise_for_status()
-        root = ET.fromstring(response.content)
+        root = _parse_rss(response.content)
         items = root.findall(".//item")
         for item in items[:max_results]:
             title = (

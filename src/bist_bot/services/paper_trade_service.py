@@ -124,9 +124,7 @@ class PaperTradeService:
         regime_frame = self.fetcher.fetch_single(signal.ticker, period="3mo")
         fetch_meta_getter = getattr(self.fetcher, "get_last_history_fetch_meta", None)
         fetch_meta_raw = (
-            fetch_meta_getter(
-                signal.ticker, "3mo", getattr(self.settings, "DATA_INTERVAL", "1d")
-            )
+            fetch_meta_getter(signal.ticker, "3mo", getattr(self.settings, "DATA_INTERVAL", "1d"))
             if callable(fetch_meta_getter)
             else None
         )
@@ -152,7 +150,7 @@ class PaperTradeService:
                 candle_count=len(regime_frame) if regime_frame is not None else 0,
             )
         direction = "short" if signal.signal_type.is_sell else "long"
-        self.db.add_paper_trade(
+        trade_id = self.db.add_paper_trade(
             ticker=signal.ticker,
             signal_type=signal.signal_type.value,
             signal_price=signal.price,
@@ -163,6 +161,79 @@ class PaperTradeService:
             regime=regime,
             direction=direction,
         )
+        self._record_ledger_open(trade_id, signal, regime, direction)
+
+    def _record_ledger_open(
+        self, paper_trade_id: Any, signal: Signal, regime: str, direction: str
+    ) -> None:
+        """Sprint 2: dual-write the paper open into the unified trade ledger.
+
+        Failure is isolated — ledger problems must never break paper trading
+        (same B3 isolation contract as the rest of the queue path).
+        """
+        try:
+            recorder = getattr(self.db, "record_ledger_open", None)
+            if not callable(recorder):
+                return
+            recorder(
+                kind="PAPER",
+                ticker=signal.ticker,
+                signal_type=signal.signal_type.value,
+                direction=direction,
+                score=float(signal.score),
+                regime=regime,
+                entry_price=float(signal.price),
+                entry_time=signal.timestamp,
+                stop_loss=signal.stop_loss,
+                target_price=signal.target_price,
+                paper_trade_id=paper_trade_id if isinstance(paper_trade_id, int) else None,
+                source="live",
+            )
+        except Exception as exc:
+            logger.warning(
+                "ledger_open_write_failed",
+                ticker=signal.ticker,
+                error_type=type(exc).__name__,
+                error=str(exc),
+            )
+
+    def _record_ledger_close(
+        self, trade: Any, exit_price: float, reason: str, direction: str, net_pct: float
+    ) -> None:
+        """Sprint 2: mirror a paper close into the unified trade ledger.
+
+        Records both gross (fee-free) and net (fee-adjusted) PnL so the
+        historical net/gross ambiguity of ``actual_profit_pct`` never recurs.
+        """
+        try:
+            closer = getattr(self.db, "record_ledger_close", None)
+            if not callable(closer):
+                return
+            entry = float(trade.signal_price)
+            if entry > 0:
+                if direction == "short":
+                    gross_pct = (entry - exit_price) / entry * 100.0
+                else:
+                    gross_pct = (exit_price - entry) / entry * 100.0
+                gross_pct = round(gross_pct, 6)
+            else:
+                gross_pct = None
+            closer(
+                "PAPER",
+                paper_trade_id=getattr(trade, "id", None),
+                ticker=trade.ticker,
+                exit_price=exit_price,
+                close_reason=reason,
+                gross_pnl_pct=gross_pct,
+                net_pnl_pct=net_pct,
+            )
+        except Exception as exc:
+            logger.warning(
+                "ledger_close_write_failed",
+                ticker=trade.ticker,
+                error_type=type(exc).__name__,
+                error=str(exc),
+            )
 
     @staticmethod
     def _trade_direction(trade: Any) -> str:
@@ -241,15 +312,24 @@ class PaperTradeService:
         if missing:
             try:
                 batch = self.fetcher.fetch_all(period="1d", force=False) or {}
-            except Exception:
+            except Exception as exc:
+                logger.error(
+                    "paper_price_fetch_empty",
+                    error=str(exc),
+                    missing_tickers=missing,
+                )
                 batch = {}
             for ticker in missing:
                 df = batch.get(ticker)
                 if df is not None and len(df) > 0 and "close" in df.columns:
                     try:
                         prices[ticker] = float(df["close"].iloc[-1])
-                    except (TypeError, ValueError, KeyError, IndexError):
-                        pass
+                    except (TypeError, ValueError, KeyError, IndexError) as exc:
+                        logger.warning(
+                            "paper_price_parse_skipped",
+                            ticker=ticker,
+                            error_type=type(exc).__name__,
+                        )
 
         # B3: "if not prices: return" erken cikisi kaldirildi — fiyat hic
         # gelmediginde her acik pozisyon miss sayacina dusmeli (sessiz OPEN
@@ -393,6 +473,7 @@ class PaperTradeService:
             actual_profit_pct=profit_pct,
             trade_id=getattr(trade, "id", None),
         )
+        self._record_ledger_close(trade, current, reason, direction, profit_pct)
         event = {
             "STOP_HIT": "paper_trade_stop_hit",
             "TARGET_HIT": "paper_trade_target_hit",

@@ -139,18 +139,45 @@ def _audit_rows_for(engine: Engine) -> list[dict]:
             entry = dict(row)
             direction = resolve_direction_safe(entry["signal_type"], entry["direction"])
             if direction is None:
-                candidates.append({**entry, "direction": None, "profit": None, "status": STATUS_QUARANTINE_DIRECTION})
+                candidates.append(
+                    {
+                        **entry,
+                        "direction": None,
+                        "profit": None,
+                        "status": STATUS_QUARANTINE_DIRECTION,
+                    }
+                )
                 continue
-            if entry["signal_price"] is None or entry["signal_price"] <= 0 or (entry["exit_price"] or 0) <= 0:
-                candidates.append({**entry, "direction": direction, "profit": None, "status": STATUS_QUARANTINE_PRICE})
+            if (
+                entry["signal_price"] is None
+                or entry["signal_price"] <= 0
+                or (entry["exit_price"] or 0) <= 0
+            ):
+                candidates.append(
+                    {
+                        **entry,
+                        "direction": direction,
+                        "profit": None,
+                        "status": STATUS_QUARANTINE_PRICE,
+                    }
+                )
                 continue
             profit = PaperTradeService.net_profit_pct(
                 entry["signal_price"], entry["exit_price"], None, direction
             )
             if abs(profit) > OUTLIER_ABS_PCT:
-                candidates.append({**entry, "direction": direction, "profit": None, "status": STATUS_QUARANTINE_OUTLIER})
+                candidates.append(
+                    {
+                        **entry,
+                        "direction": direction,
+                        "profit": None,
+                        "status": STATUS_QUARANTINE_OUTLIER,
+                    }
+                )
                 continue
-            candidates.append({**entry, "direction": direction, "profit": profit, "status": STATUS_REPAIRED})
+            candidates.append(
+                {**entry, "direction": direction, "profit": profit, "status": STATUS_REPAIRED}
+            )
     return candidates
 
 
@@ -330,7 +357,11 @@ def main() -> int:
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--trade-id", type=int, default=None)
     parser.add_argument("--db", default=None, help="SQLAlchemy URL (default: DATABASE_URL)")
-    parser.add_argument("--add-constraint", action="store_true", help="apply sonrasi CHECK constraint ekle (postgres)")
+    parser.add_argument(
+        "--add-constraint",
+        action="store_true",
+        help="apply sonrasi CHECK constraint ekle (postgres)",
+    )
     args = parser.parse_args()
 
     engine = _build_engine(args.db)
@@ -344,8 +375,10 @@ def main() -> int:
     )
     cc = report.get("crosscheck", {})
     print("== CROSS-CHECK ==")
-    print(f"  kontrol: {cc.get('checked', 0)} | birebir: {cc.get('exact', 0)} | "
-          f"fee-delta (bilinen): {cc.get('fee_delta', 0)} | beklenmedik: {cc.get('unexpected', 0)}")
+    print(
+        f"  kontrol: {cc.get('checked', 0)} | birebir: {cc.get('exact', 0)} | "
+        f"fee-delta (bilinen): {cc.get('fee_delta', 0)} | beklenmedik: {cc.get('unexpected', 0)}"
+    )
     if "aborted" in report:
         print(f"ABORT: {report['aborted']}")
         return 2

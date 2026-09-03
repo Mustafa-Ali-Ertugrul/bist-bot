@@ -1,5 +1,8 @@
 """Tests for confluence sell soft-fail behavior and is_actionable recomputation."""
 
+# mypy: disable-error-code="method-assign"
+# (Tests monkeypatch engine methods with MagicMock; safe at runtime.)
+
 from unittest.mock import MagicMock
 
 from bist_bot.strategy.engine import StrategyEngine

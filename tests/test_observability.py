@@ -216,6 +216,23 @@ def test_json_logging_renders_without_error():
     assert payload["duration_ms"] == 12.5
 
 
+def test_console_logging_survives_non_utf8_encoding():
+    """cp1252-style console must not raise UnicodeEncodeError on emoji log lines."""
+    buffer = io.BytesIO()
+    cp1252_stream = io.TextIOWrapper(buffer, encoding="cp1252")
+
+    with settings.override(LOG_FORMAT="console", LOG_LEVEL="INFO"):
+        configure_logging(stream=cp1252_stream)
+        logger = get_logger("tests.observability.encoding", component="test")
+        logger.info("emoji_log_test", preview="🤖 baslatildi")
+
+    cp1252_stream.flush()
+    out = buffer.getvalue().decode("cp1252")
+    assert "emoji_log_test" in out
+    assert "baslatildi" in out  # encodable text survives
+    assert "?" in out  # unencodable emoji degraded, not raised
+
+
 def test_structured_log_event_includes_standard_fields():
     stream = io.StringIO()
     with settings.override(LOG_FORMAT="json", LOG_LEVEL="INFO"):

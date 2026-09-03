@@ -104,7 +104,10 @@ class WorkerHealthServer:
         return Handler
 
     def start(self) -> None:
-        self._server = ThreadingHTTPServer(("0.0.0.0", self.port), self._handler())
+        # Container liveness endpoint must listen on all interfaces; the
+        # port serves only container-local healthchecks, never the internet.
+        bind_host = "0.0.0.0"  # nosec B104
+        self._server = ThreadingHTTPServer((bind_host, self.port), self._handler())
         self._thread = Thread(target=self._server.serve_forever, name="worker-http", daemon=True)
         self._thread.start()
         logger.info("worker_http_started", port=self.port)

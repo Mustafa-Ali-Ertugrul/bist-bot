@@ -119,7 +119,7 @@ def _run_score(
     raw_total: float,
     ticker: str = "TEST.IS",
     momentum_ok: bool = True,
-) -> tuple[float, list[str]] | None:
+) -> tuple[float, list[str], float | None] | None:
     momentum_scorer, trend_scorer, volume_scorer, structure_scorer = _fixed_component_scorers(
         raw_total
     )

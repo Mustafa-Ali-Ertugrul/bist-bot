@@ -28,7 +28,11 @@ from bist_bot.config.settings import settings
 from bist_bot.indicators import TechnicalIndicators
 from bist_bot.strategy.engine_filters import calculate_score_and_reasons
 from bist_bot.strategy.params import StrategyParams
-from bist_bot.strategy.regime import check_momentum_confirmation
+from bist_bot.strategy.regime import (
+    MarketRegime,
+    check_momentum_confirmation,
+    load_macro_regime_series,
+)
 from bist_bot.strategy.scoring import (
     score_momentum,
     score_structure,
@@ -165,6 +169,22 @@ def _load_csv_fallback(cache_dir: Path, ticker: str, period: str) -> pd.DataFram
         return None
 
 
+def _load_tickers_file(path: Path) -> list[str]:
+    """Load a ticker universe from a CSV file with a ``ticker`` column.
+
+    Used by Deney A (robust watchlist pool filter). Rows with an empty
+    ticker cell are skipped; duplicates are preserved (caller may dedupe).
+    """
+    with path.open(newline="", encoding="utf-8") as fh:
+        reader = csv.DictReader(fh)
+        if reader.fieldnames is None or "ticker" not in reader.fieldnames:
+            raise ValueError(f"tickers file must have a 'ticker' column: {path}")
+        tickers = [row["ticker"].strip() for row in reader if (row.get("ticker") or "").strip()]
+    if not tickers:
+        raise ValueError(f"no tickers found in tickers file: {path}")
+    return tickers
+
+
 def evaluate_ticker(
     ticker: str,
     df: pd.DataFrame,
@@ -188,6 +208,10 @@ def evaluate_ticker(
             "total_oos_trades": 0,
             "counter_trend_multiplier": wf.strategy_params.counter_trend_multiplier,
             "obv_divergence_cap": wf.strategy_params.obv_divergence_cap,
+            "macro_bear_oos_bars": 0,
+            "macro_bear_oos_entry_candidates": 0,
+            "data_start": str(df.index.min().date()),
+            "data_end": str(df.index.max().date()),
             "rows": len(df),
         }
 
@@ -206,6 +230,10 @@ def evaluate_ticker(
             "total_oos_trades": 0,
             "counter_trend_multiplier": wf.strategy_params.counter_trend_multiplier,
             "obv_divergence_cap": wf.strategy_params.obv_divergence_cap,
+            "macro_bear_oos_bars": 0,
+            "macro_bear_oos_entry_candidates": 0,
+            "data_start": str(df.index.min().date()),
+            "data_end": str(df.index.max().date()),
             "rows": len(df),
         }
 
@@ -223,6 +251,12 @@ def evaluate_ticker(
         "total_oos_trades": sum(w.test_trades for w in result.windows),
         "counter_trend_multiplier": wf.strategy_params.counter_trend_multiplier,
         "obv_divergence_cap": wf.strategy_params.obv_divergence_cap,
+        "macro_bear_oos_bars": sum(w.test_macro_bear_bars for w in result.windows),
+        "macro_bear_oos_entry_candidates": sum(
+            w.test_macro_bear_entry_candidates for w in result.windows
+        ),
+        "data_start": str(df.index.min().date()),
+        "data_end": str(df.index.max().date()),
         "rows": len(df),
     }
 
@@ -299,6 +333,13 @@ def write_csv(rows: list[dict[str, object]], path: Path) -> None:
         "counter_trend_multiplier",
         "obv_divergence_cap",
         "gates",
+        "target_rr",
+        "oversold_trend_confirm",
+        "macro_regime_mode",
+        "macro_bear_oos_bars",
+        "macro_bear_oos_entry_candidates",
+        "data_start",
+        "data_end",
         "rows",
     ]
     with path.open("w", newline="", encoding="utf-8") as fh:
@@ -743,6 +784,28 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--commission-bps",
+        type=float,
+        default=2.0,
+        help="Commission per side in basis points (default: 2.0)",
+    )
+    parser.add_argument(
+        "--slippage-bps",
+        type=float,
+        default=5.0,
+        help="Slippage per side in basis points (default: 5.0)",
+    )
+    parser.add_argument(
+        "--profile",
+        type=str,
+        default="conservative",
+        choices=("conservative", "research_v1"),
+        help=(
+            "StrategyParams profile to evaluate (default: conservative). "
+            "research_v1 normalizes component scores with literature-based weights."
+        ),
+    )
+    parser.add_argument(
         "--chase-block-enabled",
         dest="chase_block_enabled",
         action=argparse.BooleanOptionalAction,
@@ -753,16 +816,80 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "When disabled, output saved to *_h3_off.csv unless --output is explicit."
         ),
     )
+    parser.add_argument(
+        "--tickers-file",
+        type=str,
+        default=None,
+        help=(
+            "Deney A: CSV file with a 'ticker' column to use as the universe "
+            "instead of BIST30 (e.g. results/robust_watchlist.csv). "
+            "Default output renamed to walk_forward_<file-stem>.csv."
+        ),
+    )
+    parser.add_argument(
+        "--target-rr",
+        type=float,
+        default=None,
+        help=(
+            "Deney B: override Backtester target_rr (reward/risk multiple for the "
+            "take-profit target; Backtester default is 2.0). "
+            "Default output renamed to walk_forward_expB_rr<value>.csv."
+        ),
+    )
+    parser.add_argument(
+        "--oversold-trend-confirm",
+        action="store_true",
+        help=(
+            "Deney C: enable oversold_requires_trend_confirm on the profile "
+            "(BB BELOW_LOWER and CCI<-100 points scaled by the unconfirmed "
+            "multiplier unless close>SMA20 or plus_di>minus_di). "
+            "Default output renamed to walk_forward_expC_tc_m<mult>.csv."
+        ),
+    )
+    parser.add_argument(
+        "--oversold-unconfirmed-multiplier",
+        type=float,
+        default=None,
+        help=(
+            "Deney C: scale factor for unconfirmed oversold points "
+            "(default 0.5 = halve; 0.0 = disable points entirely)."
+        ),
+    )
+    parser.add_argument(
+        "--macro-regime-mode",
+        type=str,
+        default="off",
+        choices=("off", "observe", "enforce"),
+        help=(
+            "Deney D: macro regime entry gate. off = current behaviour "
+            "(no benchmark data loaded); observe = count BEAR-day entry "
+            "candidates without changing trades; enforce = block those "
+            "entries. Benchmarks are loaded cache-only from --cache-dir."
+        ),
+    )
+    parser.add_argument(
+        "--pv-confirmation-required",
+        action="store_true",
+        help=(
+            "Deney F: require price_volume_direction == BULLISH_CONFIRMATION "
+            "for long entries (opt-in; default preserves current behaviour)."
+        ),
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     tickers = list(BIST30_TICKERS)
+    if args.tickers_file:
+        tickers = _load_tickers_file(Path(args.tickers_file))
     if args.limit and args.limit > 0:
         tickers = tickers[: args.limit]
 
-    params = StrategyParams.conservative()
+    if args.profile == "research_v1":
+        params = StrategyParams.research_v1()
+    else:
+        params = StrategyParams.conservative()
     if args.buy_threshold is not None:
         params.buy_threshold = args.buy_threshold
     params.counter_trend_multiplier = args.counter_trend_multiplier
@@ -772,6 +899,12 @@ def main(argv: list[str] | None = None) -> int:
         params.obv_divergence_cap = args.obv_divergence_cap
     if args.mtf_confluence_block_enabled is not None:
         params.mtf_confluence_block_enabled = bool(args.mtf_confluence_block_enabled)
+    if args.oversold_trend_confirm:
+        params.oversold_requires_trend_confirm = True
+    if args.oversold_unconfirmed_multiplier is not None:
+        params.oversold_unconfirmed_score_multiplier = args.oversold_unconfirmed_multiplier
+    if args.pv_confirmation_required:
+        params.pv_confirmation_required = True
     gates_enabled = not args.no_gates
     if args.no_gates:
         params.counter_trend_multiplier = 1.0
@@ -782,7 +915,17 @@ def main(argv: list[str] | None = None) -> int:
     if args.chase_block_enabled is not None:
         params.chase_block_enabled = bool(args.chase_block_enabled)
     output_path = Path(args.output)
-    if args.buy_threshold is not None and args.output == str(DEFAULT_RESULTS_CSV):
+    if args.tickers_file and args.output == str(DEFAULT_RESULTS_CSV):
+        stem = Path(args.tickers_file).stem
+        output_path = REPO_ROOT / "results" / f"walk_forward_{stem}.csv"
+    elif args.target_rr is not None and args.output == str(DEFAULT_RESULTS_CSV):
+        output_path = REPO_ROOT / "results" / f"walk_forward_expB_rr{args.target_rr:g}.csv"
+    elif args.oversold_trend_confirm and args.output == str(DEFAULT_RESULTS_CSV):
+        mult = params.oversold_unconfirmed_score_multiplier
+        output_path = REPO_ROOT / "results" / f"walk_forward_expC_tc_m{mult:g}.csv"
+    elif args.profile == "research_v1" and args.output == str(DEFAULT_RESULTS_CSV):
+        output_path = REPO_ROOT / "results" / "walk_forward_bist30_research_v1.csv"
+    elif args.buy_threshold is not None and args.output == str(DEFAULT_RESULTS_CSV):
         output_path = (
             REPO_ROOT
             / "results"
@@ -804,23 +947,50 @@ def main(argv: list[str] | None = None) -> int:
         # the explicit --no-chase-block-enabled case only; both write the same file.
         output_path = REPO_ROOT / "results" / "walk_forward_bist30_conservative_h3_off.csv"
     cache_dir = Path(args.cache_dir)
+
+    macro_series = None
+    if args.macro_regime_mode != "off":
+        # Cache-only, fail-fast: any missing/short benchmark aborts the run
+        # before any ticker is evaluated.
+        macro_series = load_macro_regime_series(cache_dir)
+        counts = macro_series.value_counts()
+        n_days = len(macro_series)
+        dist = {r.value: int(counts.get(r, 0)) for r in MarketRegime}
+        bear_days = dist[MarketRegime.BEAR.value]
+        print("=" * 100)
+        print(
+            f"MACRO REGIME SERIES (mode={args.macro_regime_mode}): "
+            f"{macro_series.index.min().date()} .. {macro_series.index.max().date()} "
+            f"({n_days} days)"
+        )
+        print("  regime days: " + "  ".join(f"{k}={v}" for k, v in dist.items()))
+        if bear_days == 0:
+            print("  WARNING: 0 BEAR days — the experiment is INCONCLUSIVE by design.")
+        print("=" * 100)
+
     wf = WalkForwardValidator(
         train_window=252,
         test_window=63,
         step_size=63,
-        commission_bps=2.0,
-        slippage_bps=5.0,
+        commission_bps=float(args.commission_bps),
+        slippage_bps=float(args.slippage_bps),
         initial_capital=100_000.0,
         strategy_params=params,
+        target_rr=args.target_rr,
+        macro_regime_series=macro_series,
+        macro_regime_mode=args.macro_regime_mode,
     )
 
     print(
-        f"BIST30 walk-forward scan (StrategyParams.conservative, "
+        f"BIST30 walk-forward scan (profile={args.profile}, "
         f"counter_trend_multiplier={params.counter_trend_multiplier}, "
         f"gates={'ON' if gates_enabled else 'OFF'}, "
         f"chase_block={'ON' if params.chase_block_enabled else 'OFF'}, "
         f"slope_lookback={params.slope_lookback}, "
-        f"mtf_confluence_block={'ON' if params.mtf_confluence_block_enabled else 'OFF'})"
+        f"mtf_confluence_block={'ON' if params.mtf_confluence_block_enabled else 'OFF'}, "
+        f"target_rr={args.target_rr if args.target_rr is not None else 2.0}, "
+        f"oversold_trend_confirm={'ON' if params.oversold_requires_trend_confirm else 'OFF'}, "
+        f"macro_regime_mode={args.macro_regime_mode})"
     )
     print(
         f"  tickers={len(tickers)}  period={args.period}  "
@@ -876,6 +1046,13 @@ def main(argv: list[str] | None = None) -> int:
                     "has_overfitting_warning": False,
                     "counter_trend_multiplier": args.counter_trend_multiplier,
                     "gates": "ON" if gates_enabled else "OFF",
+                    "target_rr": args.target_rr if args.target_rr is not None else 2.0,
+                    "oversold_trend_confirm": (
+                        "ON" if params.oversold_requires_trend_confirm else "OFF"
+                    ),
+                    "macro_regime_mode": args.macro_regime_mode,
+                    "macro_bear_oos_bars": 0,
+                    "macro_bear_oos_entry_candidates": 0,
                     "rows": 0 if df is None else len(df),
                 }
             )
@@ -885,6 +1062,9 @@ def main(argv: list[str] | None = None) -> int:
         # is already handled inside load_or_download.
         row = evaluate_ticker(ticker, df, wf)
         row["gates"] = "ON" if gates_enabled else "OFF"
+        row["target_rr"] = args.target_rr if args.target_rr is not None else 2.0
+        row["oversold_trend_confirm"] = "ON" if params.oversold_requires_trend_confirm else "OFF"
+        row["macro_regime_mode"] = args.macro_regime_mode
         rows.append(row)
         print(
             f"  status={row['status']} windows={row['windows']} "
@@ -937,6 +1117,19 @@ def main(argv: list[str] | None = None) -> int:
                 f"obv_trend_notnull={t_obv_notnull} "
                 f"h4_long_fired={t_h4_fired} h4_short_fired={t_h4_short_fired} "
                 f"h6_total={t_h6_total} h6_neutralized={t_h6_neutralized}"
+            )
+
+    if args.macro_regime_mode != "off":
+        total_bear_oos = sum(int(r.get("macro_bear_oos_bars") or 0) for r in rows)
+        total_cand_oos = sum(int(r.get("macro_bear_oos_entry_candidates") or 0) for r in rows)
+        print(
+            f"MACRO GATE (mode={args.macro_regime_mode}): "
+            f"OOS bear bars={total_bear_oos}  OOS entry candidates on bear days={total_cand_oos}"
+        )
+        if total_cand_oos == 0:
+            print(
+                "  WARNING: 0 bear-day entry candidates — the observe/enforce "
+                "comparison is INCONCLUSIVE."
             )
 
     write_csv(rows, output_path)

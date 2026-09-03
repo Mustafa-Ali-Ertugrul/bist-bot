@@ -213,9 +213,56 @@ class PositionManager:
             logger.exception("get_position_failed", ticker=ticker)
             return None
 
-    def check_exit_conditions(self, prices: dict[str, float]) -> list[dict[str, Any]]:
+    def _update_stop_loss(self, position_id: int, new_stop: float) -> None:
+        """Ratchet a position's stop loss upward (trailing stop persistence).
+
+        Best-effort: on failure the exit check continues with the in-memory
+        stop for this cycle; the next cycle recomputes the trail from bars, so
+        a restart only loses the persisted ratchet, never the protection.
+        """
+        try:
+            with self.db.manager.engine.begin() as conn:
+                conn.execute(
+                    text(
+                        """UPDATE live_positions SET stop_loss=:stop, updated_at=:ts
+                        WHERE id=:id AND state=:state"""
+                    ),
+                    {
+                        "stop": round(new_stop, 4),
+                        "ts": datetime.now(UTC),
+                        "id": position_id,
+                        "state": PositionState.POSITION_OPEN.value,
+                    },
+                )
+            logger.info(
+                "trailing_stop_updated", position_id=position_id, new_stop=round(new_stop, 4)
+            )
+        except Exception:
+            logger.exception("trailing_stop_update_failed", position_id=position_id)
+
+    def check_exit_conditions(
+        self,
+        prices: dict[str, float],
+        atr_map: dict[str, float] | None = None,
+        closes_map: dict[str, list[tuple[str, float]]] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Evaluate exit triggers for open positions.
+
+        prices: ticker -> latest price (required).
+        atr_map: ticker -> ATR14 (Deney M ATR trailing stop; optional).
+        closes_map: ticker -> [(iso_date, close), ...] daily closes since
+            roughly entry (peak-close tracking; optional).
+
+        ATR trailing (Deney M, docs/retail_abone_ekonomisi.md §17): trail =
+        peak_close - TRAILING_ATR_MULT * ATR14, only ever tightening the
+        original stop. When the trail rises above the stored stop it is
+        persisted via _update_stop_loss so restarts keep the ratchet. A hit on
+        a ratcheted stop exits with TRAILING_STOP (vs STOP_HIT on the original).
+        """
         open_positions = self.get_open_positions()
         triggers: list[dict[str, Any]] = []
+        atr_mult = float(getattr(self.settings.agent, "TRAILING_ATR_MULT", 0.0) or 0.0)
+        trail_enabled = bool(getattr(self.settings.agent, "TRAILING_STOP_ENABLED", False))
 
         for pos in open_positions:
             ticker = str(pos["ticker"])
@@ -223,26 +270,39 @@ class PositionManager:
             if current_price is None:
                 continue
 
-            stop_loss = float(pos["stop_loss"])
+            original_stop = float(pos["stop_loss"])
+            stop_loss = original_stop
             target_price = float(pos["target_price"])
             entry_price = float(pos["entry_price"])
             reason = None
 
+            if trail_enabled and atr_mult > 0 and atr_map and ticker in atr_map and closes_map:
+                atr = float(atr_map[ticker])
+                if atr > 0:
+                    entry_date = str(pos.get("entry_time") or "")[:10]
+                    peak = current_price
+                    for bar_date, close in closes_map.get(ticker, []):
+                        if bar_date >= entry_date and close > peak:
+                            peak = close
+                    trail = peak - atr_mult * atr
+                    if trail > stop_loss:
+                        self._update_stop_loss(int(pos["id"]), trail)
+                        stop_loss = trail
+
             if current_price <= stop_loss:
-                reason = ExitReason.STOP_HIT
+                reason = (
+                    ExitReason.TRAILING_STOP if stop_loss > original_stop else ExitReason.STOP_HIT
+                )
             elif current_price >= target_price:
                 reason = ExitReason.TARGET_HIT
-            elif self.settings.agent.TRAILING_STOP_ENABLED and pos.get("exit_price"):
-                trailing_stop = float(pos["exit_price"]) * (
-                    1 - self.settings.agent.TRAILING_STOP_PCT / 100
-                )
-                if current_price <= trailing_stop:
-                    reason = ExitReason.TRAILING_STOP
 
-            # 3 gün kuralı: MAX_HOLDING_DAYS (varsayılan 3) gün sonra otomatik kapat
+            # Takvim-gunu kurali: MAX_HOLDING_DAYS takvim gunu sonra otomatik kapat
+            # (28 takvim gunu ~= 20 is gunu; bkz. Deney H, docs/retail_abone_ekonomisi.md)
             if reason is None and pos.get("entry_time"):
                 try:
                     entry_dt = datetime.fromisoformat(str(pos["entry_time"]).replace("Z", "+00:00"))
+                    if entry_dt.tzinfo is None:
+                        entry_dt = entry_dt.replace(tzinfo=UTC)
                     now = datetime.now(UTC)
                     days_held = (now - entry_dt).days
                     max_days = self.settings.agent.MAX_HOLDING_DAYS

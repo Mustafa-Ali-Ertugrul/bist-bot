@@ -3,19 +3,17 @@
 Run INSIDE the bist-bot-worker container (has bist_bot package + psycopg2 + settings).
 Usage: python export_telegram_messages_postgres.py
 """
+
 import io
 import json
-import sys
-from datetime import datetime, timezone
+from datetime import UTC
 
 import psycopg2
 
-sys.path.insert(0, "/app/src")
-
-from bist_bot.strategy.signal_models import Signal, SignalType
 from bist_bot.notifier import TelegramNotifier
 from bist_bot.strategy.engine_filters import is_trade_actionable
 from bist_bot.strategy.params import StrategyParams
+from bist_bot.strategy.signal_models import Signal, SignalType
 
 DB_DSN = "postgresql://bist:bist@postgres:5432/bist_bot"
 SINCE = "2026-08-12"
@@ -48,8 +46,19 @@ buf.write(f"# Telegram Bildirimleri (gerçek veri) — {SINCE} → bugün\n\n")
 sent_detail = 0
 for r in rows:
     (
-        ts, ticker, signal_type, score, price, stop_loss, target_price,
-        pos_size, confidence, reasons_raw, conditions_raw, sb_raw, created_at,
+        ts,
+        ticker,
+        signal_type,
+        score,
+        price,
+        stop_loss,
+        target_price,
+        pos_size,
+        confidence,
+        reasons_raw,
+        conditions_raw,
+        sb_raw,
+        created_at,
     ) = r
     reasons = []
     if conditions_raw:
@@ -65,7 +74,9 @@ for r in rows:
         try:
             parsed = json.loads(sb_raw)
             if isinstance(parsed, dict) and parsed and "by_reason" not in parsed:
-                score_breakdown = {k: float(v) for k, v in parsed.items() if isinstance(v, (int, float))}
+                score_breakdown = {
+                    k: float(v) for k, v in parsed.items() if isinstance(v, int | float)
+                }
         except Exception:
             score_breakdown = None
 
@@ -78,7 +89,7 @@ for r in rows:
         target_price=float(target_price or 0),
         position_size=int(pos_size) if pos_size is not None else None,
         confidence=str(confidence or "confidence.low"),
-        timestamp=ts.replace(tzinfo=timezone.utc) if ts.tzinfo is None else ts,
+        timestamp=ts.replace(tzinfo=UTC) if ts.tzinfo is None else ts,
         reasons=reasons,
         score_breakdown=score_breakdown,
     )
@@ -94,7 +105,9 @@ for r in rows:
     tag = "✅ DETAY MESAJI (score>0)" if float(score) > 0 else "ℹ️ scan_summary içinde"
     if float(score) > 0:
         sent_detail += 1
-    buf.write(f"\n## {ticker} | {signal_type} | skor={score} | {created_at}\n\n```\n{msg}\n```\n---\n")
+    buf.write(
+        f"\n## {ticker} | {signal_type} | skor={score} | {created_at}\n\n```\n{msg}\n```\n---\n"
+    )
 
 with open(OUT, "w", encoding="utf-8") as f:
     f.write(buf.getvalue())

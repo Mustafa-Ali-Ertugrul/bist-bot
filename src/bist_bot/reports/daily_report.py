@@ -402,13 +402,13 @@ def generate_daily_report(
         ]
     )
     if radar_demoted:
-        top_demoted = sorted(radar_demoted, key=lambda x: -x["score_float"])[
-            :radar_demoted_limit
-        ]
+        top_demoted = sorted(radar_demoted, key=lambda x: -x["score_float"])[:radar_demoted_limit]
         demoted_cells = []
         for s in top_demoted:
             tag = s.get("gate_tag") or "[Gate]"
-            demoted_cells.append(f"**{s['ticker'].replace('.IS', '')}** ({s['score_float']:+.1f}) {tag}")
+            demoted_cells.append(
+                f"**{s['ticker'].replace('.IS', '')}** ({s['score_float']:+.1f}) {tag}"
+            )
         if demoted_cells:
             lines.append(", ".join(demoted_cells))
         if len(radar_demoted) > radar_demoted_limit:
@@ -457,10 +457,7 @@ def generate_daily_report(
         if top_b:
             lines.append(
                 ", ".join(
-                    [
-                        f"{s['ticker'].replace('.IS', '')} ({s['score_float']:+.1f})"
-                        for s in top_b
-                    ]
+                    [f"{s['ticker'].replace('.IS', '')} ({s['score_float']:+.1f})" for s in top_b]
                 )
             )
         if len(radar_tier_b) > radar_tier_b_limit:

@@ -23,6 +23,10 @@ Pipeline (production order in ``engine.analyze``):
 7. risk manager + signal construction
 """
 
+# mypy: disable-error-code="comparison-overlap"
+# ( membership-narrowed ``signal_type`` compared against the excluded member
+# is intentional negative assertion; safe at runtime.)
+
 from __future__ import annotations
 
 from typing import Any, cast

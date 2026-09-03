@@ -51,10 +51,15 @@ def test_limiter_allows_upto_limit_without_waiting():
 def test_limiter_blocks_when_window_full():
     clock = _FakeClock()
     waits: list[float] = []
+
+    def _sleep_and_advance(s: float) -> None:
+        waits.append(s)
+        clock.advance(s)
+
     limiter = SlidingWindowRateLimiter(
         limit_per_minute=2,
         clock=clock,
-        sleep_fn=lambda s: (waits.append(s), clock.advance(s)),
+        sleep_fn=_sleep_and_advance,
     )
 
     limiter.acquire()
@@ -233,7 +238,12 @@ def test_diagnosis_uses_buy_threshold_for_buy_signals():
 def test_scan_summary_marks_actionable_sell():
     notifier = TelegramNotifier(token="t", chat_id="c")
     captured: list[str] = []
-    notifier.sender = lambda base_url, chat_id, text, **kw: captured.append(text) or True
+
+    def _capture(base_url: object, chat_id: object, text: str, **kw: object) -> bool:
+        captured.append(text)
+        return True
+
+    notifier.sender = _capture
     actionable_sell = _signal(SignalType.SELL, -30.0, is_actionable=True)
     notifier.send_scan_summary([actionable_sell], total_scanned=1)
     assert "— SAT (actionable)" in captured[0]

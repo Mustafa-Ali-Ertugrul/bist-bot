@@ -1,4 +1,5 @@
 """Create all DB tables in the configured backend (PostgreSQL) and verify."""
+
 import os
 
 from sqlalchemy import text
@@ -14,11 +15,14 @@ def main() -> None:
     Base.metadata.create_all(mgr.engine)
     print("create_all done")
     with mgr.engine.connect() as conn:
-        rows = conn.execute(
-            text(
-                "SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename"
-            )
-        ).all()
+        if mgr.engine.dialect.name == "postgresql":
+            rows = conn.execute(
+                text("SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename")
+            ).all()
+        else:
+            rows = conn.execute(
+                text("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+            ).all()
     print("tables:", [r[0] for r in rows])
 
 

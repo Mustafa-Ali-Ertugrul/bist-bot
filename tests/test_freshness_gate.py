@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import MagicMock
 
 import pandas as pd
 
 import bist_bot.scanner as scanner_module
+from bist_bot.market_calendar import TR
 from bist_bot.scanner import ScanService
 
 
@@ -16,7 +18,9 @@ def _frames(ticker_last_bar_minutes_ago: dict[str, float]) -> dict[str, dict[str
     data: dict[str, dict[str, pd.DataFrame]] = {}
     for ticker, age_min in ticker_last_bar_minutes_ago.items():
         idx = [now - pd.Timedelta(minutes=age_min), now - pd.Timedelta(minutes=age_min + 15)]
-        trigger = pd.DataFrame({"open": [1.0, 1.0], "close": [1.0, 1.0]}, index=pd.DatetimeIndex(idx))
+        trigger = pd.DataFrame(
+            {"open": [1.0, 1.0], "close": [1.0, 1.0]}, index=pd.DatetimeIndex(idx)
+        )
         trend = pd.DataFrame({"close": [1.0, 2.0]}, index=pd.DatetimeIndex([now, now]))
         data[ticker] = {"trigger": trigger, "trend": trend}
     return data
@@ -24,13 +28,17 @@ def _frames(ticker_last_bar_minutes_ago: dict[str, float]) -> dict[str, dict[str
 
 def _service(notifier=None, warn=0.2, halt=0.4, max_age=30):
     service = ScanService.__new__(ScanService)
-    service.settings = SimpleNamespace(
-        STALE_BAR_MAX_AGE_MINUTES=max_age,
-        STALE_SYMBOL_WARN_RATIO=warn,
-        STALE_SYMBOL_HALT_RATIO=halt,
+    service.settings = cast(
+        Any,
+        SimpleNamespace(
+            STALE_BAR_MAX_AGE_MINUTES=max_age,
+            STALE_SYMBOL_WARN_RATIO=warn,
+            STALE_SYMBOL_HALT_RATIO=halt,
+        ),
     )
     service.notifier = notifier or MagicMock()
     service._last_stale_warn_date = None
+    service._last_stale_halt_alert_at = None
     return service
 
 
@@ -100,3 +108,61 @@ def test_last_bar_age_handles_date_column():
     df["date"] = [now - pd.Timedelta(minutes=45)]
     age = svc._last_bar_age_minutes(df)
     assert age is not None and 40 < age < 50
+
+
+def test_intraday_age_measured_from_bar_close():
+    """Bar open 40 dk once olsa da 15m bar'in kapanisi 25 dk once → taze sayilmali."""
+    svc = _service()
+    now = pd.Timestamp.now(tz="UTC")
+    df = pd.DataFrame(
+        {"close": [1.0]},
+        index=pd.DatetimeIndex([now - pd.Timedelta(minutes=40)]),
+    )
+    age = svc._last_bar_age_minutes(df, interval="15m")
+    assert age is not None and 20 < age < 30
+
+
+def test_intraday_forming_bar_is_fresh():
+    """Yahoo ~15-20 dk gecikmeli BIST verisi: son bar kapanisi 20 dk once → gecmeli."""
+    svc = _service()
+    now = pd.Timestamp.now(tz="UTC")
+    df = pd.DataFrame(
+        {"close": [1.0]},
+        index=pd.DatetimeIndex([now - pd.Timedelta(minutes=35)]),
+    )
+    age = svc._last_bar_age_minutes(df, interval="15m")
+    assert age is not None and 15 < age < 25
+
+
+def test_daily_bar_today_is_fresh():
+    svc = _service()
+    now = pd.Timestamp.now(tz="UTC")
+    # Freshness is judged per TR session (scanner converts bar days to TR);
+    # build the bar at TR midnight so "today" is unambiguous — a UTC-midnight
+    # bar belongs to the previous TR day between 21:00-24:00 UTC.
+    today_midnight_tr = now.tz_convert(TR).replace(hour=0, minute=0, second=0, microsecond=0)
+    df = pd.DataFrame({"close": [1.0]}, index=pd.DatetimeIndex([today_midnight_tr]))
+    age = svc._last_bar_age_minutes(df, interval="1d")
+    assert age == 0.0
+
+
+def test_daily_bar_previous_session_is_stale():
+    svc = _service()
+    now = pd.Timestamp.now(tz="UTC")
+    old = now - pd.Timedelta(days=2)
+    df = pd.DataFrame({"close": [1.0]}, index=pd.DatetimeIndex([old]))
+    age = svc._last_bar_age_minutes(df, interval="1d")
+    assert age is not None and age > 24 * 60
+
+
+def test_halt_alert_throttled_within_cooldown(monkeypatch):
+    monkeypatch.setattr(scanner_module, "is_bist_open", lambda: True)
+    notifier = MagicMock()
+    svc = _service(notifier=notifier)
+    data = _frames({f"S{i}.IS": 600 for i in range(5)})
+    assert svc._apply_freshness_gate(data) == {}
+    assert notifier.send_message.call_count == 1
+    # Ikinci halt ayni cooldown penceresinde → tekrar mesaj yok.
+    data2 = _frames({f"S{i}.IS": 600 for i in range(5)})
+    assert svc._apply_freshness_gate(data2) == {}
+    assert notifier.send_message.call_count == 1

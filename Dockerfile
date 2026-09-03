@@ -18,8 +18,8 @@ RUN apt-get update \
     && python -m venv "${VIRTUAL_ENV}" \
     && pip install --upgrade pip
 
-COPY requirements.txt .
-RUN pip install -r requirements.txt
+COPY requirements.txt pyproject.toml ./
+RUN pip install --no-cache-dir -r requirements.txt
 
 # ---- runtime: slim image without build tools ----
 FROM python:3.11-slim AS runtime
