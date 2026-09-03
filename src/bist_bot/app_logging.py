@@ -17,6 +17,35 @@ except ImportError:  # pragma: no cover - optional dependency
 
 _DEFAULT_COMPONENT = "app"
 
+_SENSITIVE_KEYS = {
+    "password",
+    "token",
+    "secret",
+    "api_key",
+    "jwt",
+    "authorization",
+    "key",
+    "otp",
+    "credential",
+}
+
+
+def _redact_value(key: str, val: Any) -> Any:
+    key_lower = str(key).lower()
+    if any(s in key_lower for s in _SENSITIVE_KEYS):
+        return "[REDACTED]"
+    if isinstance(val, dict):
+        return {k: _redact_value(k, v) for k, v in val.items()}
+    if isinstance(val, list):
+        return [_redact_value(key, item) for item in val]
+    return val
+
+
+def redact_sensitive_data(payload: dict[str, Any]) -> dict[str, Any]:
+    """Redact sensitive fields (passwords, tokens, keys) from log payload."""
+    return {k: _redact_value(k, v) for k, v in payload.items()}
+
+
 _correlation_id_ctx: ContextVar[str | None] = ContextVar("correlation_id", default=None)
 
 
@@ -42,11 +71,12 @@ def _json_enabled() -> bool:
 
 
 def _serialize_event(payload: dict[str, Any]) -> str:
+    sanitized = redact_sensitive_data(payload)
     if _json_enabled():
-        return json.dumps(payload, ensure_ascii=False, default=str)
-    ordered = [f"event={payload.get('event', 'log')}"]
-    for key in sorted(key for key in payload if key != "event"):
-        ordered.append(f"{key}={payload[key]}")
+        return json.dumps(sanitized, ensure_ascii=False, default=str)
+    ordered = [f"event={sanitized.get('event', 'log')}"]
+    for key in sorted(key for key in sanitized if key != "event"):
+        ordered.append(f"{key}={sanitized[key]}")
     return " ".join(ordered)
 
 
