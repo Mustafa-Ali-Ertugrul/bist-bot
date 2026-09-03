@@ -259,6 +259,9 @@ def create_dashboard_app(
         return app.config["broker"]
 
     def get_scan_service() -> ScanService:
+        factory = app.config.get("scan_service_factory")
+        if callable(factory):
+            return factory()
         return ScanService(
             get_fetcher(),
             get_engine(),
@@ -269,8 +272,8 @@ def create_dashboard_app(
             circuit_breaker=app.config.get("circuit_breaker"),
         )
 
-    # Process-level mutex to prevent concurrent /api/scan race on shared RiskManager
-    _scan_mutex = threading.Lock()
+    # Process-level state to track actively executing scan jobs and prevent duplicate/stale writes
+    _scan_in_flight = threading.Event()
 
     def verify_admin(email: str, password: str) -> bool:
         logger.info("verify_admin_start", email=_mask_email(email))
@@ -535,10 +538,9 @@ def create_dashboard_app(
             )
             scan_service = get_scan_service()
             logger.info("api_scan_started", force_refresh=force_refresh)
-            # Acquire the mutex with a non-blocking or bounded attempt to prevent
-            # stacking requests when a scan is already running.
-            acquired = _scan_mutex.acquire(blocking=False)
-            if not acquired:
+
+            # Check if a scan is already running (either active in request or running as an aborted background worker)
+            if _scan_in_flight.is_set():
                 logger.warning("api_scan_already_in_progress")
                 return jsonify(
                     {
@@ -547,33 +549,40 @@ def create_dashboard_app(
                     }
                 ), 429
 
-            scan_future = None
+            _scan_in_flight.set()
+            abort_event = threading.Event()
             executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-            try:
-                scan_future = executor.submit(scan_service.scan_once, force_refresh=force_refresh)
+
+            def _run_scan() -> list[Signal]:
                 try:
-                    signals = scan_future.result(timeout=settings.SCAN_TIMEOUT_SECONDS)
-                except concurrent.futures.TimeoutError:
-                    logger.error(
-                        "api_scan_timed_out",
-                        timeout_seconds=settings.SCAN_TIMEOUT_SECONDS,
-                        force_refresh=force_refresh,
+                    return scan_service.scan_once(
+                        force_refresh=force_refresh, abort_event=abort_event
                     )
-                    # Cancel future if still pending
-                    scan_future.cancel()
-                    # Shutdown executor immediately without waiting for running thread to block caller
-                    executor.shutdown(wait=False, cancel_futures=True)
-                    return jsonify(
-                        {
-                            "status": "error",
-                            "message": "Scan timed out",
-                            "timeout_seconds": settings.SCAN_TIMEOUT_SECONDS,
-                        }
-                    ), 504
-                else:
-                    executor.shutdown(wait=True)
-            finally:
-                _scan_mutex.release()
+                finally:
+                    _scan_in_flight.clear()
+
+            scan_future = executor.submit(_run_scan)
+            try:
+                signals = scan_future.result(timeout=settings.SCAN_TIMEOUT_SECONDS)
+            except concurrent.futures.TimeoutError:
+                logger.error(
+                    "api_scan_timed_out",
+                    timeout_seconds=settings.SCAN_TIMEOUT_SECONDS,
+                    force_refresh=force_refresh,
+                )
+                # Signal cooperative abort to ensure strict discard of stale results
+                abort_event.set()
+                scan_future.cancel()
+                executor.shutdown(wait=False, cancel_futures=True)
+                return jsonify(
+                    {
+                        "status": "error",
+                        "message": "Scan timed out",
+                        "timeout_seconds": settings.SCAN_TIMEOUT_SECONDS,
+                    }
+                ), 504
+            else:
+                executor.shutdown(wait=True)
             scan_stats = scan_service.last_scan_stats
 
             results = [
