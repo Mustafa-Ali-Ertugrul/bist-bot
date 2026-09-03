@@ -463,10 +463,109 @@ def create_dashboard_app(
         status_code = 200 if health["status"] == "healthy" else 503
         return jsonify(health), status_code
 
+    @app.route("/livez")
+    def liveness_check():
+        """Lightweight liveness probe for Kubernetes / orchestrators.
+
+        Returns 200 OK as long as process responds.
+        """
+        return (
+            jsonify(
+                {
+                    "status": "alive",
+                    "timestamp": datetime.now(TR).isoformat(),
+                    "version": "1.0.0",
+                }
+            ),
+            200,
+        )
+
     @app.route("/ready")
+    @app.route("/readyz")
     def readiness_check():
-        ready = {"status": "ready", "timestamp": datetime.now(TR).isoformat()}
-        return jsonify(ready), 200
+        """Readiness probe for traffic admission.
+
+        Performs deep dependency checks: Database connectivity, Broker configuration,
+        and Circuit Breaker state.
+        """
+        circuit = app.config.get("circuit_breaker")
+        db = get_db()
+        db_ok = False
+        try:
+            db_ok = bool(db.ping())
+        except Exception:
+            db_ok = False
+
+        broker = get_broker()
+        broker_mode = str(getattr(settings, "BROKER_MODE", "") or settings.BROKER_PROVIDER).lower()
+        broker_provider = str(getattr(settings, "BROKER_PROVIDER", "paper") or "paper").lower()
+        broker_status = "ok"
+        broker_detail = type(broker).__name__ if broker is not None else "none"
+        if broker is None:
+            broker_status = "unconfigured"
+        else:
+            try:
+                auth = getattr(broker, "authenticate", None)
+                if (
+                    callable(auth)
+                    and broker_mode != "paper"
+                    and broker_provider not in {"paper", ""}
+                ):
+                    ok = bool(auth())
+                    broker_status = "ok" if ok else "auth_failed"
+            except NotImplementedError:
+                broker_status = "stub"
+            except Exception as exc:
+                broker_status = "error"
+                broker_detail = f"{type(exc).__name__}"
+
+        last_scan_at: str | None = None
+        last_scan_age_seconds: float | None = None
+        try:
+            if hasattr(db, "get_latest_scan_log"):
+                latest = db.get_latest_scan_log()
+                if latest and latest.get("timestamp"):
+                    last_scan_at = str(latest["timestamp"])
+                    try:
+                        raw_ts = latest["timestamp"]
+                        if isinstance(raw_ts, datetime):
+                            ts = raw_ts
+                        else:
+                            ts = datetime.fromisoformat(str(raw_ts).replace("Z", "+00:00"))
+                        if ts.tzinfo is None:
+                            ts = ts.replace(tzinfo=UTC)
+                        last_scan_age_seconds = round(
+                            (datetime.now(UTC) - ts.astimezone(UTC)).total_seconds(),
+                            1,
+                        )
+                    except (TypeError, ValueError):
+                        last_scan_age_seconds = None
+        except Exception:
+            last_scan_at = None
+
+        circuit_state = str(circuit.state) if circuit else "UNKNOWN"
+        ready_payload = {
+            "status": "ready",
+            "database": "ok" if db_ok else "error",
+            "broker": {
+                "status": broker_status,
+                "mode": broker_mode,
+                "provider": broker_provider,
+                "detail": broker_detail,
+            },
+            "last_scan": {
+                "timestamp": last_scan_at,
+                "age_seconds": last_scan_age_seconds,
+            },
+            "version": "1.0.0",
+            "timestamp": datetime.now(TR).isoformat(),
+            "circuit_state": circuit_state,
+        }
+        if not db_ok or broker_status in {"error", "auth_failed"}:
+            ready_payload["status"] = "not_ready"
+
+        status_code = 200 if ready_payload["status"] == "ready" else 503
+        return jsonify(ready_payload), status_code
 
     def _metrics_view():
         return app.response_class(render_metrics(), mimetype="text/plain; version=0.0.4")
