@@ -103,12 +103,15 @@ jobs:
           pip install pip-audit bandit[toml]
 
       - name: pip-audit (dependency CVE scan)
-        run: pip-audit --requirement requirements.txt --strict
-        continue-on-error: true
+        run: |
+          if [ -s .pip-audit-ignore ]; then
+            pip-audit --requirement requirements.txt --strict --ignore-vuln-ignore-file=.pip-audit-ignore
+          else
+            pip-audit --requirement requirements.txt --strict
+          fi
 
       - name: Bandit (static security analysis)
-        run: bandit -r src/bist_bot -ll -f txt
-        continue-on-error: true
+        run: bandit -r src/bist_bot -x tests -ll -f txt
 
   docker:
     name: Docker Build
