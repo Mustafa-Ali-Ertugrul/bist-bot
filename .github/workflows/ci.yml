@@ -113,6 +113,11 @@ jobs:
       - name: Bandit (static security analysis)
         run: bandit -r src/bist_bot -x tests -ll -f txt
 
+      - name: Gitleaks (secret detection)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   docker:
     name: Docker Build
     runs-on: ubuntu-latest

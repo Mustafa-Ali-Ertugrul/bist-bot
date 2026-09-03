@@ -1,0 +1,15 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Known test fixtures, placeholders, and dummy tokens"
+paths = [
+    '''tests/.*''',
+    '''\.env\.example$''',
+    '''README\.md$''',
+]
+regexes = [
+    '''test_secret_key_.*''',
+    '''your_.*_here''',
+    '''super_secret_jwt_key_.*''',
+]
