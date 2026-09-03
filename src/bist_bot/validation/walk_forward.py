@@ -78,6 +78,11 @@ class WalkForwardWindowMetrics:
     test_trades: int
     train_final_capital: float
     test_final_capital: float
+    # Deney D: macro regime gate diagnostics (defaults keep back-compat).
+    train_macro_bear_bars: int = 0
+    test_macro_bear_bars: int = 0
+    train_macro_bear_entry_candidates: int = 0
+    test_macro_bear_entry_candidates: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -97,6 +102,9 @@ class WalkForwardValidationResult:
     is_aggregate: dict[str, float] = field(default_factory=dict)
     flags: list[str] = field(default_factory=list)
     overfitting_return_ratio: float = DEFAULT_OVERFITTING_RETURN_RATIO
+    # Deney D: Σ over all windows of macro gate diagnostics (train + test).
+    total_macro_bear_bars: int = 0
+    total_macro_bear_entry_candidates: int = 0
 
     @property
     def has_overfitting_warning(self) -> bool:
@@ -117,6 +125,8 @@ class WalkForwardValidationResult:
             "flags": list(self.flags),
             "overfitting_return_ratio": self.overfitting_return_ratio,
             "has_overfitting_warning": self.has_overfitting_warning,
+            "total_macro_bear_bars": self.total_macro_bear_bars,
+            "total_macro_bear_entry_candidates": self.total_macro_bear_entry_candidates,
         }
 
 
@@ -217,6 +227,9 @@ class WalkForwardValidator:
         backtester_factory: BacktesterFactory | None = None,
         use_cost_model: bool = True,
         strategy_params: Any | None = None,
+        target_rr: float | None = None,
+        macro_regime_series: pd.Series | None = None,
+        macro_regime_mode: str = "off",
     ) -> None:
         if train_window < 1:
             raise ValueError("train_window must be >= 1")
@@ -230,6 +243,21 @@ class WalkForwardValidator:
             raise ValueError("initial_capital must be > 0")
         if not (0.0 < overfitting_return_ratio <= 1.0):
             raise ValueError("overfitting_return_ratio must be in (0, 1]")
+        if target_rr is not None and target_rr <= 0:
+            raise ValueError("target_rr must be > 0 when provided")
+        if macro_regime_mode not in {"off", "observe", "enforce"}:
+            raise ValueError(
+                f"macro_regime_mode must be one of off/observe/enforce, got {macro_regime_mode!r}"
+            )
+        if macro_regime_mode != "off" and macro_regime_series is None:
+            raise ValueError(f"macro_regime_mode={macro_regime_mode!r} requires a series")
+        if macro_regime_mode == "off" and macro_regime_series is not None:
+            raise ValueError("macro_regime_series requires mode observe/enforce")
+        if macro_regime_mode != "off" and backtester_factory is not None:
+            raise ValueError(
+                "macro regime gate modes require the built-in Backtester; "
+                "backtester_factory cannot be combined with them"
+            )
 
         self.train_window = int(train_window)
         self.test_window = int(test_window)
@@ -241,6 +269,9 @@ class WalkForwardValidator:
         self.backtester_factory = backtester_factory
         self.use_cost_model = bool(use_cost_model)
         self.strategy_params = strategy_params
+        self.target_rr = float(target_rr) if target_rr is not None else None
+        self.macro_regime_series = macro_regime_series
+        self.macro_regime_mode = macro_regime_mode
 
     def build_windows(self, df: pd.DataFrame) -> list[tuple[pd.DataFrame, pd.DataFrame]]:
         """Return (train_df, test_df) pairs with no look-ahead leakage."""
@@ -285,6 +316,11 @@ class WalkForwardValidator:
             slippage_arg = slippage_pct
 
         if self.backtester_factory is not None:
+            if self.target_rr is not None:
+                logger.warning(
+                    "walk_forward_target_rr_ignored_by_factory",
+                    target_rr=self.target_rr,
+                )
             return self.backtester_factory(
                 initial_capital=self.initial_capital,
                 cost_model=cost_model,
@@ -293,11 +329,20 @@ class WalkForwardValidator:
                 slippage_pct=slippage_arg,
                 strategy_params=self.strategy_params,
             )
+        rr_kwargs: dict[str, float] = (
+            {"target_rr": self.target_rr} if self.target_rr is not None else {}
+        )
+        macro_kwargs: dict[str, Any] = {
+            "macro_regime_series": self.macro_regime_series,
+            "macro_regime_mode": self.macro_regime_mode,
+        }
         if self.use_cost_model:
             return Backtester(
                 initial_capital=self.initial_capital,
                 cost_model=cost_model,
                 strategy_params=self.strategy_params,
+                **rr_kwargs,
+                **macro_kwargs,
             )
         return Backtester(
             initial_capital=self.initial_capital,
@@ -305,6 +350,8 @@ class WalkForwardValidator:
             commission_sell_pct=commission_sell_pct,
             slippage_pct=slippage_arg,
             strategy_params=self.strategy_params,
+            **rr_kwargs,
+            **macro_kwargs,
         )
 
     def run(
@@ -341,7 +388,13 @@ class WalkForwardValidator:
 
         for idx, (train_df, test_df) in enumerate(windows, start=1):
             train_result = backtester.run(ticker, train_df, verbose=False)
+            # Capture gate diagnostics immediately after each run — the
+            # counters reset at the start of every Backtester.run call.
+            train_bear_bars = int(getattr(backtester, "last_macro_bear_bars", 0))
+            train_bear_candidates = int(getattr(backtester, "last_macro_bear_entry_candidates", 0))
             test_result = backtester.run(ticker, test_df, verbose=False)
+            test_bear_bars = int(getattr(backtester, "last_macro_bear_bars", 0))
+            test_bear_candidates = int(getattr(backtester, "last_macro_bear_entry_candidates", 0))
             train_m = _result_metrics(train_result, self.initial_capital)
             test_m = _result_metrics(test_result, self.initial_capital)
             is_rows.append(train_m)
@@ -367,6 +420,10 @@ class WalkForwardValidator:
                     test_trades=int(test_m["total_trades"]),
                     train_final_capital=train_m["final_capital"],
                     test_final_capital=test_m["final_capital"],
+                    train_macro_bear_bars=train_bear_bars,
+                    test_macro_bear_bars=test_bear_bars,
+                    train_macro_bear_entry_candidates=train_bear_candidates,
+                    test_macro_bear_entry_candidates=test_bear_candidates,
                 )
             )
 
@@ -403,6 +460,13 @@ class WalkForwardValidator:
             is_aggregate=is_aggregate,
             flags=flags,
             overfitting_return_ratio=self.overfitting_return_ratio,
+            total_macro_bear_bars=sum(
+                w.train_macro_bear_bars + w.test_macro_bear_bars for w in window_metrics
+            ),
+            total_macro_bear_entry_candidates=sum(
+                w.train_macro_bear_entry_candidates + w.test_macro_bear_entry_candidates
+                for w in window_metrics
+            ),
         )
 
 

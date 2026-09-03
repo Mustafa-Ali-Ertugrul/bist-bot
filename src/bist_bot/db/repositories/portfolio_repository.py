@@ -67,28 +67,33 @@ class PortfolioRepository:
         score: int = 0,
         regime: str = "UNKNOWN",
         direction: str = "long",
-    ) -> None:
+    ) -> int | None:
+        """Insert an OPEN paper trade and return its new row id.
+
+        Sprint 2: the returned id lets the unified trade ledger link its
+        PAPER mirror row via ``paper_trade_id``.
+        """
         if direction not in VALID_DIRECTIONS:
             raise ValueError(f"Invalid paper trade direction: {direction!r}")
 
         def _write(session):
-            session.add(
-                PaperTradeRecord(
-                    ticker=ticker,
-                    signal_type=signal_type,
-                    signal_price=signal_price,
-                    signal_time=signal_time or datetime.now(UTC),
-                    stop_loss=stop_loss,
-                    target_price=target_price,
-                    score=score,
-                    regime=regime,
-                    direction=direction,
-                    outcome="OPEN",
-                )
+            record = PaperTradeRecord(
+                ticker=ticker,
+                signal_type=signal_type,
+                signal_price=signal_price,
+                signal_time=signal_time or datetime.now(UTC),
+                stop_loss=stop_loss,
+                target_price=target_price,
+                score=score,
+                regime=regime,
+                direction=direction,
+                outcome="OPEN",
             )
-            return None
+            session.add(record)
+            session.flush()
+            return record.id
 
-        self.manager.run_session(_write)
+        return self.manager.run_session(_write)
 
     def get_open_paper_trades(self) -> list[PaperTrade]:
         rows = self.manager.run_session(

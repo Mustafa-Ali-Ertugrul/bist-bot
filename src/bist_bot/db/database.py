@@ -13,6 +13,7 @@ from typing import TypeVar
 from sqlalchemy import (
     DateTime,
     Float,
+    Index,
     Integer,
     String,
     Text,
@@ -49,8 +50,23 @@ def _quote_identifier(name: str) -> str:
     return f'"{_validate_table_name(name)}"'
 
 
+def _mask_email(email: str) -> str:
+    parts = (email or "").split("@", 1)
+    if len(parts) != 2:
+        return email
+    user, domain = parts
+    masked_user = user[:2] + "***" if len(user) > 2 else "***"
+    return f"{masked_user}@{domain}"
+
+
 class SignalRecord(Base):
     __tablename__ = "signals"
+    # Mirrors 0001_initial_schema + the legacy SQLite runtime indexes so that
+    # autogenerate sees models and migrated databases as identical.
+    __table_args__ = (
+        Index("idx_signals_created_at", "created_at"),
+        Index("idx_signals_ticker_created_at", "ticker", "created_at"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     timestamp: Mapped[datetime] = mapped_column(
@@ -104,6 +120,49 @@ class PaperTradeRecord(Base):
     exit_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     close_reason: Mapped[str | None] = mapped_column(String, nullable=True)
     close_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class TradeLedgerRecord(Base):
+    """Sprint 2: unified trade ledger — PAPER and SHADOW positions in one table.
+
+    Additive by design: ``paper_trades`` and the shadow CSV remain
+    authoritative for their own flows while services dual-write here, giving
+    reports a single queryable source. Soft references only
+    (``paper_trade_id``, ``signal_id``) — no hard FK, matching the existing
+    schema style and keeping legacy SQLite/Postgres databases compatible.
+    """
+
+    __tablename__ = "trade_ledger"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    # kind: 'PAPER' | 'SHADOW'
+    kind: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    ticker: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    signal_type: Mapped[str] = mapped_column(String, nullable=False)
+    direction: Mapped[str] = mapped_column(String, nullable=False, default="long")
+    score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    regime: Mapped[str | None] = mapped_column(String, nullable=True)
+    entry_price: Mapped[float] = mapped_column(Float, nullable=False)
+    entry_time: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+    )
+    stop_loss: Mapped[float | None] = mapped_column(Float, nullable=True)
+    target_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    agreement_ratio: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # status: 'OPEN' | 'CLOSED'
+    status: Mapped[str] = mapped_column(String, nullable=False, default="OPEN", index=True)
+    exit_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    exit_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    close_reason: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Ayrık kolonlar: gross (komisyonsuz) ve net (komisyonlu) PnL asla karışmaz.
+    gross_pnl_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    net_pnl_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    paper_trade_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    signal_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    source: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+    )
 
 
 class ScanLogRecord(Base):
@@ -474,9 +533,11 @@ class DatabaseManager:
                 if col not in col_info:
                     continue
                 quoted_col = _quote_identifier(col)
+                # nosec B608: only validated/quoted identifiers are
+                # interpolated (no user values); see _validate_table_name.
                 conn.execute(
                     text(
-                        f"UPDATE {quoted_table} SET {quoted_col} = "
+                        f"UPDATE {quoted_table} SET {quoted_col} = "  # nosec B608
                         f"CASE "
                         f"  WHEN {quoted_col} IS NULL OR {quoted_col} = '' THEN NULL "
                         f"  WHEN {quoted_col} GLOB '*[a-zA-Z]*' "
@@ -499,7 +560,7 @@ class DatabaseManager:
 
         logger.info(
             "admin_bootstrap_start",
-            email=settings.ADMIN_BOOTSTRAP_EMAIL,
+            email=_mask_email(settings.ADMIN_BOOTSTRAP_EMAIL),
         )
 
         now = self.now_utc()
@@ -510,9 +571,10 @@ class DatabaseManager:
             ).scalar_one_or_none()
             if admin_exists is not None:
                 if settings.ADMIN_BOOTSTRAP_UPDATE_EXISTING:
-                    logger.info(
-                        "admin_bootstrap_existing_admin_found",
-                        email=settings.ADMIN_BOOTSTRAP_EMAIL,
+                    logger.warning(
+                        "admin_bootstrap_overwrite_enabled",
+                        detail="ADMIN_BOOTSTRAP_UPDATE_EXISTING açık; ilk kurulum sonrası .env içinde false yapılması önerilir.",
+                        email=_mask_email(settings.ADMIN_BOOTSTRAP_EMAIL),
                     )
                     conn.execute(
                         text(
@@ -526,13 +588,13 @@ class DatabaseManager:
                     )
                     logger.info(
                         "admin_bootstrap_existing_admin_updated",
-                        email=settings.ADMIN_BOOTSTRAP_EMAIL,
+                        email=_mask_email(settings.ADMIN_BOOTSTRAP_EMAIL),
                     )
                 else:
                     logger.info(
                         "admin_bootstrap_existing_admin_update_skipped",
                         reason="admin_exists",
-                        email=settings.ADMIN_BOOTSTRAP_EMAIL,
+                        email=_mask_email(settings.ADMIN_BOOTSTRAP_EMAIL),
                     )
                 return
             try:
@@ -555,7 +617,7 @@ class DatabaseManager:
                 )
                 logger.info(
                     "admin_bootstrap_created",
-                    email=settings.ADMIN_BOOTSTRAP_EMAIL,
+                    email=_mask_email(settings.ADMIN_BOOTSTRAP_EMAIL),
                 )
             except IntegrityError:
                 logger.warning(
@@ -597,7 +659,7 @@ class DatabaseManager:
                 if not self._is_locked_error(exc) or attempt >= self.write_retry_attempts - 1:
                     raise
                 backoff = self.write_retry_backoff_seconds * (2**attempt)
-                jitter = random.uniform(0, backoff * 0.5)
+                jitter = random.uniform(0, backoff * 0.5)  # nosec B311: retry jitter.
                 time.sleep(backoff + jitter)
                 attempt += 1
 

@@ -156,7 +156,7 @@ def _run_score(
     df: pd.DataFrame,
     *,
     raw_total: float,
-) -> tuple[float, list[str], float] | None:
+) -> tuple[float, list[str], float | None] | None:
     from bist_bot.strategy.engine_filters import calculate_score_and_reasons
 
     momentum_scorer, trend_scorer, volume_scorer, structure_scorer = _fixed_component_scorers(

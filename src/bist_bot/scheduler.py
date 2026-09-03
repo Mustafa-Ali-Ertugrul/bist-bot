@@ -151,7 +151,9 @@ class MarketScheduler:
         if self._last_scan_success_at is None:
             return
         stale_minutes = max(5, int(getattr(self.settings, "WATCHDOG_STALE_MINUTES", 30)))
-        cooldown_minutes = max(stale_minutes, int(getattr(self.settings, "WATCHDOG_ALERT_COOLDOWN_MINUTES", 60)))
+        cooldown_minutes = max(
+            stale_minutes, int(getattr(self.settings, "WATCHDOG_ALERT_COOLDOWN_MINUTES", 60))
+        )
         age = (now - self._last_scan_success_at).total_seconds() / 60.0
         if age < stale_minutes:
             return
@@ -292,9 +294,9 @@ class MarketScheduler:
                 CHECK_INTERVAL_SECONDS = 10
                 interval_minutes = max(1, int(getattr(self.settings, "SCAN_INTERVAL_MINUTES", 15)))
                 interval_seconds = interval_minutes * 60
-                min_separation = max(
-                    0, int(getattr(self.settings, "SCAN_MIN_SEPARATION_MINUTES", 5))
-                ) * 60
+                min_separation = (
+                    max(0, int(getattr(self.settings, "SCAN_MIN_SEPARATION_MINUTES", 5))) * 60
+                )
                 now = self._now()
                 seconds_into_cycle = (now.minute * 60 + now.second) % interval_seconds
                 wait_seconds = interval_seconds - seconds_into_cycle
@@ -302,9 +304,7 @@ class MarketScheduler:
                     wait_seconds = interval_seconds
                 last = self._last_scan_attempt_at
                 if last is not None and min_separation > 0:
-                    while (
-                        now.timestamp() + wait_seconds - last.timestamp()
-                    ) < min_separation:
+                    while (now.timestamp() + wait_seconds - last.timestamp()) < min_separation:
                         wait_seconds += interval_seconds
                 deadline = now.timestamp() + wait_seconds
                 while self.running and self._now().timestamp() < deadline:

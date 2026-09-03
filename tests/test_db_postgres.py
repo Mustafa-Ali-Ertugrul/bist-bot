@@ -35,6 +35,7 @@ def test_resolve_database_url_defaults_to_sqlite(
 
 def test_resolve_database_url_prefers_bist_bot_alias(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setattr("bist_bot.db.connection._postgres_driver_available", lambda: True)
     monkeypatch.setenv(
         "BIST_BOT_DATABASE_URL",
         "postgresql://user:pass@localhost:5432/bist_bot",
@@ -45,10 +46,28 @@ def test_resolve_database_url_prefers_bist_bot_alias(monkeypatch: pytest.MonkeyP
     assert "bist_bot" in cfg.url
 
 
-def test_resolve_database_url_normalizes_postgres_scheme() -> None:
+def test_resolve_database_url_normalizes_postgres_scheme(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("bist_bot.db.connection._postgres_driver_available", lambda: True)
     cfg = resolve_database_url(database_url="postgres://u:p@h:5432/db")
     assert cfg.url.startswith("postgresql+psycopg2://")
     assert is_postgres_url(cfg.url)
+
+
+def test_resolve_database_url_falls_back_to_sqlite_when_driver_missing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Postgres URL configured but psycopg2 missing → loud SQLite fallback (DB_PATH)."""
+    monkeypatch.setattr("bist_bot.db.connection._postgres_driver_available", lambda: False)
+    monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@localhost:5432/bist_bot")
+    db_file = tmp_path / "driver_fallback.db"
+    monkeypatch.setenv("DB_PATH", str(db_file))
+    cfg = resolve_database_url()
+    assert cfg.is_sqlite is True
+    assert cfg.url.startswith("sqlite:///")
+    assert "driver_fallback.db" in cfg.url
+    assert cfg.sqlite_path == str(db_file)
 
 
 def test_create_db_engine_sqlite_uses_null_pool_and_check_same_thread(
@@ -68,7 +87,10 @@ def test_create_db_engine_sqlite_uses_null_pool_and_check_same_thread(
         engine.dispose()
 
 
-def test_create_db_engine_postgres_uses_queue_pool_settings() -> None:
+def test_create_db_engine_postgres_uses_queue_pool_settings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("bist_bot.db.connection._postgres_driver_available", lambda: True)
     mock_engine = MagicMock()
     with patch("bist_bot.db.connection.create_engine", return_value=mock_engine) as mocked:
         cfg = resolve_database_url(
@@ -110,7 +132,10 @@ def test_database_manager_sqlite_fallback_still_works(tmp_path: Path) -> None:
     manager.engine.dispose()
 
 
-def test_database_manager_uses_connection_factory_for_postgres() -> None:
+def test_database_manager_uses_connection_factory_for_postgres(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("bist_bot.db.connection._postgres_driver_available", lambda: True)
     mock_engine = MagicMock()
     mock_engine.begin.return_value.__enter__.return_value = MagicMock()
     mock_engine.begin.return_value.__exit__.return_value = False
@@ -137,6 +162,23 @@ def test_database_manager_uses_connection_factory_for_postgres() -> None:
     assert engine_kwargs["pool_size"] == 10
     assert engine_kwargs["max_overflow"] == 20
     assert engine_kwargs["pool_pre_ping"] is True
+
+
+def test_database_manager_postgres_url_falls_back_to_sqlite_without_driver(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """DATABASE_URL=postgres + no psycopg2 installed → DatabaseManager runs on SQLite."""
+    monkeypatch.setattr("bist_bot.db.connection._postgres_driver_available", lambda: False)
+    manager = DatabaseManager(
+        database_url="postgresql://user:pass@localhost:5432/bist_bot",
+        sqlite_path=str(tmp_path / "manager_fallback.db"),
+    )
+    try:
+        assert manager._is_sqlite is True
+        assert manager.get_journal_mode().lower() == "wal"
+    finally:
+        manager.session_factory.remove()
+        manager.engine.dispose()
 
 
 def test_alembic_initial_revision_file_exists() -> None:

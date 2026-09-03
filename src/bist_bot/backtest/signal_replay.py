@@ -143,7 +143,7 @@ class ReplayTrade:
     direction: str
     signal_type: str
     signal_score: float | None
-    confidence: float | None
+    confidence: str | float | None
     signal_date: str
     entry_date: str
     exit_date: str
@@ -205,7 +205,9 @@ def normalize_bars(df: pd.DataFrame | None) -> pd.DataFrame | None:
         return None
     out = df.copy()
     if getattr(out.columns, "nlevels", 1) > 1:
-        out.columns = [c[0].lower() if isinstance(c, tuple) else str(c).lower() for c in out.columns]
+        out.columns = [
+            c[0].lower() if isinstance(c, tuple) else str(c).lower() for c in out.columns
+        ]
     else:
         out.columns = [str(c).lower() for c in out.columns]
     rename: dict[str, str] = {}
@@ -341,7 +343,9 @@ def build_dataset_first_actionable(
                     is_gap_exceeded = False
                     if bar_dates:
                         try:
-                            i1 = next(i for i, d in enumerate(bar_dates) if d >= last_sig.signal_date)
+                            i1 = next(
+                                i for i, d in enumerate(bar_dates) if d >= last_sig.signal_date
+                            )
                             i2 = next(i for i, d in enumerate(bar_dates) if d >= sig.signal_date)
                             if (i2 - i1) > max_gap_bars:
                                 is_gap_exceeded = True
@@ -636,6 +640,7 @@ class SignalReplayEngine:
 # Analytics & Guard Layer
 # ----------------------------------------------------------------------
 
+
 def calculate_cell_metrics(trades: Sequence[ReplayTrade], n_signals: int = 0) -> dict[str, Any]:
     n_tr = len(trades)
     if n_tr == 0:
@@ -699,23 +704,29 @@ def analyze_score_buckets(
     for b_label, low, high in SCORE_BUCKET_DEFS:
         # Long signals
         long_sigs = [
-            s for s in all_signals
+            s
+            for s in all_signals
             if s.direction == "long" and s.score is not None and low <= s.score < high
         ]
         long_tr = [
-            t for t in trades
+            t
+            for t in trades
             if t.direction == "long" and t.signal_score is not None and low <= t.signal_score < high
         ]
         results[f"long_{b_label}"] = calculate_cell_metrics(long_tr, len(long_sigs))
 
         # Short signals: symmetric via abs(score)
         short_sigs = [
-            s for s in all_signals
+            s
+            for s in all_signals
             if s.direction == "short" and s.score is not None and low <= abs(s.score) < high
         ]
         short_tr = [
-            t for t in trades
-            if t.direction == "short" and t.signal_score is not None and low <= abs(t.signal_score) < high
+            t
+            for t in trades
+            if t.direction == "short"
+            and t.signal_score is not None
+            and low <= abs(t.signal_score) < high
         ]
         results[f"short_{b_label}"] = calculate_cell_metrics(short_tr, len(short_sigs))
 
@@ -742,6 +753,7 @@ def analyze_confidence_buckets(
 # ----------------------------------------------------------------------
 # No-Lookahead Filter Replays (EMA200, RSI extremes)
 # ----------------------------------------------------------------------
+
 
 def _compute_ema(series: pd.Series, span: int = 200) -> pd.Series:
     return series.ewm(span=span, adjust=False).mean()
@@ -821,7 +833,9 @@ def evaluate_indicator_filters(
             filtered_ema_trades.append(trade)
 
         # RSI rule: Longs veto if RSI > 70 (overbought), Shorts veto if RSI < 30 (oversold)
-        if (sig.direction == "long" and dec_rsi > 70.0) or (sig.direction == "short" and dec_rsi < 30.0):
+        if (sig.direction == "long" and dec_rsi > 70.0) or (
+            sig.direction == "short" and dec_rsi < 30.0
+        ):
             dropped_rsi_count += 1
         else:
             filtered_rsi_trades.append(trade)
@@ -908,7 +922,9 @@ def evaluate_hysteresis(
                     is_gap_exceeded = False
                     if bar_dates:
                         try:
-                            i1 = next(i for i, d in enumerate(bar_dates) if d >= last_sig.signal_date)
+                            i1 = next(
+                                i for i, d in enumerate(bar_dates) if d >= last_sig.signal_date
+                            )
                             i2 = next(i for i, d in enumerate(bar_dates) if d >= sig.signal_date)
                             if (i2 - i1) > max_gap_bars:
                                 is_gap_exceeded = True
@@ -960,9 +976,16 @@ def generate_decision_report(
                 eligible_short_cells.append(k)
 
     # Sort all cells by N desc to highlight highest N sample points
-    all_cells_sorted = sorted(score_buckets.items(), key=lambda item: item[1]["n_traded"], reverse=True)
+    all_cells_sorted = sorted(
+        score_buckets.items(), key=lambda item: item[1]["n_traded"], reverse=True
+    )
     top_3_by_n = [
-        {"cell": c[0], "n_traded": c[1]["n_traded"], "avg_r_net": c[1]["avg_r_net"], "win_rate": c[1]["win_rate"]}
+        {
+            "cell": c[0],
+            "n_traded": c[1]["n_traded"],
+            "avg_r_net": c[1]["avg_r_net"],
+            "win_rate": c[1]["win_rate"],
+        }
         for c in all_cells_sorted[:3]
     ]
 

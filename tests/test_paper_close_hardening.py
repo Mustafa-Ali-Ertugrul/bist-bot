@@ -58,9 +58,7 @@ def test_close_by_trade_id_targets_exact_row(tmp_path):
     newer = max(open_rows, key=lambda t: t.id)  # entry 105
 
     # Eski islemin stop seviyesine gore kapanis karari -> O id kapanmali.
-    repo.close_paper_trade(
-        "THYAO.IS", 94.0, "STOP_HIT", actual_profit_pct=-6.0, trade_id=older.id
-    )
+    repo.close_paper_trade("THYAO.IS", 94.0, "STOP_HIT", actual_profit_pct=-6.0, trade_id=older.id)
 
     remaining = repo.get_open_paper_trades()
     assert len(remaining) == 1
@@ -70,6 +68,7 @@ def test_close_by_trade_id_targets_exact_row(tmp_path):
 
     with Session(manager.engine) as session:
         closed = session.get(PaperTradeRecord, older.id)
+        assert closed is not None
         assert closed.outcome == "CLOSED"
         assert closed.close_reason == "STOP_HIT"
         assert closed.actual_profit_pct == pytest.approx(-6.0)
@@ -79,14 +78,21 @@ def test_close_by_trade_id_targets_exact_row(tmp_path):
 def _skip_service(price_map, alerts, threshold=3):
     db = MagicMock()
     trade = SimpleNamespace(
-        id=7, ticker="DEAD.IS", signal_type="🟢 AL", signal_price=100.0,
-        stop_loss=95.0, target_price=110.0, direction="long",
+        id=7,
+        ticker="DEAD.IS",
+        signal_type="🟢 AL",
+        signal_price=100.0,
+        stop_loss=95.0,
+        target_price=110.0,
+        direction="long",
     )
     db.get_open_paper_trades.return_value = [trade]
     fetcher = MagicMock()
     fetcher.fetch_all.return_value = price_map.get("fetch", {})
     cfg = SimpleNamespace(
-        PAPER_MODE=True, PAPER_COOLDOWN_DAYS=0, PAPER_CLOSE_SKIP_WARN_THRESHOLD=threshold,
+        PAPER_MODE=True,
+        PAPER_COOLDOWN_DAYS=0,
+        PAPER_CLOSE_SKIP_WARN_THRESHOLD=threshold,
     )
     service = PaperTradeService(fetcher, db, settings=cfg, alerter=alerts.append)
     return service, db
@@ -107,13 +113,22 @@ def test_price_skip_alerts_once_after_threshold_and_resets():
 
     # Fiyat geri geldi: sayaç sıfırlanır, pozisyon normal akışa döner.
     alive = SimpleNamespace(
-        ticker="DEAD.IS", price=96.0, signal_type=SignalType.BUY,
+        ticker="DEAD.IS",
+        price=96.0,
+        signal_type=SignalType.BUY,
     )
     service.fetcher.fetch_all.return_value = {}
-    db.get_open_paper_trades.return_value = [SimpleNamespace(
-        id=7, ticker="DEAD.IS", signal_type="🟢 AL", signal_price=100.0,
-        stop_loss=100.5, target_price=110.0, direction="long",
-    )]
+    db.get_open_paper_trades.return_value = [
+        SimpleNamespace(
+            id=7,
+            ticker="DEAD.IS",
+            signal_type="🟢 AL",
+            signal_price=100.0,
+            stop_loss=100.5,
+            target_price=110.0,
+            direction="long",
+        )
+    ]
     service.update_open_trades(signals=[alive])
     assert "DEAD.IS" not in service._price_skip_counts
 
@@ -125,13 +140,21 @@ def test_queue_actionable_isolates_failures_and_reports():
     cfg = SimpleNamespace(PAPER_MODE=True, PAPER_COOLDOWN_DAYS=0, DATA_INTERVAL="1d")
 
     good = SimpleNamespace(
-        ticker="GOOD.IS", price=100.0, score=40,
-        timestamp=datetime.now(UTC), stop_loss=95.0, target_price=110.0,
+        ticker="GOOD.IS",
+        price=100.0,
+        score=40,
+        timestamp=datetime.now(UTC),
+        stop_loss=95.0,
+        target_price=110.0,
         signal_type=SignalType.BUY,
     )
     bad = SimpleNamespace(
-        ticker="BAD.IS", price=100.0, score=40,
-        timestamp=datetime.now(UTC), stop_loss=95.0, target_price=110.0,
+        ticker="BAD.IS",
+        price=100.0,
+        score=40,
+        timestamp=datetime.now(UTC),
+        stop_loss=95.0,
+        target_price=110.0,
         signal_type=SignalType.BUY,
     )
 

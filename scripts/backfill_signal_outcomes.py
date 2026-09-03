@@ -137,14 +137,18 @@ def load_pending_signals(engine: sa.engine.Engine, ticker: str | None = None) ->
     return [_row_to_replay_signal(r) for r in rows]
 
 
-def load_bars(tickers: list[str], period: str = "1y", interval: str = "1d",
-              bars_dir: str | None = None) -> dict[str, pd.DataFrame]:
+def load_bars(
+    tickers: list[str], period: str = "1y", interval: str = "d", bars_dir: str | None = None
+) -> dict[str, pd.DataFrame]:
     bars: dict[str, pd.DataFrame] = {}
     if bars_dir:
         base = Path(bars_dir)
         for t in tickers:
-            csv = base / f"{t}.csv"
-            if csv.exists():
+            # Accept both naming conventions: "ASELS.IS.csv" and the
+            # cache-style "ASELS_IS.csv" (dot replaced by underscore).
+            candidates = [base / f"{t}.csv", base / f"{t.replace('.', '_')}.csv"]
+            csv = next((c for c in candidates if c.exists()), None)
+            if csv is not None:
                 df = normalize_bars(pd.read_csv(csv))
                 if df is not None and not df.empty:
                     bars[t] = df
@@ -204,7 +208,9 @@ def ensure_provenance_columns(engine: sa.engine.Engine) -> str:
         return "SKIP (postgres degil)"
     with engine.begin() as conn:
         conn.execute(sa.text("ALTER TABLE signals ADD COLUMN IF NOT EXISTS outcome_source TEXT"))
-        conn.execute(sa.text("ALTER TABLE signals ADD COLUMN IF NOT EXISTS backfilled_at TIMESTAMP"))
+        conn.execute(
+            sa.text("ALTER TABLE signals ADD COLUMN IF NOT EXISTS backfilled_at TIMESTAMP")
+        )
     return "OK: outcome_source + backfilled_at hazir"
 
 
@@ -259,7 +265,9 @@ def main() -> int:
         "## Puanlanan Sinyaller",
         "",
         f"- Toplam: {len(scored)} · Kazanan: {wins} "
-        f"(kazanma orani {100.0 * wins / len(scored):.1f}%)" if scored else "- Puanlanan sinyal yok.",
+        f"(kazanma orani {100.0 * wins / len(scored):.1f}%)"
+        if scored
+        else "- Puanlanan sinyal yok.",
         "",
         "> **Semantik notu:** Backfill sonuctemel gunluk-bar T+1 semantigi tasir",
         "> (giris = sinyal sonrasi ilk bar acilisi; cikis = kalici stop/hedef).",

@@ -1,5 +1,9 @@
 """Tests for API startup responsiveness and Cloud Run readiness."""
 
+# mypy: disable-error-code="abstract"
+# (Test fakes subclass Protocols explicitly and implement only the members
+# exercised by each test; instantiation is safe at runtime.)
+
 from __future__ import annotations
 
 import time

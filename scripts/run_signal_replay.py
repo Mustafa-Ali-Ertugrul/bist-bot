@@ -86,7 +86,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--min-score", type=float, default=0.0, help="Min |score| to include")
     parser.add_argument("--ticker", default=None, help="Restrict to a single ticker")
     parser.add_argument("--limit", type=int, default=5000, help="Max signals to load")
-    parser.add_argument("--min-n", type=int, default=10, help="Guard sample size per cell (default 10)")
+    parser.add_argument(
+        "--min-n", type=int, default=10, help="Guard sample size per cell (default 10)"
+    )
     parser.add_argument("--out", default=str(DEFAULT_SUMMARY), help="Summary JSON output path")
     parser.add_argument("--trades-out", default=None, help="Trades CSV output path")
     parser.add_argument("--db-path", default=None, help="SQLite database path (default: settings)")
@@ -95,7 +97,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         help="Directory of per-ticker OHLCV CSVs for offline replay (no network)",
     )
-    parser.add_argument("--period", default="4y", help="History period for the fetcher (default 4y)")
+    parser.add_argument(
+        "--period", default="4y", help="History period for the fetcher (default 4y)"
+    )
     parser.add_argument("--interval", default="1d", help="Bar interval (default 1d)")
     parser.add_argument("--force-download", action="store_true", help="Bypass fetcher cache")
     return parser.parse_args(argv)
@@ -111,7 +115,10 @@ def load_signals(
     repo = SignalsRepository(manager)
     rows = repo.get_signals(limit=args.limit, ticker=args.ticker)
     if not rows:
-        print(f"No signals found (limit={args.limit}, ticker={args.ticker or 'all'}).", file=sys.stderr)
+        print(
+            f"No signals found (limit={args.limit}, ticker={args.ticker or 'all'}).",
+            file=sys.stderr,
+        )
         return []
 
     signals: list[ReplaySignal] = []
@@ -133,7 +140,9 @@ def load_signals(
                 score=float(score) if score is not None else None,
                 price=float(row.get("price") or 0.0),
                 stop_loss=float(row["stop_loss"]) if row.get("stop_loss") is not None else None,
-                target_price=float(row["target_price"]) if row.get("target_price") is not None else None,
+                target_price=float(row["target_price"])
+                if row.get("target_price") is not None
+                else None,
                 confidence=row.get("confidence"),
                 reasons=list(row.get("reasons") or []),
                 score_breakdown=dict(row.get("score_breakdown") or {}),
@@ -142,10 +151,7 @@ def load_signals(
 
     if args.min_score > 0:
         before = len(signals)
-        signals = [
-            s for s in signals
-            if s.score is not None and abs(s.score) >= args.min_score
-        ]
+        signals = [s for s in signals if s.score is not None and abs(s.score) >= args.min_score]
         print(f"min-score filter {args.min_score}: {before} -> {len(signals)} signals")
 
     # Chronological order (repository returns DESC).
@@ -240,8 +246,7 @@ def main(argv: list[str] | None = None) -> int:
         print("Nothing to replay.", file=sys.stderr)
         return 1
 
-    print(f"Loaded {len(signals)} signals across "
-          f"{len({s.ticker for s in signals})} tickers")
+    print(f"Loaded {len(signals)} signals across {len({s.ticker for s in signals})} tickers")
 
     bars_by_ticker = load_bars_for_tickers([s.ticker for s in signals], args)
     if not bars_by_ticker:
@@ -382,7 +387,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     print(f"Summary written: {out_path}")
 
-    trades_path = Path(args.trades_out) if args.trades_out else out_path.with_name(out_path.stem + "_trades.csv")
+    trades_path = (
+        Path(args.trades_out)
+        if args.trades_out
+        else out_path.with_name(out_path.stem + "_trades.csv")
+    )
     if all_trades:
         pd.DataFrame(all_trades).to_csv(trades_path, index=False, encoding="utf-8")
         print(f"Trades written  : {trades_path} ({len(all_trades)} rows)")
@@ -391,7 +400,9 @@ def main(argv: list[str] | None = None) -> int:
 
     # ---- Console table ----
     print()
-    print(f"{'dataset':<18} {'cost':<7} {'N':>4} {'win%':>7} {'avgR':>7} {'netR':>7} {'TP':>3} {'SL':>3} {'TO':>3} {'low_n':>6}")
+    print(
+        f"{'dataset':<18} {'cost':<7} {'N':>4} {'win%':>7} {'avgR':>7} {'netR':>7} {'TP':>3} {'SL':>3} {'TO':>3} {'low_n':>6}"
+    )
     print("-" * 70)
     for block_key, block in summary_blocks.items():
         ds_name, cost_name = block_key.split("__")

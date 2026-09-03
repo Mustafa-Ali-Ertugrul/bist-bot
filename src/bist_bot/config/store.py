@@ -31,8 +31,8 @@ DEFAULT_SETTINGS: dict[str, dict[str, Any]] = {
         "adx_threshold": 20,
     },
     "telegram": {
-        "bot_token": "",
-        "chat_id": "",
+        "bot_token": "",  # nosec B105: empty default; secrets never persisted.
+        "chat_id": "",  # nosec B105: empty default; secrets never persisted.
         "notify_min_score": 30,
         "enabled": False,
     },
@@ -60,8 +60,8 @@ def _merge_with_defaults(data: dict[str, Any] | None) -> dict[str, dict[str, Any
         if not isinstance(current, dict):
             continue
         defaults.update(current)
-    merged["telegram"]["bot_token"] = ""
-    merged["telegram"]["chat_id"] = ""
+    merged["telegram"]["bot_token"] = ""  # nosec B105: secret-stripping.
+    merged["telegram"]["chat_id"] = ""  # nosec B105: secret-stripping.
     return merged
 
 
@@ -83,8 +83,8 @@ def save_settings(settings: dict[str, Any]) -> bool:
     try:
         settings = _merge_with_defaults(json.loads(json.dumps(settings)))
         telegram = settings["telegram"]
-        telegram["bot_token"] = ""
-        telegram["chat_id"] = ""
+        telegram["bot_token"] = ""  # nosec B105: secret-stripping before save.
+        telegram["chat_id"] = ""  # nosec B105: secret-stripping before save.
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             json.dump(settings, f, indent=2, ensure_ascii=False)
         return True

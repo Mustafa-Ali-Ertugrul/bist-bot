@@ -51,7 +51,10 @@ def test_signal_database_saves_and_reads_signal(tmp_path):
     assert latest["target_price"] == 135.0
 
 
-def test_database_manager_uses_database_url_for_non_sqlite_backends():
+def test_database_manager_uses_database_url_for_non_sqlite_backends(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr("bist_bot.db.connection._postgres_driver_available", lambda: True)
     mock_engine = MagicMock()
     mock_engine.begin.return_value.__enter__.return_value = MagicMock()
     mock_engine.begin.return_value.__exit__.return_value = False

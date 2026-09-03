@@ -26,7 +26,13 @@ class NotificationDispatchService:
         self.sleeper = sleeper
         # Load robust watchlist once at startup; membership check is O(1).
         self._robust_set: set[str] = set(load_watchlist("robust"))
-        self._group_chat_id = getattr(self.settings, "TELEGRAM_GROUP_CHAT_ID", "") or None
+        # Group mirroring requires BOTH the chat id and the enabled flag —
+        # previously the chat id alone activated it, ignoring TELEGRAM_GROUP_ENABLED.
+        self._group_chat_id = (
+            (getattr(self.settings, "TELEGRAM_GROUP_CHAT_ID", "") or None)
+            if bool(getattr(self.settings, "TELEGRAM_GROUP_ENABLED", True))
+            else None
+        )
         self._batch_threshold = getattr(self.settings, "TELEGRAM_GROUP_BATCH_THRESHOLD", 5)
 
     def _is_robust_member(self, signal) -> bool:

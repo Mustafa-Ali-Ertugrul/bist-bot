@@ -29,7 +29,7 @@ def _row(
     is_ret: float = 5.0,
     overfit: object = "False",
     status: str = "OK",
-) -> dict[str, str]:
+) -> dict[str, object]:
     return {
         "ticker": ticker,
         "status": status,

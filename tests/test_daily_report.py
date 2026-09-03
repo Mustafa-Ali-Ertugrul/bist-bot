@@ -365,9 +365,7 @@ def test_daily_report_gate_demoted_radar_split(repo, tmp_path, monkeypatch):
     assert "`RADARe` = gate-demotion" in md
 
 
-def test_daily_report_no_performance_section_without_portfolio_repo(
-    repo, tmp_path, monkeypatch
-):
+def test_daily_report_no_performance_section_without_portfolio_repo(repo, tmp_path, monkeypatch):
     """Section 8 is opt-in: absent unless a portfolio_repo is supplied."""
     monkeypatch.chdir(tmp_path)
     repo.save_scan_log(total=100, generated=0, buys=0, sells=0, actionable=0)
@@ -387,15 +385,11 @@ def test_daily_report_performance_section_with_portfolio_repo(
     """Closed paper trades render section 8 with the n<30 disclaimer."""
     monkeypatch.chdir(tmp_path)
     port_repo = PortfolioRepository(memory_db)
-    port_repo.add_paper_trade(
-        ticker="THYAO.IS", signal_type="BUY", signal_price=100.0, score=30
-    )
+    port_repo.add_paper_trade(ticker="THYAO.IS", signal_type="BUY", signal_price=100.0, score=30)
     port_repo.close_paper_trade(
         ticker="THYAO.IS", exit_price=105.0, close_reason="TARGET", actual_profit_pct=5.0
     )
-    port_repo.add_paper_trade(
-        ticker="GARAN.IS", signal_type="BUY", signal_price=50.0, score=28
-    )
+    port_repo.add_paper_trade(ticker="GARAN.IS", signal_type="BUY", signal_price=50.0, score=28)
     port_repo.close_paper_trade(
         ticker="GARAN.IS", exit_price=49.1, close_reason="STOP", actual_profit_pct=-1.8
     )
@@ -440,9 +434,7 @@ def test_daily_report_radar_top_n_budget(repo, tmp_path, monkeypatch):
 
     params = StrategyParams.conservative()
     with settings.override(RADAR_REPORT_TOP_N=2):
-        md = generate_daily_report(
-            day=target_day, repo=repo, params=params, save_to_disk=False
-        )
+        md = generate_daily_report(day=target_day, repo=repo, params=params, save_to_disk=False)
 
     tier_a_section = md.split("### Kademe A")[1].split("### Kademe B")[0]
     assert "**AAA** (+24.0)" in tier_a_section

@@ -73,7 +73,10 @@ class SignalCategory(Enum):
 
 
 def categorize(
-    signal_type: SignalType, score: float, buy_threshold: float = 20.0
+    signal_type: SignalType,
+    score: float,
+    buy_threshold: float = 20.0,
+    max_signal_score: float = 33.0,
 ) -> SignalCategory:
     """Classify a signal into the canonical category (AL / RADAR / SAT / HOLD).
 
@@ -85,28 +88,49 @@ def categorize(
        - score >= buy_threshold -> AL
        - score > 0 -> RADAR
        - otherwise -> HOLD
+
+    NOTE: Effective score is capped at ``max_signal_score`` (default 33) to prevent
+    overconfident high scores from degrading trade performance (per challenge data:
+    35+ scores have WR %69.7 but net −497 TL/işlem; 28-33 bandı %76.6 +630 TL).
     """
+    effective_score = min(score, max_signal_score)
     if signal_type.is_sell:
         return SignalCategory.SAT
     if signal_type is SignalType.HOLD:
         return SignalCategory.HOLD
     if signal_type is SignalType.RADAR:
-        return SignalCategory.RADAR if score > 0 else SignalCategory.HOLD
+        return SignalCategory.RADAR if effective_score > 0 else SignalCategory.HOLD
     if signal_type.is_buy:
-        if score >= buy_threshold:
+        if effective_score >= buy_threshold:
             return SignalCategory.AL
-        if score > 0:
+        if effective_score > 0:
             return SignalCategory.RADAR
         return SignalCategory.HOLD
     return SignalCategory.HOLD
 
 
-def categorize_signal(signal: Signal, buy_threshold: float | None = None) -> SignalCategory:
-    """Categorize a Signal object using its internal buy_threshold unless overridden."""
+def categorize_signal(
+    signal: Signal, buy_threshold: float | None = None, max_signal_score: float | None = None
+) -> SignalCategory:
+    """Categorize a Signal object using its internal buy_threshold unless overridden.
+
+    Parameters
+    ----------
+    signal : Signal
+        The signal to categorize.
+    buy_threshold : float, optional
+        Override the signal's internal buy_threshold. Defaults to the signal's
+        ``buy_threshold`` attribute (default 20.0) or the settings value.
+    max_signal_score : float, optional
+        Cap the effective score at this value (default 33.0 from settings).
+        Scores above this cap are treated as the cap value for categorization,
+        preventing overconfident high scores from degrading performance.
+    """
     threshold = (
         buy_threshold if buy_threshold is not None else getattr(signal, "buy_threshold", 20.0)
     )
-    return categorize(signal.signal_type, float(signal.score), threshold)
+    mss = max_signal_score if max_signal_score is not None else 33.0
+    return categorize(signal.signal_type, float(signal.score), threshold, mss)
 
 
 def ensure_utc(value: datetime) -> datetime:

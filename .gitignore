@@ -124,3 +124,9 @@ results/haftalik_rapor_*.md
 results/*_gunluk_performans_raporu.md
 results/signal_replay_*.json
 results/signal_replay_*.csv
+
+# Regenerable local caches / scratch exports (never commit)
+data/cache_ohlcv/
+results/*.parquet
+numbers_check_summary.md
+telegram_messages_TODAY_*.md

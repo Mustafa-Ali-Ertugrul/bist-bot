@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import func, select
 
 from bist_bot.db.database import DatabaseManager, ScanLogRecord, SignalRecord
-from bist_bot.strategy.signal_models import Signal
+from bist_bot.strategy.signal_models import Signal, SignalType
 
 
 def _serialize_reasons(reasons: list[str]) -> str:
@@ -178,10 +178,74 @@ class SignalsRepository:
         rows = self.manager.run_session(_read, read_only=True)
         return [self._signal_to_dict(row) for row in rows]
 
+    def get_signal_tickers_for_day(
+        self,
+        signal_types: list[str],
+        day: date,
+        tz: ZoneInfo = ZoneInfo("Europe/Istanbul"),
+    ) -> set[str]:
+        """Return the set of unique tickers that already produced a signal of any
+        listed ``signal_types`` on the given local day. Used for per-ticker dedup
+        (e.g. ensure at most one SAT persists per ticker per day)."""
+        if not signal_types:
+            return set()
+        start_local = datetime.combine(day, time.min, tzinfo=tz)
+        end_local = start_local + timedelta(days=1)
+        start_utc = start_local.astimezone(UTC)
+        end_utc = end_local.astimezone(UTC)
+
+        def _read(session):
+            rows = session.execute(
+                select(SignalRecord.ticker)
+                .where(
+                    SignalRecord.signal_type.in_(signal_types),
+                    SignalRecord.timestamp >= start_utc,
+                    SignalRecord.timestamp < end_utc,
+                )
+                .distinct()
+            )
+            return {str(row.ticker) for row in rows}
+
+        return cast(set[str], self.manager.run_session(_read, read_only=True))
+
     def get_recent_signals(
         self, limit: int = 50, ticker: str | None = None
     ) -> list[dict[str, Any]]:
         return self.get_signals(limit=limit, ticker=ticker)
+
+    def get_last_signal_times(
+        self,
+        tickers: list[str],
+        signal_types: list[str],
+        since: datetime,
+        min_score: float | None = None,
+    ) -> dict[str, datetime]:
+        """Return {ticker: latest signal timestamp} for the listed tickers whose
+        latest persisted signal of any listed ``signal_types`` is at or after
+        ``since`` (UTC). Used for AL-signal cooldown (per-ticker, time-based).
+
+        ``min_score`` optionally filters to actionable signals only, so
+        RADAR/WEAK_BUY persists (score below the buy threshold) do not arm the
+        AL cooldown."""
+        if not tickers or not signal_types:
+            return {}
+
+        def _read(session):
+            statement = (
+                select(SignalRecord.ticker, func.max(SignalRecord.timestamp))
+                .where(
+                    SignalRecord.ticker.in_(tickers),
+                    SignalRecord.signal_type.in_(signal_types),
+                    SignalRecord.timestamp >= since,
+                )
+                .group_by(SignalRecord.ticker)
+            )
+            if min_score is not None:
+                statement = statement.where(SignalRecord.score >= min_score)
+            rows = session.execute(statement)
+            return {str(r.ticker): r[1] for r in rows if r[1] is not None}
+
+        return cast(dict[str, datetime], self.manager.run_session(_read, read_only=True))
 
     def get_latest_signal(self, ticker: str) -> dict[str, Any] | None:
         row = self.manager.run_session(
@@ -261,7 +325,20 @@ class SignalsRepository:
             row.outcome = outcome
             row.outcome_price = outcome_price
             row.outcome_date = datetime.now(UTC)
-            row.profit_pct = round((outcome_price - original_price) / original_price * 100, 2)
+            # Direction-aware profit calculation:
+            # For short (sell-family) signals, profit = (entry - exit) / entry * 100
+            # For long (buy-family) signals, profit = (exit - entry) / entry * 100
+            # The persisted signal_type is the enum's display string (e.g.
+            # "SAT"); parse it back so `is_sell` resolves reliably. Unparsable
+            # values fall back to long (preserves legacy behaviour).
+            try:
+                is_short = SignalType.from_value(str(row.signal_type)).is_sell
+            except ValueError:
+                is_short = False
+            if is_short:
+                row.profit_pct = round((original_price - outcome_price) / original_price * 100, 2)
+            else:
+                row.profit_pct = round((outcome_price - original_price) / original_price * 100, 2)
             if source is not None:
                 row.outcome_source = source
             return None

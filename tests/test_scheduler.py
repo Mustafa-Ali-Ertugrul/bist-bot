@@ -245,12 +245,10 @@ def test_run_loop_prefers_eod_pass_over_idle_sleep(monkeypatch) -> None:
     class FakeDateTime(datetime):
         current_hour = {"h": 18}
 
-    @classmethod
-    def _now(cls, tz=None):
-        h = FakeDateTime.current_hour["h"]
-        return datetime(2026, 8, 20, h, 33, tzinfo=tz)
-
-    FakeDateTime.now = _now
+        @classmethod
+        def now(cls, tz=None):  # type: ignore[override]
+            h = cls.current_hour["h"]
+            return datetime(2026, 8, 20, h, 33, tzinfo=tz)
 
     def advancing_sleep(seconds: float) -> None:
         # First poll advances the clock past the trigger so the outer loop

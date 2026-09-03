@@ -143,6 +143,10 @@ class AlertManager:
 
     @staticmethod
     def _default_transport(url: str, payload: dict[str, Any], timeout: float) -> bool:
+        # Only http(s) webhook URLs are allowed (operator-configured
+        # ALERT_WEBHOOK_URL); file:/custom schemes are rejected.
+        if not url.startswith(("https://", "http://")):
+            return False
         body = json.dumps(payload).encode("utf-8")
         req = urlrequest.Request(
             url,
@@ -151,7 +155,9 @@ class AlertManager:
             method="POST",
         )
         try:
-            with urlrequest.urlopen(req, timeout=timeout) as response:
+            # nosec B310: url scheme is validated to http(s) above; the target
+            # is the operator-configured ALERT_WEBHOOK_URL (Slack/generic).
+            with urlrequest.urlopen(req, timeout=timeout) as response:  # nosec B310
                 return 200 <= int(getattr(response, "status", 200)) < 300
         except urlerror.HTTPError as exc:
             return 200 <= int(exc.code) < 300

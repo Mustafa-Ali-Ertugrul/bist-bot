@@ -1,3 +1,7 @@
+# mypy: disable-error-code="method-assign, comparison-overlap"
+# (Tests monkeypatch agent methods, and assert state-machine transitions
+# whose Literal-narrowed comparisons strict_equality cannot follow.)
+
 from unittest.mock import MagicMock
 
 import pytest
@@ -242,8 +246,8 @@ class TestP0Regression:
         data_fetcher.fetch_single.return_value = {"close": 8.0}
 
         agent = TradingAgent(pm, es, cb, db, notifier, settings, data_fetcher=data_fetcher)
-        # Override _fetch_prices to return expected prices
-        agent._fetch_prices = lambda tickers: {"TEST.IS": 8.0}
+        # Override _fetch_exit_data to return expected prices (no ATR/closes)
+        agent._fetch_exit_data = lambda tickers: ({"TEST.IS": 8.0}, {}, {})
         es.exit_position.return_value = True
 
         agent._check_exits()
@@ -421,3 +425,45 @@ class TestCommandHandler:
         handler = CommandHandler(mock_agent)
         result = handler.handle("/close UNKNOWN.IS")
         assert "bulunamadı" in result.lower() or "not found" in result.lower()
+
+
+class TestRealAgentSettingsSmoke:
+    """Regression: TradingAgent must run against the REAL frozen AgentSettings.
+
+    The MagicMock fixtures above auto-create any attribute, which masked a
+    real bug: trading_agent._check_entries accessed agent_settings.MIN_SCORE_THRESHOLD
+    before that field existed in AgentSettings (AttributeError on first live scan).
+    """
+
+    def test_agent_settings_has_min_score_threshold(self):
+        from bist_bot.config.subsettings import AgentSettings
+
+        agent_settings = AgentSettings()
+        assert hasattr(agent_settings, "MIN_SCORE_THRESHOLD")
+        assert isinstance(agent_settings.MIN_SCORE_THRESHOLD, int)
+
+    def test_on_scan_completed_empty_signals_with_real_settings(self):
+        from bist_bot.agent.trading_agent import TradingAgent
+        from bist_bot.config.subsettings import AgentSettings
+
+        pm = MagicMock()
+        pm.get_open_positions.return_value = []
+        pm.get_daily_trade_count.return_value = 0
+        es = MagicMock()
+        cb = MagicMock()
+        cb.allow_request.return_value = True
+        db = MagicMock()
+        notifier = MagicMock()
+        settings = MagicMock()
+        settings.agent = AgentSettings()
+
+        agent = TradingAgent(
+            position_manager=pm,
+            exit_service=es,
+            circuit_breaker=cb,
+            db=db,
+            notifier=notifier,
+            settings=settings,
+        )
+        agent.on_scan_completed([])
+        pm.get_open_positions.assert_called()

@@ -90,8 +90,9 @@ def main():
         run_backtest(container.fetcher)
     elif "--dashboard" in sys.argv:
         app = create_default_dashboard_app(container)
+        # nosec B104: container entrypoint; exposure via compose/Cloud Run.
         app.run(
-            host="0.0.0.0",
+            host="0.0.0.0",  # nosec B104
             port=settings.FLASK_PORT,
             debug=False,
             use_reloader=settings.FLASK_DEBUG,
@@ -115,7 +116,10 @@ def main():
         app = create_default_dashboard_app(container)
         t = Thread(
             target=lambda: app.run(
-                host="0.0.0.0", port=settings.FLASK_PORT, debug=False, use_reloader=False
+                host="0.0.0.0",  # nosec B104: container-local; see above.
+                port=settings.FLASK_PORT,
+                debug=False,
+                use_reloader=False,
             ),
             daemon=True,
         )

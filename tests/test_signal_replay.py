@@ -34,8 +34,13 @@ from bist_bot.strategy.signal_models import Signal, SignalType
 # ---------------------------------------------------------------------------
 
 
-def make_bar_df(dates: list[date], opens: list[float], highs: list[float],
-                lows: list[float], closes: list[float]) -> pd.DataFrame:
+def make_bar_df(
+    dates: list[date],
+    opens: list[float],
+    highs: list[float],
+    lows: list[float],
+    closes: list[float],
+) -> pd.DataFrame:
     return pd.DataFrame(
         {
             "date": dates,
@@ -318,8 +323,9 @@ def test_missing_geometry_skip() -> None:
     assert trade is None
     assert status == "missing_geometry"
 
-    radar = make_signal(signal_type=SignalType.RADAR.value, score=None,
-                        stop_loss=None, target_price=None)
+    radar = make_signal(
+        signal_type=SignalType.RADAR.value, score=None, stop_loss=None, target_price=None
+    )
     trade2, status2 = replay_one(radar, bars)
     assert trade2 is None
     assert status2 == "is_radar"
@@ -364,7 +370,7 @@ def test_mfe_mae_short() -> None:
     bars.loc[1, "low"] = 90.0
     trade, _ = replay_one(sig, bars, timeout_bars=3)
     assert trade is not None
-    assert trade.mfe_pct == pytest.approx(0.10)   # (100 - 90) / 100
+    assert trade.mfe_pct == pytest.approx(0.10)  # (100 - 90) / 100
     assert trade.mae_pct == pytest.approx(-0.05)  # (100 - 105) / 100
     assert trade.mfe_pct >= 0.0
     assert trade.mae_pct <= 0.0
@@ -434,12 +440,21 @@ def test_raw_dedup_same_day() -> None:
 
 
 def test_episodes_collapse_same_direction() -> None:
-    sig1 = make_signal(signal_type=SignalType.WEAK_BUY.value, score=15.0,
-                       signal_date=date(2025, 1, 10), signal_id=1)
-    sig2 = make_signal(signal_type=SignalType.BUY.value, score=28.0,
-                       signal_date=date(2025, 1, 12), signal_id=2)
-    sig3 = make_signal(signal_type=SignalType.WEAK_SELL.value, score=-15.0,
-                       signal_date=date(2025, 1, 14), signal_id=3)
+    sig1 = make_signal(
+        signal_type=SignalType.WEAK_BUY.value,
+        score=15.0,
+        signal_date=date(2025, 1, 10),
+        signal_id=1,
+    )
+    sig2 = make_signal(
+        signal_type=SignalType.BUY.value, score=28.0, signal_date=date(2025, 1, 12), signal_id=2
+    )
+    sig3 = make_signal(
+        signal_type=SignalType.WEAK_SELL.value,
+        score=-15.0,
+        signal_date=date(2025, 1, 14),
+        signal_id=3,
+    )
     bars = flat_bars(date(2025, 1, 9), 10)
     episodes = build_dataset_episodes([sig1, sig2, sig3], {"AAA.IS": bars})
     assert len(episodes) == 2
@@ -448,31 +463,44 @@ def test_episodes_collapse_same_direction() -> None:
 
 
 def test_episodes_split_on_gap() -> None:
-    sig1 = make_signal(signal_type=SignalType.BUY.value, score=28.0,
-                       signal_date=date(2025, 1, 10), signal_id=1)
-    sig2 = make_signal(signal_type=SignalType.BUY.value, score=30.0,
-                       signal_date=date(2025, 1, 24), signal_id=2)  # 10 bars later
+    sig1 = make_signal(
+        signal_type=SignalType.BUY.value, score=28.0, signal_date=date(2025, 1, 10), signal_id=1
+    )
+    sig2 = make_signal(
+        signal_type=SignalType.BUY.value, score=30.0, signal_date=date(2025, 1, 24), signal_id=2
+    )  # 10 bars later
     bars = flat_bars(date(2025, 1, 9), 30)
     episodes = build_dataset_episodes([sig1, sig2], {"AAA.IS": bars}, max_gap_bars=5)
     assert len(episodes) == 2
 
 
 def test_radar_excluded_from_episodes() -> None:
-    radar = make_signal(signal_type=SignalType.RADAR.value, score=None,
-                        signal_date=date(2025, 1, 10), stop_loss=None,
-                        target_price=None, signal_id=1)
-    buy = make_signal(signal_type=SignalType.BUY.value, score=28.0,
-                      signal_date=date(2025, 1, 12), signal_id=2)
+    radar = make_signal(
+        signal_type=SignalType.RADAR.value,
+        score=None,
+        signal_date=date(2025, 1, 10),
+        stop_loss=None,
+        target_price=None,
+        signal_id=1,
+    )
+    buy = make_signal(
+        signal_type=SignalType.BUY.value, score=28.0, signal_date=date(2025, 1, 12), signal_id=2
+    )
     episodes = build_dataset_episodes([radar, buy], {})
     assert len(episodes) == 1
     assert episodes[0].id == 2
 
 
 def test_first_actionable_picks_first_actionable() -> None:
-    weak = make_signal(signal_type=SignalType.WEAK_BUY.value, score=15.0,
-                       signal_date=date(2025, 1, 10), signal_id=1)
-    strong = make_signal(signal_type=SignalType.BUY.value, score=28.0,
-                         signal_date=date(2025, 1, 12), signal_id=2)
+    weak = make_signal(
+        signal_type=SignalType.WEAK_BUY.value,
+        score=15.0,
+        signal_date=date(2025, 1, 10),
+        signal_id=1,
+    )
+    strong = make_signal(
+        signal_type=SignalType.BUY.value, score=28.0, signal_date=date(2025, 1, 12), signal_id=2
+    )
     bars = flat_bars(date(2025, 1, 9), 10)
     fa = build_dataset_first_actionable([weak, strong], {"AAA.IS": bars})
     assert len(fa) == 1
@@ -480,10 +508,18 @@ def test_first_actionable_picks_first_actionable() -> None:
 
 
 def test_first_actionable_none_actionable() -> None:
-    weak1 = make_signal(signal_type=SignalType.WEAK_BUY.value, score=15.0,
-                        signal_date=date(2025, 1, 10), signal_id=1)
-    weak2 = make_signal(signal_type=SignalType.WEAK_BUY.value, score=12.0,
-                        signal_date=date(2025, 1, 12), signal_id=2)
+    weak1 = make_signal(
+        signal_type=SignalType.WEAK_BUY.value,
+        score=15.0,
+        signal_date=date(2025, 1, 10),
+        signal_id=1,
+    )
+    weak2 = make_signal(
+        signal_type=SignalType.WEAK_BUY.value,
+        score=12.0,
+        signal_date=date(2025, 1, 12),
+        signal_id=2,
+    )
     bars = flat_bars(date(2025, 1, 9), 10)
     fa = build_dataset_first_actionable([weak1, weak2], {"AAA.IS": bars})
     assert fa == []
@@ -603,15 +639,15 @@ def test_entry_delay_out_of_range_skip() -> None:
 
 
 def test_hysteresis_second_confirmation() -> None:
-    sig1 = make_signal(signal_type=SignalType.BUY.value, score=28.0,
-                       signal_date=date(2025, 1, 10), signal_id=1)
-    sig2 = make_signal(signal_type=SignalType.BUY.value, score=30.0,
-                       signal_date=date(2025, 1, 12), signal_id=2)
+    sig1 = make_signal(
+        signal_type=SignalType.BUY.value, score=28.0, signal_date=date(2025, 1, 10), signal_id=1
+    )
+    sig2 = make_signal(
+        signal_type=SignalType.BUY.value, score=30.0, signal_date=date(2025, 1, 12), signal_id=2
+    )
     bars = flat_bars(date(2025, 1, 9), 20)
     engine = SignalReplayEngine(timeout_bars=5, cost_models=build_cost_scenarios())
-    result = evaluate_hysteresis(
-        [sig1, sig2], {"AAA.IS": bars}, engine, cost_model_name="zero"
-    )
+    result = evaluate_hysteresis([sig1, sig2], {"AAA.IS": bars}, engine, cost_model_name="zero")
     assert result["confirmed_episodes"] == 1
     assert result["unconfirmed_episodes"] == 0
     assert result["metrics"]["n_traded"] == 1
@@ -695,12 +731,18 @@ def test_e2e_runner_sqlite_csv(tmp_path) -> None:
     out = tmp_path / "summary.json"
     rc = main(
         [
-            "--db-path", str(db_path),
-            "--bars-dir", str(bars_dir),
-            "--dataset", "raw",
-            "--cost", "zero,base",
-            "--out", str(out),
-            "--min-n", "10",
+            "--db-path",
+            str(db_path),
+            "--bars-dir",
+            str(bars_dir),
+            "--dataset",
+            "raw",
+            "--cost",
+            "zero,base",
+            "--out",
+            str(out),
+            "--min-n",
+            "10",
         ]
     )
     assert rc == 0

@@ -40,6 +40,7 @@ from bist_bot.strategy.regime import (
 )
 from bist_bot.strategy.scoring import (
     _compute_ema_slope,
+    combine_component_scores,
     score_momentum,
     score_structure,
     score_trend,
@@ -333,19 +334,43 @@ class StrategyEngine:
         return result
 
     def _build_score_breakdown(
-        self, last: pd.Series, prev: pd.Series, df: pd.DataFrame | None = None
+        self,
+        last: pd.Series,
+        prev: pd.Series,
+        df: pd.DataFrame | None = None,
+        *,
+        final_score: float | None = None,
     ) -> dict[str, float]:
-        """Compute a per-component score breakdown for explainability."""
+        """Compute a per-component score breakdown for explainability.
+
+        Legacy mode returns the four raw component values (momentum / trend /
+        volume / structure). In research/normalized mode the breakdown shows
+        the effective weighted contributions and, when ``final_score`` is
+        provided, an ``adjustments`` entry so the rounded breakdown sums to
+        the final score after later filters/caps/low-ADX penalty.
+        """
         s_momentum, _ = self._score_momentum(last, prev)
         s_trend, _ = self._score_trend(last, prev, df)
         s_volume, _ = self._score_volume(last, prev)
         s_structure, _ = self._score_structure(last)
-        return {
-            "momentum": round(float(s_momentum), 2),
-            "trend": round(float(s_trend), 2),
-            "volume": round(float(s_volume), 2),
-            "structure": round(float(s_structure), 2),
-        }
+
+        if not getattr(self.params, "normalized_component_scoring", False):
+            return {
+                "momentum": round(float(s_momentum), 2),
+                "trend": round(float(s_trend), 2),
+                "volume": round(float(s_volume), 2),
+                "structure": round(float(s_structure), 2),
+            }
+
+        _, contributions = combine_component_scores(
+            self.params, s_momentum, s_trend, s_volume, s_structure
+        )
+        breakdown = {k: round(float(v), 2) for k, v in contributions.items()}
+        if final_score is not None:
+            adjustment = round(float(final_score) - sum(breakdown.values()), 2)
+            if adjustment != 0.0:
+                breakdown["adjustments"] = adjustment
+        return breakdown
 
     def _classify_signal(
         self, score: float, agreement_ratio: float | None = None
@@ -549,7 +574,7 @@ class StrategyEngine:
                 return None
 
         # Capture per-component breakdown once scoring is finalized.
-        score_breakdown = self._build_score_breakdown(last, prev, df)
+        score_breakdown = self._build_score_breakdown(last, prev, df, final_score=score)
 
         signal_type, confidence = self._classify_signal(score, _agreement)
         risk_levels = self.risk_manager.calculate(df)
@@ -807,15 +832,24 @@ class StrategyEngine:
                         error_type=type(exc).__name__,
                     )
 
-        # Merge: prefer higher score per (ticker, signal_type)
+        # Merge: prefer stronger score per (ticker, signal_type)
+        # For sell signals, more negative is stronger; for others, more positive is stronger.
         all_signals = builtin_signals + plugin_signals
         seen: dict[tuple[str, str], Signal] = {}
         for sig in all_signals:
             key = (sig.ticker, sig.signal_type.name)
-            if key not in seen or sig.score > seen[key].score:
+            if key not in seen:
                 seen[key] = sig
+            else:
+                existing = seen[key]
+                if sig.signal_type.is_sell:
+                    if sig.score < existing.score:
+                        seen[key] = sig
+                else:
+                    if sig.score > existing.score:
+                        seen[key] = sig
 
-        merged = sorted(seen.values(), key=lambda s: s.score, reverse=True)
+        merged = sorted(seen.values(), key=lambda s: abs(s.score), reverse=True)
         logger.info(
             "scan_with_plugins_finished",
             builtin_count=len(builtin_signals),

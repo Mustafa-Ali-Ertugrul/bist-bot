@@ -127,9 +127,7 @@ def test_max_drawdown_respects_close_time_order():
 
 
 def test_sharpe_none_when_single_trade():
-    trades = [
-        {"score": 30.0, "actual_profit_pct": 2.0, "close_time": "2026-08-20T18:00:00+00:00"}
-    ]
+    trades = [{"score": 30.0, "actual_profit_pct": 2.0, "close_time": "2026-08-20T18:00:00+00:00"}]
     assert compute_portfolio_metrics(trades)["sharpe"] is None
 
 
@@ -161,9 +159,7 @@ def test_format_benchmark_line():
 
 
 def test_accepts_attribute_objects():
-    Trade = namedtuple(
-        "Trade", ["score", "actual_profit_pct", "close_time", "close_reason"]
-    )
+    Trade = namedtuple("Trade", ["score", "actual_profit_pct", "close_time", "close_reason"])
     trades = [
         Trade(
             score=30.0,

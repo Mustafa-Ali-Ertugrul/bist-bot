@@ -54,18 +54,20 @@ def engine():
 def _insert(engine, *rows):
     with engine.begin() as conn:
         for row in rows:
-            conn.execute(sa.insert(PaperTradeRecord).values(
-                ticker=row.ticker,
-                signal_type=row.signal_type,
-                signal_price=row.signal_price,
-                signal_time=row.signal_time,
-                direction=row.direction,
-                outcome=row.outcome,
-                actual_profit_pct=row.actual_profit_pct,
-                exit_price=row.exit_price,
-                exit_date=row.exit_date,
-                close_reason=row.close_reason,
-            ))
+            conn.execute(
+                sa.insert(PaperTradeRecord).values(
+                    ticker=row.ticker,
+                    signal_type=row.signal_type,
+                    signal_price=row.signal_price,
+                    signal_time=row.signal_time,
+                    direction=row.direction,
+                    outcome=row.outcome,
+                    actual_profit_pct=row.actual_profit_pct,
+                    exit_price=row.exit_price,
+                    exit_date=row.exit_date,
+                    close_reason=row.close_reason,
+                )
+            )
 
 
 def test_resolve_direction_prefers_persisted_then_signal_type():
@@ -81,9 +83,7 @@ def test_long_profit_repair_includes_fees(engine):
     report = run_backfill(engine, apply=True)
     assert report["by_status"][STATUS_REPAIRED] == 1
     with engine.connect() as conn:
-        stored = conn.execute(
-            sa.select(PaperTradeRecord.actual_profit_pct)
-        ).scalar_one()
+        stored = conn.execute(sa.select(PaperTradeRecord.actual_profit_pct)).scalar_one()
     # net = gross(10.0) - fee(~0.183): net < gross ve gross'a yakin
     assert stored == pytest.approx(10.0, abs=0.5)
     assert stored < 10.0
@@ -92,18 +92,24 @@ def test_long_profit_repair_includes_fees(engine):
 def test_long_loss_and_short_cases(engine):
     _insert(
         engine,
-        _trade(ticker="L.IS", signal_price=100.0, exit_price=95.0),              # long zarar
-        _trade(ticker="S1.IS", signal_type="🔴 SAT", signal_price=100.0, exit_price=90.0),   # short kar
-        _trade(ticker="S2.IS", signal_type="🔴 SAT", signal_price=100.0, exit_price=105.0),  # short zarar
-        _trade(ticker="Z.IS", signal_price=100.0, exit_price=100.0),              # sifir hareket
+        _trade(ticker="L.IS", signal_price=100.0, exit_price=95.0),  # long zarar
+        _trade(
+            ticker="S1.IS", signal_type="🔴 SAT", signal_price=100.0, exit_price=90.0
+        ),  # short kar
+        _trade(
+            ticker="S2.IS", signal_type="🔴 SAT", signal_price=100.0, exit_price=105.0
+        ),  # short zarar
+        _trade(ticker="Z.IS", signal_price=100.0, exit_price=100.0),  # sifir hareket
     )
     report = run_backfill(engine, apply=True)
     assert report["by_status"][STATUS_REPAIRED] == 4
     assert report["remaining_null_after"] == 0
     with engine.connect() as conn:
-        profits = dict(conn.execute(
-            sa.select(PaperTradeRecord.ticker, PaperTradeRecord.actual_profit_pct)
-        ).all())
+        profits = dict(
+            conn.execute(
+                sa.select(PaperTradeRecord.ticker, PaperTradeRecord.actual_profit_pct)
+            ).all()
+        )
     assert profits["L.IS"] == pytest.approx(-5.0, abs=0.5)
     assert profits["S1.IS"] == pytest.approx(10.0, abs=0.5)
     assert profits["S2.IS"] == pytest.approx(-5.0, abs=0.5)
@@ -111,7 +117,9 @@ def test_long_loss_and_short_cases(engine):
 
 
 def test_quarantine_on_ambiguous_direction(engine):
-    _insert(engine, _trade(ticker="Q.IS", signal_type="BOZUK", signal_price=100.0, exit_price=105.0))
+    _insert(
+        engine, _trade(ticker="Q.IS", signal_type="BOZUK", signal_price=100.0, exit_price=105.0)
+    )
     report = run_backfill(engine, apply=True)
     assert report["by_status"].get(STATUS_QUARANTINE_DIRECTION) == 1
     assert report["by_status"].get(STATUS_REPAIRED) is None
@@ -161,10 +169,13 @@ def test_audit_rows_written(engine):
     )
     run_backfill(engine, apply=True)
     with engine.connect() as conn:
-        statuses = dict(conn.execute(
-            sa.select(AUDIT_TABLE.c.repair_status, sa.func.count())
-            .group_by(AUDIT_TABLE.c.repair_status)
-        ).all())
+        statuses = dict(
+            conn.execute(
+                sa.select(AUDIT_TABLE.c.repair_status, sa.func.count()).group_by(
+                    AUDIT_TABLE.c.repair_status
+                )
+            ).all()
+        )
     assert statuses[STATUS_REPAIRED] == 1
     assert statuses[STATUS_QUARANTINE_DIRECTION] == 1
 
@@ -204,15 +215,15 @@ def test_allow_crosscheck_drift_bypasses_gate_and_repairs_drift(engine):
     assert report["crosscheck_bypassed"]
     assert report["drift_repaired"] == 1
     with engine.connect() as conn:
-        profits = dict(conn.execute(
-            sa.select(PaperTradeRecord.ticker, PaperTradeRecord.actual_profit_pct)
-        ).all())
-        drift_audits = conn.execute(
-            sa.select(AUDIT_TABLE.c.repair_status)
-        ).scalars().all()
+        profits = dict(
+            conn.execute(
+                sa.select(PaperTradeRecord.ticker, PaperTradeRecord.actual_profit_pct)
+            ).all()
+        )
+        drift_audits = conn.execute(sa.select(AUDIT_TABLE.c.repair_status)).scalars().all()
     assert profits["DRIFT.IS"] == pytest.approx(9.82, abs=0.2)  # kendi fiyatlarindan
-    assert profits["OK.IS"] == pytest.approx(9.817, abs=0.01)   # zaten dogru, dokunulmadi
-    assert profits["NULL.IS"] == pytest.approx(4.8, abs=0.3)    # NULL onarimi
+    assert profits["OK.IS"] == pytest.approx(9.817, abs=0.01)  # zaten dogru, dokunulmadi
+    assert profits["NULL.IS"] == pytest.approx(4.8, abs=0.3)  # NULL onarimi
     assert "DRIFT_REPAIRED" in drift_audits
     assert "REPAIRED" in drift_audits
 
