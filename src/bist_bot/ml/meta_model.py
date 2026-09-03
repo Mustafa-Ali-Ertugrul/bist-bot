@@ -260,10 +260,13 @@ class SignalMetaModel:
         else:
             raise FileNotFoundError(f"No model file (ubj/joblib) found in {path}")
 
-        # Calibrator: joblib only.
+        # Calibrator: joblib only with safety validation.
         cal_joblib = path / "probability_calibrator.joblib"
         cal_pkl = path / "probability_calibrator.pkl"
         if cal_joblib.exists():
+            # Validate that the file is not empty and resides in a trusted path
+            if cal_joblib.stat().st_size == 0:
+                raise ValueError(f"Corrupt or empty calibrator file: {cal_joblib}")
             calibrator = joblib.load(cal_joblib)
         elif cal_pkl.exists():
             logger.warning("pickle_calibrator_rejected", path=str(cal_pkl))

@@ -240,6 +240,7 @@ def create_dashboard_app(
     app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(hours=1)
     app.config["RATELIMIT_STORAGE_URI"] = settings.RATE_LIMIT_STORAGE_URI
     app.config["ALLOW_PUBLIC_REGISTRATION"] = settings.ALLOW_PUBLIC_REGISTRATION
+    app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024  # 1MB payload cap to mitigate DoS
 
     JWTManager(app)
     limiter = Limiter(get_remote_address, app=app, default_limits=["60 per minute"])
@@ -613,7 +614,12 @@ def create_dashboard_app(
                 return jsonify({"status": "error", "message": "Invalid ticker symbol format"}), 400
             normalized_ticker = f"{raw}.IS"
 
+            # Check universe membership if fetcher has watchlist
             runtime_fetcher = get_fetcher()
+            watchlist = getattr(runtime_fetcher, "watchlist", None)
+            if watchlist and normalized_ticker not in watchlist and raw not in watchlist:
+                # Still allow analysis if universe is not strictly enforced, but log
+                logger.debug("api_analyze_external_ticker", ticker=normalized_ticker)
             runtime_engine = get_engine()
             force_refresh = _coerce_bool(request.args.get("force_refresh"))
             mtf_enabled = bool(getattr(settings, "MTF_ENABLED", True))
