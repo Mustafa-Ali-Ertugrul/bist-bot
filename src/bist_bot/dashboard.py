@@ -652,7 +652,7 @@ def create_dashboard_app(
             abort_event = threading.Event()
             executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
 
-            def _run_scan() -> list[Signal]:
+            def _run_scan() -> list[Any]:
                 try:
                     return scan_service.scan_once(
                         force_refresh=force_refresh, abort_event=abort_event

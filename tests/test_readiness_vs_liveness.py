@@ -1,6 +1,6 @@
 import json
 from unittest.mock import MagicMock
-import pytest
+
 from bist_bot.dashboard import create_dashboard_app
 
 

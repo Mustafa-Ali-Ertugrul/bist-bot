@@ -35,6 +35,7 @@ def validate_ticker_symbol(ticker: str) -> str:
         raise ValueError(f"Invalid ticker symbol format: {ticker!r}")
     return cleaned
 
+
 # Yahoo blocks the default python-requests User-Agent (429/HTML); the v8 chart
 # API only answers reliably with a browser UA.
 _YAHOO_CHART_HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
