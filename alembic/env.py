@@ -20,14 +20,17 @@ from bist_bot.db.database import Base  # noqa: E402
 
 config = context.config
 
-if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+if config.config_file_name is not None and not config.get_main_option("dont_mutate_root_logger"):
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
 
 
 def get_url() -> str:
-    """Resolve DB URL the same way runtime DatabaseManager does."""
+    """Resolve DB URL: prefer config option if set (e.g. tests), else runtime."""
+    cfg_url = config.get_main_option("sqlalchemy.url")
+    if cfg_url and cfg_url.strip():
+        return cfg_url
     cfg = resolve_database_url()
     return cfg.url
 
