@@ -1,0 +1,3 @@
+# pip-audit vulnerability ignore file
+# Format: CVE-YYYY-XXXXX or GHSA-XXXX-XXXX-XXXX
+# Use this file to record vetted transitive/unfixable vulnerabilities with justifications.
