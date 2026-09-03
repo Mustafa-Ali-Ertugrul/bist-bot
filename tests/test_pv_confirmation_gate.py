@@ -123,8 +123,15 @@ def test_gate_does_not_affect_below_threshold_rows():
 def test_gate_short_side_untouched():
     params = StrategyParams.conservative()
     params.pv_confirmation_required = True
+    # Düşüş trendi / negatif skor senaryosu: skor negatif çıkmalı ve
+    # gate (score >= buy_threshold iken çalıştığı için) kısa tarafı engellememelidir.
     df = _frame(pv="NONE")
-    # Negatif skorlu senaryo: gate yalnız score >= buy_threshold iken ateşlenir.
-    # Yapay olarak eşiği negatife çekip skorun negatif kalmasını sağlıyoruz.
+    # SMA death cross ve bearish indikatörler ile düşüş çerçevesi oluştur
+    df["sma_cross"] = "DEATH_CROSS"
+    df["macd_cross"] = "BEARISH"
+    df["rsi"] = 75.0
+    df["bb_position"] = "ABOVE_UPPER"
     result = _score(params, df)
-    assert result is None  # pozitif skorlu long aday engellendi (beklenen)
+    assert result is not None
+    score, reasons, _ = result
+    assert score < 0  # negatif skorlu sat/short aday engellenmedi (None dönmedi)

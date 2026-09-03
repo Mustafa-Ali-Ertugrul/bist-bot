@@ -6,7 +6,7 @@ $ErrorActionPreference = "Continue"
 $StartTime = Get-Date
 
 # Yol tanımları
-$ProjectRoot = "C:\Users\Ali\OneDrive\Masaüstü\bist_bot"
+$ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $LogFile = "$ProjectRoot\logs\bot_worker_$(Get-Date -Format 'yyyyMMdd_HHmmss').log"
 $LogDir = Split-Path $LogFile -Parent
 

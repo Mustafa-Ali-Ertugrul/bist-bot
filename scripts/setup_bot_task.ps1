@@ -3,7 +3,7 @@
 # Yonetici yetkisi ile calistir!
 
 $ErrorActionPreference = "Continue"
-$ProjectRoot = "C:\Users\Ali\OneDrive\Masaustu\bist_bot"
+$ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $ScriptPath = "$ProjectRoot\scripts\start_bot_worker.ps1"
 $TaskName = "BISTBotWorker"
 
