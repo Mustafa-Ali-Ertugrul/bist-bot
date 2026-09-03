@@ -2,6 +2,24 @@
 
 Bu doküman, BIST-Bot projesinin mevcut "Sinyal + Paper Trade" yapısından, ölçeklenebilir ve profesyonel bir "Algoritmik İşlem (Algo Trading) Motoruna" dönüştürülmesi için izlenecek teknik adımları içerir.
 
+## ✅ Durum — 21 Ağustos 2026 (Program Kapanışı)
+
+> Bu bölüm, aşağıdaki tarihsel planın güncel durumunu özetler. Alt başlıklardaki eski maddelerin büyük bölümü bu programla kapatıldı; dokümanın gerisi tarihsel plana aittir.
+
+| Program | İçerik | PR |
+|---|---|---|
+| **Faz 1 + 1.5** | Kanonik sinyal sınıflandırması (`categorize`), tek-geçiş günlük rapor, radar A/B/C kademeleri, grup bildirimi robust koruması, paper price-priority | #110 |
+| **Faz 2** | Actionable outcome tracking (MFE/MAE, STOP/TARGET/EOD, DB geri yazım) + volatilite-adaptif stop/hedef (ATR fallback, MIN_STOP %1.5) + skor↔getiri korelasyon raporu; walk-forward parity **delta=0** | #110, kanıt #111 |
+| **Faz 3** | Pozisyon disiplini: EOD close (post-close pası) + trailing stop + yaşam döngüsü sözleşmesi + likidite (5M₺ ADV) görünürlüğü + skor-decay uyarısı (≥15:30) | #112 (+P1.1) |
+| **P5.0** | Kalibrasyon tetik görünürü (`--score-correlation` içi sayaç: ≥30 outcome / 10 işlem günü) | #113 |
+| **Operasyon** | `--daily-report` CLI fix; runtime state dosyalarının untrack+ignore + `ShadowTradeService` test stub'u (git/OneDrive veri bütünlüğü) | #114, #115 |
+
+**Günlük kontrol (EOD pası sonrası):** `python scripts/check_eod_pass.py` — log + outcome satırları + P5 tetik durumu + git hijyeni, tek komut.
+
+**Bir sonraki veri kontrol noktası:** P5 kalibrasyon tetiği (~4-5 Eylül, veri saati 24 Ağustos'ta başladı). Koşu ve karar kuralları: `results/score_calibration_protocol.md` → çıktı `results/score_calibration_YYYY-MM-DD.md`.
+
+**Bilinçli olarak ayrı proje olanlar (bu roadmap'in dışında):** KAP/haber entegrasyonu, sentiment analizi (SASA/ASTOR tipi), spread/kademe derinliği filtresi (yeni veri kaynağı gerektirir), `RESULTS_DIR` → Docker named volume (opsiyonel).
+
 ## 🔴 Aşama 1: Hemen Yapılacaklar (Hızlı Kazanımlar)
 - [ ] `strategy.py` içindeki gömülü değerleri (magic numbers) tek yere taşı (`config/settings.py` veya `strategy_params.py`).
 - [ ] Skor ağırlıkları, eşikler ve indikatör periyotları için tek bir parametre şeması (dataclass) oluştur.
