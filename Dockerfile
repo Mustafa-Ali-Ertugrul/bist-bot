@@ -1,7 +1,8 @@
 # syntax=docker/dockerfile:1.7
 
-# ---- builder: install deps into a venv ----
-FROM python:3.11-slim AS builder
+# ---- builder: install deps into a venv via uv ----
+FROM ghcr.io/astral-sh/uv:0.6.5 AS uv_bin
+FROM python:3.11-slim@sha256:9534e5a8e315485d4061ed659af0fd78a284c015f9b73661b41d6bab25604534 AS builder
 
 WORKDIR /app
 
@@ -9,20 +10,19 @@ ENV VIRTUAL_ENV=/opt/venv
 ENV PATH="${VIRTUAL_ENV}/bin:${PATH}"
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
-ENV PIP_DISABLE_PIP_VERSION_CHECK=1
-ENV PIP_NO_CACHE_DIR=1
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential curl \
     && rm -rf /var/lib/apt/lists/* \
-    && python -m venv "${VIRTUAL_ENV}" \
-    && pip install --upgrade pip
+    && python -m venv "${VIRTUAL_ENV}"
+
+COPY --from=uv_bin /uv /bin/uv
 
 COPY requirements.txt pyproject.toml ./
-RUN pip install --no-cache-dir -r requirements.txt
+RUN uv pip install --no-cache --python "${VIRTUAL_ENV}/bin/python" -r requirements.txt
 
 # ---- runtime: slim image without build tools ----
-FROM python:3.11-slim AS runtime
+FROM python:3.11-slim@sha256:9534e5a8e315485d4061ed659af0fd78a284c015f9b73661b41d6bab25604534 AS runtime
 
 WORKDIR /app
 
@@ -48,7 +48,6 @@ COPY --from=builder /opt/venv /opt/venv
 COPY --chown=appuser:appuser pyproject.toml requirements.txt alembic.ini ./
 COPY --chown=appuser:appuser alembic ./alembic
 COPY --chown=appuser:appuser src ./src
-COPY --chown=appuser:appuser results ./results
 COPY --chown=appuser:appuser main.py dashboard.py streamlit_app.py ./
 
 USER appuser
