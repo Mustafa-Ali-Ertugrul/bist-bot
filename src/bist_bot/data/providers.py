@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import time
 from abc import ABC
 from dataclasses import dataclass
@@ -17,6 +18,22 @@ from bist_bot.data import quotes as quote_helpers
 from bist_bot.data.scraper import scrape_bist_quote
 
 logger = get_logger(__name__, component="providers")
+
+_TICKER_VALIDATION_RE = re.compile(r"^[A-Z0-9]{1,10}(\.IS)?$")
+
+
+def validate_ticker_symbol(ticker: str) -> str:
+    """Validate ticker format against strict alphanumeric pattern.
+
+    Raises ValueError if ticker contains illegal characters, whitespace or traversal attacks.
+    Returns stripped uppercase ticker.
+    """
+    if not isinstance(ticker, str):
+        raise ValueError(f"Ticker must be a string, got {type(ticker).__name__}")
+    cleaned = ticker.strip().upper()
+    if not cleaned or not _TICKER_VALIDATION_RE.fullmatch(cleaned):
+        raise ValueError(f"Invalid ticker symbol format: {ticker!r}")
+    return cleaned
 
 # Yahoo blocks the default python-requests User-Agent (429/HTML); the v8 chart
 # API only answers reliably with a browser UA.
@@ -224,6 +241,7 @@ class YFinanceProvider:
         return df.sort_values("Date").set_index("Date")
 
     def fetch_history(self, ticker: str, period: str, interval: str) -> pd.DataFrame | None:
+        ticker = validate_ticker_symbol(ticker)
         allow_http_fallback = ticker.upper().endswith(".IS") and not self._yfinance_is_patched()
         if allow_http_fallback:
             try:
@@ -285,6 +303,7 @@ class YFinanceProvider:
     def fetch_batch(
         self, tickers: list[str], period: str, interval: str
     ) -> dict[str, pd.DataFrame | None]:
+        tickers = [validate_ticker_symbol(t) for t in tickers]
         if not tickers:
             return {}
 
@@ -403,6 +422,7 @@ class BorsaIstanbulQuoteProvider:
         self.rate_limiter = rate_limiter
 
     def fetch_quote(self, ticker: str) -> float | None:
+        ticker = validate_ticker_symbol(ticker)
         result = scrape_bist_quote(ticker, self.rate_limiter)
         if result.success and result.price is not None:
             return float(result.price)
