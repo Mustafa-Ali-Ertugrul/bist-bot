@@ -20,7 +20,7 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://bist:bist@postgres:5432/bist_bot}
       DB_PATH: /app/data/bist_signals.db
       # C7: Prometheus ic agdan JWT'siz scrape icin (port host'a acilmadikca risk dusuk).
-      METRICS_PUBLIC: ${METRICS_PUBLIC:-true}
+      METRICS_PUBLIC: ${METRICS_PUBLIC:-false}
       LOG_FORMAT: ${LOG_FORMAT:-json}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?JWT_SECRET_KEY must be set for secure startup}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
@@ -30,7 +30,7 @@ services:
       ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
       CONFIG_STRICT: ${CONFIG_STRICT:-true}
     ports:
-      - "5000:5000"
+      - "127.0.0.1:5000:5000"
     volumes:
       - bot-data:/app/data
       - ./results:/app/results

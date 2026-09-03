@@ -115,5 +115,9 @@ class WorkerHealthServer:
     def stop(self) -> None:
         if self._server is not None:
             self._server.shutdown()
+            self._server.server_close()
             self._server = None
+        if self._thread is not None:
+            self._thread.join(timeout=2)
+            self._thread = None
         logger.info("worker_http_stopped")
