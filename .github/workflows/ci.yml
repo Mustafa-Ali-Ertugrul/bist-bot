@@ -104,11 +104,16 @@ jobs:
 
       - name: pip-audit (dependency CVE scan)
         run: |
+          ARGS=""
           if [ -s .pip-audit-ignore ]; then
-            pip-audit --requirement requirements.txt --strict --ignore-vuln-ignore-file=.pip-audit-ignore
-          else
-            pip-audit --requirement requirements.txt --strict
+            while IFS= read -r line || [ -n "$line" ]; do
+              line="$(echo "$line" | sed 's/#.*//' | tr -d '[:space:]')"
+              if [ -n "$line" ]; then
+                ARGS="$ARGS --ignore-vuln $line"
+              fi
+            done < .pip-audit-ignore
           fi
+          pip-audit --requirement requirements.txt --strict $ARGS
 
       - name: Bandit (static security analysis)
         run: bandit -r src/bist_bot -x tests -ll -f txt
