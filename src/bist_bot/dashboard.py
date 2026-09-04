@@ -324,7 +324,7 @@ def create_dashboard_app(
                 )
         except SQLAlchemyError:
             logger.exception("rbac_user_lookup_failed", user_id=user_id)
-            return None
+            raise
         return dict(row) if row is not None else None
 
     def require_roles(*allowed_roles: str):
@@ -338,11 +338,34 @@ def create_dashboard_app(
                 claims = get_jwt()
                 claim_role = str(claims.get("role", "") or "").lower()
                 identity = str(get_jwt_identity() or "")
-                db_user = _db_user_for_identity(identity)
+                request_id = _request_id()
+                try:
+                    db_user = _db_user_for_identity(identity)
+                except SQLAlchemyError:
+                    logger.error(
+                        "auth_identity_lookup_unavailable",
+                        user_id=identity or None,
+                        route=request.path,
+                        request_id=request_id,
+                    )
+                    return jsonify(
+                        {"status": "error", "message": "Identity store unavailable"}
+                    ), 503
+                if db_user is None:
+                    audit_details = {
+                        "user_id": identity or None,
+                        "claim_role": claim_role or None,
+                        "db_role": None,
+                        "route": request.path,
+                        "request_id": request_id,
+                        "allowed_roles": sorted(allowed),
+                    }
+                    logger.warning("auth_identity_unresolved", **audit_details)
+                    _write_security_audit("auth_identity_unresolved", audit_details)
+                    return jsonify({"status": "error", "message": "Authentication required"}), 401
                 db_role = str((db_user or {}).get("role", "") or "").lower()
                 authorized = bool(claim_role in allowed and db_role in allowed)
                 g.rbac_authorized = authorized
-                request_id = _request_id()
                 audit_details = {
                     "user_id": identity or None,
                     "claim_role": claim_role or None,
@@ -888,51 +911,78 @@ def create_dashboard_app(
 
     @app.route("/api/orders/intents/<client_id>/resolve", methods=["POST"])
     @jwt_required()
-    @require_roles("admin", "trader")
+    @require_roles("admin")
     @limiter.limit("10 per minute")
     def resolve_order_intent(client_id: str):
         data = request.get_json(silent=True) or {}
-        status = str(data.get("status", "")).lower()
-        if status not in {"ack", "rejected"}:
-            return jsonify({"status": "error", "message": "status must be ack or rejected"}), 400
+        resolution = str(data.get("resolution", data.get("status", ""))).lower()
+        if resolution not in {"ack", "rejected"}:
+            return jsonify(
+                {"status": "error", "message": "resolution must be ack or rejected"}
+            ), 400
+        reason = str(data.get("reason", data.get("detail", ""))).strip()
+        if len(reason) < 10:
+            return jsonify(
+                {"status": "error", "message": "reason must be at least 10 characters"}
+            ), 400
+        if data.get("confirmed_in_broker_ui") is not True:
+            return (
+                jsonify({"status": "error", "message": "confirmed_in_broker_ui must be true"}),
+                400,
+            )
+        broker_order_id = str(data.get("broker_order_id", "")).strip() or None
+        if resolution == "ack" and not broker_order_id:
+            return jsonify(
+                {"status": "error", "message": "broker_order_id is required for ack"}
+            ), 400
         repository = getattr(get_db(), "order_intents", None)
         if repository is None:
             return jsonify({"status": "error", "message": "Order intent store unavailable"}), 503
-        detail = str(data.get("detail", "manual operator resolution")).strip()
         row = repository.update(
             client_id,
-            status=status,
-            detail=detail or "manual operator resolution",
+            status=resolution,
+            broker_order_id=broker_order_id,
+            detail=reason,
             release_lock=True,
         )
         if row is None:
             return jsonify({"status": "error", "message": "Order intent not found"}), 404
         claims = get_jwt()
-        logger.warning(
-            "order_intent_manually_resolved",
-            order_id=client_id,
-            resolution=status,
-            user_id=str(get_jwt_identity() or ""),
-            role=claims.get("role"),
-            route=request.path,
-            request_id=_request_id(),
-        )
+        audit_details = {
+            "user_id": str(get_jwt_identity() or ""),
+            "role": claims.get("role"),
+            "route": request.path,
+            "request_id": _request_id(),
+            "client_id": client_id,
+            "resolution": resolution,
+            "broker_order_id": broker_order_id,
+            "reason": reason,
+            "confirmed_in_broker_ui": True,
+        }
+        if resolution == "rejected":
+            logger.error(
+                "order_intent_manually_resolved",
+                order_id=client_id,
+                severity="critical",
+                **{k: v for k, v in audit_details.items() if k != "reason"},
+                reason=reason,
+            )
+        else:
+            logger.warning(
+                "order_intent_manually_resolved",
+                order_id=client_id,
+                **{k: v for k, v in audit_details.items() if k != "reason"},
+                reason=reason,
+            )
         _write_security_audit(
             "order_intent_manually_resolved",
-            {
-                "user_id": str(get_jwt_identity() or ""),
-                "role": claims.get("role"),
-                "route": request.path,
-                "request_id": _request_id(),
-                "client_id": client_id,
-                "resolution": status,
-            },
+            audit_details,
         )
         return jsonify(
             {
                 "status": "ok",
                 "client_id": client_id,
-                "resolution": status,
+                "resolution": resolution,
                 "lock_released": True,
             }
         )

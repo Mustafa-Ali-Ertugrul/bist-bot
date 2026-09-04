@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import os
 import sys
+from datetime import UTC, datetime
 from typing import Any, cast
 
 import pandas as pd
 from flask_jwt_extended import create_access_token
+from sqlalchemy import text
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:
@@ -15,6 +17,7 @@ if ROOT_DIR not in sys.path:
 
 from dashboard import create_dashboard_app  # noqa: E402
 
+from bist_bot.auth.passwords import hash_password  # noqa: E402
 from bist_bot.config.settings import settings  # noqa: E402
 from bist_bot.db import DataAccess, DatabaseManager  # noqa: E402
 from bist_bot.execution.base import OrderResult, OrderState  # noqa: E402
@@ -138,11 +141,33 @@ def _build_authorized_client(
         **overrides,
     ):
         manager = DatabaseManager(sqlite_path=str(tmp_path / "dashboard_cache.db"))
+        now = datetime.now(UTC)
+        with manager.engine.begin() as conn:
+            conn.execute(
+                text(
+                    "INSERT INTO users "
+                    "(email, password_hash, role, created_at, updated_at) "
+                    "VALUES (:email, :password_hash, 'admin', :created_at, :updated_at)"
+                ),
+                {
+                    "email": "admin@bistbot.local",
+                    "password_hash": hash_password("test-password"),
+                    "created_at": now,
+                    "updated_at": now,
+                },
+            )
+            admin_id = conn.execute(
+                text("SELECT id FROM users WHERE email = :email"),
+                {"email": "admin@bistbot.local"},
+            ).scalar_one()
         db = DataAccess(manager)
         app = create_dashboard_app(cast(Any, fetcher), cast(Any, engine), db, broker=broker)
         app.config["TESTING"] = True
         with app.app_context():
-            token = create_access_token(identity="admin@bistbot.local")
+            token = create_access_token(
+                identity=str(admin_id),
+                additional_claims={"role": "admin", "email": "admin@bistbot.local"},
+            )
         client = app.test_client()
     return client, fetcher, engine, token, db
 

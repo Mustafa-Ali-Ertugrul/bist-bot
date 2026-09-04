@@ -37,6 +37,7 @@ def _build_client(tmp_path):
             for email, role in (
                 ("user@bistbot.local", "user"),
                 ("trader@bistbot.local", "trader"),
+                ("admin@bistbot.local", "admin"),
             ):
                 conn.execute(
                     text(
@@ -73,9 +74,7 @@ def _build_client(tmp_path):
                 )
                 for email, user in users.items()
             }
-            tokens["legacy"] = create_access_token(
-                identity=str(users["trader@bistbot.local"]["id"])
-            )
+            tokens["legacy"] = create_access_token(identity="trader@bistbot.local")
         return app.test_client(), manager, users, tokens
 
 
@@ -99,12 +98,21 @@ def test_trader_role_can_trigger_scan_in_enforce_mode(tmp_path) -> None:
     assert response.status_code == 200
 
 
-def test_legacy_token_without_role_claim_fails_closed(tmp_path) -> None:
+def test_legacy_email_identity_token_returns_401_in_enforce_mode(tmp_path) -> None:
     client, _manager, _users, tokens = _build_client(tmp_path)
 
     response = _scan(client, tokens["legacy"])
 
-    assert response.status_code == 403
+    assert response.status_code == 401
+
+
+def test_legacy_email_identity_token_returns_401_in_warn_mode(tmp_path) -> None:
+    client, _manager, _users, tokens = _build_client(tmp_path)
+    client.application.config["RBAC_MODE"] = "warn"
+
+    response = _scan(client, tokens["legacy"])
+
+    assert response.status_code == 401
 
 
 def test_database_demotion_invalidates_existing_trader_token(tmp_path) -> None:
@@ -120,7 +128,7 @@ def test_database_demotion_invalidates_existing_trader_token(tmp_path) -> None:
     assert response.status_code == 403
 
 
-def test_manual_order_resolution_requires_trader_and_releases_lock(tmp_path) -> None:
+def test_manual_order_resolution_requires_admin_and_strong_confirmation(tmp_path) -> None:
     client, manager, _users, tokens = _build_client(tmp_path)
     repository = DataAccess(manager).order_intents
     repository.create(
@@ -134,19 +142,60 @@ def test_manual_order_resolution_requires_trader_and_releases_lock(tmp_path) -> 
     )
     repository.update("unknown-order", status="unknown")
 
-    denied = client.post(
-        "/api/orders/intents/unknown-order/resolve",
-        headers={"Authorization": f"Bearer {tokens['user@bistbot.local']}"},
-        json={"status": "rejected", "detail": "operator verified no broker order"},
-    )
-    assert denied.status_code == 403
+    def _resolve(token: str, payload: dict):
+        return client.post(
+            "/api/orders/intents/unknown-order/resolve",
+            headers={"Authorization": f"Bearer {token}"},
+            json=payload,
+        )
 
-    resolved = client.post(
-        "/api/orders/intents/unknown-order/resolve",
-        headers={"Authorization": f"Bearer {tokens['trader@bistbot.local']}"},
-        json={"status": "rejected", "detail": "operator verified no broker order"},
-    )
+    valid_reject = {
+        "resolution": "rejected",
+        "reason": "operator verified no broker order",
+        "confirmed_in_broker_ui": True,
+    }
+    # Separation of duties: user and trader cannot release the money-safety lock.
+    assert _resolve(tokens["user@bistbot.local"], valid_reject).status_code == 403
+    assert _resolve(tokens["trader@bistbot.local"], valid_reject).status_code == 403
+    # Weak confirmation is rejected even for admins.
+    short_reason = dict(valid_reject, reason="too short")
+    assert _resolve(tokens["admin@bistbot.local"], short_reason).status_code == 400
+    unconfirmed = dict(valid_reject)
+    unconfirmed.pop("confirmed_in_broker_ui")
+    assert _resolve(tokens["admin@bistbot.local"], unconfirmed).status_code == 400
+    ack_without_broker_id = {
+        "resolution": "ack",
+        "reason": "operator verified broker fill",
+        "confirmed_in_broker_ui": True,
+    }
+    assert _resolve(tokens["admin@bistbot.local"], ack_without_broker_id).status_code == 400
+
+    resolved = _resolve(tokens["admin@bistbot.local"], valid_reject)
     assert resolved.status_code == 200
+    assert resolved.get_json()["lock_released"] is True
+    assert repository.get_unresolved("THYAO.IS") is None
+
+    repository.create(
+        client_id="filled-order",
+        ticker="THYAO.IS",
+        side="BUY",
+        quantity=10,
+        order_type="MARKET",
+        price=None,
+        stop_price=None,
+    )
+    repository.update("filled-order", status="unknown")
+    acked = client.post(
+        "/api/orders/intents/filled-order/resolve",
+        headers={"Authorization": f"Bearer {tokens['admin@bistbot.local']}"},
+        json={
+            "resolution": "ack",
+            "reason": "operator verified broker fill",
+            "broker_order_id": "broker-123",
+            "confirmed_in_broker_ui": True,
+        },
+    )
+    assert acked.status_code == 200
     assert repository.get_unresolved("THYAO.IS") is None
     with manager.engine.connect() as conn:
         audit_events = {

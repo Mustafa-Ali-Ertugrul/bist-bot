@@ -6,10 +6,12 @@ import io
 import json
 import os
 import sys
+from datetime import UTC, datetime
 from typing import Any, cast
 from unittest.mock import MagicMock
 
 from flask_jwt_extended import create_access_token
+from sqlalchemy import text
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:
@@ -19,6 +21,7 @@ from dashboard import create_dashboard_app  # noqa: E402
 
 from bist_bot.app_logging import configure_logging, get_logger  # noqa: E402
 from bist_bot.app_metrics import reset_metrics  # noqa: E402
+from bist_bot.auth.passwords import hash_password  # noqa: E402
 from bist_bot.config.settings import settings  # noqa: E402
 from bist_bot.db import DataAccess, DatabaseManager  # noqa: E402
 from bist_bot.observability.alerts import (  # noqa: E402
@@ -109,6 +112,25 @@ def _build_client(tmp_path, fetcher: Any | None = None, engine: Any | None = Non
         CORS_ORIGINS=("http://localhost:8501",),
     ):
         manager = DatabaseManager(sqlite_path=str(tmp_path / "observability.db"))
+        now = datetime.now(UTC)
+        with manager.engine.begin() as conn:
+            conn.execute(
+                text(
+                    "INSERT INTO users "
+                    "(email, password_hash, role, created_at, updated_at) "
+                    "VALUES (:email, :password_hash, 'admin', :created_at, :updated_at)"
+                ),
+                {
+                    "email": "admin@bistbot.local",
+                    "password_hash": hash_password("test-password"),
+                    "created_at": now,
+                    "updated_at": now,
+                },
+            )
+            admin_id = conn.execute(
+                text("SELECT id FROM users WHERE email = :email"),
+                {"email": "admin@bistbot.local"},
+            ).scalar_one()
         db = DataAccess(manager)
         app = create_dashboard_app(
             cast(Any, fetcher or MetricsFetcher()),
@@ -117,7 +139,10 @@ def _build_client(tmp_path, fetcher: Any | None = None, engine: Any | None = Non
         )
         app.config["TESTING"] = True
         with app.app_context():
-            token = create_access_token(identity="admin@bistbot.local")
+            token = create_access_token(
+                identity=str(admin_id),
+                additional_claims={"role": "admin", "email": "admin@bistbot.local"},
+            )
         return app.test_client(), token
 
 
