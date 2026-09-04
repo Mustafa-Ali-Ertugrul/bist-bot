@@ -19,7 +19,7 @@ from bist_bot.data.fetcher import (
 )
 from bist_bot.data.providers import build_official_provider, resolve_official_endpoints
 from bist_bot.db import DataAccess
-from bist_bot.execution.algolab_broker import AlgoLabBroker, AlgoLabCredentials
+from bist_bot.execution.algolab_broker import AlgoLabBroker, AlgoLabCredentials, AlgoLabEndpoints
 from bist_bot.execution.base import BaseExecutionProvider
 from bist_bot.notifier import TelegramNotifier
 from bist_bot.risk import RiskManager
@@ -81,7 +81,7 @@ def build_app_container(
         )
     )
     settings.validate_broker_config()
-    runtime_broker = broker or _build_broker()
+    runtime_broker = broker or _build_broker(runtime_db)
     runtime_paper_trade_fetcher = paper_trade_fetcher or BISTDataFetcher(
         watchlist=watchlist if watchlist else None,
         provider=_build_data_provider(),
@@ -134,7 +134,7 @@ def build_app_container(
     )
 
 
-def _build_broker() -> BaseExecutionProvider:
+def _build_broker(db: DataAccess | None = None) -> BaseExecutionProvider:
     """Build broker based on BROKER_MODE / BROKER_PROVIDER.
 
     - paper  → PaperBroker (simulation, immediate market fills)
@@ -160,7 +160,21 @@ def _build_broker() -> BaseExecutionProvider:
                 password=settings.ALGOLAB_PASSWORD,
                 otp_code=settings.ALGOLAB_OTP_CODE or None,
             ),
+            endpoints=AlgoLabEndpoints(
+                login=settings.ALGOLAB_LOGIN_URL or None,
+                verify_otp=settings.ALGOLAB_VERIFY_OTP_URL or None,
+                positions=settings.ALGOLAB_POSITIONS_URL or None,
+                account=settings.ALGOLAB_ACCOUNT_URL or None,
+                orders=settings.ALGOLAB_ORDERS_URL or None,
+                order_status=settings.ALGOLAB_ORDER_STATUS_URL or None,
+                cancel_order=settings.ALGOLAB_CANCEL_ORDER_URL or None,
+                open_orders=settings.ALGOLAB_OPEN_ORDERS_URL or None,
+                order_history=settings.ALGOLAB_ORDER_HISTORY_URL or None,
+            ),
             dry_run=settings.ALGOLAB_DRY_RUN,
+            order_intents=db.order_intents if db is not None else None,
+            send_client_id=settings.ALGOLAB_SEND_CLIENT_ID,
+            reconcile_window_seconds=settings.ALGOLAB_RECONCILE_WINDOW_SECONDS,
         )
     if effective == "live":
         from bist_bot.execution.live import LiveBroker

@@ -17,8 +17,11 @@ from __future__ import annotations
 import threading
 import time
 from dataclasses import dataclass, field
+from datetime import UTC, date, datetime
 from enum import Enum
-from typing import Any, cast
+from typing import Any, Protocol, cast
+from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 import requests
 
@@ -34,8 +37,18 @@ from bist_bot.execution.base import (
     OrderType,
     Position,
 )
+from bist_bot.observability.alerts import AlertLevel, send_alert
 
 logger = get_logger(__name__, component="algolab_broker")
+TRADING_TIMEZONE = ZoneInfo("Europe/Istanbul")
+
+
+class OrderIntentsProtocol(Protocol):
+    def create(self, **kwargs: Any) -> dict[str, Any]: ...
+
+    def update(self, client_id: str, **kwargs: Any) -> dict[str, Any] | None: ...
+
+    def get_unresolved(self, ticker: str) -> dict[str, Any] | None: ...
 
 
 class _CircuitState(str, Enum):
@@ -96,6 +109,7 @@ class AlgoLabEndpoints:
     order_status: str | None = None
     cancel_order: str | None = None
     open_orders: str | None = None
+    order_history: str | None = None
 
 
 class AlgoLabBroker(BaseExecutionProvider):
@@ -114,6 +128,9 @@ class AlgoLabBroker(BaseExecutionProvider):
         max_requests_per_second: float = 2.0,
         circuit_failure_threshold: int = 5,
         circuit_recovery_timeout: float = 30.0,
+        order_intents: OrderIntentsProtocol | None = None,
+        send_client_id: bool = False,
+        reconcile_window_seconds: int = 180,
     ) -> None:
         self.credentials = credentials
         self.endpoints = endpoints or AlgoLabEndpoints()
@@ -133,6 +150,9 @@ class AlgoLabBroker(BaseExecutionProvider):
         self._last_request_at = 0.0
         self._session_token: str | None = None
         self._session_encrypted: str | None = None
+        self.order_intents = order_intents
+        self.send_client_id = send_client_id
+        self.reconcile_window_seconds = max(1, reconcile_window_seconds)
 
     def authenticate(self) -> bool:
         if self._session_token:
@@ -205,6 +225,24 @@ class AlgoLabBroker(BaseExecutionProvider):
         price: float | None = None,
         stop_price: float | None = None,
     ) -> OrderResult:
+        client_id = uuid4().hex
+        submitted_at = datetime.now(UTC)
+        if self.order_intents is not None:
+            unresolved = self.order_intents.get_unresolved(ticker)
+            if unresolved is not None:
+                raise RuntimeError(
+                    "Order submission blocked: unresolved intent "
+                    f"{unresolved['client_id']} exists for {ticker}"
+                )
+            self.order_intents.create(
+                client_id=client_id,
+                ticker=ticker,
+                side=side.value,
+                quantity=quantity,
+                order_type=order_type.value,
+                price=price,
+                stop_price=stop_price,
+            )
         if self.dry_run:
             logger.info(
                 "dry_run_order",
@@ -213,39 +251,183 @@ class AlgoLabBroker(BaseExecutionProvider):
                 quantity=quantity,
                 order_type=order_type.value,
             )
-            return OrderResult(
+            result = OrderResult(
                 accepted=True,
-                order_id=f"dryrun-{ticker}-{int(time.time() * 1000)}",
+                order_id=client_id,
                 state=OrderState.CREATED,
                 message="Dry-run mode: order not sent.",
             )
+            if self.order_intents is not None:
+                self.order_intents.update(client_id, status="ack", detail="dry-run")
+            return result
 
-        payload = self._json_request(
-            "POST",
-            self._required_endpoint("orders"),
-            json={
-                "ticker": ticker,
-                "side": side.value,
-                "quantity": quantity,
-                "order_type": order_type.value,
-                "price": price,
-                "stop_price": stop_price,
-            },
-        )
+        if self.order_intents is not None:
+            self.order_intents.update(client_id, status="sent")
+        order_payload: dict[str, Any] = {
+            "ticker": ticker,
+            "side": side.value,
+            "quantity": quantity,
+            "order_type": order_type.value,
+            "price": price,
+            "stop_price": stop_price,
+        }
+        if self.send_client_id:
+            order_payload["client_order_id"] = client_id
+        try:
+            payload = self._json_request(
+                "POST",
+                self._required_endpoint("orders"),
+                retry_mode="place",
+                json=order_payload,
+            )
+        except requests.RequestException as exc:
+            if self.order_intents is not None:
+                self.order_intents.update(
+                    client_id,
+                    status="unknown",
+                    detail=f"{type(exc).__name__}: submission outcome unknown",
+                )
+            return self._reconcile_order(
+                client_id=client_id,
+                ticker=ticker,
+                side=side,
+                quantity=quantity,
+                order_type=order_type,
+                price=price,
+                stop_price=stop_price,
+                submitted_at=submitted_at,
+            )
+
+        accepted = bool(payload.get("accepted", True))
+        broker_order_id = str(payload.get("order_id", "")) or None
+        if self.order_intents is not None:
+            self.order_intents.update(
+                client_id,
+                status="ack" if accepted else "rejected",
+                broker_order_id=broker_order_id,
+                detail=str(payload.get("message", "")) or None,
+            )
         return OrderResult(
-            accepted=bool(payload.get("accepted", True)),
-            order_id=str(payload.get("client_order_id") or payload.get("order_id") or ""),
-            broker_order_id=str(payload.get("order_id", "")) or None,
+            accepted=accepted,
+            order_id=str(payload.get("client_order_id") or client_id),
+            broker_order_id=broker_order_id,
             state=OrderState(str(payload.get("state", OrderState.SENT.value)).upper()),
             message=str(payload.get("message", "")),
             raw_payload=payload,
         )
 
     def cancel_order(self, order_id: str) -> bool:
-        payload = self._json_request(
-            "POST", self._required_endpoint("cancel_order"), json={"order_id": order_id}
+        response = self._request(
+            "POST",
+            self._required_endpoint("cancel_order"),
+            retry_mode="cancel",
+            json={"order_id": order_id},
         )
+        if response.status_code == 404:
+            return True
+        payload = response.json()
+        if not isinstance(payload, dict):
+            raise RuntimeError("AlgoLab response payload must be a JSON object")
         return bool(payload.get("cancelled", True))
+
+    def _reconcile_order(
+        self,
+        *,
+        client_id: str,
+        ticker: str,
+        side: OrderSide,
+        quantity: float,
+        order_type: OrderType,
+        price: float | None,
+        stop_price: float | None,
+        submitted_at: datetime,
+    ) -> OrderResult:
+        try:
+            daily_orders = self.get_daily_orders(submitted_at.astimezone(TRADING_TIMEZONE).date())
+        except Exception as exc:
+            if self.order_intents is not None:
+                self.order_intents.update(
+                    client_id,
+                    status="unknown",
+                    detail=f"reconcile failed: {type(exc).__name__}",
+                )
+            self._alert_reconcile_required(
+                client_id=client_id,
+                ticker=ticker,
+                reason=f"daily order history unavailable: {type(exc).__name__}",
+            )
+            raise RuntimeError(
+                f"Order {client_id} outcome is unknown; reconciliation failed"
+            ) from exc
+
+        id_matches = (
+            [order for order in daily_orders if order.metadata.get("client_order_id") == client_id]
+            if self.send_client_id
+            else []
+        )
+        matches = id_matches or [
+            order
+            for order in daily_orders
+            if order.ticker == ticker
+            and order.side == side
+            and order.order_type == order_type
+            and abs(order.quantity - quantity) < 1e-9
+            and self._same_optional_number(order.price, price)
+            and self._same_optional_number(order.stop_price, stop_price)
+            and abs((order.created_at - submitted_at).total_seconds())
+            <= self.reconcile_window_seconds
+        ]
+        if len(matches) == 1:
+            match = matches[0]
+            if self.order_intents is not None:
+                self.order_intents.update(
+                    client_id,
+                    status="ack",
+                    broker_order_id=match.broker_order_id,
+                    detail="reconciled from daily order history; manual lock release required",
+                    release_lock=False,
+                )
+            return OrderResult(
+                accepted=True,
+                order_id=client_id,
+                broker_order_id=match.broker_order_id,
+                state=match.state,
+                message="Order reconciled after an ambiguous submission.",
+            )
+        if not matches:
+            if self.order_intents is not None:
+                self.order_intents.update(
+                    client_id,
+                    status="unknown",
+                    detail="not found in daily order history; manual resolution required",
+                )
+            self._alert_reconcile_required(
+                client_id=client_id,
+                ticker=ticker,
+                reason="no matching order in daily order history",
+            )
+            raise RuntimeError(f"Order {client_id} outcome remains unknown; no history match found")
+
+        if self.order_intents is not None:
+            self.order_intents.update(
+                client_id,
+                status="unknown",
+                detail=f"ambiguous reconciliation: {len(matches)} matches",
+            )
+        self._alert_reconcile_required(
+            client_id=client_id,
+            ticker=ticker,
+            reason=f"ambiguous daily history match count: {len(matches)}",
+        )
+        raise RuntimeError(
+            f"Order {client_id} outcome remains unknown; {len(matches)} broker matches found"
+        )
+
+    @staticmethod
+    def _same_optional_number(left: float | None, right: float | None) -> bool:
+        if left is None or right is None:
+            return left is right
+        return abs(left - right) < 1e-9
 
     def get_order_status(self, order_id: str) -> OrderStatus:
         payload = self._json_request(
@@ -262,23 +444,72 @@ class AlgoLabBroker(BaseExecutionProvider):
 
     def get_open_orders(self) -> list[Order]:
         payload = self._json_request("GET", self._required_endpoint("open_orders"))
+        return self._parse_orders(payload)
+
+    def get_daily_orders(self, trading_day: date) -> list[Order]:
+        payload = self._json_request(
+            "GET",
+            self._required_endpoint("order_history"),
+            params={"date": trading_day.isoformat()},
+        )
+        return self._parse_orders(payload)
+
+    def _parse_orders(self, payload: dict[str, Any]) -> list[Order]:
         orders = payload.get("orders", [])
-        return [
-            Order(
-                ticker=str(item.get("ticker", "")),
-                side=OrderSide(str(item.get("side", OrderSide.BUY.value)).upper()),
-                quantity=float(item.get("quantity", 0.0)),
-                order_type=OrderType(str(item.get("order_type", OrderType.MARKET.value)).upper()),
-                price=float(item.get("price", 0.0)) or None,
-                stop_price=float(item.get("stop_price", 0.0)) or None,
-                order_id=str(item.get("client_order_id") or item.get("order_id") or ""),
-                broker_order_id=str(item.get("order_id", "")) or None,
-                state=OrderState(str(item.get("state", OrderState.SENT.value)).upper()),
-                filled_quantity=float(item.get("filled_quantity", 0.0)),
-                average_fill_price=float(item.get("average_fill_price", 0.0)) or None,
-            )
-            for item in orders
-        ]
+        if not isinstance(orders, list):
+            raise ValueError("AlgoLab orders payload must contain a list")
+        return [self._parse_order(item) for item in orders if isinstance(item, dict)]
+
+    @staticmethod
+    def _parse_order(item: dict[str, Any]) -> Order:
+        raw_timestamp = item.get("created_at") or item.get("timestamp") or item.get("order_time")
+        created_at = datetime.min.replace(tzinfo=UTC)
+        if raw_timestamp:
+            try:
+                created_at = datetime.fromisoformat(str(raw_timestamp).replace("Z", "+00:00"))
+                if created_at.tzinfo is None:
+                    created_at = created_at.replace(tzinfo=UTC)
+                else:
+                    created_at = created_at.astimezone(UTC)
+            except ValueError:
+                created_at = datetime.min.replace(tzinfo=UTC)
+        state_text = str(item.get("state", OrderState.SENT.value)).upper()
+        state_aliases = {"EXECUTED": "FILLED", "COMPLETED": "FILLED", "CANCELED": "CANCELLED"}
+        state = OrderState(state_aliases.get(state_text, state_text))
+        client_order_id = str(item.get("client_order_id", "")) or None
+        broker_order_id = str(item.get("order_id", "")) or None
+        return Order(
+            ticker=str(item.get("ticker", "")),
+            side=OrderSide(str(item.get("side", OrderSide.BUY.value)).upper()),
+            quantity=float(item.get("quantity", 0.0)),
+            order_type=OrderType(str(item.get("order_type", OrderType.MARKET.value)).upper()),
+            price=float(item.get("price", 0.0)) or None,
+            stop_price=float(item.get("stop_price", 0.0)) or None,
+            order_id=client_order_id or broker_order_id or "",
+            broker_order_id=broker_order_id,
+            state=state,
+            filled_quantity=float(item.get("filled_quantity", 0.0)),
+            average_fill_price=float(item.get("average_fill_price", 0.0)) or None,
+            created_at=created_at,
+            updated_at=created_at,
+            metadata={"client_order_id": client_order_id},
+        )
+
+    @staticmethod
+    def _alert_reconcile_required(*, client_id: str, ticker: str, reason: str) -> None:
+        logger.error(
+            "order_reconcile_required",
+            order_id=client_id,
+            ticker=ticker,
+            reason=reason,
+        )
+        send_alert(
+            "Manual order reconciliation required",
+            reason,
+            level=AlertLevel.CRITICAL,
+            ticker=ticker,
+            order_id=client_id,
+        )
 
     def _required_endpoint(self, name: str) -> str:
         value = cast(str | None, getattr(self.endpoints, name))
@@ -314,9 +545,11 @@ class AlgoLabBroker(BaseExecutionProvider):
         timeout = kwargs.pop("timeout", self.timeout)
         auth_required = kwargs.pop("auth_required", True)
         base_headers = kwargs.pop("headers", {})
+        retry_mode = str(kwargs.pop("retry_mode", "default"))
 
         last_error: Exception | None = None
-        for attempt in range(self.max_retries):
+        max_attempts = 2 if retry_mode == "place" else max(self.max_retries, 1)
+        for attempt in range(max_attempts):
             try:
                 headers = (
                     {**base_headers, **self._auth_headers()} if auth_required else base_headers
@@ -333,16 +566,19 @@ class AlgoLabBroker(BaseExecutionProvider):
                         self._session_encrypted = None
                     continue
 
+                if retry_mode == "cancel" and response.status_code == 404:
+                    return response
+
                 response.raise_for_status()
                 return response
             except requests.RequestException as exc:
                 last_error = exc
-                if attempt == self.max_retries - 1:
+                if retry_mode == "place":
+                    raise
+                if attempt == max_attempts - 1:
                     break
                 time.sleep(0.5 * (2**attempt))
-        raise RuntimeError(
-            f"AlgoLab request failed after {self.max_retries} attempts"
-        ) from last_error
+        raise RuntimeError(f"AlgoLab request failed after {max_attempts} attempts") from last_error
 
     def _json_request(self, method: str, url: str, **kwargs: Any) -> dict[str, Any]:
         response = self._request(method, url, **kwargs)
