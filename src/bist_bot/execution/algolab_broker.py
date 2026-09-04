@@ -438,7 +438,7 @@ class AlgoLabBroker(BaseExecutionProvider):
             avg_price = getattr(match, "average_fill_price", None)
             broker_order_id = match.broker_order_id or match.order_id
 
-            # Case 1: zero filled quantity
+            # Case 1: zero filled quantity on first read
             if filled_qty <= 0:
                 if match.state in {OrderState.CANCELLED, OrderState.REJECTED}:
                     if self.order_intents is not None:
@@ -456,32 +456,51 @@ class AlgoLabBroker(BaseExecutionProvider):
                         state=match.state,
                         message="Broker history confirms order cancelled/rejected with zero fills.",
                     )
-                # Still OPEN with zero fills: cancel remainder if enabled
+                # Still OPEN with zero fills: cancel remainder if enabled, then re-read.
+                # A 404 (or any cancel outcome) is NOT success: it may mean
+                # "already filled". Accounting always uses the second read.
                 if self.cancel_remainder and match.broker_order_id:
-                    try:
-                        self.cancel_order(str(match.broker_order_id))
+                    self._try_cancel_remainder(str(match.broker_order_id))
+                    fresh = self._reread_order_by_broker_id(
+                        str(match.broker_order_id), trading_days
+                    )
+                    if fresh is None:
+                        return self._keep_reconcile_unknown(
+                            client_id=client_id,
+                            ticker=ticker,
+                            reason="post-cancel re-read failed or order vanished",
+                        )
+                    fresh_filled = float(getattr(fresh, "filled_quantity", 0.0) or 0.0)
+                    fresh_avg = getattr(fresh, "average_fill_price", None)
+                    if fresh_filled > 0:
+                        return self._settle_matched_fill(
+                            client_id=client_id,
+                            ticker=ticker,
+                            match=fresh,
+                            filled_qty=fresh_filled,
+                            avg_price=fresh_avg,
+                        )
+                    if fresh.state in {OrderState.CANCELLED, OrderState.REJECTED}:
                         if self.order_intents is not None:
                             self.order_intents.update(
                                 client_id,
                                 status="rejected",
-                                broker_order_id=broker_order_id,
-                                detail="cancelled unfilled remainder",
+                                broker_order_id=fresh.broker_order_id or broker_order_id,
+                                detail=f"post-cancel state={fresh.state.value}, filled=0",
                                 release_lock=True,
                             )
                         return OrderResult(
                             accepted=False,
                             order_id=client_id,
-                            broker_order_id=broker_order_id,
-                            state=OrderState.CANCELLED,
-                            message="Unfilled open remainder cancelled during reconciliation.",
+                            broker_order_id=fresh.broker_order_id or broker_order_id,
+                            state=fresh.state,
+                            message="Post-cancel re-read confirms no fills.",
                         )
-                    except Exception as exc:
-                        logger.warning("reconcile_cancel_remainder_failed", error=str(exc))
-                        return self._keep_reconcile_unknown(
-                            client_id=client_id,
-                            ticker=ticker,
-                            reason="unfilled order could not be cancelled",
-                        )
+                    return self._keep_reconcile_unknown(
+                        client_id=client_id,
+                        ticker=ticker,
+                        reason="order still open after cancel with zero fills",
+                    )
                 # Cannot cancel remainder or cancel not requested
                 return self._keep_reconcile_unknown(
                     client_id=client_id,
@@ -489,77 +508,66 @@ class AlgoLabBroker(BaseExecutionProvider):
                     reason="order remains open with zero fills",
                 )
 
-            # Case 2: filled_qty > 0 (applies even if state is CANCELLED/PARTIAL/FILLED)
-            # If partial fill and still open, cancel remainder if enabled
+            # Case 2: filled_qty > 0 on first read (applies even if CANCELLED/PARTIAL/FILLED).
+            # When the order still looks open, cancel the remainder first, then
+            # re-read and account with the SECOND read's values.
             if (
                 self.cancel_remainder
-                and match.state in {OrderState.SENT, OrderState.CREATED}
+                and match.state in {OrderState.SENT, OrderState.CREATED, OrderState.PARTIAL}
                 and match.broker_order_id
             ):
-                try:
-                    self.cancel_order(str(match.broker_order_id))
-                except Exception as exc:
-                    logger.warning("reconcile_cancel_partial_remainder_failed", error=str(exc))
-                    inc_counter("order_intents_unaccounted_total")
+                self._try_cancel_remainder(str(match.broker_order_id))
+                fresh = self._reread_order_by_broker_id(str(match.broker_order_id), trading_days)
+                if fresh is None:
+                    return self._keep_reconcile_unknown(
+                        client_id=client_id,
+                        ticker=ticker,
+                        reason="post-cancel re-read failed after partial fill",
+                    )
+                fresh_filled = float(getattr(fresh, "filled_quantity", 0.0) or 0.0)
+                fresh_avg = getattr(fresh, "average_fill_price", None)
+                if fresh_filled <= 0:
+                    return self._keep_reconcile_unknown(
+                        client_id=client_id,
+                        ticker=ticker,
+                        reason="post-cancel re-read lost previously seen fills",
+                    )
+                if fresh.state in {OrderState.SENT, OrderState.CREATED, OrderState.PARTIAL}:
+                    # Remainder may still be live: account fills but keep locked.
+                    result = self._settle_matched_fill(
+                        client_id=client_id,
+                        ticker=ticker,
+                        match=fresh,
+                        filled_qty=fresh_filled,
+                        avg_price=fresh_avg,
+                    )
                     if self.order_intents is not None:
                         self.order_intents.update(
                             client_id,
                             status="ack_unaccounted",
-                            broker_order_id=broker_order_id,
-                            detail="partial fill confirmed but remainder cancel failed",
+                            detail="fills accounted but remainder may still be open",
                             release_lock=False,
                         )
                     self._alert_reconcile_required(
                         client_id=client_id,
                         ticker=ticker,
-                        reason="partial fill confirmed but remainder cancel failed",
+                        reason="fills accounted but remainder may still be open",
                     )
-                    return OrderResult(
-                        accepted=True,
-                        order_id=client_id,
-                        broker_order_id=broker_order_id,
-                        state=match.state,
-                        message="Partial fill confirmed; remainder cancel failed.",
-                    )
-
-            # Accounting integration
-            final_status = "ack"
-            final_detail = "reconciled from daily order history"
-            if self.accounting_service is not None and self.order_intents is not None:
-                intent_row = self.order_intents.get(client_id) or {}
-                outcome = self.accounting_service.record_fill(
-                    intent=intent_row,
-                    broker_order_id=broker_order_id,
-                    filled_qty=filled_qty,
-                    avg_fill_price=avg_price,
-                    broker_state=match.state.value,
-                )
-                final_status = outcome.status
-                final_detail = outcome.detail
-                if not outcome.success:
-                    self._alert_reconcile_required(
-                        client_id=client_id,
-                        ticker=ticker,
-                        reason=f"reconcile accounting outcome: {final_status} ({final_detail})",
-                    )
-
-            if self.order_intents is not None:
-                # Compare-and-set: update only if still in pre-reconcile status
-                self.order_intents.update_conditional(
-                    client_id,
-                    status=final_status,
-                    expected_statuses=("pending", "sent", "unknown"),
-                    broker_order_id=broker_order_id,
-                    detail=final_detail,
-                    release_lock=False,  # Lock remains until manual admin verification
+                    return result
+                return self._settle_matched_fill(
+                    client_id=client_id,
+                    ticker=ticker,
+                    match=fresh,
+                    filled_qty=fresh_filled,
+                    avg_price=fresh_avg,
                 )
 
-            return OrderResult(
-                accepted=True,
-                order_id=client_id,
-                broker_order_id=broker_order_id,
-                state=match.state,
-                message=f"Order reconciled ({final_status}): {final_detail}",
+            return self._settle_matched_fill(
+                client_id=client_id,
+                ticker=ticker,
+                match=match,
+                filled_qty=filled_qty,
+                avg_price=avg_price,
             )
         if not matches:
             return self._keep_reconcile_unknown(
@@ -583,6 +591,128 @@ class AlgoLabBroker(BaseExecutionProvider):
             f"Order {client_id} outcome remains unknown; {len(matches)} broker matches found"
         )
 
+    def _try_cancel_remainder(self, broker_order_id: str) -> str:
+        """Attempt a remainder cancel without interpreting 404 as success.
+
+        Returns 'cancelled' | 'not_found' | 'failed'. Callers must always
+        re-read broker history afterwards; a 404 may mean 'already filled'
+        rather than 'already cancelled' until the vendor contract is verified.
+        """
+        try:
+            response = self._request(
+                "POST",
+                self._required_endpoint("cancel_order"),
+                retry_mode="cancel",
+                json={"order_id": broker_order_id},
+            )
+        except Exception as exc:
+            logger.warning("reconcile_cancel_remainder_failed", error=str(exc))
+            return "failed"
+        if response.status_code == 404:
+            return "not_found"
+        try:
+            payload = response.json()
+        except Exception:
+            return "failed"
+        if isinstance(payload, dict) and payload.get("cancelled", True):
+            return "cancelled"
+        return "failed"
+
+    def _reread_order_by_broker_id(
+        self, broker_order_id: str, trading_days: list[date]
+    ) -> Order | None:
+        """Re-fetch broker history and locate one order by broker ID.
+
+        Returns None when history is unavailable or the order is absent.
+        Bound-order exclusion is intentionally not applied: this is the same order.
+        """
+        try:
+            orders = [
+                order
+                for trading_day in trading_days
+                for order in self.get_daily_orders(trading_day)
+            ]
+        except Exception:
+            return None
+        for order in orders:
+            if order.broker_order_id == broker_order_id or order.order_id == broker_order_id:
+                return order
+        return None
+
+    def _refresh_unaccounted_gauge(self) -> None:
+        try:
+            if self.order_intents is not None and hasattr(
+                self.order_intents, "count_unaccounted_open"
+            ):
+                count = self.order_intents.count_unaccounted_open()
+                set_gauge("order_intents_unaccounted_open", float(count))
+        except Exception:
+            logger.warning("unaccounted_gauge_refresh_failed")
+
+    def _settle_matched_fill(
+        self,
+        *,
+        client_id: str,
+        ticker: str,
+        match: Order,
+        filled_qty: float,
+        avg_price: float | None,
+    ) -> OrderResult:
+        """Account a confirmed fill and persist the intent transition."""
+        broker_order_id = match.broker_order_id or match.order_id
+        final_status = "ack"
+        final_detail = "reconciled from daily order history"
+        if self.accounting_service is not None and self.order_intents is not None:
+            intent_row = self.order_intents.get(client_id) or {}
+            outcome = self.accounting_service.record_fill(
+                intent=intent_row,
+                broker_order_id=broker_order_id,
+                filled_qty=filled_qty,
+                avg_fill_price=avg_price,
+                broker_state=match.state.value,
+            )
+            final_status = outcome.status
+            final_detail = outcome.detail
+            if not outcome.success:
+                self._alert_reconcile_required(
+                    client_id=client_id,
+                    ticker=ticker,
+                    reason=f"reconcile accounting outcome: {final_status} ({final_detail})",
+                )
+            if final_status == "ack_unaccounted":
+                inc_counter("reconciled_fill_unaccounted_total")
+            else:
+                inc_counter("reconciled_fill_total")
+            try:
+                from bist_bot.observability.metrics import record_order
+
+                record_order(match.side.value, final_status.upper())
+            except Exception:
+                logger.warning("reconcile_order_metric_failed")
+            self._refresh_unaccounted_gauge()
+        elif self.order_intents is not None:
+            # No accounting service (paper/test wiring): still refresh gauge.
+            self._refresh_unaccounted_gauge()
+
+        if self.order_intents is not None:
+            # Compare-and-set: update only if still in pre-reconcile status
+            self.order_intents.update_conditional(
+                client_id,
+                status=final_status,
+                expected_statuses=("pending", "sent", "unknown"),
+                broker_order_id=broker_order_id,
+                detail=final_detail,
+                release_lock=False,  # Lock remains until manual admin verification
+            )
+
+        return OrderResult(
+            accepted=True,
+            order_id=client_id,
+            broker_order_id=broker_order_id,
+            state=match.state,
+            message=f"Order reconciled ({final_status}): {final_detail}",
+        )
+
     def _keep_reconcile_unknown(
         self,
         *,
@@ -603,13 +733,32 @@ class AlgoLabBroker(BaseExecutionProvider):
     def reconcile_pending_intents(self, *, background: bool = False) -> dict[str, int]:
         if background:
             t = threading.Thread(
-                target=self._run_reconcile_pending_intents,
+                target=self._run_reconcile_background,
                 name="algolab-startup-reconcile",
                 daemon=True,
             )
             t.start()
             return {"attempted": 0, "resolved": 0, "unknown": 0}
         return self._run_reconcile_pending_intents()
+
+    def _run_reconcile_background(self) -> None:
+        """Background-thread entrypoint with terminal visibility.
+
+        DB/session errors propagate here (not per-intent errors); without this
+        wrapper they would kill the daemon thread silently. DB sessions are
+        thread-local via scoped_session, so sharing the manager is safe.
+        """
+        try:
+            self._run_reconcile_pending_intents()
+        except BaseException as exc:
+            logger.error(
+                "startup_reconciliation_thread_failed",
+                severity="critical",
+                error=exc,
+            )
+            inc_counter("reconcile_startup_failed_total")
+            set_gauge("reconcile_startup_pending", 0.0)
+            raise
 
     def _run_reconcile_pending_intents(self) -> dict[str, int]:
         summary = {"attempted": 0, "resolved": 0, "unknown": 0}

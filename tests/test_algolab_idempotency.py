@@ -56,9 +56,7 @@ class _IntentStore:
             return None
         release_lock = kwargs.pop("release_lock", None)
         row.update(kwargs)
-        if release_lock is True or (
-            release_lock is None and row["status"] in {"ack", "rejected"}
-        ):
+        if release_lock is True or (release_lock is None and row["status"] in {"ack", "rejected"}):
             row["active_key"] = None
         self.transitions.append(str(kwargs["status"]))
         return row

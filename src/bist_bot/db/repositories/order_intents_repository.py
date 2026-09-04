@@ -165,6 +165,22 @@ class OrderIntentsRepository:
 
         return cast(list[dict[str, Any]], self.manager.run_session(_read, read_only=True))
 
+    def count_unaccounted_open(self) -> int:
+        """Number of ack_unaccounted intents that still hold their symbol lock."""
+        from sqlalchemy import func
+
+        def _read(session):
+            return session.execute(
+                select(func.count())
+                .select_from(OrderIntentRecord)
+                .where(
+                    OrderIntentRecord.status == "ack_unaccounted",
+                    OrderIntentRecord.active_key.is_not(None),
+                )
+            ).scalar_one()
+
+        return int(self.manager.run_session(_read, read_only=True))
+
     def is_broker_order_bound(self, broker_order_id: str, *, exclude_client_id: str) -> bool:
         def _read(session):
             row_id = session.execute(
