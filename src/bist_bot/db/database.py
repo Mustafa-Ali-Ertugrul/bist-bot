@@ -16,6 +16,7 @@ from sqlalchemy import (
     Float,
     Index,
     Integer,
+    MetaData,
     String,
     Text,
     event,
@@ -42,7 +43,23 @@ class DatabaseInitializationError(RuntimeError):
 
 
 class Base(DeclarativeBase):
-    pass
+    """Declarative base with deterministic PostgreSQL-compatible constraint names.
+
+    Keeps SQLAlchemy's default ``ix`` convention and adds the ``uq`` template
+    matching PostgreSQL's auto-naming (``%(table_name)s_%(column_0_name)s_key``)
+    so inline ``unique=True`` columns compare equal to the table-level
+    UniqueConstraints created by the Alembic migrations. Without the ``uq``
+    entry, ``alembic check`` reports phantom remove_constraint drift on every
+    fresh database. A partial dict would also drop the default ``ix`` entry,
+    so both keys are declared explicitly.
+    """
+
+    metadata = MetaData(
+        naming_convention={
+            "ix": "ix_%(column_0_label)s",
+            "uq": "%(table_name)s_%(column_0_name)s_key",
+        }
+    )
 
 
 def _validate_table_name(name: str) -> str:
@@ -198,9 +215,14 @@ class ConfigRecord(Base):
 
 class UserRecord(Base):
     __tablename__ = "users"
+    # Mirrors migration 0001 (table-level UniqueConstraint on email) plus the
+    # unique ix_users_email index enforced since migration 0002. The metadata
+    # naming convention gives the inline constraint the same PostgreSQL name
+    # so `alembic check` stays green.
+    __table_args__ = (Index("ix_users_email", "email", unique=True),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    email: Mapped[str] = mapped_column(String, nullable=False, unique=True, index=True)
+    email: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     password_hash: Mapped[str] = mapped_column(Text, nullable=False)
     role: Mapped[str] = mapped_column(String, nullable=False, default="user", server_default="user")
     created_at: Mapped[datetime] = mapped_column(
@@ -237,10 +259,16 @@ class OrderRecord(Base):
 
 class OrderIntentRecord(Base):
     __tablename__ = "order_intents"
+    # Unique indexes mirror migration 0004 exactly (inline unique=True keeps the
+    # table-level constraints PG-named via the metadata naming convention).
+    __table_args__ = (
+        Index("ix_order_intents_client_id", "client_id", unique=True),
+        Index("ix_order_intents_active_key", "active_key", unique=True),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    client_id: Mapped[str] = mapped_column(String, nullable=False, unique=True, index=True)
-    active_key: Mapped[str | None] = mapped_column(String, nullable=True, unique=True, index=True)
+    client_id: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    active_key: Mapped[str | None] = mapped_column(String, nullable=True, unique=True)
     ticker: Mapped[str] = mapped_column(String, nullable=False, index=True)
     side: Mapped[str] = mapped_column(String, nullable=False)
     quantity: Mapped[float] = mapped_column(Float, nullable=False)
