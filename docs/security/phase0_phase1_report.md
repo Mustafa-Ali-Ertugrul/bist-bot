@@ -10,7 +10,8 @@ Branch: `feat/post-pr118-security-hardening`
 - Scoring criteria: **fixed/accepted x0.0, mitigated_warn x0.5, open x1.0**.
   Warn-only mitigations stay partially open until enforcement is deployed.
   Finding #2 (order idempotency) is scored at half-weight (3.5) until vendor dictionary,
-  echoed client ID, and `order_intents_unaccounted_total == 0` are proven in live staging.
+  echoed client ID, and `order_intents_unaccounted_open == 0` (gauge of unresolved unaccounted
+  locks, not the monotonic counter) are proven in live staging.
 - Fixed baseline findings: **#4, #20**
 - Partially mitigated (half weight): **#1 RBAC, #2 order idempotency, #3 artifact trust**
 - Deployment blocker: leaked historical API key must be rotated before any push/deploy.
@@ -120,7 +121,11 @@ routes exist.
   check. Bootstrap create/promote events are written to `audit_trail`.
 - An unreachable database raises `DatabaseInitializationError` (distinct from "0 privileged users").
   WSGI degrades to process liveness (`/livez` 200) with `/readyz` and `/health` at 503, so
-  orchestrators do not mistake a DB outage for a healthy instance.
+  orchestrators do not mistake a DB outage for a healthy instance. Scope note: the degraded app
+  only covers startup-time DB failure; a DB outage after successful startup is served by the full
+  app with `/readyz` 503. After `DEGRADED_MAX_SECONDS` (default 300) the worker process exits via
+  SIGTERM (daemon timer thread, probe-independent) so Gunicorn/Cloud Run respawns a fresh worker
+  that retries DB init. No `--preload` is used anywhere, so respawn re-imports `wsgi` cleanly.
 - Enforce startup fails if no `admin` or `trader` exists.
 - RBAC allow/warn/deny and manual resolution events are written both to structured logs and the
   DB-backed `audit_trail`, including user ID, claim role, DB role, route, and request ID.
@@ -139,9 +144,17 @@ routes exist.
   `(ticker, side, quantity, order_type, price, stop_price, submitted_at ± 180 seconds)`.
   History orders already bound to a different intent (`broker_order_id`) are excluded, so a repeated
   signal cannot steal another intent's fill.
-- Broker state mapping: `FILLED/PARTIAL/OPEN/SENT` → `ack` (lock held for manual release);
-  `CANCELLED/REJECTED` → `rejected` (lock released, order confirmed non-active); unknown raw states
-  → `unknown` (lock held).
+- Cancel/re-read race rule: after any remainder cancel (success, 404, or error), history is
+  re-fetched and accounting uses the **second** read's `filled_qty/avg_fill_price`. Cancel 404 is
+  treated as "re-query", never as success, until the vendor confirms its semantics. If the second
+  read fails or the order is still open, the intent stays `unknown` + locked.
+- Broker state mapping: `FILLED/PARTIAL/OPEN/SENT` → accounting path; `CANCELLED/REJECTED` with
+  `filled_qty == 0` → `rejected` (lock released); `CANCELLED/REJECTED` with `filled_qty > 0` →
+  accounting path (partial-post-cancel fills are real positions). Unknown raw states →
+  `unknown` (lock held) + `unmapped_broker_status_total` metric (first 20 raw labels, rest `other`).
+- `ALGOLAB_STATUS_MAP` (JSON env) allows alias overrides without code changes; targets are limited
+  to `FILLED|PARTIAL|OPEN|CANCELLED|REJECTED` and validated at startup (fail-closed). Scope: the map
+  is validated whenever set, in every broker mode, so a typo fails fast even in paper.
 - Day window uses `Europe/Istanbul` and queries the previous, current, and next Istanbul day around
   the submission instant, so ±180s windows crossing midnight query both days.
 - Missing history, no match, or multiple matches remains `unknown`; the symbol lock stays active and
@@ -151,6 +164,23 @@ routes exist.
 - Live broker startup replays persisted `pending/sent/unknown` intents (`ALGOLAB_RECONCILE_ON_STARTUP=true` default).
 - Live AlgoLab refuses startup without non-SQLite `DATABASE_URL`, credentials, confirmation, and
   required endpoint configuration.
+- The remainder cancel is itself a broker POST: if the cancel call itself is ambiguous (timeout),
+  it is treated as "failed" and the second history read decides — the same race rule applies, so
+  no separate cancel-intent ledger is needed.
+- Bootstrap hash handling: `ADMIN_BOOTSTRAP_PASSWORD_HASH` is validated at boot with the exact
+  acceptance set of the login verifier (scrypt/pbkdf2 via Werkzeug, bcrypt via `bcrypt.checkpw`);
+  malformed values fail closed. Treat the hash as a secret (Secret Manager mount, never shell
+  history); the Cloud Run yaml example value `replace_with_scrypt_or_bcrypt_hash` is an invalid
+  placeholder that fails validation if deployed uncommented.
+
+## Review-4 decisions (recorded, rollback noted)
+
+- **D.6** remainder-cancel default `true`: approved as implemented. Rollback: set
+  `ALGOLAB_RECONCILE_CANCEL_REMAINDER=false` (fills then resolve to `ack_unaccounted` + locked).
+- **D.8** degraded worker-exit: approved as implemented. Rollback: raise `DEGRADED_MAX_SECONDS` or
+  revert `wsgi.py` to probe-only degradation.
+- **D.9** cancel-404 semantics: "re-query, never success" until the vendor confirms 404 means
+  already-cancelled. No code change needed later beyond flipping `_try_cancel_remainder`.
 
 ## Deserialization inventory
 
@@ -214,27 +244,52 @@ public key; manifests are small JSON files so re-signing is cheap and atomic per
 
 | Area | Implementation Focus | Test Name | File |
 |---|---|---|---|
-| A.1 | BUY fill opens position | `test_reconciled_fill_buy_opens_position` | `tests/test_reconciled_fill.py` |
-| A.1 | SELL fill closes position | `test_reconciled_fill_sell_closes_position` | `tests/test_reconciled_fill.py` |
-| A.1 | Missing snapshot / avg price → `ack_unaccounted` | `test_reconciled_fill_without_snapshot_is_unaccounted`, `test_reconciled_fill_without_avg_price_is_unaccounted` | `tests/test_reconciled_fill.py` |
-| A.1 | Reconcile idempotency (no duplicate positions) | `test_reconciled_fill_is_idempotent` | `tests/test_reconciled_fill.py` |
+| A.1 | Double reconcile → single position change (CAS) | `test_double_reconcile_produces_single_position_change` | `tests/test_reconciled_fill.py` |
+| A.1 | Reconciled SELL loss lands in position ledger | `test_reconciled_sell_loss_visible_in_position_ledger` | `tests/test_reconciled_fill.py` |
+| A.1 | SELL partial quantity → `ack_unaccounted` (no reduce path) | `test_reconciled_sell_partial_quantity_is_unaccounted` | `tests/test_reconciled_fill.py` |
+| A.1 | Manual resolve without broker history → `ack_unaccounted` | `test_manual_resolve_without_broker_history_is_unaccounted` | `tests/test_reconciled_fill.py` |
 | A.2 | CANCELLED with fills accounted | `test_cancelled_order_with_fills_triggers_accounting` | `tests/test_reconciled_fill.py` |
 | A.2 | Status map override & unmapped metric | `test_status_map_override_and_unmapped_metric` | `tests/test_reconciled_fill.py` |
-| A.3 | Degraded worker exit on max lifetime | `test_degraded_worker_exit_after_max_seconds` | `tests/test_reconciled_fill.py` |
+| A.2 | PARTIAL 3 → cancel → second read FILLED 10 → position 10 | `test_partial_fill_cancel_then_second_read_full_fill` | `tests/test_reconciled_fill.py` |
+| A.3 | Degraded worker SIGTERM timer + `/livez` 503 after expiry | `test_degraded_worker_exit_after_max_seconds` | `tests/test_reconciled_fill.py` |
 | A.3 | Outage keeps liveness but fails readiness | `test_database_outage_keeps_liveness_but_fails_readiness` | `tests/test_wsgi_degraded.py` |
 | A.4 | Bootstrap is one-shot via `bootstrap_state` table | `test_bootstrap_is_one_shot_via_state_table` | `tests/test_reconciled_fill.py` |
+| A.4 | Hash format validated by login verifier | `test_bootstrap_hash_format_validated_by_verifier` | `tests/test_reconciled_fill.py` |
 | A.4 | Pre-computed password hash format validation | `test_enforce_mode_bootstraps_first_admin` | `tests/test_rbac_bootstrap.py` |
 | A.5 | Schema migration 0005 idempotency | `test_alembic_fresh_upgrade_and_downgrade` | `tests/test_alembic_migrations.py` |
 | A.6 | Paper mode startup skips broker calls | `test_paper_mode_startup_reconcile_does_not_call_broker` | `tests/test_reconciled_fill.py` |
+| A.7 | Background replay failure metric + critical log | `test_background_replay_failure_is_visible` | `tests/test_reconciled_fill.py` |
 | RBAC | User cannot trigger scan (403) | `test_user_role_cannot_trigger_scan_in_enforce_mode` | `tests/test_scan_authz.py` |
 | RBAC | Trader can trigger scan (200) | `test_trader_role_can_trigger_scan_in_enforce_mode` | `tests/test_scan_authz.py` |
 | RBAC | Trader cannot resolve intent (403) | `test_manual_order_resolution_requires_admin_and_strong_confirmation` | `tests/test_scan_authz.py` |
 | RBAC | Admin can resolve intent (200) | `test_manual_order_resolution_requires_admin_and_strong_confirmation` | `tests/test_scan_authz.py` |
 | RBAC | Manual resolve history mismatch (409) | `test_manual_resolve_mismatch_with_broker_history_returns_409` | `tests/test_reconciled_fill.py` |
 
-## Fresh-environment smoke verification (PowerShell)
+## Fresh-environment smoke verification (executed 2026-09-04, `-p bist-smoke`)
 
-To run a clean-slate smoke verification without port or volume collisions:
+Isolated project with prefixed volumes/network, API on `127.0.0.1:18081`, Postgres on
+`127.0.0.1:15432` (dev stack untouched), throwaway scrypt bootstrap hash. Probes run via
+`docker exec` (host ports were occupied by the dev stack; HTTP surface identical).
+
+- **Scenario 1** (empty Postgres + `RBAC_MODE=enforce` + bootstrap env): `alembic upgrade head`
+  applied 0001→0005 cleanly; `/readyz` 200 (`database: ok`, paper broker, circuit CLOSED);
+  1 admin seeded + `bootstrap_state=created`; login issued a JWT for the bootstrap admin.
+- **Scenario 2** (fresh DB, no bootstrap env): worker failed to boot with
+  `RuntimeError: No admin/trader user exists. Configure ADMIN_BOOTSTRAP_EMAIL and
+  ADMIN_BOOTSTRAP_PASSWORD_HASH before enabling RBAC_MODE=enforce.` — clear fail-closed.
+  (One attempt initially passed because an empty `$env:` did not propagate and repo `.env`
+  values were used instead; rerun with explicit-empty override reproduced the fail-closed path.)
+- **Scenario 3** (DB outage + recovery, `DEGRADED_MAX_SECONDS=20`): with Postgres stopped, a
+  restarted worker logged `database_unavailable_starting_degraded_liveness`, served degraded
+  `/livez` 200 + `/readyz` 503; after 20 s it logged
+  `degraded_mode_lifetime_exceeded_exiting_worker`, exited via SIGTERM
+  (`Worker exiting (pid: 7)`), and Gunicorn booted a second worker (`pid: 49`) — the gthread
+  worker-restart path works in a real container. After Postgres returned, the next worker booted
+  the full app (`/readyz` 200) and logged `admin_bootstrap_skipped_one_shot` (one-shot guard held).
+- Runtime-outage note: an already-running full app answers `/livez` 200 + `/readyz` 503 during a
+  DB outage; only startup-time outages take the degraded-app path (with the same probe contract).
+
+PowerShell reproduction (throwaway secrets only):
 
 ```powershell
 $env:PORT_OVERRIDE = "5005"

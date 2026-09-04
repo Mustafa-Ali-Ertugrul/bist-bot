@@ -18,6 +18,11 @@ Tum degisiklikler chronolojik sirayla listelenir.
 - Cozulemeyen JWT identity warn/enforce fark etmeksizin 401 dondurur.
 - AlgoLab startup reconcile eklendi; bagli broker emirleri eslestirmeden dislanir, broker durumlari ack/rejected/unknown olarak map edilir.
 - DB kesintisinde WSGI degraded liveness (`/livez` 200, `/readyz` ve `/health` 503) eklendi.
+- Degraded worker `DEGRADED_MAX_SECONDS` (varsayilan 300) sonunda SIGTERM ile sonlanir; Gunicorn master temiz worker acar.
+- Reconcile muhasebesi eklendi: dogrulanmis dolumlar `orders`/`live_positions` defterlerine normal fill yoluyla ayni kanaldan islenir; eksik veri `ack_unaccounted` + kilit birakir.
+- Migration note (davranis degisikligi): `CANCELLED` artik kosulsuz kilit acmaz; `filled_qty > 0` ise muhasebeye gider. Kismi dolumlarda kalan bacagi otomatik iptal icin `ALGOLAB_RECONCILE_CANCEL_REMAINDER=true` (varsayilan) ayarlayin; kapaliysa `ack_unaccounted` uretilir.
+- Migration note: broker durum eslemesi `ALGOLAB_STATUS_MAP` (JSON) ile override edilebilir; gecersiz hedef startup'ta fail-closed.
+- Migration note: `ADMIN_BOOTSTRAP_PASSWORD_HASH` formati startup'ta login verifier ile dogrulanir; bozuk placeholder hash boot'u dusurur.
 - Migration note: existing deployments with `AUTO_EXECUTE=true` must explicitly set
   `AUTO_EXECUTE_ENABLED=true`; otherwise execution remains disabled and a startup warning/metric
   is emitted. The legacy `AUTO_EXECUTE` flag is scheduled for removal after one release.
