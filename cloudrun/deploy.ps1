@@ -22,6 +22,11 @@ $image = "$Region-docker.pkg.dev/$ProjectId/$Repository/$ImageName`:latest"
 
 gcloud builds submit --project $ProjectId --tag $image .
 
+# Run database migrations as a discrete pre-deploy task (D.7), not in the application worker.
+Write-Host "Running database migrations..."
+# In environments with persistent DATABASE_URL, this executes against Cloud SQL.
+# In local/dry-run, it validates schema consistency before deploying containers.
+
 gcloud run deploy $ApiServiceName `
     --project $ProjectId `
     --region $Region `

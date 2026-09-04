@@ -68,7 +68,7 @@ spec:
               containerPort: 8080
           startupProbe:
             httpGet:
-              path: /livez
+              path: /readyz
               port: 8080
             failureThreshold: 30
             periodSeconds: 2
