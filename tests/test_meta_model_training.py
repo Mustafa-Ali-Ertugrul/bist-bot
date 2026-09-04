@@ -73,9 +73,8 @@ def test_train_meta_model_persists_expected_artifacts(tmp_path) -> None:
         or (tmp_path / "meta_model.joblib").exists()
         or (tmp_path / "meta_model.ubj").exists()
     )
-    assert (tmp_path / "probability_calibrator.pkl").exists() or (
-        tmp_path / "probability_calibrator.joblib"
-    ).exists()
+    assert (tmp_path / "probability_calibrator.json").exists()
+    assert (tmp_path / "artifact_manifest.json").exists()
     assert (tmp_path / "feature_columns.json").exists()
     assert (tmp_path / "training_manifest.json").exists()
     assert (tmp_path / "metrics.json").exists()
