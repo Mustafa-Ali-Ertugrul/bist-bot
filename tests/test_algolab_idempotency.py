@@ -465,3 +465,44 @@ def test_database_symbol_lock_releases_after_terminal_status(tmp_path) -> None:
     assert not repository.is_broker_order_bound("broker-first", exclude_client_id="first")
     row = repository.create(client_id="second", **payload)
     assert row["status"] == "pending"
+
+
+def test_ack_unaccounted_and_ack_keep_db_symbol_lock(tmp_path) -> None:
+    """DB-level proof: no status predicate on the lock.
+
+    The unique constraint is on active_key alone (NULL = unlocked), so any
+    status that keeps active_key — including ack_unaccounted and manually-held
+    ack — keeps blocking a second intent, including after a restart.
+    """
+    db_path = str(tmp_path / "lock-persist.db")
+    payload = {
+        "ticker": "THYAO.IS",
+        "side": "BUY",
+        "quantity": 10,
+        "order_type": "MARKET",
+        "price": None,
+        "stop_price": None,
+    }
+    repository = DataAccess(DatabaseManager(sqlite_path=db_path)).order_intents
+    repository.create(client_id="first", **payload)
+    repository.update("first", status="ack_unaccounted", detail="missing fill price")
+    assert repository.get("first")["active_key"] == "THYAO.IS"
+
+    with pytest.raises(IntegrityError):
+        repository.create(client_id="second", **payload)
+
+    # Same guarantee after a process restart (fresh manager, same file).
+    reopened = DataAccess(DatabaseManager(sqlite_path=db_path)).order_intents
+    assert reopened.get("first")["status"] == "ack_unaccounted"
+    with pytest.raises(IntegrityError):
+        reopened.create(client_id="third", **payload)
+
+    # Manually-held ack (release_lock=False) also keeps blocking.
+    reopened.update("first", status="ack", release_lock=False)
+    with pytest.raises(IntegrityError):
+        reopened.create(client_id="fourth", **payload)
+
+    # Explicit release frees the symbol.
+    reopened.update("first", status="ack", release_lock=True)
+    row = reopened.create(client_id="fifth", **payload)
+    assert row["status"] == "pending"

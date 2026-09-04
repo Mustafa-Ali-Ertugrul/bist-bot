@@ -434,9 +434,29 @@ class AlgoLabBroker(BaseExecutionProvider):
                     reason=f"unknown broker order state: {match.metadata.get('raw_state')}",
                 )
 
-            filled_qty = float(getattr(match, "filled_quantity", 0.0) or 0.0)
-            avg_price = getattr(match, "average_fill_price", None)
+            filled_qty, avg_price, fill_problem = self._validate_history_fill(
+                filled_raw=getattr(match, "filled_quantity", 0.0),
+                avg_raw=getattr(match, "average_fill_price", None),
+                submitted_qty=quantity,
+                broker_state=match.state,
+            )
             broker_order_id = match.broker_order_id or match.order_id
+            if fill_problem is not None and "partial quantity" not in fill_problem:
+                return self._keep_reconcile_unknown(
+                    client_id=client_id,
+                    ticker=ticker,
+                    reason=f"invalid history fill data: {fill_problem}",
+                )
+            # A FILLED label with partial quantity is routed as a live remainder.
+            effective_open = match.state in {
+                OrderState.SENT,
+                OrderState.CREATED,
+                OrderState.PARTIAL,
+            } or (
+                match.state == OrderState.FILLED
+                and fill_problem is not None
+                and "partial quantity" in fill_problem
+            )
 
             # Case 1: zero filled quantity on first read
             if filled_qty <= 0:
@@ -470,8 +490,18 @@ class AlgoLabBroker(BaseExecutionProvider):
                             ticker=ticker,
                             reason="post-cancel re-read failed or order vanished",
                         )
-                    fresh_filled = float(getattr(fresh, "filled_quantity", 0.0) or 0.0)
-                    fresh_avg = getattr(fresh, "average_fill_price", None)
+                    fresh_filled, fresh_avg, fresh_problem = self._validate_history_fill(
+                        filled_raw=getattr(fresh, "filled_quantity", 0.0),
+                        avg_raw=getattr(fresh, "average_fill_price", None),
+                        submitted_qty=quantity,
+                        broker_state=fresh.state,
+                    )
+                    if fresh_problem is not None:
+                        return self._keep_reconcile_unknown(
+                            client_id=client_id,
+                            ticker=ticker,
+                            reason=f"post-cancel re-read invalid: {fresh_problem}",
+                        )
                     if fresh_filled > 0:
                         return self._settle_matched_fill(
                             client_id=client_id,
@@ -511,11 +541,7 @@ class AlgoLabBroker(BaseExecutionProvider):
             # Case 2: filled_qty > 0 on first read (applies even if CANCELLED/PARTIAL/FILLED).
             # When the order still looks open, cancel the remainder first, then
             # re-read and account with the SECOND read's values.
-            if (
-                self.cancel_remainder
-                and match.state in {OrderState.SENT, OrderState.CREATED, OrderState.PARTIAL}
-                and match.broker_order_id
-            ):
+            if self.cancel_remainder and effective_open and match.broker_order_id:
                 self._try_cancel_remainder(str(match.broker_order_id))
                 fresh = self._reread_order_by_broker_id(str(match.broker_order_id), trading_days)
                 if fresh is None:
@@ -524,15 +550,29 @@ class AlgoLabBroker(BaseExecutionProvider):
                         ticker=ticker,
                         reason="post-cancel re-read failed after partial fill",
                     )
-                fresh_filled = float(getattr(fresh, "filled_quantity", 0.0) or 0.0)
-                fresh_avg = getattr(fresh, "average_fill_price", None)
+                fresh_filled, fresh_avg, fresh_problem = self._validate_history_fill(
+                    filled_raw=getattr(fresh, "filled_quantity", 0.0),
+                    avg_raw=getattr(fresh, "average_fill_price", None),
+                    submitted_qty=quantity,
+                    broker_state=fresh.state,
+                )
+                if fresh_problem is not None and "partial quantity" not in fresh_problem:
+                    return self._keep_reconcile_unknown(
+                        client_id=client_id,
+                        ticker=ticker,
+                        reason=f"post-cancel re-read invalid: {fresh_problem}",
+                    )
                 if fresh_filled <= 0:
                     return self._keep_reconcile_unknown(
                         client_id=client_id,
                         ticker=ticker,
                         reason="post-cancel re-read lost previously seen fills",
                     )
-                if fresh.state in {OrderState.SENT, OrderState.CREATED, OrderState.PARTIAL}:
+                if fresh.state in {
+                    OrderState.SENT,
+                    OrderState.CREATED,
+                    OrderState.PARTIAL,
+                } or (fresh.state == OrderState.FILLED and fresh_problem is not None):
                     # Remainder may still be live: account fills but keep locked.
                     result = self._settle_matched_fill(
                         client_id=client_id,
@@ -713,6 +753,55 @@ class AlgoLabBroker(BaseExecutionProvider):
             message=f"Order reconciled ({final_status}): {final_detail}",
         )
 
+    @staticmethod
+    def _validate_history_fill(
+        *,
+        filled_raw: Any,
+        avg_raw: Any,
+        submitted_qty: float,
+        broker_state: OrderState,
+    ) -> tuple[float, float | None, str | None]:
+        """Fail-closed numeric validation for broker history fills.
+
+        Uses Decimal at the broker→accounting boundary so float dust can never
+        promote a partial fill into a full-fill accounting. Returns
+        (filled_qty, avg_price_or_None, problem). A non-None problem that is
+        not the FILLED-partial mismatch must resolve to unknown + locked.
+        A missing/non-positive/non-finite average price degrades to None and
+        is handled downstream as ack_unaccounted, never as ack.
+        """
+        import math
+        from decimal import Decimal, InvalidOperation
+
+        try:
+            filled_dec = Decimal(str(filled_raw if filled_raw is not None else 0.0))
+            submitted_dec = Decimal(str(submitted_qty))
+        except (InvalidOperation, ValueError, TypeError):
+            return 0.0, None, "non-numeric fill quantities in broker history"
+        if filled_dec < 0:
+            return 0.0, None, "negative filled quantity in broker history"
+        if submitted_dec > 0 and filled_dec > submitted_dec:
+            return (
+                0.0,
+                None,
+                f"filled {filled_dec} exceeds submitted {submitted_dec} in broker history",
+            )
+        avg: float | None = None
+        if avg_raw is not None:
+            try:
+                avg_candidate = float(avg_raw)
+            except (TypeError, ValueError):
+                avg_candidate = float("nan")
+            if math.isfinite(avg_candidate) and avg_candidate > 0:
+                avg = avg_candidate
+        if broker_state == OrderState.FILLED and submitted_dec > 0 and filled_dec != submitted_dec:
+            return (
+                float(filled_dec),
+                avg,
+                "FILLED state but partial quantity; treating remainder as live",
+            )
+        return float(filled_dec), avg, None
+
     def _keep_reconcile_unknown(
         self,
         *,
@@ -730,10 +819,13 @@ class AlgoLabBroker(BaseExecutionProvider):
         self._alert_reconcile_required(client_id=client_id, ticker=ticker, reason=reason)
         raise RuntimeError(f"Order {client_id} outcome remains unknown; {reason}")
 
-    def reconcile_pending_intents(self, *, background: bool = False) -> dict[str, int]:
+    def reconcile_pending_intents(
+        self, *, background: bool = False, on_fatal: Any | None = None
+    ) -> dict[str, int]:
         if background:
             t = threading.Thread(
                 target=self._run_reconcile_background,
+                args=(on_fatal,),
                 name="algolab-startup-reconcile",
                 daemon=True,
             )
@@ -741,15 +833,30 @@ class AlgoLabBroker(BaseExecutionProvider):
             return {"attempted": 0, "resolved": 0, "unknown": 0}
         return self._run_reconcile_pending_intents()
 
-    def _run_reconcile_background(self) -> None:
+    def _default_replay_fatal_exit(self) -> None:
+        import os
+        import signal as _signal
+
+        try:
+            os.kill(os.getpid(), _signal.SIGTERM)
+        except Exception:
+            logger.exception("replay_fatal_sigterm_failed")
+            os._exit(1)
+
+    def _run_reconcile_background(self, on_fatal: Any | None = None) -> None:
         """Background-thread entrypoint with terminal visibility.
 
         DB/session errors propagate here (not per-intent errors); without this
         wrapper they would kill the daemon thread silently. DB sessions are
         thread-local via scoped_session, so sharing the manager is safe.
+        A DB/session failure triggers a controlled worker exit so the
+        supervisor respawns and replay is retried; the readiness probe fails
+        until then. KeyboardInterrupt/SystemExit are never swallowed.
         """
         try:
             self._run_reconcile_pending_intents()
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except BaseException as exc:
             logger.error(
                 "startup_reconciliation_thread_failed",
@@ -758,7 +865,11 @@ class AlgoLabBroker(BaseExecutionProvider):
             )
             inc_counter("reconcile_startup_failed_total")
             set_gauge("reconcile_startup_pending", 0.0)
-            raise
+            fatal = on_fatal or self._default_replay_fatal_exit
+            try:
+                fatal()
+            finally:
+                raise
 
     def _run_reconcile_pending_intents(self) -> dict[str, int]:
         summary = {"attempted": 0, "resolved": 0, "unknown": 0}

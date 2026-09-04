@@ -576,6 +576,84 @@ def test_partial_fill_cancel_then_second_read_full_fill(tmp_path) -> None:
     assert positions[0]["entry_price"] == 101.0
 
 
+def test_status_map_partial_mapped_to_filled_never_full_accounts(tmp_path) -> None:
+    """ALGOLAB_STATUS_MAP={"PARTIAL": "FILLED"} + filled 3/10 must not full-fill.
+
+    The mapped FILLED label with partial quantity routes as a live remainder:
+    fills are accounted for the confirmed 3 units only, and the intent stays
+    ack_unaccounted + locked.
+    """
+    manager, db, pm, accounting = _setup_accounting(tmp_path)
+    submitted_at = datetime.now(UTC)
+    session = MagicMock(spec=requests.Session)
+    history = {
+        "orders": [
+            {
+                "order_id": "brk-map",
+                "ticker": "THYAO.IS",
+                "side": "BUY",
+                "quantity": 10.0,
+                "order_type": "MARKET",
+                "state": "PARTIAL",
+                "created_at": submitted_at.isoformat(),
+                "filled_quantity": 3.0,
+                "average_fill_price": 100.0,
+            }
+        ]
+    }
+
+    def request(method: str, url: str, **kwargs: Any):
+        if method == "POST":
+            return _Response({"cancelled": True})
+        return _Response(history)
+
+    session.request.side_effect = request
+    broker = AlgoLabBroker(
+        AlgoLabCredentials(api_key="k", username="u", password="p"),
+        endpoints=AlgoLabEndpoints(
+            order_history="http://test/history",
+            cancel_order="http://test/cancel",
+        ),
+        session=session,
+        dry_run=False,
+        order_intents=db.order_intents,
+        accounting_service=accounting,
+        status_map={"PARTIAL": "FILLED"},
+        clock=lambda: submitted_at,
+    )
+    broker._session_token = "mock-valid-token"
+    db.order_intents.create(
+        client_id="intent-map",
+        ticker="THYAO.IS",
+        side="BUY",
+        quantity=10.0,
+        order_type="MARKET",
+        price=None,
+        stop_price=None,
+        order_db_id=61,
+        signal_snapshot=json.dumps({"stop_loss": 90.0, "target_price": 120.0}),
+    )
+    db.order_intents.update("intent-map", status="unknown")
+
+    result = broker._reconcile_order(
+        client_id="intent-map",
+        ticker="THYAO.IS",
+        side=OrderSide.BUY,
+        quantity=10.0,
+        order_type=OrderType.MARKET,
+        price=None,
+        stop_price=None,
+        submitted_at=submitted_at,
+    )
+
+    assert result.accepted is True
+    assert db.order_intents.get("intent-map")["status"] == "ack_unaccounted"
+    assert db.order_intents.get_unresolved("THYAO.IS") is not None
+    positions = pm.get_open_positions()
+    assert len(positions) == 1
+    assert positions[0]["quantity"] == 3.0
+
+
 def test_double_reconcile_produces_single_position_change(tmp_path) -> None:
     """Two back-to-back reconciles of the same intent must not duplicate accounting."""
     manager, db, pm, accounting = _setup_accounting(tmp_path)
@@ -847,17 +925,159 @@ def test_background_replay_failure_is_visible(monkeypatch) -> None:
             done.set()
 
     monkeypatch.setattr(broker, "_run_reconcile_pending_intents", failing_run)
-    broker.reconcile_pending_intents(background=True)
-    assert done.wait(timeout=10) is True
-    # Give the daemon thread a moment to record the failure metric
-    # (the critical log line is visible in captured stderr output)
+    fatal_calls: list[str] = []
+    # on_fatal is injectable so tests never SIGTERM the pytest process.
+    broker.reconcile_pending_intents(background=True, on_fatal=lambda: fatal_calls.append("exit"))
+    assert done.wait(timeout=15) is True
+    # Give the daemon thread time to record the metric and invoke on_fatal;
+    # poll for both under full-suite CPU contention.
     import time as _time
 
-    deadline = _time.monotonic() + 5.0
-    while "reconcile_startup_failed_total" not in render_metrics():
-        assert _time.monotonic() < deadline, "failure metric was not recorded"
+    deadline = _time.monotonic() + 15.0
+    while True:
+        metrics_ready = "reconcile_startup_failed_total" in render_metrics()
+        if metrics_ready and fatal_calls == ["exit"]:
+            break
+        assert _time.monotonic() < deadline, (
+            f"background failure not fully visible: fatal_calls={fatal_calls}"
+        )
         _time.sleep(0.05)
     assert "reconcile_startup_failed_total" in render_metrics()
+    # DB/session failure triggers the controlled-exit path (injected here).
+    assert fatal_calls == ["exit"]
+
+
+def test_background_replay_network_error_does_not_trigger_exit(tmp_path) -> None:
+    """Per-intent network failures stay unknown; only DB/session faults exit."""
+    db_path = str(tmp_path / "replay-net.db")
+    manager = DatabaseManager(sqlite_path=db_path)
+    db = DataAccess(manager)
+    db.order_intents.create(
+        client_id="intent-net",
+        ticker="THYAO.IS",
+        side="BUY",
+        quantity=10.0,
+        order_type="MARKET",
+        price=None,
+        stop_price=None,
+    )
+    session = MagicMock(spec=requests.Session)
+    broker = AlgoLabBroker(
+        AlgoLabCredentials(api_key="k", username="u", password="p"),
+        endpoints=AlgoLabEndpoints(order_history="http://test/history"),
+        session=session,
+        dry_run=False,
+        order_intents=db.order_intents,
+    )
+    broker._session_token = "tok"
+    # History fetch fails at the transport level for every attempt.
+    session.request.side_effect = requests.ConnectionError("network down")
+
+    fatal_calls: list[str] = []
+    done = threading.Event()
+    original_reconcile = broker._reconcile_order
+
+    def counting_reconcile(**kwargs):
+        try:
+            return original_reconcile(**kwargs)
+        finally:
+            done.set()
+
+    broker._reconcile_order = counting_reconcile  # type: ignore[method-assign]
+    broker.reconcile_pending_intents(background=True, on_fatal=lambda: fatal_calls.append("exit"))
+
+    assert done.wait(timeout=15) is True
+    assert fatal_calls == []
+    assert db.order_intents.get("intent-net")["status"] == "unknown"
+
+
+def test_sell_replay_after_close_returns_ack_without_second_pnl(tmp_path) -> None:
+    """Crash between close_position commit and intent CAS must replay cleanly.
+
+    The second record_fill finds the CLOSED row via exit_order_id and returns
+    ack without writing a second PnL row and without falling to ack_unaccounted.
+    """
+    from sqlalchemy import text
+
+    manager, db, pm, accounting = _setup_accounting(tmp_path)
+    pm.open_position(
+        ticker="THYAO.IS",
+        entry_order_id=51,
+        entry_price=100.0,
+        quantity=10.0,
+        stop_loss=90.0,
+        target_price=120.0,
+        signal_type="STRONG_BUY",
+        signal_score=80.0,
+    )
+    order_row = db.create_order(
+        ticker="THYAO.IS", side="SELL", quantity=10.0, order_type="MARKET", state="CREATED"
+    )
+    intent = db.order_intents.create(
+        client_id="intent-sell-crash",
+        ticker="THYAO.IS",
+        side="SELL",
+        quantity=10.0,
+        order_type="MARKET",
+        price=None,
+        stop_price=None,
+        order_db_id=int(order_row["id"]),
+    )
+
+    first = accounting.record_fill(
+        intent=intent,
+        broker_order_id="brk-crash",
+        filled_qty=10.0,
+        avg_fill_price=105.0,
+        broker_state="FILLED",
+    )
+    assert first.success is True and first.status == "ack"
+
+    # Simulate the crash: CAS never ran, intent still pre-terminal. Replay:
+    replay = accounting.record_fill(
+        intent=intent,
+        broker_order_id="brk-crash",
+        filled_qty=10.0,
+        avg_fill_price=105.0,
+        broker_state="FILLED",
+    )
+    assert replay.success is True
+    assert replay.status == "ack"
+    assert "already closed" in replay.detail
+
+    with manager.engine.connect() as conn:
+        closed_count = conn.execute(
+            text(
+                "SELECT COUNT(*) FROM live_positions "
+                "WHERE exit_order_id = :order_id AND state = 'CLOSED'"
+            ),
+            {"order_id": int(order_row["id"])},
+        ).scalar_one()
+    assert closed_count == 1
+
+
+def test_update_conditional_loser_writes_nothing(tmp_path) -> None:
+    """CAS loser path: update_conditional returns None outside expected statuses."""
+    manager, db, _pm, _accounting = _setup_accounting(tmp_path)
+    db.order_intents.create(
+        client_id="intent-cas",
+        ticker="THYAO.IS",
+        side="BUY",
+        quantity=10.0,
+        order_type="MARKET",
+        price=None,
+        stop_price=None,
+    )
+    db.order_intents.update("intent-cas", status="ack", release_lock=False)
+    assert (
+        db.order_intents.update_conditional(
+            "intent-cas",
+            status="ack",
+            expected_statuses=("pending", "sent", "unknown"),
+        )
+        is None
+    )
+    assert db.order_intents.get("intent-cas")["status"] == "ack"
 
 
 def test_paper_mode_startup_reconcile_does_not_call_broker() -> None:
