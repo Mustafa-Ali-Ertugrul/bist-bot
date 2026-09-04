@@ -249,6 +249,8 @@ class OrderIntentRecord(Base):
     stop_price: Mapped[float | None] = mapped_column(Float, nullable=True)
     status: Mapped[str] = mapped_column(String, nullable=False, default="pending", index=True)
     broker_order_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    order_db_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    signal_snapshot: Mapped[str | None] = mapped_column(Text, nullable=True)
     detail: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=lambda: datetime.now(UTC)
@@ -290,6 +292,16 @@ class LivePositionRecord(Base):
         DateTime, nullable=False, default=lambda: datetime.now(UTC)
     )
     updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+
+class BootstrapStateRecord(Base):
+    __tablename__ = "bootstrap_state"
+
+    key: Mapped[str] = mapped_column(String, primary_key=True)
+    value: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=lambda: datetime.now(UTC)
     )
 
@@ -621,7 +633,25 @@ class DatabaseManager:
         )
 
         now = self.now_utc()
+        state_key = f"admin_bootstrap_completed:{settings.ADMIN_BOOTSTRAP_EMAIL}"
         with self.engine.begin() as conn:
+            # Check if bootstrap has already completed once for this email
+            try:
+                state_completed = conn.execute(
+                    text("SELECT value FROM bootstrap_state WHERE key = :key LIMIT 1"),
+                    {"key": state_key},
+                ).scalar_one_or_none()
+            except OperationalError:
+                state_completed = None
+
+            if state_completed is not None:
+                logger.warning(
+                    "admin_bootstrap_skipped_one_shot",
+                    reason="bootstrap has already completed for this email; delete bootstrap_state row to re-arm",
+                    email=_mask_email(settings.ADMIN_BOOTSTRAP_EMAIL),
+                )
+                return
+
             admin_row = (
                 conn.execute(
                     text("SELECT id, role FROM users WHERE email = :email LIMIT 1"),
@@ -658,6 +688,7 @@ class DatabaseManager:
                         user_id=int(admin_row["id"]),
                         previous_role=str(admin_row["role"]),
                     )
+                    self._mark_bootstrap_completed(conn, state_key, "promoted")
                 else:
                     log_method = (
                         logger.info if str(admin_row["role"]) == "admin" else logger.warning
@@ -702,12 +733,25 @@ class DatabaseManager:
                     user_id=int(created_id),
                     previous_role=None,
                 )
+                self._mark_bootstrap_completed(conn, state_key, "created")
             except IntegrityError:
                 logger.warning(
                     "admin_bootstrap_duplicate",
                     email=settings.ADMIN_BOOTSTRAP_EMAIL,
                 )
                 return
+
+    def _mark_bootstrap_completed(self, conn, key: str, value: str) -> None:
+        try:
+            conn.execute(
+                text(
+                    "INSERT INTO bootstrap_state (key, value, created_at) "
+                    "VALUES (:key, :value, :created_at)"
+                ),
+                {"key": key, "value": value, "created_at": self.now_utc()},
+            )
+        except Exception:
+            logger.warning("bootstrap_state_record_failed", key=key)
 
     def _write_bootstrap_audit(
         self,
