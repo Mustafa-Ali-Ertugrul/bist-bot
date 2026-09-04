@@ -161,8 +161,11 @@ Neither is currently configured in the observed environment.
 - History finding: `opencode.json:26`, commit `6d0fa86e194708840f26d6a91447d0813a25c184`.
 - `opencode.json` is removed from the Git index and added to `.gitignore` and `.dockerignore`; the
   local file is retained.
-- No-git scan found four redacted findings in the local ignored `.env`; no findings were reported
-  under `src`, `scripts`, `cloudrun`, `.github`, or `android_app`. Secret values were not inspected.
+- The raw no-git scan reported 224 redacted candidates: four in the ignored local `.env`, 219 in
+  `.venv` dependency files, and one generic-key false-positive candidate in ignored Android IDE
+  metadata (`android_app/.idea/planningMode.xml`). No findings were reported under production
+  `src`, `scripts`, `cloudrun`, `.github`, or `android_app/app` paths. Secret values were not
+  inspected.
 - Artifact Registry inventory failed because billing is disabled for the configured GCP project;
   old image deletion remains blocked.
 - Rotation, provider usage/billing review, fork notification, history rewrite, GitHub cache cleanup,
