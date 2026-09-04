@@ -197,7 +197,7 @@ class UserRecord(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     email: Mapped[str] = mapped_column(String, nullable=False, unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(Text, nullable=False)
-    role: Mapped[str] = mapped_column(String, nullable=False, default="admin")
+    role: Mapped[str] = mapped_column(String, nullable=False, default="user", server_default="user")
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=lambda: datetime.now(UTC)
     )
@@ -228,6 +228,29 @@ class OrderRecord(Base):
     position_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     purpose: Mapped[str] = mapped_column(String, nullable=False, default="ENTRY")
     metadata_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class OrderIntentRecord(Base):
+    __tablename__ = "order_intents"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    client_id: Mapped[str] = mapped_column(String, nullable=False, unique=True, index=True)
+    active_key: Mapped[str | None] = mapped_column(String, nullable=True, unique=True, index=True)
+    ticker: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    side: Mapped[str] = mapped_column(String, nullable=False)
+    quantity: Mapped[float] = mapped_column(Float, nullable=False)
+    order_type: Mapped[str] = mapped_column(String, nullable=False)
+    price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    stop_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    status: Mapped[str] = mapped_column(String, nullable=False, default="pending", index=True)
+    broker_order_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+    )
 
 
 class LivePositionRecord(Base):
@@ -384,7 +407,26 @@ class DatabaseManager:
             self._migrate_legacy_schema()
             self._seed_admin_user()
             self._warn_if_no_users()
+            self._validate_privileged_user_exists()
             self._initialized = True
+
+    def _validate_privileged_user_exists(self) -> None:
+        try:
+            with self.engine.connect() as conn:
+                count = conn.execute(
+                    text("SELECT COUNT(*) FROM users WHERE role IN ('admin', 'trader')")
+                ).scalar_one()
+        except OperationalError:
+            return
+        if count:
+            return
+        message = (
+            "No admin/trader user exists. Configure ADMIN_BOOTSTRAP_EMAIL and "
+            "ADMIN_BOOTSTRAP_PASSWORD_HASH before enabling RBAC_MODE=enforce."
+        )
+        if str(settings.RBAC_MODE).lower() == "enforce":
+            raise RuntimeError(message)
+        logger.warning("no_privileged_user_configured", message=message)
 
     def _warn_if_no_users(self) -> None:
         if not self._is_sqlite:
@@ -565,11 +607,15 @@ class DatabaseManager:
 
         now = self.now_utc()
         with self.engine.begin() as conn:
-            admin_exists = conn.execute(
-                text("SELECT id FROM users WHERE email = :email LIMIT 1"),
-                {"email": settings.ADMIN_BOOTSTRAP_EMAIL},
-            ).scalar_one_or_none()
-            if admin_exists is not None:
+            admin_row = (
+                conn.execute(
+                    text("SELECT id, role FROM users WHERE email = :email LIMIT 1"),
+                    {"email": settings.ADMIN_BOOTSTRAP_EMAIL},
+                )
+                .mappings()
+                .first()
+            )
+            if admin_row is not None:
                 if settings.ADMIN_BOOTSTRAP_UPDATE_EXISTING:
                     logger.warning(
                         "admin_bootstrap_overwrite_enabled",
@@ -578,7 +624,8 @@ class DatabaseManager:
                     )
                     conn.execute(
                         text(
-                            "UPDATE users SET password_hash = :password_hash, updated_at = :updated_at WHERE email = :email"
+                            "UPDATE users SET password_hash = :password_hash, role = 'admin', "
+                            "updated_at = :updated_at WHERE email = :email"
                         ),
                         {
                             "email": settings.ADMIN_BOOTSTRAP_EMAIL,
@@ -591,9 +638,14 @@ class DatabaseManager:
                         email=_mask_email(settings.ADMIN_BOOTSTRAP_EMAIL),
                     )
                 else:
-                    logger.info(
+                    log_method = (
+                        logger.info if str(admin_row["role"]) == "admin" else logger.warning
+                    )
+                    log_method(
                         "admin_bootstrap_existing_admin_update_skipped",
-                        reason="admin_exists",
+                        reason="admin_exists"
+                        if str(admin_row["role"]) == "admin"
+                        else "existing_user_not_admin",
                         email=_mask_email(settings.ADMIN_BOOTSTRAP_EMAIL),
                     )
                 return

@@ -31,6 +31,7 @@ def test_alembic_fresh_upgrade_and_downgrade(alembic_cfg, tmp_path):
         tables = set(insp.get_table_names())
         assert "signals" in tables
         assert "trade_ledger" in tables
+        assert "order_intents" in tables
         assert "users" in tables
 
         signal_cols = {col["name"] for col in insp.get_columns("signals")}
@@ -44,6 +45,7 @@ def test_alembic_fresh_upgrade_and_downgrade(alembic_cfg, tmp_path):
         insp = sa.inspect(conn)
         tables = set(insp.get_table_names())
         assert "trade_ledger" not in tables
+        assert "order_intents" not in tables
         signal_cols = {col["name"] for col in insp.get_columns("signals")}
         assert "score_breakdown" not in signal_cols
 
@@ -53,6 +55,7 @@ def test_alembic_fresh_upgrade_and_downgrade(alembic_cfg, tmp_path):
         insp = sa.inspect(conn)
         tables = set(insp.get_table_names())
         assert "trade_ledger" in tables
+        assert "order_intents" in tables
 
 
 def test_alembic_idempotent_on_existing_app_schema(alembic_cfg, tmp_path):
@@ -77,3 +80,4 @@ def test_alembic_idempotent_on_existing_app_schema(alembic_cfg, tmp_path):
         insp = sa.inspect(conn)
         tables = set(insp.get_table_names())
         assert "trade_ledger" in tables
+        assert "order_intents" in tables

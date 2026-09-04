@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import warnings
 from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from dataclasses import replace as dataclass_replace
@@ -195,6 +196,26 @@ class Settings:
             raise RuntimeError(
                 f"Unsupported BROKER_MODE/BROKER_PROVIDER: mode={mode!r} provider={provider!r}"
             )
+        effective = provider if provider == "algolab" else mode
+        live_execution = effective == "live" or (
+            effective == "algolab" and not self.ALGOLAB_DRY_RUN
+        )
+        if live_execution:
+            database_url = str(self.DATABASE_URL or "").strip().lower()
+            if not database_url or database_url.startswith("sqlite"):
+                raise RuntimeError(
+                    "Live broker execution requires a persistent non-SQLite DATABASE_URL; "
+                    "ephemeral/local SQLite cannot preserve the order intent ledger"
+                )
+        if self.EXPECTED_INSTANCE_COUNT > 1 and str(self.RATE_LIMIT_STORAGE_URI).startswith(
+            "memory://"
+        ):
+            warnings.warn(
+                "RATE_LIMIT_STORAGE_URI=memory:// is process-local while "
+                "EXPECTED_INSTANCE_COUNT>1; configure Redis before scaling out",
+                RuntimeWarning,
+                stacklevel=2,
+            )
         # Live stub is intentional; venue adapters require explicit provider.
         if mode == "live" and provider in {"live", "paper"}:
             # LiveBroker stub — allowed for construction; submit raises NotImplementedError.
@@ -208,6 +229,21 @@ class Settings:
                 raise RuntimeError(
                     "CONFIRM_LIVE_TRADING=true is required when ALGOLAB_DRY_RUN=false"
                 )
+            if not self.ALGOLAB_DRY_RUN:
+                endpoint_names = {
+                    "ALGOLAB_LOGIN_URL": self.ALGOLAB_LOGIN_URL,
+                    "ALGOLAB_VERIFY_OTP_URL": self.ALGOLAB_VERIFY_OTP_URL,
+                    "ALGOLAB_ORDERS_URL": self.ALGOLAB_ORDERS_URL,
+                    "ALGOLAB_ORDER_STATUS_URL": self.ALGOLAB_ORDER_STATUS_URL,
+                    "ALGOLAB_CANCEL_ORDER_URL": self.ALGOLAB_CANCEL_ORDER_URL,
+                    "ALGOLAB_ORDER_HISTORY_URL": self.ALGOLAB_ORDER_HISTORY_URL,
+                }
+                missing_endpoints = [name for name, value in endpoint_names.items() if not value]
+                if missing_endpoints:
+                    raise RuntimeError(
+                        "Missing required AlgoLab endpoint settings for live execution: "
+                        + ", ".join(missing_endpoints)
+                    )
             return
 
     def validate_data_provider_config(self) -> None:
