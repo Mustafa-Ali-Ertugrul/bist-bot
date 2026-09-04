@@ -33,7 +33,8 @@ class PositionManager:
     ) -> LivePositionRecord | None:
         entry_time = datetime.now(UTC)
         agent_settings = self.settings.agent
-        settlement_dt = calculate_settlement(entry_time, agent_settings.SETTLEMENT_DAYS)
+        settlement_days = int(getattr(agent_settings, "SETTLEMENT_DAYS", 2))
+        settlement_dt = calculate_settlement(entry_time, settlement_days)
 
         position = LivePositionRecord(
             ticker=ticker,
@@ -59,10 +60,12 @@ class PositionManager:
                         """INSERT INTO live_positions
                         (ticker, side, entry_order_id, entry_price, quantity, entry_time,
                          stop_loss, target_price, risk_reward_ratio, position_size_method,
-                         settlement_date, state, signal_type, signal_score, regime)
+                         settlement_date, state, signal_type, signal_score, regime, fees_paid,
+                         created_at, updated_at)
                         VALUES (:ticker, :side, :entry_order_id, :entry_price, :quantity, :entry_time,
                                 :stop_loss, :target_price, :risk_reward_ratio, :position_size_method,
-                                :settlement_date, :state, :signal_type, :signal_score, :regime)"""
+                                :settlement_date, :state, :signal_type, :signal_score, :regime, :fees_paid,
+                                :created_at, :updated_at)"""
                     ),
                     {
                         "ticker": ticker,
@@ -80,6 +83,9 @@ class PositionManager:
                         "signal_type": signal_type,
                         "signal_score": signal_score,
                         "regime": regime,
+                        "fees_paid": 0.0,
+                        "created_at": entry_time,
+                        "updated_at": entry_time,
                     },
                 )
             logger.info(

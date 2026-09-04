@@ -169,6 +169,14 @@ def _build_broker(db: DataAccess | None = None) -> BaseExecutionProvider:
     effective = provider if provider in {"algolab"} else mode
 
     if effective == "algolab":
+        accounting_service = None
+        if db is not None:
+            from bist_bot.agent.position_manager import PositionManager
+            from bist_bot.execution.reconcile_accounting import ReconcileAccountingService
+
+            pm = PositionManager(db, settings)
+            accounting_service = ReconcileAccountingService(db=db, position_manager=pm)
+
         algolab = AlgoLabBroker(
             AlgoLabCredentials(
                 api_key=settings.ALGOLAB_API_KEY,
@@ -191,9 +199,19 @@ def _build_broker(db: DataAccess | None = None) -> BaseExecutionProvider:
             order_intents=db.order_intents if db is not None else None,
             send_client_id=settings.ALGOLAB_SEND_CLIENT_ID,
             reconcile_window_seconds=settings.ALGOLAB_RECONCILE_WINDOW_SECONDS,
+            cancel_remainder=settings.ALGOLAB_RECONCILE_CANCEL_REMAINDER,
+            accounting_service=accounting_service,
         )
         if not settings.ALGOLAB_DRY_RUN and settings.ALGOLAB_RECONCILE_ON_STARTUP:
-            algolab.reconcile_pending_intents()
+            if settings.EXPECTED_INSTANCE_COUNT > 1:
+                logger.warning(
+                    "startup_reconcile_multi_instance",
+                    detail=(
+                        "Startup reconciliation runs on instance 1 without multi-instance "
+                        "distributed locking; coordinate instances during startup."
+                    ),
+                )
+            algolab.reconcile_pending_intents(background=True)
         return algolab
     if effective == "live":
         from bist_bot.execution.live import LiveBroker

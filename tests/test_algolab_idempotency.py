@@ -47,16 +47,44 @@ class _IntentStore:
         self.transitions.append("pending")
         return row
 
+    def get(self, client_id: str) -> dict[str, Any] | None:
+        return self.rows.get(client_id)
+
     def update(self, client_id: str, **kwargs: Any) -> dict[str, Any] | None:
         row = self.rows.get(client_id)
         if row is None:
             return None
         release_lock = kwargs.pop("release_lock", None)
         row.update(kwargs)
-        if release_lock is True or (release_lock is None and row["status"] in {"ack", "rejected"}):
+        if release_lock is True or (
+            release_lock is None and row["status"] in {"ack", "rejected"}
+        ):
             row["active_key"] = None
         self.transitions.append(str(kwargs["status"]))
         return row
+
+    def update_conditional(
+        self,
+        client_id: str,
+        *,
+        status: str,
+        expected_statuses: tuple[str, ...],
+        broker_order_id: str | None = None,
+        detail: str | None = None,
+        release_lock: bool | None = None,
+    ) -> dict[str, Any] | None:
+        row = self.rows.get(client_id)
+        if row is None:
+            return None
+        if row["status"] not in expected_statuses:
+            return None
+        return self.update(
+            client_id,
+            status=status,
+            broker_order_id=broker_order_id,
+            detail=detail,
+            release_lock=release_lock,
+        )
 
     def get_unresolved(self, ticker: str) -> dict[str, Any] | None:
         return next(
@@ -125,6 +153,8 @@ def test_place_timeout_sends_once_then_reconciles_by_client_id() -> None:
                         "quantity": 10,
                         "order_type": "MARKET",
                         "state": "FILLED",
+                        "filled_quantity": 10.0,
+                        "average_fill_price": 100.0,
                     }
                 ]
             }
@@ -328,6 +358,8 @@ def test_reconciliation_queries_both_istanbul_days_near_midnight() -> None:
                         "quantity": 10,
                         "order_type": "MARKET",
                         "state": "FILLED",
+                        "filled_quantity": 10.0,
+                        "average_fill_price": 100.0,
                         "created_at": "2026-09-04T20:59:30+00:00",
                     }
                 ]
@@ -362,6 +394,8 @@ def test_startup_reconciles_persisted_unknown_intent() -> None:
                     "quantity": 10,
                     "order_type": "MARKET",
                     "state": "FILLED",
+                    "filled_quantity": 10.0,
+                    "average_fill_price": 100.0,
                     "created_at": submitted_at.isoformat(),
                 }
             ]

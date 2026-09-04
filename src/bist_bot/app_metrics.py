@@ -21,6 +21,8 @@ _COUNTER_DEFAULTS = OrderedDict(
         "bist_signal_emitted_total": 0.0,
         "bist_auto_execute_total": 0.0,
         "bist_auto_execute_fail_total": 0.0,
+        "order_intents_unaccounted_total": 0.0,
+        "unmapped_broker_status_total": 0.0,
     }
 )
 
@@ -29,6 +31,7 @@ _GAUGE_DEFAULTS = OrderedDict(
         "bist_last_scan_duration_ms": 0.0,
         "bist_last_scan_scanned_count": 0.0,
         "bist_auto_execute_migration_blocked": 0.0,
+        "reconcile_startup_pending": 0.0,
     }
 )
 

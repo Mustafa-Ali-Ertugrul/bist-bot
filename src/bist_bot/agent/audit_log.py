@@ -24,15 +24,16 @@ def write_audit(
         return
     try:
         details_json = json.dumps(details or {}, ensure_ascii=False, default=str)
+        now = datetime.now(UTC)
         with engine.begin() as conn:
             conn.execute(
                 text(
                     """INSERT INTO audit_trail
-                    (timestamp, event_type, ticker, position_id, order_id, agent_state, details, trigger_source)
-                    VALUES (:timestamp, :event_type, :ticker, :position_id, :order_id, :agent_state, :details, :trigger_source)"""
+                    (timestamp, event_type, ticker, position_id, order_id, agent_state, details, trigger_source, created_at)
+                    VALUES (:timestamp, :event_type, :ticker, :position_id, :order_id, :agent_state, :details, :trigger_source, :created_at)"""
                 ),
                 {
-                    "timestamp": datetime.now(UTC),
+                    "timestamp": now,
                     "event_type": event_type,
                     "ticker": ticker,
                     "position_id": position_id,
@@ -40,6 +41,7 @@ def write_audit(
                     "agent_state": agent_state,
                     "details": details_json,
                     "trigger_source": trigger_source,
+                    "created_at": now,
                 },
             )
     except Exception:

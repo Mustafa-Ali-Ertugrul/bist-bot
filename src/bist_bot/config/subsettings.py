@@ -352,6 +352,7 @@ class ServerSettings:
     API_BASE_URL: str = _get_str_env("API_BASE_URL", f"http://localhost:{DEFAULT_FLASK_PORT}")
     RATE_LIMIT_STORAGE_URI: str = _get_str_env("RATE_LIMIT_STORAGE_URI", "memory://")
     EXPECTED_INSTANCE_COUNT: int = _get_int_env("EXPECTED_INSTANCE_COUNT", 1)
+    DEGRADED_MAX_SECONDS: int = _get_int_env("DEGRADED_MAX_SECONDS", 300)
     SENTRY_DSN: str | None = _get_str_env("SENTRY_DSN") or None
     ENVIRONMENT: str = _get_str_env("ENVIRONMENT", "production")
     SCAN_TIMEOUT_SECONDS: int = _get_int_env("SCAN_TIMEOUT_SECONDS", 300)
@@ -417,6 +418,10 @@ class BrokerSettings:
     ALGOLAB_ORDER_HISTORY_URL: str = _get_str_env("ALGOLAB_ORDER_HISTORY_URL")
     ALGOLAB_RECONCILE_WINDOW_SECONDS: int = _get_int_env("ALGOLAB_RECONCILE_WINDOW_SECONDS", 180)
     ALGOLAB_RECONCILE_ON_STARTUP: bool = _get_bool_env("ALGOLAB_RECONCILE_ON_STARTUP", True)
+    ALGOLAB_RECONCILE_CANCEL_REMAINDER: bool = _get_bool_env(
+        "ALGOLAB_RECONCILE_CANCEL_REMAINDER", True
+    )
+    ALGOLAB_STATUS_MAP: str = _get_str_env("ALGOLAB_STATUS_MAP", "")
     ALPACA_API_KEY: str = _get_str_env("ALPACA_API_KEY")
     ALPACA_SECRET_KEY: str = _get_str_env("ALPACA_SECRET_KEY")
     ALPACA_PAPER: bool = _get_bool_env("ALPACA_PAPER", True)

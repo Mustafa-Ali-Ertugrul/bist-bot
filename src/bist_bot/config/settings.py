@@ -186,6 +186,19 @@ class Settings:
 
     @property
     def admin_bootstrap_enabled(self) -> bool:
+        if bool(self.ADMIN_BOOTSTRAP_EMAIL) != bool(self.ADMIN_BOOTSTRAP_PASSWORD_HASH):
+            raise RuntimeError(
+                "Both ADMIN_BOOTSTRAP_EMAIL and ADMIN_BOOTSTRAP_PASSWORD_HASH must be set together"
+            )
+        if self.ADMIN_BOOTSTRAP_PASSWORD_HASH:
+            h = str(self.ADMIN_BOOTSTRAP_PASSWORD_HASH).strip()
+            # Valid hashes produced by Werkzeug or bcrypt: scrypt:... or $2b$... or pbkdf2:...
+            valid_prefixes = ("scrypt:", "pbkdf2:", "$2b$", "$2a$", "$2y$", "argon2:")
+            if not any(h.startswith(p) for p in valid_prefixes) or len(h) < 20:
+                raise RuntimeError(
+                    "ADMIN_BOOTSTRAP_PASSWORD_HASH has an invalid format; "
+                    "pre-computed scrypt/bcrypt hash required (e.g. 'scrypt:32768:8:1$...')"
+                )
         return bool(self.ADMIN_BOOTSTRAP_EMAIL and self.ADMIN_BOOTSTRAP_PASSWORD_HASH)
 
     def validate_broker_config(self) -> None:
@@ -221,6 +234,26 @@ class Settings:
             # LiveBroker stub — allowed for construction; submit raises NotImplementedError.
             return
         if provider == "algolab":
+            if self.ALGOLAB_STATUS_MAP:
+                import json as _json
+
+                try:
+                    parsed_map = _json.loads(self.ALGOLAB_STATUS_MAP)
+                    if not isinstance(parsed_map, dict):
+                        raise ValueError("must be a JSON object")
+                except Exception as exc:
+                    raise RuntimeError(
+                        f"ALGOLAB_STATUS_MAP has invalid JSON format: {exc}"
+                    ) from exc
+                valid_targets = {"FILLED", "PARTIAL", "OPEN", "CANCELLED", "REJECTED"}
+                for k, v in parsed_map.items():
+                    normalized_target = str(v).strip().upper()
+                    if normalized_target not in valid_targets:
+                        raise RuntimeError(
+                            f"ALGOLAB_STATUS_MAP target '{v}' for status '{k}' is invalid; "
+                            f"allowed targets: {sorted(valid_targets)}"
+                        )
+
             if not self.ALGOLAB_API_KEY or not self.ALGOLAB_USERNAME or not self.ALGOLAB_PASSWORD:
                 raise RuntimeError(
                     "Missing required AlgoLab credentials for BROKER_PROVIDER=algolab"

@@ -916,9 +916,12 @@ def create_dashboard_app(
     def resolve_order_intent(client_id: str):
         data = request.get_json(silent=True) or {}
         resolution = str(data.get("resolution", data.get("status", ""))).lower()
-        if resolution not in {"ack", "rejected"}:
+        if resolution not in {"ack", "ack_unaccounted", "rejected"}:
             return jsonify(
-                {"status": "error", "message": "resolution must be ack or rejected"}
+                {
+                    "status": "error",
+                    "message": "resolution must be ack, ack_unaccounted, or rejected",
+                }
             ), 400
         reason = str(data.get("reason", data.get("detail", ""))).strip()
         if len(reason) < 10:
@@ -931,13 +934,96 @@ def create_dashboard_app(
                 400,
             )
         broker_order_id = str(data.get("broker_order_id", "")).strip() or None
-        if resolution == "ack" and not broker_order_id:
+        if resolution in {"ack", "ack_unaccounted"} and not broker_order_id:
             return jsonify(
-                {"status": "error", "message": "broker_order_id is required for ack"}
+                {"status": "error", "message": "broker_order_id is required for ack resolutions"}
             ), 400
+
         repository = getattr(get_db(), "order_intents", None)
         if repository is None:
             return jsonify({"status": "error", "message": "Order intent store unavailable"}), 503
+
+        existing_intent = repository.get(client_id)
+        if existing_intent is None:
+            return jsonify({"status": "error", "message": "Order intent not found"}), 404
+
+        # Cross-check or parse filled quantity and average fill price for ack
+        filled_qty = data.get("filled_qty")
+        avg_fill_price = data.get("avg_fill_price")
+
+        # Try pulling from broker history if broker is wired
+        broker = get_broker()
+        if (
+            broker
+            and hasattr(broker, "get_daily_orders")
+            and hasattr(existing_intent.get("created_at"), "date")
+        ):
+            try:
+                intent_date = existing_intent["created_at"].date()
+                daily_orders = broker.get_daily_orders(intent_date)
+                match = next(
+                    (
+                        o
+                        for o in daily_orders
+                        if o.broker_order_id == broker_order_id or o.order_id == broker_order_id
+                    ),
+                    None,
+                )
+                if match:
+                    history_filled = float(getattr(match, "filled_quantity", 0.0) or 0.0)
+                    history_avg = getattr(match, "average_fill_price", None)
+                    if filled_qty is not None and abs(float(filled_qty) - history_filled) > 1e-6:
+                        return jsonify(
+                            {
+                                "status": "error",
+                                "message": f"Conflict: body filled_qty ({filled_qty}) does not match broker history ({history_filled})",
+                            }
+                        ), 409
+                    if (
+                        avg_fill_price is not None
+                        and history_avg is not None
+                        and abs(float(avg_fill_price) - float(history_avg)) > 1e-4
+                    ):
+                        return jsonify(
+                            {
+                                "status": "error",
+                                "message": f"Conflict: body avg_fill_price ({avg_fill_price}) does not match broker history ({history_avg})",
+                            }
+                        ), 409
+                    if filled_qty is None:
+                        filled_qty = history_filled
+                    if avg_fill_price is None:
+                        avg_fill_price = history_avg
+            except Exception as exc:
+                logger.warning("resolve_broker_history_check_failed", error=str(exc))
+
+        # If resolution is ack, require accounting if possible
+        if resolution == "ack":
+            if filled_qty is None or avg_fill_price is None:
+                resolution = "ack_unaccounted"
+                reason = f"{reason} (unaccounted: missing fill qty or price)"
+            else:
+                try:
+                    from bist_bot.agent.position_manager import PositionManager
+                    from bist_bot.execution.reconcile_accounting import ReconcileAccountingService
+
+                    pm = PositionManager(get_db(), settings)
+                    accounting = ReconcileAccountingService(db=get_db(), position_manager=pm)
+                    outcome = accounting.record_fill(
+                        intent=existing_intent,
+                        broker_order_id=broker_order_id,
+                        filled_qty=float(filled_qty),
+                        avg_fill_price=float(avg_fill_price),
+                        broker_state="FILLED",
+                    )
+                    if not outcome.success:
+                        resolution = outcome.status
+                        reason = f"{reason} (accounting detail: {outcome.detail})"
+                except Exception:
+                    logger.exception("resolve_manual_accounting_failed", client_id=client_id)
+                    resolution = "ack_unaccounted"
+                    reason = f"{reason} (accounting failed)"
+
         row = repository.update(
             client_id,
             status=resolution,
