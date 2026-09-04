@@ -7,13 +7,27 @@ spec:
     metadata:
       annotations:
         run.googleapis.com/execution-environment: gen2
+        autoscaling.knative.dev/maxScale: "1"
     spec:
       containerConcurrency: 20
-      timeoutSeconds: 300
+      timeoutSeconds: 360
       containers:
         - image: REGION-docker.pkg.dev/PROJECT_ID/REPOSITORY/bist-bot:latest
-          command: ["python"]
-          args: ["dashboard.py"]
+          # Keep one process: /api/scan currently uses a process-local lock.
+          command: ["gunicorn"]
+          args:
+            [
+              "--bind",
+              "0.0.0.0:8080",
+              "--workers",
+              "1",
+              "--threads",
+              "8",
+              "--timeout",
+              "330",
+              "--forwarded-allow-ips=*",
+              "bist_bot.wsgi:app",
+            ]
           env:
             - name: PORT
               value: "8080"
@@ -33,6 +47,8 @@ spec:
             # For local development, set JWT_SECRET_KEY via environment variable or .env file
             - name: RATE_LIMIT_STORAGE_URI
               value: "memory://"
+            - name: EXPECTED_INSTANCE_COUNT
+              value: "1"
             - name: WATCHLIST_SOURCE
               value: "bist30"
             - name: CORS_ORIGINS

@@ -6,7 +6,19 @@ services:
       dockerfile: Dockerfile
       target: runtime
     container_name: bist-bot-api
-    command: ["python", "dashboard.py"]
+    command:
+      [
+        "gunicorn",
+        "--bind",
+        "0.0.0.0:5000",
+        "--workers",
+        "1",
+        "--threads",
+        "8",
+        "--timeout",
+        "330",
+        "bist_bot.wsgi:app",
+      ]
     env_file:
       - path: .env
         required: false
