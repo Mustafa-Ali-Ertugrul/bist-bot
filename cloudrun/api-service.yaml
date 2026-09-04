@@ -25,6 +25,8 @@ spec:
               "8",
               "--timeout",
               "330",
+              "--graceful-timeout",
+              "30",
               "--forwarded-allow-ips=*",
               "bist_bot.wsgi:app",
             ]
@@ -64,3 +66,15 @@ spec:
           ports:
             - name: http1
               containerPort: 8080
+          startupProbe:
+            httpGet:
+              path: /livez
+              port: 8080
+            failureThreshold: 30
+            periodSeconds: 2
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: 8080
+            failureThreshold: 3
+            periodSeconds: 30

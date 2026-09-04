@@ -74,7 +74,7 @@ jobs:
 
       - name: Deploy API service
         run: |
-          gcloud run deploy "$API_SERVICE_NAME" --project "$GCP_PROJECT_ID" --region "$GCP_REGION" --image "$IMAGE_URI" --allow-unauthenticated --command gunicorn --args="--bind,0.0.0.0:8080,--workers,1,--threads,8,--timeout,330,--forwarded-allow-ips=*,bist_bot.wsgi:app" --max-instances=1 --set-env-vars PYTHONPATH=/app/src,DB_PATH=/tmp/bist_signals.db,RATE_LIMIT_STORAGE_URI=memory://,EXPECTED_INSTANCE_COUNT=1 --set-secrets JWT_SECRET_KEY="${GCP_JWT_SECRET_NAME}:latest" --timeout=360 --no-cpu-throttling
+          gcloud run deploy "$API_SERVICE_NAME" --project "$GCP_PROJECT_ID" --region "$GCP_REGION" --image "$IMAGE_URI" --allow-unauthenticated --command gunicorn --args="--bind,0.0.0.0:8080,--workers,1,--threads,8,--timeout,330,--graceful-timeout,30,--forwarded-allow-ips=*,bist_bot.wsgi:app" --max-instances=1 --set-env-vars PYTHONPATH=/app/src,DB_PATH=/tmp/bist_signals.db,RATE_LIMIT_STORAGE_URI=memory://,EXPECTED_INSTANCE_COUNT=1 --set-secrets JWT_SECRET_KEY="${GCP_JWT_SECRET_NAME}:latest" --timeout=360 --no-cpu-throttling
           API_URL="$(gcloud run services describe "$API_SERVICE_NAME" --project "$GCP_PROJECT_ID" --region "$GCP_REGION" --format 'value(status.url)')"
           echo "API_URL=$API_URL" >> "$GITHUB_ENV"
 

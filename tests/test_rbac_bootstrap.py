@@ -38,8 +38,15 @@ def test_enforce_mode_bootstraps_first_admin(tmp_path) -> None:
                 text("SELECT role FROM users WHERE email = :email"),
                 {"email": "admin@bistbot.local"},
             ).scalar_one()
+            audit_event = conn.execute(
+                text(
+                    "SELECT event_type FROM audit_trail "
+                    "WHERE event_type = 'admin_bootstrap_created'"
+                )
+            ).scalar_one()
 
     assert role == "admin"
+    assert audit_event == "admin_bootstrap_created"
 
 
 def test_bootstrap_update_promotes_existing_user_when_explicitly_enabled(tmp_path) -> None:
@@ -83,5 +90,12 @@ def test_bootstrap_update_promotes_existing_user_when_explicitly_enabled(tmp_pat
                 text("SELECT role FROM users WHERE email = :email"),
                 {"email": "admin@bistbot.local"},
             ).scalar_one()
+            audit_event = conn.execute(
+                text(
+                    "SELECT event_type FROM audit_trail "
+                    "WHERE event_type = 'admin_bootstrap_promoted_existing'"
+                )
+            ).scalar_one()
 
     assert role == "admin"
+    assert audit_event == "admin_bootstrap_promoted_existing"

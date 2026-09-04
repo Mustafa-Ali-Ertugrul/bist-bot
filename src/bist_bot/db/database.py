@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import random
 import re
 import threading
@@ -34,6 +35,10 @@ from bist_bot.app_logging import get_logger
 from bist_bot.config.settings import settings
 
 logger = get_logger(__name__, component="database")
+
+
+class DatabaseInitializationError(RuntimeError):
+    """The configured database is unavailable during application startup."""
 
 
 class Base(DeclarativeBase):
@@ -401,13 +406,21 @@ class DatabaseManager:
             try:
                 Base.metadata.create_all(self.engine)
             except OperationalError as exc:
-                raise RuntimeError(
+                raise DatabaseInitializationError(
                     "Veri deposu başlatılamadı. DB_PATH veya DATABASE_URL yapılandırmasını kontrol edin."
                 ) from exc
-            self._migrate_legacy_schema()
-            self._seed_admin_user()
-            self._warn_if_no_users()
-            self._validate_privileged_user_exists()
+            try:
+                self._migrate_legacy_schema()
+                # Bootstrap always runs before the fail-closed privileged-user check.
+                self._seed_admin_user()
+                self._warn_if_no_users()
+                self._validate_privileged_user_exists()
+            except DatabaseInitializationError:
+                raise
+            except SQLAlchemyError as exc:
+                raise DatabaseInitializationError(
+                    "Database became unavailable during startup validation"
+                ) from exc
             self._initialized = True
 
     def _validate_privileged_user_exists(self) -> None:
@@ -416,8 +429,10 @@ class DatabaseManager:
                 count = conn.execute(
                     text("SELECT COUNT(*) FROM users WHERE role IN ('admin', 'trader')")
                 ).scalar_one()
-        except OperationalError:
-            return
+        except OperationalError as exc:
+            raise DatabaseInitializationError(
+                "Database unavailable while validating privileged users"
+            ) from exc
         if count:
             return
         message = (
@@ -637,6 +652,12 @@ class DatabaseManager:
                         "admin_bootstrap_existing_admin_updated",
                         email=_mask_email(settings.ADMIN_BOOTSTRAP_EMAIL),
                     )
+                    self._write_bootstrap_audit(
+                        conn,
+                        event_type="admin_bootstrap_promoted_existing",
+                        user_id=int(admin_row["id"]),
+                        previous_role=str(admin_row["role"]),
+                    )
                 else:
                     log_method = (
                         logger.info if str(admin_row["role"]) == "admin" else logger.warning
@@ -671,12 +692,56 @@ class DatabaseManager:
                     "admin_bootstrap_created",
                     email=_mask_email(settings.ADMIN_BOOTSTRAP_EMAIL),
                 )
+                created_id = conn.execute(
+                    text("SELECT id FROM users WHERE email = :email"),
+                    {"email": settings.ADMIN_BOOTSTRAP_EMAIL},
+                ).scalar_one()
+                self._write_bootstrap_audit(
+                    conn,
+                    event_type="admin_bootstrap_created",
+                    user_id=int(created_id),
+                    previous_role=None,
+                )
             except IntegrityError:
                 logger.warning(
                     "admin_bootstrap_duplicate",
                     email=settings.ADMIN_BOOTSTRAP_EMAIL,
                 )
                 return
+
+    def _write_bootstrap_audit(
+        self,
+        conn,
+        *,
+        event_type: str,
+        user_id: int,
+        previous_role: str | None,
+    ) -> None:
+        now = self.now_utc()
+        conn.execute(
+            text(
+                "INSERT INTO audit_trail "
+                "(timestamp, event_type, agent_state, details, trigger_source, created_at) "
+                "VALUES (:timestamp, :event_type, :agent_state, :details, "
+                ":trigger_source, :created_at)"
+            ),
+            {
+                "timestamp": now,
+                "event_type": event_type,
+                "agent_state": "security",
+                "details": json.dumps(
+                    {
+                        "user_id": user_id,
+                        "previous_role": previous_role,
+                        "new_role": "admin",
+                        "email": _mask_email(settings.ADMIN_BOOTSTRAP_EMAIL),
+                    },
+                    ensure_ascii=False,
+                ),
+                "trigger_source": "bootstrap",
+                "created_at": now,
+            },
+        )
 
     @contextmanager
     def session_scope(self, *, read_only: bool = False) -> Iterator[Session]:

@@ -17,6 +17,8 @@ services:
         "8",
         "--timeout",
         "330",
+        "--graceful-timeout",
+        "30",
         "bist_bot.wsgi:app",
       ]
     env_file:
@@ -54,7 +56,7 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:5000/health || exit 1"]
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:5000/livez || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3

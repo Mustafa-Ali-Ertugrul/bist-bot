@@ -29,7 +29,7 @@ gcloud run deploy $ApiServiceName `
     --allow-unauthenticated `
     --max-instances 1 `
     --command gunicorn `
-    --args "--bind,0.0.0.0:8080,--workers,1,--threads,8,--timeout,330,--forwarded-allow-ips=*,bist_bot.wsgi:app" `
+    --args "--bind,0.0.0.0:8080,--workers,1,--threads,8,--timeout,330,--graceful-timeout,30,--forwarded-allow-ips=*,bist_bot.wsgi:app" `
     --timeout 360 `
     --set-env-vars "PYTHONPATH=/app/src,DB_PATH=/tmp/bist_signals.db,RATE_LIMIT_STORAGE_URI=memory://,EXPECTED_INSTANCE_COUNT=1,WATCHLIST_SOURCE=bist30" `
     --set-secrets JWT_SECRET_KEY=${JwtSecretKey}:latest
