@@ -23,26 +23,31 @@ jobs:
           python-version: "3.11"
           cache: "pip"
           cache-dependency-path: |
-            requirements.txt
-            dev-requirements.txt
+            uv.lock
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install -r dev-requirements.txt
+          python -m pip install uv==0.11.16
+          uv sync --locked --dev
+
+      - name: Verify lock and generated requirements export
+        run: |
+          uv lock --check
+          uv export --format requirements.txt --locked --no-dev --no-emit-project --output-file /tmp/requirements.lock.txt
+          diff -u <(tail -n +3 requirements.lock.txt) <(tail -n +3 /tmp/requirements.lock.txt)
+          diff -u <(tail -n +3 requirements.txt) <(tail -n +3 /tmp/requirements.lock.txt)
 
       - name: Ruff lint
-        run: ruff check . --output-format=github
+        run: uv run --locked ruff check . --output-format=github
 
       - name: Ruff format check
-        run: ruff format --check .
+        run: uv run --locked ruff format --check .
 
       - name: Mypy type check
-        run: mypy src/bist_bot --ignore-missing-imports
+        run: uv run --locked mypy src/bist_bot --ignore-missing-imports
 
       - name: Compile check
-        run: python -m compileall src/bist_bot main.py dashboard.py streamlit_app.py
+        run: uv run --locked python -m compileall src/bist_bot main.py dashboard.py streamlit_app.py
 
   test:
     name: Tests (Python ${{ matrix.python-version }})
@@ -60,18 +65,16 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: "pip"
           cache-dependency-path: |
-            requirements.txt
-            dev-requirements.txt
+            uv.lock
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install -r dev-requirements.txt
+          python -m pip install uv==0.11.16
+          uv sync --locked --dev
 
       - name: Run pytest with coverage
         run: |
-          pytest tests/ -v --tb=short \
+          uv run --locked pytest tests/ -v --tb=short \
             --cov=src/bist_bot \
             --cov-report=xml \
             --cov-report=term-missing:skip-covered \
@@ -101,8 +104,8 @@ jobs:
 
       - name: Install security tools
         run: |
-          python -m pip install --upgrade pip
-          pip install pip-audit bandit[toml]
+          python -m pip install uv==0.11.16
+          uv sync --locked --dev
 
       - name: pip-audit (dependency CVE scan)
         run: |
@@ -115,10 +118,13 @@ jobs:
               fi
             done < .pip-audit-ignore
           fi
-          pip-audit --requirement requirements.txt --strict $ARGS
+          uv run --locked pip-audit --requirement requirements.lock.txt --require-hashes --strict $ARGS
 
       - name: Bandit (static security analysis)
-        run: bandit -r src/bist_bot -x tests -ll -f txt
+        run: uv run --locked bandit -r src/bist_bot -x tests -ll -f txt
+
+      - name: Bandit scripts (high-confidence medium+)
+        run: uv run --locked bandit -r scripts -ll -ii -f txt
 
       - name: Gitleaks (secret detection)
         uses: gitleaks/gitleaks-action@v2
