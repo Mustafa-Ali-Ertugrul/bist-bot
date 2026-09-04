@@ -28,6 +28,7 @@ _GAUGE_DEFAULTS = OrderedDict(
     {
         "bist_last_scan_duration_ms": 0.0,
         "bist_last_scan_scanned_count": 0.0,
+        "bist_auto_execute_migration_blocked": 0.0,
     }
 )
 

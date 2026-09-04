@@ -106,6 +106,34 @@ class OrderIntentsRepository:
 
         return cast(dict[str, Any] | None, self.manager.run_session(_read, read_only=True))
 
+    def list_reconcilable(self) -> list[dict[str, Any]]:
+        def _read(session):
+            rows = session.execute(
+                select(OrderIntentRecord)
+                .where(
+                    OrderIntentRecord.active_key.is_not(None),
+                    OrderIntentRecord.status.in_(("pending", "sent", "unknown")),
+                )
+                .order_by(OrderIntentRecord.created_at.asc())
+            ).scalars()
+            return [self._to_dict(row) for row in rows]
+
+        return cast(list[dict[str, Any]], self.manager.run_session(_read, read_only=True))
+
+    def is_broker_order_bound(self, broker_order_id: str, *, exclude_client_id: str) -> bool:
+        def _read(session):
+            row_id = session.execute(
+                select(OrderIntentRecord.id)
+                .where(
+                    OrderIntentRecord.broker_order_id == broker_order_id,
+                    OrderIntentRecord.client_id != exclude_client_id,
+                )
+                .limit(1)
+            ).scalar_one_or_none()
+            return row_id is not None
+
+        return bool(self.manager.run_session(_read, read_only=True))
+
     @staticmethod
     def _to_dict(row: OrderIntentRecord) -> dict[str, Any]:
         return {

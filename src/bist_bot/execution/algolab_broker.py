@@ -16,8 +16,9 @@ from __future__ import annotations
 
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from enum import Enum
 from typing import Any, Protocol, cast
 from uuid import uuid4
@@ -49,6 +50,10 @@ class OrderIntentsProtocol(Protocol):
     def update(self, client_id: str, **kwargs: Any) -> dict[str, Any] | None: ...
 
     def get_unresolved(self, ticker: str) -> dict[str, Any] | None: ...
+
+    def list_reconcilable(self) -> list[dict[str, Any]]: ...
+
+    def is_broker_order_bound(self, broker_order_id: str, *, exclude_client_id: str) -> bool: ...
 
 
 class _CircuitState(str, Enum):
@@ -131,6 +136,7 @@ class AlgoLabBroker(BaseExecutionProvider):
         order_intents: OrderIntentsProtocol | None = None,
         send_client_id: bool = False,
         reconcile_window_seconds: int = 180,
+        clock: Callable[[], datetime] | None = None,
     ) -> None:
         self.credentials = credentials
         self.endpoints = endpoints or AlgoLabEndpoints()
@@ -153,6 +159,7 @@ class AlgoLabBroker(BaseExecutionProvider):
         self.order_intents = order_intents
         self.send_client_id = send_client_id
         self.reconcile_window_seconds = max(1, reconcile_window_seconds)
+        self._clock = clock or (lambda: datetime.now(UTC))
 
     def authenticate(self) -> bool:
         if self._session_token:
@@ -226,7 +233,7 @@ class AlgoLabBroker(BaseExecutionProvider):
         stop_price: float | None = None,
     ) -> OrderResult:
         client_id = uuid4().hex
-        submitted_at = datetime.now(UTC)
+        submitted_at = self._normalize_datetime(self._clock())
         if self.order_intents is not None:
             unresolved = self.order_intents.get_unresolved(ticker)
             if unresolved is not None:
@@ -343,7 +350,19 @@ class AlgoLabBroker(BaseExecutionProvider):
         submitted_at: datetime,
     ) -> OrderResult:
         try:
-            daily_orders = self.get_daily_orders(submitted_at.astimezone(TRADING_TIMEZONE).date())
+            window = timedelta(seconds=self.reconcile_window_seconds)
+            trading_days = sorted(
+                {
+                    (submitted_at - window).astimezone(TRADING_TIMEZONE).date(),
+                    submitted_at.astimezone(TRADING_TIMEZONE).date(),
+                    (submitted_at + window).astimezone(TRADING_TIMEZONE).date(),
+                }
+            )
+            daily_orders = [
+                order
+                for trading_day in trading_days
+                for order in self.get_daily_orders(trading_day)
+            ]
         except Exception as exc:
             if self.order_intents is not None:
                 self.order_intents.update(
@@ -360,14 +379,30 @@ class AlgoLabBroker(BaseExecutionProvider):
                 f"Order {client_id} outcome is unknown; reconciliation failed"
             ) from exc
 
+        eligible_orders = [
+            order
+            for order in daily_orders
+            if not (
+                order.broker_order_id
+                and self.order_intents is not None
+                and self.order_intents.is_broker_order_bound(
+                    order.broker_order_id,
+                    exclude_client_id=client_id,
+                )
+            )
+        ]
         id_matches = (
-            [order for order in daily_orders if order.metadata.get("client_order_id") == client_id]
+            [
+                order
+                for order in eligible_orders
+                if order.metadata.get("client_order_id") == client_id
+            ]
             if self.send_client_id
             else []
         )
         matches = id_matches or [
             order
-            for order in daily_orders
+            for order in eligible_orders
             if order.ticker == ticker
             and order.side == side
             and order.order_type == order_type
@@ -379,6 +414,28 @@ class AlgoLabBroker(BaseExecutionProvider):
         ]
         if len(matches) == 1:
             match = matches[0]
+            if match.metadata.get("state_known") is False:
+                return self._keep_reconcile_unknown(
+                    client_id=client_id,
+                    ticker=ticker,
+                    reason=f"unknown broker order state: {match.metadata.get('raw_state')}",
+                )
+            if match.state in {OrderState.CANCELLED, OrderState.REJECTED}:
+                if self.order_intents is not None:
+                    self.order_intents.update(
+                        client_id,
+                        status="rejected",
+                        broker_order_id=match.broker_order_id,
+                        detail=f"broker history state={match.state.value}",
+                        release_lock=True,
+                    )
+                return OrderResult(
+                    accepted=False,
+                    order_id=client_id,
+                    broker_order_id=match.broker_order_id,
+                    state=match.state,
+                    message="Broker history confirms the order did not remain active.",
+                )
             if self.order_intents is not None:
                 self.order_intents.update(
                     client_id,
@@ -395,18 +452,11 @@ class AlgoLabBroker(BaseExecutionProvider):
                 message="Order reconciled after an ambiguous submission.",
             )
         if not matches:
-            if self.order_intents is not None:
-                self.order_intents.update(
-                    client_id,
-                    status="unknown",
-                    detail="not found in daily order history; manual resolution required",
-                )
-            self._alert_reconcile_required(
+            return self._keep_reconcile_unknown(
                 client_id=client_id,
                 ticker=ticker,
                 reason="no matching order in daily order history",
             )
-            raise RuntimeError(f"Order {client_id} outcome remains unknown; no history match found")
 
         if self.order_intents is not None:
             self.order_intents.update(
@@ -422,6 +472,50 @@ class AlgoLabBroker(BaseExecutionProvider):
         raise RuntimeError(
             f"Order {client_id} outcome remains unknown; {len(matches)} broker matches found"
         )
+
+    def _keep_reconcile_unknown(
+        self,
+        *,
+        client_id: str,
+        ticker: str,
+        reason: str,
+    ) -> OrderResult:
+        if self.order_intents is not None:
+            self.order_intents.update(
+                client_id,
+                status="unknown",
+                detail=f"{reason}; manual resolution required",
+                release_lock=False,
+            )
+        self._alert_reconcile_required(client_id=client_id, ticker=ticker, reason=reason)
+        raise RuntimeError(f"Order {client_id} outcome remains unknown; {reason}")
+
+    def reconcile_pending_intents(self) -> dict[str, int]:
+        summary = {"attempted": 0, "resolved": 0, "unknown": 0}
+        if self.order_intents is None:
+            return summary
+        for intent in self.order_intents.list_reconcilable():
+            summary["attempted"] += 1
+            created_at = self._normalize_datetime(intent["created_at"])
+            try:
+                self._reconcile_order(
+                    client_id=str(intent["client_id"]),
+                    ticker=str(intent["ticker"]),
+                    side=OrderSide(str(intent["side"])),
+                    quantity=float(intent["quantity"]),
+                    order_type=OrderType(str(intent["order_type"])),
+                    price=float(intent["price"]) if intent["price"] is not None else None,
+                    stop_price=(
+                        float(intent["stop_price"]) if intent["stop_price"] is not None else None
+                    ),
+                    submitted_at=created_at,
+                )
+            except RuntimeError:
+                summary["unknown"] += 1
+            else:
+                summary["resolved"] += 1
+        logger.info("startup_order_reconciliation_completed", **summary)
+        return summary
 
     @staticmethod
     def _same_optional_number(left: float | None, right: float | None) -> bool:
@@ -475,7 +569,13 @@ class AlgoLabBroker(BaseExecutionProvider):
                 created_at = datetime.min.replace(tzinfo=UTC)
         state_text = str(item.get("state", OrderState.SENT.value)).upper()
         state_aliases = {"EXECUTED": "FILLED", "COMPLETED": "FILLED", "CANCELED": "CANCELLED"}
-        state = OrderState(state_aliases.get(state_text, state_text))
+        normalized_state = state_aliases.get(state_text, state_text)
+        try:
+            state = OrderState(normalized_state)
+            state_known = True
+        except ValueError:
+            state = OrderState.CREATED
+            state_known = False
         client_order_id = str(item.get("client_order_id", "")) or None
         broker_order_id = str(item.get("order_id", "")) or None
         return Order(
@@ -492,8 +592,18 @@ class AlgoLabBroker(BaseExecutionProvider):
             average_fill_price=float(item.get("average_fill_price", 0.0)) or None,
             created_at=created_at,
             updated_at=created_at,
-            metadata={"client_order_id": client_order_id},
+            metadata={
+                "client_order_id": client_order_id,
+                "raw_state": state_text,
+                "state_known": state_known,
+            },
         )
+
+    @staticmethod
+    def _normalize_datetime(value: datetime) -> datetime:
+        if value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
+        return value.astimezone(UTC)
 
     @staticmethod
     def _alert_reconcile_required(*, client_id: str, ticker: str, reason: str) -> None:

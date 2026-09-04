@@ -416,6 +416,7 @@ class BrokerSettings:
     ALGOLAB_OPEN_ORDERS_URL: str = _get_str_env("ALGOLAB_OPEN_ORDERS_URL")
     ALGOLAB_ORDER_HISTORY_URL: str = _get_str_env("ALGOLAB_ORDER_HISTORY_URL")
     ALGOLAB_RECONCILE_WINDOW_SECONDS: int = _get_int_env("ALGOLAB_RECONCILE_WINDOW_SECONDS", 180)
+    ALGOLAB_RECONCILE_ON_STARTUP: bool = _get_bool_env("ALGOLAB_RECONCILE_ON_STARTUP", True)
     ALPACA_API_KEY: str = _get_str_env("ALPACA_API_KEY")
     ALPACA_SECRET_KEY: str = _get_str_env("ALPACA_SECRET_KEY")
     ALPACA_PAPER: bool = _get_bool_env("ALPACA_PAPER", True)

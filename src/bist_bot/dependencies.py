@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from functools import lru_cache
 
 from bist_bot.agent import TradingAgent
+from bist_bot.app_logging import get_logger
+from bist_bot.app_metrics import set_gauge
 from bist_bot.backtest import Backtester
 from bist_bot.config.settings import settings
 from bist_bot.data.fetcher import (
@@ -26,6 +28,8 @@ from bist_bot.risk import RiskManager
 from bist_bot.risk.circuit_breaker import CircuitBreaker
 from bist_bot.scanner import ScanService
 from bist_bot.strategy import StrategyEngine
+
+logger = get_logger(__name__, component="dependencies")
 
 
 @dataclass(frozen=True)
@@ -51,17 +55,14 @@ def build_app_container(
     backtester_factory: Callable[[], Backtester] | None = None,
     circuit_breaker: CircuitBreaker | None = None,
 ) -> AppContainer:
+    _report_auto_execute_migration_state()
     # Fail closed on dangerous/inconsistent risk, score, and timeout settings.
     settings.enforce_preflight_validation()
     validation_errors = settings.validate_all()
     if validation_errors:
-        from bist_bot.app_logging import get_logger
-
         # validate_all may still include provider/broker credential issues that are
         # environment-specific; log them but keep preflight hard-fail above.
-        get_logger(__name__, component="dependencies").warning(
-            "config_validation_errors", errors=validation_errors
-        )
+        logger.warning("config_validation_errors", errors=validation_errors)
     data_provider = _build_data_provider()
     quote_provider = BorsaIstanbulQuoteProvider(rate_limiter=_build_rate_limiter())
     watchlist = list(getattr(settings, "WATCHLIST", []) or [])
@@ -134,6 +135,21 @@ def build_app_container(
     )
 
 
+def _report_auto_execute_migration_state() -> bool:
+    blocked = bool(settings.AUTO_EXECUTE) and not bool(settings.AUTO_EXECUTE_ENABLED)
+    set_gauge("bist_auto_execute_migration_blocked", 1.0 if blocked else 0.0)
+    if blocked:
+        logger.warning(
+            "auto_execute_disabled_new_gate_required",
+            detail=(
+                "AUTO_EXECUTE=true is set, but AUTO_EXECUTE_ENABLED=false. "
+                "Order execution remains disabled until the new flag is explicitly enabled."
+            ),
+            migration_required=True,
+        )
+    return blocked
+
+
 def _build_broker(db: DataAccess | None = None) -> BaseExecutionProvider:
     """Build broker based on BROKER_MODE / BROKER_PROVIDER.
 
@@ -153,7 +169,7 @@ def _build_broker(db: DataAccess | None = None) -> BaseExecutionProvider:
     effective = provider if provider in {"algolab"} else mode
 
     if effective == "algolab":
-        return AlgoLabBroker(
+        algolab = AlgoLabBroker(
             AlgoLabCredentials(
                 api_key=settings.ALGOLAB_API_KEY,
                 username=settings.ALGOLAB_USERNAME,
@@ -176,6 +192,9 @@ def _build_broker(db: DataAccess | None = None) -> BaseExecutionProvider:
             send_client_id=settings.ALGOLAB_SEND_CLIENT_ID,
             reconcile_window_seconds=settings.ALGOLAB_RECONCILE_WINDOW_SECONDS,
         )
+        if not settings.ALGOLAB_DRY_RUN and settings.ALGOLAB_RECONCILE_ON_STARTUP:
+            algolab.reconcile_pending_intents()
+        return algolab
     if effective == "live":
         from bist_bot.execution.live import LiveBroker
 
