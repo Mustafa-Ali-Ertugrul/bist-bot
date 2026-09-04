@@ -947,9 +947,12 @@ def create_dashboard_app(
         if existing_intent is None:
             return jsonify({"status": "error", "message": "Order intent not found"}), 404
 
-        # Cross-check or parse filled quantity and average fill price for ack
+        # Cross-check or parse filled quantity and average fill price for ack.
+        # A full ack is only possible with broker-history verification; body
+        # values alone can only ever yield ack_unaccounted.
         filled_qty = data.get("filled_qty")
         avg_fill_price = data.get("avg_fill_price")
+        history_verified = False
 
         # Try pulling from broker history if broker is wired
         broker = get_broker()
@@ -970,6 +973,7 @@ def create_dashboard_app(
                     None,
                 )
                 if match:
+                    history_verified = True
                     history_filled = float(getattr(match, "filled_quantity", 0.0) or 0.0)
                     history_avg = getattr(match, "average_fill_price", None)
                     if filled_qty is not None and abs(float(filled_qty) - history_filled) > 1e-6:
@@ -994,10 +998,19 @@ def create_dashboard_app(
                         filled_qty = history_filled
                     if avg_fill_price is None:
                         avg_fill_price = history_avg
+                else:
+                    logger.warning(
+                        "resolve_broker_order_not_in_history",
+                        order_id=broker_order_id,
+                    )
             except Exception as exc:
                 logger.warning("resolve_broker_history_check_failed", error=str(exc))
 
-        # If resolution is ack, require accounting if possible
+        # If resolution is ack, require accounting if possible.
+        # Without broker-history verification a full ack is never granted.
+        if resolution == "ack" and not history_verified:
+            resolution = "ack_unaccounted"
+            reason = f"{reason} (unaccounted: broker history unavailable for verification)"
         if resolution == "ack":
             if filled_qty is None or avg_fill_price is None:
                 resolution = "ack_unaccounted"
