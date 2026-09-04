@@ -153,6 +153,9 @@ class ScanService:
 
     def _auto_execute_signals(self, signals: list[Signal]) -> None:
         """Submit actionable signals to the configured execution service."""
+        if getattr(self.settings, "AUTO_EXECUTE_ENABLED", False) is not True:
+            logger.info("auto_execute_disabled_by_independent_gate")
+            return
         self.execution_service.auto_execute_signals(signals)
 
     def _check_signal_changes(self, signals: list[Signal]) -> None:

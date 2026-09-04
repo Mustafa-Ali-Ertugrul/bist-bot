@@ -3,17 +3,25 @@
 from __future__ import annotations
 
 import concurrent.futures
+import json
 import re
 import secrets
 import threading
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta, timezone
+from functools import wraps
 from typing import Any, cast
 
-from flask import Flask, jsonify, request
+from flask import Flask, g, has_request_context, jsonify, request
 from flask_cors import CORS
-from flask_jwt_extended import JWTManager, create_access_token, jwt_required
+from flask_jwt_extended import (
+    JWTManager,
+    create_access_token,
+    get_jwt,
+    get_jwt_identity,
+    jwt_required,
+)
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from sqlalchemy import text
@@ -237,9 +245,11 @@ def create_dashboard_app(
     app.config["broker"] = broker
     app.config["circuit_breaker"] = circuit_breaker
     app.config["JWT_SECRET_KEY"] = settings.JWT_SECRET_KEY
-    app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(hours=1)
+    access_token_minutes = max(1, min(int(settings.JWT_ACCESS_TOKEN_MINUTES), 15))
+    app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(minutes=access_token_minutes)
     app.config["RATELIMIT_STORAGE_URI"] = settings.RATE_LIMIT_STORAGE_URI
     app.config["ALLOW_PUBLIC_REGISTRATION"] = settings.ALLOW_PUBLIC_REGISTRATION
+    app.config["RBAC_MODE"] = settings.RBAC_MODE
     app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024  # 1MB payload cap to mitigate DoS
 
     JWTManager(app)
@@ -258,36 +268,147 @@ def create_dashboard_app(
     def get_broker() -> Any | None:
         return app.config["broker"]
 
+    def _request_id() -> str:
+        existing = getattr(g, "request_id", None)
+        if existing:
+            return str(existing)
+        supplied = request.headers.get("X-Request-ID", "").strip()
+        if supplied and re.fullmatch(r"[A-Za-z0-9._:-]{1,128}", supplied):
+            g.request_id = supplied
+        else:
+            g.request_id = secrets.token_hex(12)
+        return str(g.request_id)
+
+    def _write_security_audit(event_type: str, details: dict[str, Any]) -> None:
+        manager = getattr(get_db(), "manager", None)
+        if manager is None:
+            return
+        try:
+            with manager.engine.begin() as conn:
+                conn.execute(
+                    text(
+                        "INSERT INTO audit_trail "
+                        "(timestamp, event_type, agent_state, details, trigger_source, created_at) "
+                        "VALUES (:timestamp, :event_type, :agent_state, :details, "
+                        ":trigger_source, :created_at)"
+                    ),
+                    {
+                        "timestamp": datetime.now(UTC),
+                        "event_type": event_type,
+                        "agent_state": "security",
+                        "details": json.dumps(details, ensure_ascii=False, default=str),
+                        "trigger_source": "http",
+                        "created_at": datetime.now(UTC),
+                    },
+                )
+        except SQLAlchemyError:
+            logger.exception("security_audit_write_failed", event_type=event_type)
+
+    def _db_user_for_identity(identity: str) -> dict[str, Any] | None:
+        manager = getattr(get_db(), "manager", None)
+        if manager is None:
+            return None
+        try:
+            user_id = int(identity)
+        except (TypeError, ValueError):
+            return None
+        try:
+            with manager.engine.connect() as conn:
+                row = (
+                    conn.execute(
+                        text("SELECT id, email, role FROM users WHERE id = :id LIMIT 1"),
+                        {"id": user_id},
+                    )
+                    .mappings()
+                    .first()
+                )
+        except SQLAlchemyError:
+            logger.exception("rbac_user_lookup_failed", user_id=user_id)
+            return None
+        return dict(row) if row is not None else None
+
+    def require_roles(*allowed_roles: str):
+        """Require a current DB role, with a warn-only migration mode."""
+
+        allowed = frozenset(allowed_roles)
+
+        def decorator(view):
+            @wraps(view)
+            def wrapped(*args, **kwargs):
+                claims = get_jwt()
+                claim_role = str(claims.get("role", "") or "").lower()
+                identity = str(get_jwt_identity() or "")
+                db_user = _db_user_for_identity(identity)
+                db_role = str((db_user or {}).get("role", "") or "").lower()
+                authorized = bool(claim_role in allowed and db_role in allowed)
+                g.rbac_authorized = authorized
+                request_id = _request_id()
+                audit_details = {
+                    "user_id": identity or None,
+                    "claim_role": claim_role or None,
+                    "db_role": db_role or None,
+                    "route": request.path,
+                    "request_id": request_id,
+                    "allowed_roles": sorted(allowed),
+                }
+                if not authorized:
+                    mode = str(app.config.get("RBAC_MODE", "warn") or "warn").lower()
+                    event_type = "rbac_access_denied" if mode == "enforce" else "rbac_would_deny"
+                    logger.warning(
+                        event_type,
+                        **audit_details,
+                    )
+                    _write_security_audit(event_type, audit_details)
+                    if mode == "enforce":
+                        return jsonify({"status": "error", "message": "Forbidden"}), 403
+                else:
+                    logger.info(
+                        "rbac_access_granted",
+                        **audit_details,
+                    )
+                    _write_security_audit("rbac_access_granted", audit_details)
+                return view(*args, **kwargs)
+
+            return wrapped
+
+        return decorator
+
     def get_scan_service() -> ScanService:
         factory = app.config.get("scan_service_factory")
         if callable(factory):
             return factory()
+        scan_settings = settings.replace()
+        if has_request_context() and getattr(g, "rbac_authorized", True) is False:
+            scan_settings = scan_settings.replace(AUTO_EXECUTE_ENABLED=False, AUTO_EXECUTE=False)
         return ScanService(
             get_fetcher(),
             get_engine(),
             SilentNotifier(),
             get_db(),
             broker=get_broker(),
-            settings=settings.replace(),
+            settings=scan_settings,
             circuit_breaker=app.config.get("circuit_breaker"),
         )
 
     # Process-level state to track actively executing scan jobs and prevent duplicate/stale writes
     _scan_in_flight = threading.Event()
 
-    def verify_admin(email: str, password: str) -> bool:
+    def authenticate_user(email: str, password: str) -> dict[str, Any] | None:
         logger.info("verify_admin_start", email=_mask_email(email))
         manager = getattr(get_db(), "manager", None)
         if manager is None:
             logger.warning("login_db_unavailable", email=_mask_email(email))
-            return False
+            return None
         try:
             logger.info("verify_admin_db_transaction_start", email=_mask_email(email))
             with manager.engine.begin() as conn:
                 logger.info("verify_admin_select_user_start", email=_mask_email(email))
                 row = (
                     conn.execute(
-                        text("SELECT id, password_hash FROM users WHERE email = :email LIMIT 1"),
+                        text(
+                            "SELECT id, email, password_hash, role "
+                            "FROM users WHERE email = :email LIMIT 1"
+                        ),
                         {"email": email},
                     )
                     .mappings()
@@ -296,17 +417,17 @@ def create_dashboard_app(
                 logger.info("verify_admin_select_user_end", email=_mask_email(email))
         except SQLAlchemyError as exc:
             logger.error("verify_admin_db_error", email=_mask_email(email), error=str(exc))
-            return False
+            return None
         if row is None:
             logger.info("login_user_not_found", email=_mask_email(email))
             verify_and_rehash_password(_DUMMY_PASSWORD, _DUMMY_HASH)
-            return False
+            return None
         logger.info("verify_admin_password_check_start", email=_mask_email(email))
         verified, upgraded_hash = verify_and_rehash_password(password, str(row["password_hash"]))
         logger.info("verify_admin_password_check_end", email=_mask_email(email))
         if not verified:
             logger.info("login_password_invalid", email=_mask_email(email))
-            return False
+            return None
         if upgraded_hash is not None:
             try:
                 logger.info("verify_admin_hash_upgrade_start", email=_mask_email(email))
@@ -327,17 +448,21 @@ def create_dashboard_app(
                     "verify_admin_hash_upgrade_failed", email=_mask_email(email), error=str(exc)
                 )
         logger.info("login_success", email=_mask_email(email))
-        return True
+        return {
+            "id": int(row["id"]),
+            "email": str(row["email"]),
+            "role": str(row["role"] or "user").lower(),
+        }
 
-    def create_user(email: str, password: str) -> tuple[bool, str]:
+    def create_user(email: str, password: str) -> tuple[bool, str, dict[str, Any] | None]:
         manager = getattr(get_db(), "manager", None)
         if manager is None:
-            return False, get_message("api.register_error")
+            return False, get_message("api.register_error"), None
         parts = email.rsplit("@", 1)
         if len(parts) != 2 or not parts[0] or "." not in parts[1] or " " in email:
-            return False, get_message("api.invalid_email")
+            return False, get_message("api.invalid_email"), None
         if len(password) < 12:
-            return False, get_message("api.password_too_short")
+            return False, get_message("api.password_too_short"), None
 
         timestamp = datetime.now(TR)
         try:
@@ -356,10 +481,16 @@ def create_dashboard_app(
                         "updated_at": timestamp,
                     },
                 )
+                user_id = int(
+                    conn.execute(
+                        text("SELECT id FROM users WHERE email = :email LIMIT 1"),
+                        {"email": email},
+                    ).scalar_one()
+                )
         except IntegrityError:
-            return False, get_message("api.email_already_exists")
+            return False, get_message("api.email_already_exists"), None
 
-        return True, ""
+        return True, "", {"id": user_id, "email": email, "role": "user"}
 
     @app.after_request
     def add_security_headers(response):
@@ -595,7 +726,8 @@ def create_dashboard_app(
             ), 401
 
         logger.info("api_login_attempt", email=_mask_email(email))
-        if not verify_admin(email, password):
+        user = authenticate_user(email, password)
+        if user is None:
             logger.warning(
                 "api_login_failed", reason="invalid_credentials", email=_mask_email(email)
             )
@@ -604,8 +736,18 @@ def create_dashboard_app(
             ), 401
 
         logger.info("api_login_succeeded", email=_mask_email(email))
-        token = create_access_token(identity=email)
-        return jsonify({"status": "ok", "access_token": token, "expires_in_hours": 1})
+        token = create_access_token(
+            identity=str(user["id"]),
+            additional_claims={"role": user["role"], "email": user["email"]},
+        )
+        return jsonify(
+            {
+                "status": "ok",
+                "access_token": token,
+                "expires_in_hours": access_token_minutes / 60,
+                "expires_in_seconds": access_token_minutes * 60,
+            }
+        )
 
     @app.route("/api/auth/register", methods=["POST"])
     @limiter.limit("5 per minute", key_func=_auth_rate_limit_key)
@@ -618,15 +760,30 @@ def create_dashboard_app(
         payload = request.get_json(silent=True) or {}
         email = str(payload.get("email", "")).strip().lower()
         password = str(payload.get("password", ""))
-        success, message = create_user(email, password)
+        success, message, user = create_user(email, password)
         if not success:
             return jsonify({"status": "error", "message": message}), 400
 
-        token = create_access_token(identity=email)
-        return jsonify({"status": "ok", "access_token": token, "expires_in_hours": 1}), 201
+        assert user is not None
+        token = create_access_token(
+            identity=str(user["id"]),
+            additional_claims={"role": user["role"], "email": user["email"]},
+        )
+        return (
+            jsonify(
+                {
+                    "status": "ok",
+                    "access_token": token,
+                    "expires_in_hours": access_token_minutes / 60,
+                    "expires_in_seconds": access_token_minutes * 60,
+                }
+            ),
+            201,
+        )
 
     @app.route("/api/scan", methods=["POST"])
     @jwt_required()
+    @require_roles("admin", "trader")
     @limiter.limit("10 per minute")
     def api_scan():
         start_time = time.time()
@@ -728,6 +885,57 @@ def create_dashboard_app(
                 component="dashboard",
             )
             return jsonify({"status": "error", "message": "scan provider unavailable"}), 500
+
+    @app.route("/api/orders/intents/<client_id>/resolve", methods=["POST"])
+    @jwt_required()
+    @require_roles("admin", "trader")
+    @limiter.limit("10 per minute")
+    def resolve_order_intent(client_id: str):
+        data = request.get_json(silent=True) or {}
+        status = str(data.get("status", "")).lower()
+        if status not in {"ack", "rejected"}:
+            return jsonify({"status": "error", "message": "status must be ack or rejected"}), 400
+        repository = getattr(get_db(), "order_intents", None)
+        if repository is None:
+            return jsonify({"status": "error", "message": "Order intent store unavailable"}), 503
+        detail = str(data.get("detail", "manual operator resolution")).strip()
+        row = repository.update(
+            client_id,
+            status=status,
+            detail=detail or "manual operator resolution",
+            release_lock=True,
+        )
+        if row is None:
+            return jsonify({"status": "error", "message": "Order intent not found"}), 404
+        claims = get_jwt()
+        logger.warning(
+            "order_intent_manually_resolved",
+            order_id=client_id,
+            resolution=status,
+            user_id=str(get_jwt_identity() or ""),
+            role=claims.get("role"),
+            route=request.path,
+            request_id=_request_id(),
+        )
+        _write_security_audit(
+            "order_intent_manually_resolved",
+            {
+                "user_id": str(get_jwt_identity() or ""),
+                "role": claims.get("role"),
+                "route": request.path,
+                "request_id": _request_id(),
+                "client_id": client_id,
+                "resolution": status,
+            },
+        )
+        return jsonify(
+            {
+                "status": "ok",
+                "client_id": client_id,
+                "resolution": status,
+                "lock_released": True,
+            }
+        )
 
     _TICKER_BASE_RE = re.compile(r"^[A-Z0-9]{1,10}$")
 

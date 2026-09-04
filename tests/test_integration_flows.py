@@ -414,7 +414,12 @@ def test_scan_orchestration_auto_execute_creates_sent_order(tmp_path) -> None:
                 {"notify_scan_results": lambda self, signals, actionable, total: None},
             )(),
         ),
-        settings=settings.replace(AUTO_EXECUTE=True, PAPER_MODE=False, AGENT_ENABLED=False),
+        settings=settings.replace(
+            AUTO_EXECUTE=True,
+            AUTO_EXECUTE_ENABLED=True,
+            PAPER_MODE=False,
+            AGENT_ENABLED=False,
+        ),
     )
 
     result = service.scan_once()
@@ -475,7 +480,12 @@ def test_scan_orchestration_marks_order_rejected_when_broker_fails(tmp_path) -> 
                 {"notify_scan_results": lambda self, signals, actionable, total: None},
             )(),
         ),
-        settings=settings.replace(AUTO_EXECUTE=True, PAPER_MODE=False, AGENT_ENABLED=False),
+        settings=settings.replace(
+            AUTO_EXECUTE=True,
+            AUTO_EXECUTE_ENABLED=True,
+            PAPER_MODE=False,
+            AGENT_ENABLED=False,
+        ),
     )
 
     service.scan_once()
