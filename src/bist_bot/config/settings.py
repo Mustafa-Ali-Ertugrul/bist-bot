@@ -191,14 +191,25 @@ class Settings:
                 "Both ADMIN_BOOTSTRAP_EMAIL and ADMIN_BOOTSTRAP_PASSWORD_HASH must be set together"
             )
         if self.ADMIN_BOOTSTRAP_PASSWORD_HASH:
-            h = str(self.ADMIN_BOOTSTRAP_PASSWORD_HASH).strip()
-            # Valid hashes produced by Werkzeug or bcrypt: scrypt:... or $2b$... or pbkdf2:...
-            valid_prefixes = ("scrypt:", "pbkdf2:", "$2b$", "$2a$", "$2y$", "argon2:")
-            if not any(h.startswith(p) for p in valid_prefixes) or len(h) < 20:
+            # Validate with the same acceptance set as the login verifier
+            # (auth/passwords.verify_and_rehash_password): malformed hashes must
+            # fail at boot, never surface as a permanently-locked admin.
+            import bcrypt
+            from werkzeug.security import check_password_hash
+
+            candidate = str(self.ADMIN_BOOTSTRAP_PASSWORD_HASH).strip()
+            try:
+                if candidate.startswith(("scrypt:", "pbkdf2:")):
+                    check_password_hash(candidate, "__bootstrap_format_probe__")
+                elif candidate.startswith(("$2a$", "$2b$", "$2y$")):
+                    bcrypt.checkpw(b"__bootstrap_format_probe__", candidate.encode("utf-8"))
+                else:
+                    raise ValueError(f"unsupported hash format: {candidate[:12]!r}")
+            except ValueError as exc:
                 raise RuntimeError(
                     "ADMIN_BOOTSTRAP_PASSWORD_HASH has an invalid format; "
-                    "pre-computed scrypt/bcrypt hash required (e.g. 'scrypt:32768:8:1$...')"
-                )
+                    "pre-computed scrypt/pbkdf2/bcrypt hash required"
+                ) from exc
         return bool(self.ADMIN_BOOTSTRAP_EMAIL and self.ADMIN_BOOTSTRAP_PASSWORD_HASH)
 
     def validate_broker_config(self) -> None:
