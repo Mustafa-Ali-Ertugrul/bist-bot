@@ -4,6 +4,12 @@ Scoring criteria (also documented in docs/security/phase0_phase1_report.md):
 - fixed / accepted: weight x 0.0 (closed)
 - mitigated_warn: weight x 0.5 (partially mitigated, enforcement pending)
 - open: weight x 1.0
+
+Finding 2 (order idempotency) graduates from mitigated_warn to fixed only when
+ALL of these hold: pending_open == sent_open == unknown_open ==
+ack_unaccounted_open == 0 on the live ledger AND the vendor contract
+(client_order_id echo, cancel-404 semantics, status dictionary) is verified in
+live staging. Until then it stays mitigated_warn regardless of code state.
 """
 
 from __future__ import annotations
@@ -83,6 +89,8 @@ def calculate() -> dict[str, object]:
         "notes": [
             "mitigated_warn counts at half weight until enforcement is deployed",
             "finding 2 is fail-closed when daily history is unavailable",
+            "finding 2 graduates to fixed only when pending/sent/unknown/ack_unaccounted "
+            "open counts are all 0 AND the vendor contract is verified in live staging",
             "the historical leaked API key is tracked separately as an incident blocker",
         ],
     }

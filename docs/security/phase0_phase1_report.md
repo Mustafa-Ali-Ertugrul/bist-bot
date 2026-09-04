@@ -245,6 +245,8 @@ public key; manifests are small JSON files so re-signing is cheap and atomic per
 | Area | Implementation Focus | Test Name | File |
 |---|---|---|---|
 | A.1 | Double reconcile → single position change (CAS) | `test_double_reconcile_produces_single_position_change` | `tests/test_reconciled_fill.py` |
+| A.1 | SELL replay after close → ack, no second PnL (exit_order_id) | `test_sell_replay_after_close_returns_ack_without_second_pnl` | `tests/test_reconciled_fill.py` |
+| A.1 | CAS loser writes nothing | `test_update_conditional_loser_writes_nothing` | `tests/test_reconciled_fill.py` |
 | A.1 | Reconciled SELL loss lands in position ledger | `test_reconciled_sell_loss_visible_in_position_ledger` | `tests/test_reconciled_fill.py` |
 | A.1 | SELL partial quantity → `ack_unaccounted` (no reduce path) | `test_reconciled_sell_partial_quantity_is_unaccounted` | `tests/test_reconciled_fill.py` |
 | A.1 | Manual resolve without broker history → `ack_unaccounted` | `test_manual_resolve_without_broker_history_is_unaccounted` | `tests/test_reconciled_fill.py` |
@@ -264,6 +266,30 @@ public key; manifests are small JSON files so re-signing is cheap and atomic per
 | RBAC | Trader cannot resolve intent (403) | `test_manual_order_resolution_requires_admin_and_strong_confirmation` | `tests/test_scan_authz.py` |
 | RBAC | Admin can resolve intent (200) | `test_manual_order_resolution_requires_admin_and_strong_confirmation` | `tests/test_scan_authz.py` |
 | RBAC | Manual resolve history mismatch (409) | `test_manual_resolve_mismatch_with_broker_history_returns_409` | `tests/test_reconciled_fill.py` |
+| RBAC | Rejected with fills → 409, lock kept | `test_manual_resolve_rejected_with_fills_returns_409_and_keeps_lock` | `tests/test_scan_authz.py` |
+| RBAC | Rejected while open → 409 | `test_manual_resolve_rejected_while_open_returns_409` | `tests/test_scan_authz.py` |
+| RBAC | Rejected without history → 503 | `test_manual_resolve_rejected_without_history_returns_503` | `tests/test_scan_authz.py` |
+| RBAC | Rejected terminal zero-fill → 200, lock released | `test_manual_resolve_rejected_terminal_zero_fill_releases_lock` | `tests/test_scan_authz.py` |
+| DB | `ack_unaccounted` + held `ack` keep DB symbol lock (incl. restart) | `test_ack_unaccounted_and_ack_keep_db_symbol_lock` | `tests/test_algolab_idempotency.py` |
+| A.7 | Network-only replay failure never exits worker | `test_background_replay_network_error_does_not_trigger_exit` | `tests/test_reconciled_fill.py` |
+
+## Migration execution point (D.7 answer)
+
+`alembic upgrade head` runs at **deploy time only, never in the application worker**:
+worker startup runs `Base.metadata.create_all` (idempotent safety net) plus the
+Python-level legacy-schema/bootstrap steps. `alembic.ini` carries no hardcoded URL;
+`env.py` resolves `DATABASE_URL` / `BIST_BOT_DATABASE_URL` / `DB_PATH` at runtime
+(a hardcoded `sqlite:///bist_signals.db` that silently shadowed the environment was
+removed). Deploy paths: `cloudrun/deploy.ps1` runs a gated `bist-bot-migrate` Cloud Run
+Job (`alembic upgrade head`, `--wait`) when `MigrateDatabaseUrl` is non-sqlite, and skips
+it for the ephemeral profile; Compose/inventory runs use an explicit
+`docker compose run --rm bot alembic upgrade head` step (as in the fresh-env smoke).
+The 30x2s startup-probe budget therefore only needs to cover DB connect + bootstrap +
+app import. Fresh-database proof (2026-09-04): SQLite `upgrade head` + `alembic check`
+exit 0 with `create_all` noop; fresh Postgres `upgrade head` + `alembic check` exit 0
+after the `uq` naming-convention alignment (no migration files touched). The remaining
+SQLite-only unique-constraint reflection gap is fenced by a documented dialect-scoped
+`include_object` carve-out in `env.py`; PostgreSQL is the authoritative drift gate.
 
 ## Fresh-environment smoke verification (executed 2026-09-04, `-p bist-smoke`)
 
@@ -334,8 +360,18 @@ docker compose -p bist-smoke down -v
   and rotation is the only real fix (rewrite is hygiene).
 - Artifact Registry inventory failed because billing is disabled for the configured GCP project;
   old image deletion remains blocked.
+- Patch-set quarantine (2026-09-04): `gitleaks detect --no-git --source patches` found 9
+  candidates across the retired `security-phase1-*` / `full-18` / `full-24` sets — all verified as
+  test dummies (`test_secret_key_...`, also present in the committed tree and allowlisted by
+  `.gitleaks.toml`) or an already-replaced docs placeholder. No patch file contained the leaked
+  `opencode.json` key (the `16d5fbc` deletion diff was never part of any patch dir). All retired
+  sets were deleted from disk; the handoff artifact is a freshly generated, rescanned clean series
+  (`patches/security-phase1-clean/`, 0 findings with repo config).
+- A disposable rewrite mirror and replace-text helper used during verification were deleted.
+  The labeled pre-rewrite bundle (`%TEMP%/opencode/bist-bot-before-rewrite.bundle`, verified)
+  is retained as the sole recovery copy until the incident closes, then must be deleted.
 - Rotation, provider usage/billing review, fork notification, history rewrite, GitHub cache cleanup,
-  and collaborator reclone remain owner actions.
+  and collaborator reclone remain owner actions. No rewrite or force-push was performed in this run.
 
 ## Enforcement gates
 

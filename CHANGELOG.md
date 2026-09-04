@@ -19,8 +19,14 @@ Tum degisiklikler chronolojik sirayla listelenir.
 - AlgoLab startup reconcile eklendi; bagli broker emirleri eslestirmeden dislanir, broker durumlari ack/rejected/unknown olarak map edilir.
 - DB kesintisinde WSGI degraded liveness (`/livez` 200, `/readyz` ve `/health` 503) eklendi.
 - Degraded worker `DEGRADED_MAX_SECONDS` (varsayilan 300) sonunda SIGTERM ile sonlanir; Gunicorn master temiz worker acar.
+- Cancel-404 semantiği: remainder cancel sonrasi history yeniden okunur, muhasebe ikinci okumayla yapilir; 404 asla basari sayilmaz.
+- `ALGOLAB_STATUS_MAP` (JSON) broker durum eslemesi; hedefler kapali kume ile startup'ta dogrulanir.
+- `order_intents_unaccounted_open` gauge ve `reconcile_startup_failed_total` sayaci eklendi.
 - Reconcile muhasebesi eklendi: dogrulanmis dolumlar `orders`/`live_positions` defterlerine normal fill yoluyla ayni kanaldan islenir; eksik veri `ack_unaccounted` + kilit birakir.
 - Migration note (davranis degisikligi): `CANCELLED` artik kosulsuz kilit acmaz; `filled_qty > 0` ise muhasebeye gider. Kismi dolumlarda kalan bacagi otomatik iptal icin `ALGOLAB_RECONCILE_CANCEL_REMAINDER=true` (varsayilan) ayarlayin; kapaliysa `ack_unaccounted` uretilir.
+- Migration note: manuel `resolve rejected` yalniz broker history terminal CANCELLED/REJECTED + sifir dolum gosterirse kabul edilir; dolu/acik emirde 409, history yoksa 503.
+- Migration note: `ADMIN_BOOTSTRAP_PASSWORD_HASH` formati startup'ta login verifier ile dogrulanir; bozuk placeholder hash boot'u dusurur.
+- `alembic.ini` artik hardcoded sqlite URL icermez; URL her zaman DATABASE_URL/BIST_BOT_DATABASE_URL/DB_PATH ortamindan cozülur. Migration'lar deploy adiminda (`deploy.ps1` Cloud Run Job) calisir, uygulama startup'inda degil.
 - Migration note: broker durum eslemesi `ALGOLAB_STATUS_MAP` (JSON) ile override edilebilir; gecersiz hedef startup'ta fail-closed.
 - Migration note: `ADMIN_BOOTSTRAP_PASSWORD_HASH` formati startup'ta login verifier ile dogrulanir; bozuk placeholder hash boot'u dusurur.
 - Migration note: existing deployments with `AUTO_EXECUTE=true` must explicitly set
