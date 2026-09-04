@@ -953,6 +953,9 @@ def create_dashboard_app(
         filled_qty = data.get("filled_qty")
         avg_fill_price = data.get("avg_fill_price")
         history_verified = False
+        history_error = False
+        history_state: str | None = None
+        history_filled: float | None = None
 
         # Try pulling from broker history if broker is wired
         broker = get_broker()
@@ -976,6 +979,7 @@ def create_dashboard_app(
                     history_verified = True
                     history_filled = float(getattr(match, "filled_quantity", 0.0) or 0.0)
                     history_avg = getattr(match, "average_fill_price", None)
+                    history_state = str(getattr(match.state, "value", match.state))
                     if filled_qty is not None and abs(float(filled_qty) - history_filled) > 1e-6:
                         return jsonify(
                             {
@@ -1004,7 +1008,43 @@ def create_dashboard_app(
                         order_id=broker_order_id,
                     )
             except Exception as exc:
+                history_error = True
                 logger.warning("resolve_broker_history_check_failed", error=str(exc))
+        else:
+            history_error = True
+
+        # A filled order must never be hidden behind a rejected resolution.
+        if resolution == "rejected":
+            never_submitted = (
+                str(existing_intent.get("status", "")).lower() == "pending"
+                and not existing_intent.get("broker_order_id")
+                and not broker_order_id
+            )
+            if not never_submitted:
+                if history_error or not history_verified:
+                    return jsonify(
+                        {
+                            "status": "error",
+                            "message": "Broker history unavailable; terminal state cannot be "
+                            "verified. Use ack_unaccounted instead.",
+                        }
+                    ), 503
+            if (history_filled or 0.0) > 0:
+                return jsonify(
+                    {
+                        "status": "error",
+                        "message": "Broker history shows fills; a filled order cannot be "
+                        "resolved as rejected. Use ack or ack_unaccounted.",
+                    }
+                ), 409
+            if history_state not in {"CANCELLED", "REJECTED"}:
+                return jsonify(
+                    {
+                        "status": "error",
+                        "message": f"Broker history state is {history_state}; only terminal "
+                        "CANCELLED/REJECTED with zero fills may resolve as rejected.",
+                    }
+                ), 409
 
         # If resolution is ack, require accounting if possible.
         # Without broker-history verification a full ack is never granted.

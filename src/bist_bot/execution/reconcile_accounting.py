@@ -30,6 +30,35 @@ class ReconcileAccountingService:
         self.db = db
         self.position_manager = position_manager
 
+    def _find_closed_by_exit_order(self, order_db_id: int) -> dict[str, Any] | None:
+        """Return the CLOSED position row for an exit order, if exactly one exists."""
+        from sqlalchemy import text
+
+        manager = getattr(self.db, "manager", None)
+        engine = getattr(manager, "engine", None) if manager is not None else None
+        if engine is None:
+            return None
+        try:
+            with engine.connect() as conn:
+                row = (
+                    conn.execute(
+                        text(
+                            "SELECT id, realized_pnl FROM live_positions "
+                            "WHERE exit_order_id = :order_db_id AND state = 'CLOSED' "
+                            "LIMIT 2"
+                        ),
+                        {"order_db_id": order_db_id},
+                    )
+                    .mappings()
+                    .all()
+                )
+        except Exception:
+            logger.warning("reconcile_closed_position_lookup_failed", order_db_id=order_db_id)
+            return None
+        if len(row) != 1:
+            return None
+        return dict(row[0])
+
     def record_fill(
         self,
         *,
@@ -161,6 +190,16 @@ class ReconcileAccountingService:
         if side_str in {"SELL", OrderSide.SELL.value}:
             pos = self.position_manager.get_position(ticker)
             if not pos:
+                # Crash-recovery: a previous attempt may already have closed the
+                # position (close committed, intent CAS lost). The close is
+                # keyed by exit_order_id == order_db_id, so a replay finds it
+                # and returns ack WITHOUT writing a second PnL row.
+                if order_db_id is not None and self._find_closed_by_exit_order(int(order_db_id)):
+                    return AccountingOutcome(
+                        success=True,
+                        status="ack",
+                        detail=f"position already closed by order {order_db_id}",
+                    )
                 inc_counter("order_intents_unaccounted_total")
                 return AccountingOutcome(
                     success=False,
