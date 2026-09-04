@@ -293,8 +293,9 @@ PowerShell reproduction (throwaway secrets only):
 
 ```powershell
 $env:PORT_OVERRIDE = "5005"
+# Throwaway values only — never reuse or commit real secrets.
 $env:JWT_SECRET_KEY = "<throwaway-jwt-secret-min-32-chars>"
-$env:GRAFANA_ADMIN_PASSWORD = "smoke-admin-pass"
+$env:GRAFANA_ADMIN_PASSWORD = "<throwaway-grafana-pass>"
 $env:ADMIN_BOOTSTRAP_EMAIL = "smoke-admin@test.local"
 $env:ADMIN_BOOTSTRAP_PASSWORD_HASH = "scrypt:32768:8:1$smoke$dummyhashplaceholderforvalidationonly"
 $env:RBAC_MODE = "enforce"
