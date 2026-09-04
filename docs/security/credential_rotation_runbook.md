@@ -12,7 +12,9 @@
 - Working-tree scan found four redacted findings in the ignored local `.env`. These must remain
   local and must not be added to Git or container contexts.
 - Artifact Registry enumeration is blocked because billing is disabled on the configured GCP
-  project. Existing image inventory and deletion cannot yet be completed.
+  project. Existing image inventory and deletion cannot yet be completed. Plan the deletion step
+  **before** re-enabling billing/redeploying: enable billing, list and delete old image revisions
+  that may contain the tracked `opencode.json`, then deploy fresh images.
 
 ## Stage 1 — Provider-side containment (owner action, do first)
 
@@ -71,7 +73,9 @@ The force-push command is intentionally not executed by this remediation run.
 ## Stage 4 — After the rewrite
 
 1. Ask GitHub Support to purge cached/orphaned objects for the exposed commit.
-2. Notify the known fork owner that history contained a revoked credential.
+2. Notify the known fork owner that history contained a revoked credential. Note that a fork keeps
+   its own copy of history, so a rewrite does not clean the fork; removal there needs a personal
+   request to the fork owner (DMCA/takedown only as a last resort, maintainer decision).
 3. Require collaborators to delete old clones or reclone; old objects still contain the key.
 4. Reapply the generated security format patches onto the rewritten default branch.
 5. Re-run history and working-tree Gitleaks scans.

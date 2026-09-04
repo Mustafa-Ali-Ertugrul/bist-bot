@@ -6,10 +6,27 @@ Branch: `feat/post-pr118-security-hardening`
 ## Executive status
 
 - Baseline score: **73.5**
-- Current open score: **58.0** (`results/security/phase1.json`)
+- Current open score: **51.0** (`results/security/phase1.json`, schema v2)
+- Scoring criteria: **fixed/accepted x0.0, mitigated_warn x0.5, open x1.0**.
+  Warn-only mitigations stay partially open until enforcement is deployed.
 - Fixed baseline findings: **#2, #4, #20**
-- Warn-only and still scored open: **#1 RBAC, #3 artifact trust**
+- Partially mitigated (half weight): **#1 RBAC, #3 artifact trust**
 - Deployment blocker: leaked historical API key must be rotated before any push/deploy.
+
+## Environments actually observed
+
+The only running environment inspected during this audit was the **local Docker Compose stack**:
+API, UI, scanner worker, PostgreSQL, Prometheus, and Grafana containers were running on the audit
+workstation. The role inventory below came from that local Compose PostgreSQL container, not from a
+production database. Its `BROKER_MODE`/provider were `paper`/`paper`, both auto-execute flags were
+false, registration was disabled, RBAC was `warn`, and rate limiting used `memory://`.
+
+No serving Google Cloud production environment was observed. The configured gcloud project reports
+billing disabled, so Artifact Registry and Cloud Run runtime inventory could not be queried. Values
+such as one instance, one Gunicorn worker, ephemeral `/tmp` SQLite, and 360-second request timeout
+describe the **checked-in Cloud Run deployment profile**, not measured production state. Therefore
+there is currently no production role inventory and `RBAC_MODE=enforce` must not be enabled based on
+the local user rows alone.
 
 ## Runtime configuration observed
 
@@ -44,9 +61,10 @@ inside the healthy `bist-bot-postgres` container.
 | `trader` | 0 |
 | `user` | 0 |
 
-Privileged rows: user IDs `1` and `4`, both `admin`, created on 2026-08-12 and 2026-08-13.
-Their provenance cannot be inferred from the row alone; both require maintainer confirmation before
-`RBAC_MODE=enforce`. No accounts were demoted automatically.
+Privileged rows in the local Compose DB: user IDs `1` and `4`, both `admin`, created on 2026-08-12
+and 2026-08-13. IDs 2 and 3 are absent; the schema has no soft-delete/audit evidence that can
+distinguish deleted users from sequence gaps or prior test data. Their provenance cannot be inferred
+from the current rows. No accounts were demoted automatically.
 
 ## HTTP route inventory
 
@@ -59,20 +77,24 @@ Their provenance cannot be inferred from the row alone; both require maintainer 
 | `POST /api/auth/login` | rate limited | auth write | issues 15-minute access token |
 | `POST /api/auth/register` | config gate + rate limited | DB write | disabled by default; always creates `user` |
 | `POST /api/scan` | JWT + admin/trader RBAC | side effect | persistence, notifications, optional execution |
-| `POST /api/orders/intents/<id>/resolve` | JWT + admin/trader RBAC | financial state write | explicit manual reconciliation/unlock |
+| `POST /api/orders/intents/<id>/resolve` | JWT + **admin-only** RBAC + strict confirmation schema | financial state write | manual reconciliation/unlock; requires reason ≥10 chars, `confirmed_in_broker_ui: true`, `broker_order_id` for ack; rejected logs at error/critical severity |
 | `GET /api/analyze/<ticker>` | JWT | read/cache write | no broker action |
 | `GET /api/signals/history` | JWT | read | none |
 | `GET /api/stats` | JWT | read | none |
 | `GET /api/scans/history` | JWT | read | none |
 
-No other Flask routes were found under `src/`.
+No other Flask routes were found under `src/`. Side-effect coverage: every route that can
+move money or mutate financial reconciliation state (`/api/scan`, `/api/orders/intents/<id>/resolve`)
+is under `require_roles`; all remaining routes are read-only, auth-token issuance, or cache writes
+with no broker action.
 
 ## JWT compatibility and lifecycle
 
 - `get_jwt_identity` occurs only in `dashboard.py`: the RBAC lookup and manual-resolution audit.
 - New tokens use numeric user ID strings and include role/email claims.
 - Legacy email-identity tokens cannot be converted to an integer; the RBAC lookup returns `None`.
-  In enforce mode this produces **403**, not 500; this is covered by `test_scan_authz.py`.
+  Unresolved identity returns **401 in both warn and enforce modes** (identity failure, not a role
+  failure); this is covered by `test_scan_authz.py`.
 - In warn mode legacy/unauthorized scan requests are logged but their `ScanService` receives
   `AUTO_EXECUTE=false` and `AUTO_EXECUTE_ENABLED=false`.
 - There is no refresh-token implementation in `src/`; no refresh-role path exists.
@@ -84,9 +106,15 @@ No other Flask routes were found under `src/`.
 - `ALLOW_PUBLIC_REGISTRATION=false` by default and is tested.
 - New registrations always receive `user`.
 - `AUTO_EXECUTE_ENABLED=false` is an independent scanner-level gate; `AUTO_EXECUTE=true` alone is
-  insufficient.
-- Bootstrap inserts `admin`; explicit `ADMIN_BOOTSTRAP_UPDATE_EXISTING=true` also promotes the
-  configured existing account to admin.
+  insufficient. Legacy-only `AUTO_EXECUTE=true` emits a startup warning
+  (`auto_execute_disabled_new_gate_required`) and sets the
+  `bist_auto_execute_migration_blocked` metric; see `docs/security/auto_execute_migration.md`.
+- Bootstrap ordering: legacy migrations → admin seed (from pre-computed
+  `ADMIN_BOOTSTRAP_PASSWORD_HASH`, supplied via Secret Manager in production) → privileged-user
+  check. Bootstrap create/promote events are written to `audit_trail`.
+- An unreachable database raises `DatabaseInitializationError` (distinct from "0 privileged users").
+  WSGI degrades to process liveness (`/livez` 200) with `/readyz` and `/health` at 503, so
+  orchestrators do not mistake a DB outage for a healthy instance.
 - Enforce startup fails if no `admin` or `trader` exists.
 - RBAC allow/warn/deny and manual resolution events are written both to structured logs and the
   DB-backed `audit_trail`, including user ID, claim role, DB role, route, and request ID.
@@ -103,9 +131,18 @@ No other Flask routes were found under `src/`.
   including filled/cancelled/open states.
 - Match order: exact echoed client ID (only when enabled), then
   `(ticker, side, quantity, order_type, price, stop_price, submitted_at ± 180 seconds)`.
+  History orders already bound to a different intent (`broker_order_id`) are excluded, so a repeated
+  signal cannot steal another intent's fill.
+- Broker state mapping: `FILLED/PARTIAL/OPEN/SENT` → `ack` (lock held for manual release);
+  `CANCELLED/REJECTED` → `rejected` (lock released, order confirmed non-active); unknown raw states
+  → `unknown` (lock held).
+- Day window uses `Europe/Istanbul` and queries the previous, current, and next Istanbul day around
+  the submission instant, so ±180s windows crossing midnight query both days.
 - Missing history, no match, or multiple matches remains `unknown`; the symbol lock stays active and
   a critical operator alert is emitted.
-- Manual admin/trader resolution is required to release that lock.
+- Manual **admin-only** resolution is required to release that lock, with mandatory reason,
+  broker-UI confirmation, and `broker_order_id` for ack.
+- Live broker startup replays persisted `pending/sent/unknown` intents (`ALGOLAB_RECONCILE_ON_STARTUP=true` default).
 - Live AlgoLab refuses startup without non-SQLite `DATABASE_URL`, credentials, confirmation, and
   required endpoint configuration.
 
@@ -125,26 +162,34 @@ Observed legacy calibrator hashes (inventory only, **not provenance approval**):
 - `models/latest-local/probability_calibrator.joblib`: `300017893CE8BBDB0493F5097301940DDB51E4221501E51699F77AAEE323CF8A`
 - `models/local-run/probability_calibrator.joblib`: `9A793F7B1E557E7905F2F013168F220FF86CFF7E88488D76755CA36761AE2D82`
 
-No independent known-good hash or signing record exists. These artifacts must be retrained or have
-their provenance approved out of band before conversion. `CALIBRATOR_TRUST=off` is rejected.
+No independent known-good hash or signing record exists, and no retraining owner/date has been
+assigned. These artifacts must be retrained or have their provenance approved out of band before
+conversion. Until then `CALIBRATOR_TRUST=warn` leaves CWE-502 partially open by design.
+`CALIBRATOR_TRUST=off` is rejected.
 
-Private signing key delivery: `MODEL_SIGNING_PRIVATE_KEY_FILE` on the training/CI host only.
-Public verification key delivery: `MODEL_VERIFY_PUBLIC_KEY_FILE` mounted into runtime.
-Neither is currently configured in the observed environment.
+Private signing key delivery: `MODEL_SIGNING_PRIVATE_KEY_FILE` on the training/CI host only
+(CI secret mount, never committed). Public verification key delivery:
+`MODEL_VERIFY_PUBLIC_KEY_FILE` mounted into runtime. Neither is currently configured in the
+observed environment. Key rotation: generate a new Ed25519 pair, re-sign all manifests with the new
+private key, deploy the new public key to runtime, verify enforce-mode loads, then retire the old
+public key; manifests are small JSON files so re-signing is cheap and atomic per artifact directory.
 
 ## Build and dependency answers
 
-- Python base image is digest pinned.
-- uv helper image is version + digest pinned.
+- Python base image (`python:3.11-slim`) and uv helper image are both version + digest pinned
+  (builder and runtime stages).
 - `--no-install-project` is intentional: source is copied to `/app/src` and Docker sets
-  `PYTHONPATH=/app/src`.
-- CI runs `uv sync --locked`; a stale lock fails.
-- CI audits the hash-bearing `requirements.lock.txt` and fails when either generated requirements
-  export differs from the locked uv export.
+  `PYTHONPATH=/app/src`; no second `uv sync` is needed because `bist_bot` is imported from source.
+- CI runs `uv lock --check` (stale lock fails) and fails when either generated requirements export
+  differs from the locked uv export (`requirements.lock.txt` and `requirements.txt` both compared
+  content-wise against a fresh `uv export`).
 
 ## Proxy/XFF and concurrency
 
-- Gunicorn: one process, eight threads.
+- Gunicorn: one process, eight threads, `--timeout 330`, `--graceful-timeout 30`,
+  `--forwarded-allow-ips=*` only in the Cloud Run command.
+- Auth uses the `Authorization: Bearer` header (no cookie sessions), so there are no secure-cookie
+  or HTTPS-redirect loops from forwarded scheme headers.
 - Cloud Run manifest/deploy paths now specify max one instance.
 - Cloud Run request timeout is 360 seconds; Gunicorn worker timeout is 330 seconds and the scan
   timeout is 300 seconds.
@@ -165,7 +210,10 @@ Neither is currently configured in the observed environment.
   `.venv` dependency files, and one generic-key false-positive candidate in ignored Android IDE
   metadata (`android_app/.idea/planningMode.xml`). No findings were reported under production
   `src`, `scripts`, `cloudrun`, `.github`, or `android_app/app` paths. Secret values were not
-  inspected.
+  inspected, so it cannot be confirmed from redacted output whether the four `.env` candidates are
+  the same credential; rotation must cover the local `.env` as well.
+- Public forks are unaffected by a history rewrite; the exposed key must be treated as compromised
+  and rotation is the only real fix (rewrite is hygiene).
 - Artifact Registry inventory failed because billing is disabled for the configured GCP project;
   old image deletion remains blocked.
 - Rotation, provider usage/billing review, fork notification, history rewrite, GitHub cache cleanup,
@@ -176,3 +224,11 @@ Neither is currently configured in the observed environment.
 Do not set `RBAC_MODE=enforce` until user IDs 1 and 4 are confirmed as intended admins.
 Do not set `CALIBRATOR_TRUST=enforce` until newly trained JSON artifacts are signed and the runtime
 public key mount is verified.
+
+## Commit map (foundations commit `5292a7a`)
+
+`5292a7a feat(security): add auth and order safety foundations` is intentionally a shared base, not
+a single finding: least-privilege `users.role` default + migration `0003`, `order_intents` schema +
+migration `0004` + repository wiring, AlgoLab/client/order-history settings, and the multi-instance
+memory-limiter warning. Per-finding behavior and tests live in the follow-up commits
+(`d1313a5` F1, `d2be2ba` F2); the foundations commit only enables them.

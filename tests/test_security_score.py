@@ -14,10 +14,10 @@ def _load_security_score_module() -> ModuleType:
     return module
 
 
-def test_phase1_security_score_keeps_warn_findings_open() -> None:
+def test_phase1_security_score_weights_warn_findings_at_half() -> None:
     result = _load_security_score_module().calculate()
 
     assert result["baseline_score"] == 73.5
-    assert result["open_score"] == 58.0
+    assert result["open_score"] == 51.0
     assert result["open_count"] == 20
     assert result["status_counts"] == {"fixed": 3, "mitigated_warn": 2, "open": 18}

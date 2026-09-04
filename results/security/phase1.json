@@ -141,19 +141,26 @@
       "title": "Telegram HTML escape"
     }
   ],
-  "generated_at": "2026-09-04T11:13:18.282230+00:00",
+  "generated_at": "2026-09-04T12:53:10.480215+00:00",
   "notes": [
-    "mitigated_warn remains open until enforcement is deployed",
+    "mitigated_warn counts at half weight until enforcement is deployed",
     "finding 2 is fail-closed when daily history is unavailable",
     "the historical leaked API key is tracked separately as an incident blocker"
   ],
   "open_count": 20,
-  "open_score": 58.0,
-  "schema_version": 1,
+  "open_score": 51.0,
+  "schema_version": 2,
+  "scoring_criteria": "fixed/accepted x0.0, mitigated_warn x0.5, open x1.0; warn-only mitigations stay partially open until enforcement",
   "status_counts": {
     "fixed": 3,
     "mitigated_warn": 2,
     "open": 18
+  },
+  "status_factors": {
+    "accepted": 0.0,
+    "fixed": 0.0,
+    "mitigated_warn": 0.5,
+    "open": 1.0
   },
   "weights": {
     "best_practice": 0.5,

@@ -14,6 +14,13 @@ Tum degisiklikler chronolojik sirayla listelenir.
 - AlgoLab belirsiz emir uzlastirmasi acik emirler yerine gunluk tum emir gecmisini kullanacak ve eslesme yoksa kilidi koruyacak sekilde sertlestirildi.
 - Live broker baslangici kalici non-SQLite veritabani ve resmi endpoint ayarlari olmadan fail-closed hale getirildi.
 - Scanner icin route yetkisinden bagimsiz `AUTO_EXECUTE_ENABLED` guvenlik kapisi eklendi.
+- Order intent manuel cozumu yalniz admin roluyle sinirlandirildi; zorunlu reason, broker UI teyidi ve ack icin broker_order_id eklendi.
+- Cozulemeyen JWT identity warn/enforce fark etmeksizin 401 dondurur.
+- AlgoLab startup reconcile eklendi; bagli broker emirleri eslestirmeden dislanir, broker durumlari ack/rejected/unknown olarak map edilir.
+- DB kesintisinde WSGI degraded liveness (`/livez` 200, `/readyz` ve `/health` 503) eklendi.
+- Migration note: existing deployments with `AUTO_EXECUTE=true` must explicitly set
+  `AUTO_EXECUTE_ENABLED=true`; otherwise execution remains disabled and a startup warning/metric
+  is emitted. The legacy `AUTO_EXECUTE` flag is scheduled for removal after one release.
 - Walk-forward validation akisi eklendi; optimizer tabanli out-of-sample pencere testleri ve JSON rapor ciktilari uretiliyor.
 - BIST'e daha yakin komisyon, BSMV, borsa payi ve slippage kirilimlarini izleyen cost model eklendi.
 - AlgoLab broker entegrasyonu icin test edilebilir execution iskeleti, order tracker ve order lifecycle persistence eklendi.
