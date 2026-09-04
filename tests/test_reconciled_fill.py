@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import json
+import threading
 from datetime import UTC, datetime
 from typing import Any
 from unittest.mock import MagicMock
 
+import pytest
 import requests
 
 from bist_bot.agent.position_manager import PositionManager
+from bist_bot.agent.state_machine import PositionState
 from bist_bot.config.settings import settings
 from bist_bot.db import DataAccess, DatabaseManager
 from bist_bot.execution.algolab_broker import (
@@ -308,6 +311,7 @@ def test_status_map_override_and_unmapped_metric() -> None:
 
 
 def test_degraded_worker_exit_after_max_seconds(monkeypatch) -> None:
+    import signal
     import time
 
     import bist_bot.wsgi as wsgi_mod
@@ -316,16 +320,37 @@ def test_degraded_worker_exit_after_max_seconds(monkeypatch) -> None:
     def failing_factory():
         raise DatabaseInitializationError("DB down")
 
-    app = build_wsgi_app(failing_factory, degraded_max_seconds=0)
+    scheduled: dict[str, object] = {}
+
+    class _FakeTimer:
+        def __init__(self, seconds: float, func) -> None:
+            scheduled["seconds"] = seconds
+            scheduled["func"] = func
+            self.daemon = False
+
+        def start(self) -> None:
+            scheduled["started"] = True
+
+    monkeypatch.setattr(wsgi_mod.threading, "Timer", _FakeTimer)
+    killed: list[int] = []
+    monkeypatch.setattr(wsgi_mod.os, "kill", lambda pid, sig: killed.append(sig))
+
+    app = build_wsgi_app(failing_factory, degraded_max_seconds=60)
     client = app.test_client()
 
-    exit_called = []
-    monkeypatch.setattr(wsgi_mod.sys, "exit", lambda code: exit_called.append(code))
+    assert scheduled.get("seconds") == 60
+    assert scheduled.get("started") is True
+    # Expiry callback terminates the worker process via SIGTERM
+    scheduled["func"]()  # type: ignore[operator]
+    assert killed == [signal.SIGTERM]
 
+    # /livez reports 503 once the degraded lifetime is exceeded
+    expired_app = build_wsgi_app(failing_factory, degraded_max_seconds=0)
     time.sleep(0.02)
-    # Calling /livez after max seconds must call sys.exit(1)
-    client.get("/livez")
-    assert exit_called == [1]
+    expired_resp = expired_app.test_client().get("/livez")
+    assert expired_resp.status_code == 503
+    live_resp = client.get("/livez")
+    assert live_resp.status_code == 200
 
 
 def test_bootstrap_is_one_shot_via_state_table(tmp_path) -> None:
@@ -454,6 +479,385 @@ def test_manual_resolve_mismatch_with_broker_history_returns_409(tmp_path) -> No
 
     assert res.status_code == 409
     assert "Conflict" in res.get_json()["message"]
+
+
+def test_partial_fill_cancel_then_second_read_full_fill(tmp_path) -> None:
+    """PARTIAL 3 → cancel → second history read FILLED 10 → position 10 (race rule)."""
+    manager, db, pm, accounting = _setup_accounting(tmp_path)
+    submitted_at = datetime.now(UTC)
+    session = MagicMock(spec=requests.Session)
+
+    first_history = {
+        "orders": [
+            {
+                "order_id": "brk-race-2",
+                "ticker": "THYAO.IS",
+                "side": "BUY",
+                "quantity": 10.0,
+                "order_type": "MARKET",
+                "state": "PARTIAL",
+                "created_at": submitted_at.isoformat(),
+                "filled_quantity": 3.0,
+                "average_fill_price": 100.0,
+            }
+        ]
+    }
+    second_history = {
+        "orders": [
+            {
+                "order_id": "brk-race-2",
+                "ticker": "THYAO.IS",
+                "side": "BUY",
+                "quantity": 10.0,
+                "order_type": "MARKET",
+                "state": "FILLED",
+                "created_at": submitted_at.isoformat(),
+                "filled_quantity": 10.0,
+                "average_fill_price": 101.0,
+            }
+        ]
+    }
+
+    def request(method: str, url: str, **kwargs: Any):
+        if method == "POST" and "cancel" in url:
+            return _Response({"cancelled": True})
+        history = request_calls.get("count", 0)
+        request_calls["count"] = history + 1
+        if history == 0:
+            return _Response(first_history)
+        return _Response(second_history)
+
+    request_calls: dict[str, int] = {}
+    session.request.side_effect = request
+
+    broker = AlgoLabBroker(
+        AlgoLabCredentials(api_key="k", username="u", password="p"),
+        endpoints=AlgoLabEndpoints(
+            order_history="http://test/history",
+            cancel_order="http://test/cancel",
+        ),
+        session=session,
+        dry_run=False,
+        order_intents=db.order_intents,
+        accounting_service=accounting,
+        clock=lambda: submitted_at,
+    )
+    broker._session_token = "mock-valid-token"
+    snapshot = {"stop_loss": 90.0, "target_price": 120.0, "signal_type": "STRONG_BUY"}
+    db.order_intents.create(
+        client_id="intent-race-2",
+        ticker="THYAO.IS",
+        side="BUY",
+        quantity=10.0,
+        order_type="MARKET",
+        price=None,
+        stop_price=None,
+        order_db_id=22,
+        signal_snapshot=json.dumps(snapshot),
+    )
+    db.order_intents.update("intent-race-2", status="unknown")
+
+    result = broker._reconcile_order(
+        client_id="intent-race-2",
+        ticker="THYAO.IS",
+        side=OrderSide.BUY,
+        quantity=10.0,
+        order_type=OrderType.MARKET,
+        price=None,
+        stop_price=None,
+        submitted_at=submitted_at,
+    )
+
+    assert result.accepted is True
+    # Accounting used the SECOND read: full 10 lots at 101.0
+    positions = pm.get_open_positions()
+    assert len(positions) == 1
+    assert positions[0]["quantity"] == 10.0
+    assert positions[0]["entry_price"] == 101.0
+
+
+def test_double_reconcile_produces_single_position_change(tmp_path) -> None:
+    """Two back-to-back reconciles of the same intent must not duplicate accounting."""
+    manager, db, pm, accounting = _setup_accounting(tmp_path)
+    snapshot = {"stop_loss": 90.0, "target_price": 120.0, "signal_type": "STRONG_BUY"}
+    db.order_intents.create(
+        client_id="intent-race",
+        ticker="THYAO.IS",
+        side="BUY",
+        quantity=10.0,
+        order_type="MARKET",
+        price=None,
+        stop_price=None,
+        order_db_id=21,
+        signal_snapshot=json.dumps(snapshot),
+    )
+
+    session = MagicMock(spec=requests.Session)
+    submitted_at = datetime.now(UTC)
+    history_payload = {
+        "orders": [
+            {
+                "order_id": "brk-race",
+                "ticker": "THYAO.IS",
+                "side": "BUY",
+                "quantity": 10.0,
+                "order_type": "MARKET",
+                "state": "FILLED",
+                "created_at": submitted_at.isoformat(),
+                "filled_quantity": 10.0,
+                "average_fill_price": 100.0,
+            }
+        ]
+    }
+    session.request.return_value = _Response(history_payload)
+    broker = AlgoLabBroker(
+        AlgoLabCredentials(api_key="k", username="u", password="p"),
+        endpoints=AlgoLabEndpoints(order_history="http://test/history"),
+        session=session,
+        dry_run=False,
+        order_intents=db.order_intents,
+        accounting_service=accounting,
+        clock=lambda: submitted_at,
+    )
+    broker._session_token = "mock-valid-token"
+
+    first = broker._reconcile_order(
+        client_id="intent-race",
+        ticker="THYAO.IS",
+        side=OrderSide.BUY,
+        quantity=10.0,
+        order_type=OrderType.MARKET,
+        price=None,
+        stop_price=None,
+        submitted_at=submitted_at,
+    )
+    second = broker._reconcile_order(
+        client_id="intent-race",
+        ticker="THYAO.IS",
+        side=OrderSide.BUY,
+        quantity=10.0,
+        order_type=OrderType.MARKET,
+        price=None,
+        stop_price=None,
+        submitted_at=submitted_at,
+    )
+
+    assert first.accepted is True
+    assert second.accepted is True
+    assert len(pm.get_open_positions()) == 1
+    assert db.order_intents.get("intent-race")["status"] == "ack"
+
+
+def test_reconciled_sell_loss_visible_in_position_ledger(tmp_path) -> None:
+    """A reconciled SELL at a loss lands in the same ledger risk reads."""
+    manager, db, pm, accounting = _setup_accounting(tmp_path)
+    pm.open_position(
+        ticker="THYAO.IS",
+        entry_order_id=31,
+        entry_price=110.0,
+        quantity=10.0,
+        stop_loss=100.0,
+        target_price=130.0,
+        signal_type="STRONG_BUY",
+        signal_score=80.0,
+    )
+    order_row = db.create_order(
+        ticker="THYAO.IS", side="SELL", quantity=10.0, order_type="MARKET", state="CREATED"
+    )
+    intent = db.order_intents.create(
+        client_id="intent-sell-loss",
+        ticker="THYAO.IS",
+        side="SELL",
+        quantity=10.0,
+        order_type="MARKET",
+        price=None,
+        stop_price=None,
+        order_db_id=int(order_row["id"]),
+    )
+
+    outcome = accounting.record_fill(
+        intent=intent,
+        broker_order_id="brk-sell-loss",
+        filled_qty=10.0,
+        avg_fill_price=100.0,
+        broker_state="FILLED",
+    )
+
+    assert outcome.success is True
+    assert outcome.status == "ack"
+    # Same channel as the normal SELL path: closed row with negative realized PnL
+    with manager.engine.connect() as conn:
+        from sqlalchemy import text
+
+        row = (
+            conn.execute(
+                text(
+                    "SELECT state, realized_pnl FROM live_positions WHERE ticker='THYAO.IS' "
+                    "ORDER BY id DESC LIMIT 1"
+                )
+            )
+            .mappings()
+            .first()
+        )
+    assert row["state"] == PositionState.CLOSED.value
+    assert float(row["realized_pnl"]) < 0
+    assert len(pm.get_open_positions()) == 0
+
+
+def test_reconciled_sell_partial_quantity_is_unaccounted(tmp_path) -> None:
+    manager, db, pm, accounting = _setup_accounting(tmp_path)
+    pm.open_position(
+        ticker="THYAO.IS",
+        entry_order_id=41,
+        entry_price=100.0,
+        quantity=10.0,
+        stop_loss=90.0,
+        target_price=120.0,
+        signal_type="STRONG_BUY",
+        signal_score=80.0,
+    )
+    intent = db.order_intents.create(
+        client_id="intent-sell-partial",
+        ticker="THYAO.IS",
+        side="SELL",
+        quantity=3.0,
+        order_type="MARKET",
+        price=None,
+        stop_price=None,
+        order_db_id=41,
+    )
+
+    outcome = accounting.record_fill(
+        intent=intent,
+        broker_order_id="brk-sell-partial",
+        filled_qty=3.0,
+        avg_fill_price=105.0,
+        broker_state="FILLED",
+    )
+
+    assert outcome.success is False
+    assert outcome.status == "ack_unaccounted"
+    # Full position untouched: no reduce path exists
+    assert len(pm.get_open_positions()) == 1
+
+
+def test_manual_resolve_without_broker_history_is_unaccounted(tmp_path) -> None:
+    from flask_jwt_extended import create_access_token
+    from sqlalchemy import text
+
+    from bist_bot.auth.passwords import hash_password
+    from bist_bot.dashboard import create_dashboard_app
+
+    db_path = str(tmp_path / "resolve_no_history.db")
+    manager = DatabaseManager(sqlite_path=db_path)
+    now = datetime.now(UTC)
+    with manager.engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO users (email, password_hash, role, created_at, updated_at) "
+                "VALUES ('admin@test.com', :p, 'admin', :now, :now)"
+            ),
+            {"p": hash_password("pass"), "now": now},
+        )
+        admin_id = conn.execute(
+            text("SELECT id FROM users WHERE email='admin@test.com'")
+        ).scalar_one()
+
+    db = DataAccess(manager)
+    db.order_intents.create(
+        client_id="intent-nohist",
+        ticker="THYAO.IS",
+        side="BUY",
+        quantity=10.0,
+        order_type="MARKET",
+        price=None,
+        stop_price=None,
+    )
+    db.order_intents.update("intent-nohist", status="unknown")
+
+    # Broker whose history fetch always fails
+    mock_broker = MagicMock()
+    mock_broker.get_daily_orders.side_effect = requests.ConnectionError("broker down")
+
+    fetcher = MagicMock()
+    fetcher.watchlist = []
+    engine = MagicMock()
+    app = create_dashboard_app(fetcher, engine, db, broker=mock_broker)
+    app.config["TESTING"] = True
+
+    with app.app_context():
+        token = create_access_token(identity=str(admin_id), additional_claims={"role": "admin"})
+
+    res = app.test_client().post(
+        "/api/orders/intents/intent-nohist/resolve",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "resolution": "ack",
+            "broker_order_id": "brk-nohist",
+            "filled_qty": 10.0,
+            "avg_fill_price": 100.0,
+            "reason": "operator saw fill in broker UI",
+            "confirmed_in_broker_ui": True,
+        },
+    )
+
+    assert res.status_code == 200
+    body = res.get_json()
+    assert body["resolution"] == "ack_unaccounted"
+    assert db.order_intents.get("intent-nohist")["status"] == "ack_unaccounted"
+
+
+def test_bootstrap_hash_format_validated_by_verifier() -> None:
+    with settings.override(
+        ADMIN_BOOTSTRAP_EMAIL="admin@test.local",
+        ADMIN_BOOTSTRAP_PASSWORD_HASH="replace_with_scrypt_or_bcrypt_hash",
+    ):
+        with pytest.raises(RuntimeError, match="invalid format"):
+            _ = settings.admin_bootstrap_enabled
+
+    with settings.override(
+        ADMIN_BOOTSTRAP_EMAIL="",
+        ADMIN_BOOTSTRAP_PASSWORD_HASH="",
+    ):
+        assert settings.admin_bootstrap_enabled is False
+
+
+@pytest.mark.filterwarnings("ignore::pytest.PytestUnhandledThreadExceptionWarning")
+def test_background_replay_failure_is_visible(monkeypatch) -> None:
+    from bist_bot.app_metrics import render_metrics, reset_metrics
+
+    reset_metrics()
+    session = MagicMock(spec=requests.Session)
+    intents = MagicMock()
+    intents.list_reconcilable.side_effect = RuntimeError("db exploded")
+    broker = AlgoLabBroker(
+        AlgoLabCredentials(api_key="k", username="u", password="p"),
+        session=session,
+        order_intents=intents,
+    )
+    broker._session_token = "tok"
+
+    done = threading.Event()
+    original_run = broker._run_reconcile_pending_intents
+
+    def failing_run():
+        try:
+            return original_run()
+        finally:
+            done.set()
+
+    monkeypatch.setattr(broker, "_run_reconcile_pending_intents", failing_run)
+    broker.reconcile_pending_intents(background=True)
+    assert done.wait(timeout=10) is True
+    # Give the daemon thread a moment to record the failure metric
+    # (the critical log line is visible in captured stderr output)
+    import time as _time
+
+    deadline = _time.monotonic() + 5.0
+    while "reconcile_startup_failed_total" not in render_metrics():
+        assert _time.monotonic() < deadline, "failure metric was not recorded"
+        _time.sleep(0.05)
+    assert "reconcile_startup_failed_total" in render_metrics()
 
 
 def test_paper_mode_startup_reconcile_does_not_call_broker() -> None:

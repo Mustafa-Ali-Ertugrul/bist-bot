@@ -155,7 +155,9 @@ class ReconcileAccountingService:
                 position_id=getattr(pos, "id", None),
             )
 
-        # SELL path: close existing position
+        # SELL path: close existing position.
+        # No partial-reduce path exists in PositionManager, so a fill whose
+        # quantity differs from the open position is fail-closed.
         if side_str in {"SELL", OrderSide.SELL.value}:
             pos = self.position_manager.get_position(ticker)
             if not pos:
@@ -167,6 +169,17 @@ class ReconcileAccountingService:
                 )
 
             pos_id = int(pos["id"])
+            pos_qty = float(pos.get("quantity", 0.0) or 0.0)
+            if abs(pos_qty - float(filled_qty)) > 1e-9:
+                inc_counter("order_intents_unaccounted_total")
+                return AccountingOutcome(
+                    success=False,
+                    status="ack_unaccounted",
+                    detail=(
+                        f"partial SELL exit ({filled_qty} of open {pos_qty}) has no "
+                        "reduce path; manual resolution required"
+                    ),
+                )
             try:
                 self.position_manager.close_position(
                     position_id=pos_id,
