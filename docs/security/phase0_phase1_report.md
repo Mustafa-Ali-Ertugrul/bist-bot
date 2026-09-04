@@ -6,11 +6,13 @@ Branch: `feat/post-pr118-security-hardening`
 ## Executive status
 
 - Baseline score: **73.5**
-- Current open score: **51.0** (`results/security/phase1.json`, schema v2)
+- Current open score: **54.5** (`results/security/phase1.json`, schema v2)
 - Scoring criteria: **fixed/accepted x0.0, mitigated_warn x0.5, open x1.0**.
   Warn-only mitigations stay partially open until enforcement is deployed.
-- Fixed baseline findings: **#2, #4, #20**
-- Partially mitigated (half weight): **#1 RBAC, #3 artifact trust**
+  Finding #2 (order idempotency) is scored at half-weight (3.5) until vendor dictionary,
+  echoed client ID, and `order_intents_unaccounted_total == 0` are proven in live staging.
+- Fixed baseline findings: **#4, #20**
+- Partially mitigated (half weight): **#1 RBAC, #2 order idempotency, #3 artifact trust**
 - Deployment blocker: leaked historical API key must be rotated before any push/deploy.
 
 ## Environments actually observed
@@ -68,25 +70,29 @@ from the current rows. No accounts were demoted automatically.
 
 ## HTTP route inventory
 
-| Route | Auth | Classification | Notes |
-|---|---|---|---|
-| `GET /livez` | none | read/liveness | process-only probe |
-| `GET /ready`, `GET /readyz` | none | read/readiness | currently shares detailed health behavior |
-| `GET /health` | none | read + broker side effect | still open finding #10 |
-| `GET /metrics` | JWT unless `METRICS_PUBLIC` | read | no write side effect |
-| `POST /api/auth/login` | rate limited | auth write | issues 15-minute access token |
-| `POST /api/auth/register` | config gate + rate limited | DB write | disabled by default; always creates `user` |
-| `POST /api/scan` | JWT + admin/trader RBAC | side effect | persistence, notifications, optional execution |
-| `POST /api/orders/intents/<id>/resolve` | JWT + **admin-only** RBAC + strict confirmation schema | financial state write | manual reconciliation/unlock; requires reason ≥10 chars, `confirmed_in_broker_ui: true`, `broker_order_id` for ack; rejected logs at error/critical severity |
-| `GET /api/analyze/<ticker>` | JWT | read/cache write | no broker action |
-| `GET /api/signals/history` | JWT | read | none |
-| `GET /api/stats` | JWT | read | none |
-| `GET /api/scans/history` | JWT | read | none |
+The application registers routes exclusively via Flask decorators in `dashboard.py`.
+No blueprints or dynamic `add_url_rule` registrations exist.
 
-No other Flask routes were found under `src/`. Side-effect coverage: every route that can
-move money or mutate financial reconciliation state (`/api/scan`, `/api/orders/intents/<id>/resolve`)
-is under `require_roles`; all remaining routes are read-only, auth-token issuance, or cache writes
-with no broker action.
+| Method | Route | Auth | Rate Limit | Classification | Notes |
+|---|---|---|---|---|---|
+| `GET` | `/livez` | none | none | read/liveness | Process-only probe; degrades to worker-exit after `DEGRADED_MAX_SECONDS` |
+| `GET` | `/readyz` | none | none | read/readiness | Returns 503 during DB outage; used as container startup probe |
+| `GET` | `/ready` | none | none | read/readiness | Legacy alias for `/readyz`; identical behavior |
+| `GET` | `/health` | none | none | read + broker probe | Still open finding #10; calls broker authenticate |
+| `GET` | `/metrics` | JWT unless `METRICS_PUBLIC` | none | read | Prometheus exposition; no write side effects |
+| `POST` | `/api/auth/login` | none | 5 per minute | auth write | Issues 15-minute access token with role claims |
+| `POST` | `/api/auth/register` | `ALLOW_PUBLIC_REGISTRATION` | 3 per hour | DB write | Disabled by default; always assigns least-privileged `user` role |
+| `POST` | `/api/scan` | JWT + admin/trader RBAC | 10 per minute | financial side effect | Scans market, triggers persistence, notifications, and conditional order execution |
+| `POST` | `/api/orders/intents/<id>/resolve` | JWT + **admin-only** RBAC | 10 per minute | financial state write | Manual unlock; strict schema: reason ≥10 chars, `confirmed_in_broker_ui: true`, `broker_order_id` for ack; cross-checked against broker history with 409 Conflict |
+| `GET` | `/api/analyze/<ticker>` | JWT | 30 per minute | read / cache write | `force_refresh=true` invalidates cache and triggers upstream provider fetch under rate limit |
+| `GET` | `/api/signals/history` | JWT | none | read | Paginated signal history query |
+| `GET` | `/api/stats` | JWT | none | read | Aggregated dashboard telemetry |
+| `GET` | `/api/scans/history` | JWT | none | read | Historical scan log query |
+
+Side-effect coverage: every route that can move money or mutate financial reconciliation state
+(`/api/scan`, `/api/orders/intents/<id>/resolve`) is strictly gated under `require_roles`. All other
+routes are read-only, auth issuance, or cache queries. No scheduler-trigger or notifier-test
+routes exist.
 
 ## JWT compatibility and lifecycle
 
@@ -198,6 +204,62 @@ public key; manifests are small JSON files so re-signing is cheap and atomic per
 - `ProxyFix` is not installed and no production request capture was available, so XFF hop count was
   **not measured**. Do not enable ProxyFix until a trusted Cloud Run/LB request confirms the chain.
 - `RATE_LIMIT_STORAGE_URI=memory://`; it is acceptable only while max instance count remains one.
+- **Cloud Run deployment reality:** The GCP project currently has billing disabled and the Checked-in
+  profile uses ephemeral `/tmp` SQLite. Consequently, the Cloud Run profile **can currently only run
+  in paper mode**; live broker execution is blocked at boot by the F2 durability guard.
+- **Gunicorn preload verification:** Gunicorn does not use `--preload` in Docker Compose, Cloud Run,
+  or the Dockerfile. Worker process respawn naturally retries database initialization.
+
+## Test traceability matrix (A.1 – A.6 & RBAC)
+
+| Area | Implementation Focus | Test Name | File |
+|---|---|---|---|
+| A.1 | BUY fill opens position | `test_reconciled_fill_buy_opens_position` | `tests/test_reconciled_fill.py` |
+| A.1 | SELL fill closes position | `test_reconciled_fill_sell_closes_position` | `tests/test_reconciled_fill.py` |
+| A.1 | Missing snapshot / avg price → `ack_unaccounted` | `test_reconciled_fill_without_snapshot_is_unaccounted`, `test_reconciled_fill_without_avg_price_is_unaccounted` | `tests/test_reconciled_fill.py` |
+| A.1 | Reconcile idempotency (no duplicate positions) | `test_reconciled_fill_is_idempotent` | `tests/test_reconciled_fill.py` |
+| A.2 | CANCELLED with fills accounted | `test_cancelled_order_with_fills_triggers_accounting` | `tests/test_reconciled_fill.py` |
+| A.2 | Status map override & unmapped metric | `test_status_map_override_and_unmapped_metric` | `tests/test_reconciled_fill.py` |
+| A.3 | Degraded worker exit on max lifetime | `test_degraded_worker_exit_after_max_seconds` | `tests/test_reconciled_fill.py` |
+| A.3 | Outage keeps liveness but fails readiness | `test_database_outage_keeps_liveness_but_fails_readiness` | `tests/test_wsgi_degraded.py` |
+| A.4 | Bootstrap is one-shot via `bootstrap_state` table | `test_bootstrap_is_one_shot_via_state_table` | `tests/test_reconciled_fill.py` |
+| A.4 | Pre-computed password hash format validation | `test_enforce_mode_bootstraps_first_admin` | `tests/test_rbac_bootstrap.py` |
+| A.5 | Schema migration 0005 idempotency | `test_alembic_fresh_upgrade_and_downgrade` | `tests/test_alembic_migrations.py` |
+| A.6 | Paper mode startup skips broker calls | `test_paper_mode_startup_reconcile_does_not_call_broker` | `tests/test_reconciled_fill.py` |
+| RBAC | User cannot trigger scan (403) | `test_user_role_cannot_trigger_scan_in_enforce_mode` | `tests/test_scan_authz.py` |
+| RBAC | Trader can trigger scan (200) | `test_trader_role_can_trigger_scan_in_enforce_mode` | `tests/test_scan_authz.py` |
+| RBAC | Trader cannot resolve intent (403) | `test_manual_order_resolution_requires_admin_and_strong_confirmation` | `tests/test_scan_authz.py` |
+| RBAC | Admin can resolve intent (200) | `test_manual_order_resolution_requires_admin_and_strong_confirmation` | `tests/test_scan_authz.py` |
+| RBAC | Manual resolve history mismatch (409) | `test_manual_resolve_mismatch_with_broker_history_returns_409` | `tests/test_reconciled_fill.py` |
+
+## Fresh-environment smoke verification (PowerShell)
+
+To run a clean-slate smoke verification without port or volume collisions:
+
+```powershell
+$env:PORT_OVERRIDE = "5005"
+$env:JWT_SECRET_KEY = "smoke-validation-key-12345678901234567890"
+$env:GRAFANA_ADMIN_PASSWORD = "smoke-admin-pass"
+$env:ADMIN_BOOTSTRAP_EMAIL = "smoke-admin@test.local"
+$env:ADMIN_BOOTSTRAP_PASSWORD_HASH = "scrypt:32768:8:1$smoke$dummyhashplaceholderforvalidationonly"
+$env:RBAC_MODE = "enforce"
+
+# 1. Start isolated postgres with unique project prefix
+docker compose -p bist-smoke up -d postgres
+
+# 2. Run migrations via discrete container (Decision D.7)
+docker compose -p bist-smoke run --rm bot alembic upgrade head
+
+# 3. Start API container and verify readiness
+docker compose -p bist-smoke up -d bot
+curl.exe -fsS http://127.0.0.1:5000/readyz
+
+# 4. Outage degradation test: stop postgres, verify liveness=200 degraded, readiness=503
+docker compose -p bist-smoke stop postgres
+curl.exe -fsS http://127.0.0.1:5000/livez
+# Cleanup smoke project
+docker compose -p bist-smoke down -v
+```
 
 ## Secret incident scope
 

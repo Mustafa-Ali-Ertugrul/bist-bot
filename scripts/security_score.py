@@ -32,7 +32,7 @@ STATUS_FACTORS = {
 }
 FINDINGS = [
     {"id": 1, "severity": "high", "status": "mitigated_warn", "title": "scan RBAC"},
-    {"id": 2, "severity": "high", "status": "fixed", "title": "order idempotency"},
+    {"id": 2, "severity": "high", "status": "mitigated_warn", "title": "order idempotency"},
     {"id": 3, "severity": "high", "status": "mitigated_warn", "title": "joblib trust"},
     {"id": 4, "severity": "high", "status": "fixed", "title": "dependency lock"},
     {"id": 5, "severity": "medium", "status": "open", "title": "login rate limit"},
