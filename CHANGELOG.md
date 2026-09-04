@@ -5,11 +5,26 @@ Tum degisiklikler chronolojik sirayla listelenir.
 ## [Unreleased]
 
 ### Added
+- `RBAC_MODE=warn|enforce` ile `/api/scan` icin DB-otoritatif admin/trader yetki kapisi eklendi.
+- AlgoLab emirleri icin kalici `order_intents` outbox ve belirsiz timeout sonu reconciliation akisi eklendi.
+- Model artefaktlari icin SHA-256 + Ed25519 manifest dogrulamasi ve guvenli JSON calibrator formati eklendi.
+- Runtime/dev bagimliliklari icin dolu `uv.lock`, hash'li requirements exportu ve Dependabot guncelleme akisi eklendi.
+- Cloud Run ve Compose API entrypoint'i Flask development server yerine tek-worker threaded Gunicorn'a tasindi.
+- Yerel `opencode.json` credential dosyasi Git/Docker context'inden cikarildi.
+- AlgoLab belirsiz emir uzlastirmasi acik emirler yerine gunluk tum emir gecmisini kullanacak ve eslesme yoksa kilidi koruyacak sekilde sertlestirildi.
+- Live broker baslangici kalici non-SQLite veritabani ve resmi endpoint ayarlari olmadan fail-closed hale getirildi.
+- Scanner icin route yetkisinden bagimsiz `AUTO_EXECUTE_ENABLED` guvenlik kapisi eklendi.
 - Walk-forward validation akisi eklendi; optimizer tabanli out-of-sample pencere testleri ve JSON rapor ciktilari uretiliyor.
 - BIST'e daha yakin komisyon, BSMV, borsa payi ve slippage kirilimlarini izleyen cost model eklendi.
 - AlgoLab broker entegrasyonu icin test edilebilir execution iskeleti, order tracker ve order lifecycle persistence eklendi.
 
 ### Changed
+- Yeni JWT'ler kullanici ID'sini identity olarak kullanir, rol/e-posta claim'leri tasir ve en fazla 15 dakika gecerlidir.
+- Yeni kullanicilarin ORM/veritabani varsayilan rolu en az yetkili `user` olarak degistirildi.
+- AlgoLab emir POST'u timeout/5xx sonrasinda tekrar gonderilmez; client ID ile acik emirlerden uzlastirilir.
+- `CALIBRATOR_TRUST=warn` gecis modu eklendi; sonraki surumde `enforce` ile imzasiz/joblib calibrator reddedilebilir.
+- `CALIBRATOR_TRUST=off` kabul edilmez; artifact trust kontrolu tamamen kapatilamaz.
+- Docker ve CI kurulumlari `uv sync --locked` ile tekrar uretilebilir hale getirildi.
 - `backtest_runner.py` artik survivorship bias uyarisi basiyor ve `--walk-forward` modu ile pencere bazli dogrulama calistirabiliyor.
 - Backtest ciktilarina `cost_breakdown` ozeti ve ek risk metrikleri (Sortino, CAGR, Profit Factor, Avg Trade) eklendi.
 - Broker secimi artik `BROKER_PROVIDER` ile yapiliyor; `AUTO_EXECUTE` ve `CONFIRM_LIVE_TRADING` guvenlik kapilari eklendi.
