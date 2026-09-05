@@ -84,4 +84,21 @@ def build_wsgi_app(
         return degraded
 
 
-app = build_wsgi_app()
+# When imported as a module (e.g. by tests), app is lazily instantiated or instantiated on demand.
+# In a WSGI server (Gunicorn), gunicorn imports `bist_bot.wsgi:app`.
+class _LazyApp:
+    def __init__(self):
+        self._app = None
+
+    def __call__(self, environ, start_response):
+        if self._app is None:
+            self._app = build_wsgi_app()
+        return self._app(environ, start_response)
+
+    def __getattr__(self, name):
+        if self._app is None:
+            self._app = build_wsgi_app()
+        return getattr(self._app, name)
+
+
+app = _LazyApp()
