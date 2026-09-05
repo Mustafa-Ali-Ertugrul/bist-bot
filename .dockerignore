@@ -1,6 +1,7 @@
 .git
 .gitignore
 .opencode/
+*opencode*
 opencode.json
 .env
 .env.*

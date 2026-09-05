@@ -36,6 +36,7 @@ NUL
 
 # OpenCode local workspace configuration
 .opencode/
+*opencode*
 .coverage
 htmlcov/
 pytest_tmp_*/
