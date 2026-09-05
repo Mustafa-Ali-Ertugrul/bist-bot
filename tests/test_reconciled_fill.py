@@ -455,13 +455,19 @@ def test_manual_resolve_mismatch_with_broker_history_returns_409(tmp_path) -> No
     fetcher = MagicMock()
     fetcher.watchlist = []
     engine = MagicMock()
-    app = create_dashboard_app(fetcher, engine, db, broker=mock_broker)
-    app.config["TESTING"] = True
+    with settings.override(
+        JWT_SECRET_KEY="test_secret_key_12345678901234567890",
+        ADMIN_BOOTSTRAP_EMAIL="",
+        ADMIN_BOOTSTRAP_PASSWORD_HASH="",
+        CORS_ORIGINS=("http://localhost:8501",),
+    ):
+        app = create_dashboard_app(fetcher, engine, db, broker=mock_broker)
+        app.config["TESTING"] = True
 
-    with app.app_context():
-        token = create_access_token(identity=str(admin_id), additional_claims={"role": "admin"})
+        with app.app_context():
+            token = create_access_token(identity=str(admin_id), additional_claims={"role": "admin"})
 
-    client = app.test_client()
+        client = app.test_client()
 
     # Request body claims filled_qty=5.0 but broker history says 10.0 -> 409 Conflict
     res = client.post(
@@ -860,24 +866,30 @@ def test_manual_resolve_without_broker_history_is_unaccounted(tmp_path) -> None:
     fetcher = MagicMock()
     fetcher.watchlist = []
     engine = MagicMock()
-    app = create_dashboard_app(fetcher, engine, db, broker=mock_broker)
-    app.config["TESTING"] = True
+    with settings.override(
+        JWT_SECRET_KEY="test_secret_key_12345678901234567890",
+        ADMIN_BOOTSTRAP_EMAIL="",
+        ADMIN_BOOTSTRAP_PASSWORD_HASH="",
+        CORS_ORIGINS=("http://localhost:8501",),
+    ):
+        app = create_dashboard_app(fetcher, engine, db, broker=mock_broker)
+        app.config["TESTING"] = True
 
-    with app.app_context():
-        token = create_access_token(identity=str(admin_id), additional_claims={"role": "admin"})
+        with app.app_context():
+            token = create_access_token(identity=str(admin_id), additional_claims={"role": "admin"})
 
-    res = app.test_client().post(
-        "/api/orders/intents/intent-nohist/resolve",
-        headers={"Authorization": f"Bearer {token}"},
-        json={
-            "resolution": "ack",
-            "broker_order_id": "brk-nohist",
-            "filled_qty": 10.0,
-            "avg_fill_price": 100.0,
-            "reason": "operator saw fill in broker UI",
-            "confirmed_in_broker_ui": True,
-        },
-    )
+        res = app.test_client().post(
+            "/api/orders/intents/intent-nohist/resolve",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "resolution": "ack",
+                "broker_order_id": "brk-nohist",
+                "filled_qty": 10.0,
+                "avg_fill_price": 100.0,
+                "reason": "operator saw fill in broker UI",
+                "confirmed_in_broker_ui": True,
+            },
+        )
 
     assert res.status_code == 200
     body = res.get_json()

@@ -286,13 +286,20 @@ def _make_resolve_app(tmp_path, broker, suffix: str):
             {"email": "admin@bistbot.local"},
         ).scalar_one()
     db = DataAccess(manager)
-    app = create_dashboard_app(cast(Any, _Fetcher()), cast(Any, _Engine()), db, broker=broker)
-    app.config["TESTING"] = True
-    with app.app_context():
-        token = create_access_token(
-            identity=str(admin_id),
-            additional_claims={"role": "admin", "email": "admin@bistbot.local"},
-        )
+    with settings.override(
+        JWT_SECRET_KEY="test_secret_key_12345678901234567890",
+        ADMIN_BOOTSTRAP_EMAIL="",
+        ADMIN_BOOTSTRAP_PASSWORD_HASH="",
+        CORS_ORIGINS=("http://localhost:8501",),
+    ):
+        app = create_dashboard_app(cast(Any, _Fetcher()), cast(Any, _Engine()), db, broker=broker)
+        app.config["TESTING"] = True
+        with app.app_context():
+            token = create_access_token(
+                identity=str(admin_id),
+                additional_claims={"role": "admin", "email": "admin@bistbot.local"},
+            )
+        client = app.test_client()
     db.order_intents.create(
         client_id="guard-order",
         ticker="THYAO.IS",
@@ -303,7 +310,7 @@ def _make_resolve_app(tmp_path, broker, suffix: str):
         stop_price=None,
     )
     db.order_intents.update("guard-order", status="unknown")
-    return app.test_client(), token, db
+    return client, token, db
 
 
 def _rejected_payload(**overrides):
