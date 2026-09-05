@@ -360,13 +360,16 @@ docker compose -p bist-smoke down -v
   and rotation is the only real fix (rewrite is hygiene).
 - Artifact Registry inventory failed because billing is disabled for the configured GCP project;
   old image deletion remains blocked.
-- Patch-set quarantine (2026-09-04): `gitleaks detect --no-git --source patches` found 9
-  candidates across the retired `security-phase1-*` / `full-18` / `full-24` sets — all verified as
+- Patch-set quarantine (2026-09-04): `gitleaks detect --no-git --source patches` over the
+  retired `security-phase1-*` / `full-18` / `full-24` sets found 9 candidates — all verified as
   test dummies (`test_secret_key_...`, also present in the committed tree and allowlisted by
-  `.gitleaks.toml`) or an already-replaced docs placeholder. No patch file contained the leaked
-  `opencode.json` key (the `16d5fbc` deletion diff was never part of any patch dir). All retired
-  sets were deleted from disk; the handoff artifact is a freshly generated, rescanned clean series
-  (`patches/security-phase1-clean/`, 0 findings with repo config).
+  `.gitleaks.toml`) or a docs placeholder literal that was already replaced at HEAD. No patch file
+  contained the leaked `opencode.json` key (the `16d5fbc` deletion diff was never part of any
+  patch dir; all ranges start after it). All retired sets were deleted from disk.
+- Handoff artifact: freshly generated `patches/security-phase1-clean/` (`16d5fbc..HEAD`, 27
+  patches), rescanned with repo config: 2 findings, both the same never-used docs placeholder —
+  added in one patch, removed two patches later (`git log -S` pair), absent at HEAD
+  (`git grep` clean). Zero real secrets.
 - A disposable rewrite mirror and replace-text helper used during verification were deleted.
   The labeled pre-rewrite bundle (`%TEMP%/opencode/bist-bot-before-rewrite.bundle`, verified)
   is retained as the sole recovery copy until the incident closes, then must be deleted.
