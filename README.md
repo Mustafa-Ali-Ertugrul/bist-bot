@@ -178,7 +178,7 @@ Backtest JSON ciktilari `data/` altina yazilir.
 ## Cloud Run
 
 - Bu repo Cloud Run'da tek servis yerine iki servis olarak deploy edilmelidir: `bist-bot-api` ve `bist-bot-ui`.
-- `bist-bot-ui` Streamlit'i calistirir; `bist-bot-api` ise Flask JSON API'yi `python dashboard.py` ile acar.
+- `bist-bot-ui` Streamlit'i calistirir; `bist-bot-api` ise Flask JSON API'yi tek-worker threaded Gunicorn ile acar.
 - UI servisinde `API_BASE_URL`, API servisinin Cloud Run URL'sine ayarlanmalidir.
 - API servisinde `CORS_ORIGINS`, UI servisinin Cloud Run URL'sini icermelidir.
 - Hem UI hem API servisinde `DB_PATH=/tmp/bist_signals.db` ayarlayin; bu gecicidir ve instance yeniden olusunca sifirlanir.
@@ -209,8 +209,8 @@ gcloud run deploy bist-bot-api \
   --image REGION-docker.pkg.dev/PROJECT_ID/REPOSITORY/bist-bot:latest \
   --region YOUR_REGION \
   --allow-unauthenticated \
-  --command python \
-  --args dashboard.py \
+  --command gunicorn \
+  --args="--bind,0.0.0.0:8080,--workers,1,--threads,8,--timeout,330,--graceful-timeout,30,--forwarded-allow-ips=*,bist_bot.wsgi:app" \
   --set-env-vars PYTHONPATH=/app/src,DB_PATH=/tmp/bist_signals.db,RATE_LIMIT_STORAGE_URI=memory:// \
   --set-secrets JWT_SECRET_KEY=jwt-secret-key:latest
 

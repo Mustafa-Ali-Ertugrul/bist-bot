@@ -10,6 +10,7 @@ from dashboard import create_dashboard_app
 from flask_jwt_extended import create_access_token
 from sqlalchemy import text
 
+from bist_bot.auth.passwords import hash_password
 from bist_bot.config.settings import settings
 from bist_bot.data.fetcher import BISTDataFetcher
 from bist_bot.db import DataAccess, DatabaseManager
@@ -156,11 +157,33 @@ def _build_client(tmp_path, fetcher, engine):
         CORS_ORIGINS=("http://localhost:8501",),
     ):
         manager = DatabaseManager(sqlite_path=str(tmp_path / "integration_api.db"))
+        now = datetime.now(UTC)
+        with manager.engine.begin() as conn:
+            conn.execute(
+                text(
+                    "INSERT INTO users "
+                    "(email, password_hash, role, created_at, updated_at) "
+                    "VALUES (:email, :password_hash, 'admin', :created_at, :updated_at)"
+                ),
+                {
+                    "email": "admin@bistbot.local",
+                    "password_hash": hash_password("test-password"),
+                    "created_at": now,
+                    "updated_at": now,
+                },
+            )
+            admin_id = conn.execute(
+                text("SELECT id FROM users WHERE email = :email"),
+                {"email": "admin@bistbot.local"},
+            ).scalar_one()
         db = DataAccess(manager)
         app = create_dashboard_app(cast(Any, fetcher), cast(Any, engine), db)
         app.config["TESTING"] = True
         with app.app_context():
-            token = create_access_token(identity="admin@bistbot.local")
+            token = create_access_token(
+                identity=str(admin_id),
+                additional_claims={"role": "admin", "email": "admin@bistbot.local"},
+            )
         return app.test_client(), db, manager, token
 
 
@@ -414,7 +437,12 @@ def test_scan_orchestration_auto_execute_creates_sent_order(tmp_path) -> None:
                 {"notify_scan_results": lambda self, signals, actionable, total: None},
             )(),
         ),
-        settings=settings.replace(AUTO_EXECUTE=True, PAPER_MODE=False, AGENT_ENABLED=False),
+        settings=settings.replace(
+            AUTO_EXECUTE=True,
+            AUTO_EXECUTE_ENABLED=True,
+            PAPER_MODE=False,
+            AGENT_ENABLED=False,
+        ),
     )
 
     result = service.scan_once()
@@ -475,7 +503,12 @@ def test_scan_orchestration_marks_order_rejected_when_broker_fails(tmp_path) -> 
                 {"notify_scan_results": lambda self, signals, actionable, total: None},
             )(),
         ),
-        settings=settings.replace(AUTO_EXECUTE=True, PAPER_MODE=False, AGENT_ENABLED=False),
+        settings=settings.replace(
+            AUTO_EXECUTE=True,
+            AUTO_EXECUTE_ENABLED=True,
+            PAPER_MODE=False,
+            AGENT_ENABLED=False,
+        ),
     )
 
     service.scan_once()

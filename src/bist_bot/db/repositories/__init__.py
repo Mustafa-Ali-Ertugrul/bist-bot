@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from bist_bot.db.database import DatabaseManager
 from bist_bot.db.repositories.config_repository import ConfigRepository
 from bist_bot.db.repositories.ledger_repository import LedgerRepository
+from bist_bot.db.repositories.order_intents_repository import OrderIntentsRepository
 from bist_bot.db.repositories.orders_repository import OrdersRepository
 from bist_bot.db.repositories.portfolio_repository import PortfolioRepository
 from bist_bot.db.repositories.signals_repository import SignalsRepository
@@ -23,6 +24,7 @@ class AppRepository:
         self.ledger = LedgerRepository(self.manager)
         self.config = ConfigRepository(self.manager)
         self.orders = OrdersRepository(self.manager)
+        self.order_intents = OrderIntentsRepository(self.manager)
 
     def ping(self) -> bool:
         return self.manager.ping()

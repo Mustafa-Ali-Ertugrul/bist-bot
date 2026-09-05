@@ -1,5 +1,6 @@
 """Scan orchestration service shared by CLI and dashboard flows."""
 
+import threading
 import time
 from datetime import UTC, date, datetime, timedelta
 from typing import cast
@@ -71,6 +72,10 @@ def _interval_minutes(interval: str | None) -> float | None:
     if unit == "mo":
         return n * 30 * 24 * 60
     return None
+
+
+class ScanAbortedError(Exception):
+    """Raised when a market scan is aborted via cooperative cancellation."""
 
 
 class ScanService:
@@ -148,6 +153,9 @@ class ScanService:
 
     def _auto_execute_signals(self, signals: list[Signal]) -> None:
         """Submit actionable signals to the configured execution service."""
+        if getattr(self.settings, "AUTO_EXECUTE_ENABLED", False) is not True:
+            logger.info("auto_execute_disabled_by_independent_gate")
+            return
         self.execution_service.auto_execute_signals(signals)
 
     def _check_signal_changes(self, signals: list[Signal]) -> None:
@@ -276,13 +284,20 @@ class ScanService:
         except Exception as exc:
             logger.exception("signal_outcome_processing_failed", error=exc)
 
-    def scan_once(self, force_refresh: bool = False) -> list[Signal]:
+    def scan_once(
+        self,
+        force_refresh: bool = False,
+        abort_event: threading.Event | None = None,
+    ) -> list[Signal]:
         """Run one complete scan and return all generated signals.
 
         When `force_refresh` is true, intraday fetch and analysis caches are
         invalidated before data loading. Only actionable signals are persisted
         and queued for execution/paper trading, but the full signal list is
         returned to callers for UI and diagnostics.
+
+        If `abort_event` is provided and signaled, processing is aborted at phase
+        boundaries to ensure strict discard of stale results without side-effects.
         """
         started_at = time.perf_counter()
         watchlist = list(getattr(self.settings, "WATCHLIST", []) or [])
@@ -359,6 +374,11 @@ class ScanService:
                 )
                 return []
 
+            # Phase boundary 1: Check abort after data loading and freshness checks
+            if abort_event is not None and abort_event.is_set():
+                logger.warning("scan_aborted_after_fetch", reason="timeout_or_cancellation")
+                raise ScanAbortedError("Scan aborted after data fetch")
+
             signals = self.engine.scan_all(all_data)
             breakdown_getter = getattr(self.engine, "get_last_rejection_breakdown", None)
             breakdown = (
@@ -385,6 +405,11 @@ class ScanService:
                 "buys": len(actionable_buys),
                 "sells": len(actionable_sells),
             }
+
+            # Phase boundary 2: Strict discard check before writing side effects / persisting signals
+            if abort_event is not None and abort_event.is_set():
+                logger.warning("scan_aborted_before_persistence", reason="timeout_or_cancellation")
+                raise ScanAbortedError("Scan aborted before persistence (strict discard)")
 
             self._check_signal_changes(signals)
             persisted = self._filter_duplicate_sats(signals)
@@ -414,6 +439,11 @@ class ScanService:
                 scan_id=str(self.last_rejection_breakdown.get("scan_id", "") or ""),
                 rejection_breakdown=self.last_rejection_breakdown,
             )
+            # Phase boundary 3: Check before notifying
+            if abort_event is not None and abort_event.is_set():
+                logger.warning("scan_aborted_before_notification", reason="timeout_or_cancellation")
+                raise ScanAbortedError("Scan aborted before notification")
+
             self.notification_service.notify_scan_results(signals, actionable, len(all_data))
 
             if getattr(self.settings, "PAPER_MODE", False):

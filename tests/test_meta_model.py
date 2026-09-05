@@ -7,8 +7,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from bist_bot.config.settings import settings
 from bist_bot.ml import ProbabilityCalibrator, SignalMetaModel
 from bist_bot.ml.features import to_float
+from bist_bot.ml.meta_model import _verify_artifact_manifest, _write_artifact_manifest
 
 
 def test_probability_calibrator_platt_outputs_bounded_values() -> None:
@@ -61,3 +63,67 @@ def test_signal_meta_model_rejects_pickle_artifacts(tmp_path) -> None:
 
     with pytest.raises(FileNotFoundError, match="Pickle model format is not supported"):
         SignalMetaModel.load_artifacts(tmp_path)
+
+
+@pytest.mark.parametrize("method", ["platt", "isotonic"])
+def test_calibrator_json_round_trip_preserves_probabilities(method) -> None:
+    calibrator = ProbabilityCalibrator(method)
+    calibrator.fit([0.05, 0.2, 0.4, 0.6, 0.8, 0.95], [0, 0, 0, 1, 1, 1])
+    samples = [0.1, 0.35, 0.7, 0.9]
+
+    restored = ProbabilityCalibrator.from_json_dict(calibrator.to_json_dict())
+
+    np.testing.assert_allclose(
+        restored.predict(samples),
+        calibrator.predict(samples),
+        rtol=0.0,
+        atol=1e-9,
+    )
+
+
+def test_enforce_mode_rejects_unsigned_artifacts(tmp_path) -> None:
+    (tmp_path / "feature_columns.json").write_text('["score"]', encoding="utf-8")
+
+    with settings.override(CALIBRATOR_TRUST="enforce"):
+        with pytest.raises(ValueError, match="Signed artifact manifest is required"):
+            SignalMetaModel.load_artifacts(tmp_path)
+
+
+def test_artifact_trust_cannot_be_disabled(tmp_path) -> None:
+    with settings.override(CALIBRATOR_TRUST="off"):
+        with pytest.raises(ValueError, match="Unsupported CALIBRATOR_TRUST mode"):
+            SignalMetaModel.load_artifacts(tmp_path)
+
+
+def test_ed25519_manifest_verifies_and_detects_tampering(tmp_path) -> None:
+    cryptography = pytest.importorskip("cryptography")
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    _ = cryptography
+    private_key = Ed25519PrivateKey.generate()
+    private_path = tmp_path / "private.pem"
+    public_path = tmp_path / "public.pem"
+    private_path.write_bytes(
+        private_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+    )
+    public_path.write_bytes(
+        private_key.public_key().public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+    )
+    artifact = tmp_path / "safe.json"
+    artifact.write_text('{"ok":true}', encoding="utf-8")
+    with settings.override(MODEL_SIGNING_PRIVATE_KEY_FILE=str(private_path)):
+        _write_artifact_manifest(tmp_path, ["safe.json"])
+    with settings.override(MODEL_VERIFY_PUBLIC_KEY_FILE=str(public_path)):
+        _verify_artifact_manifest(tmp_path, "enforce")
+
+        artifact.write_text('{"ok":false}', encoding="utf-8")
+        with pytest.raises(ValueError, match="integrity check failed"):
+            _verify_artifact_manifest(tmp_path, "enforce")

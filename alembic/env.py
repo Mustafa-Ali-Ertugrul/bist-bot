@@ -26,6 +26,35 @@ if config.config_file_name is not None and not config.get_main_option("dont_muta
 target_metadata = Base.metadata
 
 
+def _make_include_object(url: str):
+    """Build the autogenerate filter bound to the target dialect.
+
+    SQLite cannot reflect inline UNIQUE column definitions as named
+    constraints, so any named UniqueConstraint in metadata trivially
+    mismatches on SQLite (PostgreSQL reflects them properly, which is why
+    the metadata naming convention exists). Skipping unique-constraint
+    comparison on SQLite only keeps `alembic check` meaningful on both
+    dialects; PostgreSQL remains the authoritative drift gate.
+    """
+    from sqlalchemy.engine import make_url
+
+    try:
+        dialect_name = make_url(url).get_dialect().name
+    except Exception:
+        dialect_name = ""
+
+    def include_object(
+        _object: object,
+        _name: str | None,
+        type_: str,
+        _reflected: object,
+        _compare_to: object | None,
+    ) -> bool:
+        return not (type_ == "unique_constraint" and dialect_name == "sqlite")
+
+    return include_object
+
+
 def get_url() -> str:
     """Resolve DB URL: prefer config option if set (e.g. tests), else runtime."""
     cfg_url = config.get_main_option("sqlalchemy.url")
@@ -43,14 +72,16 @@ def run_migrations_offline() -> None:
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
         compare_type=True,
+        include_object=_make_include_object(url),
     )
     with context.begin_transaction():
         context.run_migrations()
 
 
 def run_migrations_online() -> None:
+    url = get_url()
     configuration = config.get_section(config.config_ini_section) or {}
-    configuration["sqlalchemy.url"] = get_url()
+    configuration["sqlalchemy.url"] = url
     connectable = engine_from_config(
         configuration,
         prefix="sqlalchemy.",
@@ -62,6 +93,7 @@ def run_migrations_online() -> None:
             connection=connection,
             target_metadata=target_metadata,
             compare_type=True,
+            include_object=_make_include_object(url),
         )
         with context.begin_transaction():
             context.run_migrations()

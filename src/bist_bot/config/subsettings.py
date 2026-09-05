@@ -333,6 +333,8 @@ class DatabaseSettings:
 @dataclass(frozen=True)
 class AuthSettings:
     JWT_SECRET_KEY: str = _get_str_env("JWT_SECRET_KEY")
+    JWT_ACCESS_TOKEN_MINUTES: int = _get_int_env("JWT_ACCESS_TOKEN_MINUTES", 15)
+    RBAC_MODE: str = _get_str_env("RBAC_MODE", "warn").lower()
     ADMIN_BOOTSTRAP_EMAIL: str = _get_str_env("ADMIN_BOOTSTRAP_EMAIL")
     ADMIN_BOOTSTRAP_PASSWORD_HASH: str = _get_str_env("ADMIN_BOOTSTRAP_PASSWORD_HASH")
     ADMIN_BOOTSTRAP_UPDATE_EXISTING: bool = _get_bool_env("ADMIN_BOOTSTRAP_UPDATE_EXISTING", False)
@@ -349,6 +351,8 @@ class ServerSettings:
     METRICS_PUBLIC: bool = _get_bool_env("METRICS_PUBLIC", False)
     API_BASE_URL: str = _get_str_env("API_BASE_URL", f"http://localhost:{DEFAULT_FLASK_PORT}")
     RATE_LIMIT_STORAGE_URI: str = _get_str_env("RATE_LIMIT_STORAGE_URI", "memory://")
+    EXPECTED_INSTANCE_COUNT: int = _get_int_env("EXPECTED_INSTANCE_COUNT", 1)
+    DEGRADED_MAX_SECONDS: int = _get_int_env("DEGRADED_MAX_SECONDS", 300)
     SENTRY_DSN: str | None = _get_str_env("SENTRY_DSN") or None
     ENVIRONMENT: str = _get_str_env("ENVIRONMENT", "production")
     SCAN_TIMEOUT_SECONDS: int = _get_int_env("SCAN_TIMEOUT_SECONDS", 300)
@@ -402,6 +406,22 @@ class BrokerSettings:
     ALGOLAB_PASSWORD: str = _get_str_env("ALGOLAB_PASSWORD")
     ALGOLAB_OTP_CODE: str = _get_str_env("ALGOLAB_OTP_CODE")
     ALGOLAB_DRY_RUN: bool = _get_bool_env("ALGOLAB_DRY_RUN", True)
+    ALGOLAB_SEND_CLIENT_ID: bool = _get_bool_env("ALGOLAB_SEND_CLIENT_ID", False)
+    ALGOLAB_LOGIN_URL: str = _get_str_env("ALGOLAB_LOGIN_URL")
+    ALGOLAB_VERIFY_OTP_URL: str = _get_str_env("ALGOLAB_VERIFY_OTP_URL")
+    ALGOLAB_POSITIONS_URL: str = _get_str_env("ALGOLAB_POSITIONS_URL")
+    ALGOLAB_ACCOUNT_URL: str = _get_str_env("ALGOLAB_ACCOUNT_URL")
+    ALGOLAB_ORDERS_URL: str = _get_str_env("ALGOLAB_ORDERS_URL")
+    ALGOLAB_ORDER_STATUS_URL: str = _get_str_env("ALGOLAB_ORDER_STATUS_URL")
+    ALGOLAB_CANCEL_ORDER_URL: str = _get_str_env("ALGOLAB_CANCEL_ORDER_URL")
+    ALGOLAB_OPEN_ORDERS_URL: str = _get_str_env("ALGOLAB_OPEN_ORDERS_URL")
+    ALGOLAB_ORDER_HISTORY_URL: str = _get_str_env("ALGOLAB_ORDER_HISTORY_URL")
+    ALGOLAB_RECONCILE_WINDOW_SECONDS: int = _get_int_env("ALGOLAB_RECONCILE_WINDOW_SECONDS", 180)
+    ALGOLAB_RECONCILE_ON_STARTUP: bool = _get_bool_env("ALGOLAB_RECONCILE_ON_STARTUP", True)
+    ALGOLAB_RECONCILE_CANCEL_REMAINDER: bool = _get_bool_env(
+        "ALGOLAB_RECONCILE_CANCEL_REMAINDER", True
+    )
+    ALGOLAB_STATUS_MAP: str = _get_str_env("ALGOLAB_STATUS_MAP", "")
     ALPACA_API_KEY: str = _get_str_env("ALPACA_API_KEY")
     ALPACA_SECRET_KEY: str = _get_str_env("ALPACA_SECRET_KEY")
     ALPACA_PAPER: bool = _get_bool_env("ALPACA_PAPER", True)
@@ -414,6 +434,7 @@ class BrokerSettings:
     MAX_POSITION_SIZE: float = _get_float_env("MAX_POSITION_SIZE", 0.125)
     MAX_DAILY_LOSS: float = _get_float_env("MAX_DAILY_LOSS", 0.03)
     MAX_ACCOUNT_DRAWDOWN: float = _get_float_env("MAX_ACCOUNT_DRAWDOWN", 0.15)
+    AUTO_EXECUTE_ENABLED: bool = _get_bool_env("AUTO_EXECUTE_ENABLED", False)
     AUTO_EXECUTE: bool = _get_bool_env("AUTO_EXECUTE", False)
     STRATEGY_PROFILE: str = _get_str_env("STRATEGY_PROFILE", "conservative")
     CONFIRM_LIVE_TRADING: bool = _get_bool_env("CONFIRM_LIVE_TRADING", False)
@@ -434,6 +455,9 @@ class BacktestSettings:
 
 @dataclass(frozen=True)
 class MLSettings:
+    CALIBRATOR_TRUST: str = _get_str_env("CALIBRATOR_TRUST", "warn").lower()
+    MODEL_SIGNING_PRIVATE_KEY_FILE: str = _get_str_env("MODEL_SIGNING_PRIVATE_KEY_FILE")
+    MODEL_VERIFY_PUBLIC_KEY_FILE: str = _get_str_env("MODEL_VERIFY_PUBLIC_KEY_FILE")
     ML_SEQUENCE_LENGTH: int = _get_int_env("ML_SEQUENCE_LENGTH", 60)
     ML_EPOCHS: int = _get_int_env("ML_EPOCHS", 50)
     ML_BATCH_SIZE: int = _get_int_env("ML_BATCH_SIZE", 32)

@@ -83,6 +83,7 @@ results/daily_report_*.md
 # Temp and generated files
 __temp_*
 *.bak
+opencode.json
 opencode.json.legacy-*
 get-pip.py
 debug_login.py

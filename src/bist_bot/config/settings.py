@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import warnings
 from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from dataclasses import replace as dataclass_replace
@@ -185,6 +186,30 @@ class Settings:
 
     @property
     def admin_bootstrap_enabled(self) -> bool:
+        if bool(self.ADMIN_BOOTSTRAP_EMAIL) != bool(self.ADMIN_BOOTSTRAP_PASSWORD_HASH):
+            raise RuntimeError(
+                "Both ADMIN_BOOTSTRAP_EMAIL and ADMIN_BOOTSTRAP_PASSWORD_HASH must be set together"
+            )
+        if self.ADMIN_BOOTSTRAP_PASSWORD_HASH:
+            # Validate with the same acceptance set as the login verifier
+            # (auth/passwords.verify_and_rehash_password): malformed hashes must
+            # fail at boot, never surface as a permanently-locked admin.
+            import bcrypt
+            from werkzeug.security import check_password_hash
+
+            candidate = str(self.ADMIN_BOOTSTRAP_PASSWORD_HASH).strip()
+            try:
+                if candidate.startswith(("scrypt:", "pbkdf2:")):
+                    check_password_hash(candidate, "__bootstrap_format_probe__")
+                elif candidate.startswith(("$2a$", "$2b$", "$2y$")):
+                    bcrypt.checkpw(b"__bootstrap_format_probe__", candidate.encode("utf-8"))
+                else:
+                    raise ValueError(f"unsupported hash format: {candidate[:12]!r}")
+            except ValueError as exc:
+                raise RuntimeError(
+                    "ADMIN_BOOTSTRAP_PASSWORD_HASH has an invalid format; "
+                    "pre-computed scrypt/pbkdf2/bcrypt hash required"
+                ) from exc
         return bool(self.ADMIN_BOOTSTRAP_EMAIL and self.ADMIN_BOOTSTRAP_PASSWORD_HASH)
 
     def validate_broker_config(self) -> None:
@@ -195,11 +220,51 @@ class Settings:
             raise RuntimeError(
                 f"Unsupported BROKER_MODE/BROKER_PROVIDER: mode={mode!r} provider={provider!r}"
             )
+        effective = provider if provider == "algolab" else mode
+        live_execution = effective == "live" or (
+            effective == "algolab" and not self.ALGOLAB_DRY_RUN
+        )
+        if live_execution:
+            database_url = str(self.DATABASE_URL or "").strip().lower()
+            if not database_url or database_url.startswith("sqlite"):
+                raise RuntimeError(
+                    "Live broker execution requires a persistent non-SQLite DATABASE_URL; "
+                    "ephemeral/local SQLite cannot preserve the order intent ledger"
+                )
+        if self.EXPECTED_INSTANCE_COUNT > 1 and str(self.RATE_LIMIT_STORAGE_URI).startswith(
+            "memory://"
+        ):
+            warnings.warn(
+                "RATE_LIMIT_STORAGE_URI=memory:// is process-local while "
+                "EXPECTED_INSTANCE_COUNT>1; configure Redis before scaling out",
+                RuntimeWarning,
+                stacklevel=2,
+            )
         # Live stub is intentional; venue adapters require explicit provider.
         if mode == "live" and provider in {"live", "paper"}:
             # LiveBroker stub — allowed for construction; submit raises NotImplementedError.
             return
         if provider == "algolab":
+            if self.ALGOLAB_STATUS_MAP:
+                import json as _json
+
+                try:
+                    parsed_map = _json.loads(self.ALGOLAB_STATUS_MAP)
+                    if not isinstance(parsed_map, dict):
+                        raise ValueError("must be a JSON object")
+                except Exception as exc:
+                    raise RuntimeError(
+                        f"ALGOLAB_STATUS_MAP has invalid JSON format: {exc}"
+                    ) from exc
+                valid_targets = {"FILLED", "PARTIAL", "OPEN", "CANCELLED", "REJECTED"}
+                for k, v in parsed_map.items():
+                    normalized_target = str(v).strip().upper()
+                    if normalized_target not in valid_targets:
+                        raise RuntimeError(
+                            f"ALGOLAB_STATUS_MAP target '{v}' for status '{k}' is invalid; "
+                            f"allowed targets: {sorted(valid_targets)}"
+                        )
+
             if not self.ALGOLAB_API_KEY or not self.ALGOLAB_USERNAME or not self.ALGOLAB_PASSWORD:
                 raise RuntimeError(
                     "Missing required AlgoLab credentials for BROKER_PROVIDER=algolab"
@@ -208,6 +273,21 @@ class Settings:
                 raise RuntimeError(
                     "CONFIRM_LIVE_TRADING=true is required when ALGOLAB_DRY_RUN=false"
                 )
+            if not self.ALGOLAB_DRY_RUN:
+                endpoint_names = {
+                    "ALGOLAB_LOGIN_URL": self.ALGOLAB_LOGIN_URL,
+                    "ALGOLAB_VERIFY_OTP_URL": self.ALGOLAB_VERIFY_OTP_URL,
+                    "ALGOLAB_ORDERS_URL": self.ALGOLAB_ORDERS_URL,
+                    "ALGOLAB_ORDER_STATUS_URL": self.ALGOLAB_ORDER_STATUS_URL,
+                    "ALGOLAB_CANCEL_ORDER_URL": self.ALGOLAB_CANCEL_ORDER_URL,
+                    "ALGOLAB_ORDER_HISTORY_URL": self.ALGOLAB_ORDER_HISTORY_URL,
+                }
+                missing_endpoints = [name for name, value in endpoint_names.items() if not value]
+                if missing_endpoints:
+                    raise RuntimeError(
+                        "Missing required AlgoLab endpoint settings for live execution: "
+                        + ", ".join(missing_endpoints)
+                    )
             return
 
     def validate_data_provider_config(self) -> None:

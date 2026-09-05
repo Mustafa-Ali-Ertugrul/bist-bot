@@ -31,6 +31,8 @@ def test_alembic_fresh_upgrade_and_downgrade(alembic_cfg, tmp_path):
         tables = set(insp.get_table_names())
         assert "signals" in tables
         assert "trade_ledger" in tables
+        assert "order_intents" in tables
+        assert "bootstrap_state" in tables
         assert "users" in tables
 
         signal_cols = {col["name"] for col in insp.get_columns("signals")}
@@ -38,12 +40,18 @@ def test_alembic_fresh_upgrade_and_downgrade(alembic_cfg, tmp_path):
         assert "outcome_source" in signal_cols
         assert "backfilled_at" in signal_cols
 
+        order_intents_cols = {col["name"] for col in insp.get_columns("order_intents")}
+        assert "signal_snapshot" in order_intents_cols
+        assert "order_db_id" in order_intents_cols
+
     # 2. Downgrade to 0001
     command.downgrade(alembic_cfg, "0001_initial_schema")
     with engine.connect() as conn:
         insp = sa.inspect(conn)
         tables = set(insp.get_table_names())
         assert "trade_ledger" not in tables
+        assert "order_intents" not in tables
+        assert "bootstrap_state" not in tables
         signal_cols = {col["name"] for col in insp.get_columns("signals")}
         assert "score_breakdown" not in signal_cols
 
@@ -53,6 +61,8 @@ def test_alembic_fresh_upgrade_and_downgrade(alembic_cfg, tmp_path):
         insp = sa.inspect(conn)
         tables = set(insp.get_table_names())
         assert "trade_ledger" in tables
+        assert "order_intents" in tables
+        assert "bootstrap_state" in tables
 
 
 def test_alembic_idempotent_on_existing_app_schema(alembic_cfg, tmp_path):
@@ -77,3 +87,5 @@ def test_alembic_idempotent_on_existing_app_schema(alembic_cfg, tmp_path):
         insp = sa.inspect(conn)
         tables = set(insp.get_table_names())
         assert "trade_ledger" in tables
+        assert "order_intents" in tables
+        assert "bootstrap_state" in tables

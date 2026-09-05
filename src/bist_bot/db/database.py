@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import random
 import re
 import threading
@@ -15,6 +16,7 @@ from sqlalchemy import (
     Float,
     Index,
     Integer,
+    MetaData,
     String,
     Text,
     event,
@@ -36,8 +38,28 @@ from bist_bot.config.settings import settings
 logger = get_logger(__name__, component="database")
 
 
+class DatabaseInitializationError(RuntimeError):
+    """The configured database is unavailable during application startup."""
+
+
 class Base(DeclarativeBase):
-    pass
+    """Declarative base with deterministic PostgreSQL-compatible constraint names.
+
+    Keeps SQLAlchemy's default ``ix`` convention and adds the ``uq`` template
+    matching PostgreSQL's auto-naming (``%(table_name)s_%(column_0_name)s_key``)
+    so inline ``unique=True`` columns compare equal to the table-level
+    UniqueConstraints created by the Alembic migrations. Without the ``uq``
+    entry, ``alembic check`` reports phantom remove_constraint drift on every
+    fresh database. A partial dict would also drop the default ``ix`` entry,
+    so both keys are declared explicitly.
+    """
+
+    metadata = MetaData(
+        naming_convention={
+            "ix": "ix_%(column_0_label)s",
+            "uq": "%(table_name)s_%(column_0_name)s_key",
+        }
+    )
 
 
 def _validate_table_name(name: str) -> str:
@@ -193,11 +215,16 @@ class ConfigRecord(Base):
 
 class UserRecord(Base):
     __tablename__ = "users"
+    # Mirrors migration 0001 (table-level UniqueConstraint on email) plus the
+    # unique ix_users_email index enforced since migration 0002. The metadata
+    # naming convention gives the inline constraint the same PostgreSQL name
+    # so `alembic check` stays green.
+    __table_args__ = (Index("ix_users_email", "email", unique=True),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    email: Mapped[str] = mapped_column(String, nullable=False, unique=True, index=True)
+    email: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     password_hash: Mapped[str] = mapped_column(Text, nullable=False)
-    role: Mapped[str] = mapped_column(String, nullable=False, default="admin")
+    role: Mapped[str] = mapped_column(String, nullable=False, default="user", server_default="user")
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=lambda: datetime.now(UTC)
     )
@@ -228,6 +255,37 @@ class OrderRecord(Base):
     position_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     purpose: Mapped[str] = mapped_column(String, nullable=False, default="ENTRY")
     metadata_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class OrderIntentRecord(Base):
+    __tablename__ = "order_intents"
+    # Unique indexes mirror migration 0004 exactly (inline unique=True keeps the
+    # table-level constraints PG-named via the metadata naming convention).
+    __table_args__ = (
+        Index("ix_order_intents_client_id", "client_id", unique=True),
+        Index("ix_order_intents_active_key", "active_key", unique=True),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    client_id: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    active_key: Mapped[str | None] = mapped_column(String, nullable=True, unique=True)
+    ticker: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    side: Mapped[str] = mapped_column(String, nullable=False)
+    quantity: Mapped[float] = mapped_column(Float, nullable=False)
+    order_type: Mapped[str] = mapped_column(String, nullable=False)
+    price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    stop_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    status: Mapped[str] = mapped_column(String, nullable=False, default="pending", index=True)
+    broker_order_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    order_db_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    signal_snapshot: Mapped[str | None] = mapped_column(Text, nullable=True)
+    detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+    )
 
 
 class LivePositionRecord(Base):
@@ -262,6 +320,16 @@ class LivePositionRecord(Base):
         DateTime, nullable=False, default=lambda: datetime.now(UTC)
     )
     updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+
+class BootstrapStateRecord(Base):
+    __tablename__ = "bootstrap_state"
+
+    key: Mapped[str] = mapped_column(String, primary_key=True)
+    value: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=lambda: datetime.now(UTC)
     )
 
@@ -378,13 +446,42 @@ class DatabaseManager:
             try:
                 Base.metadata.create_all(self.engine)
             except OperationalError as exc:
-                raise RuntimeError(
+                raise DatabaseInitializationError(
                     "Veri deposu başlatılamadı. DB_PATH veya DATABASE_URL yapılandırmasını kontrol edin."
                 ) from exc
-            self._migrate_legacy_schema()
-            self._seed_admin_user()
-            self._warn_if_no_users()
+            try:
+                self._migrate_legacy_schema()
+                # Bootstrap always runs before the fail-closed privileged-user check.
+                self._seed_admin_user()
+                self._warn_if_no_users()
+                self._validate_privileged_user_exists()
+            except DatabaseInitializationError:
+                raise
+            except SQLAlchemyError as exc:
+                raise DatabaseInitializationError(
+                    "Database became unavailable during startup validation"
+                ) from exc
             self._initialized = True
+
+    def _validate_privileged_user_exists(self) -> None:
+        try:
+            with self.engine.connect() as conn:
+                count = conn.execute(
+                    text("SELECT COUNT(*) FROM users WHERE role IN ('admin', 'trader')")
+                ).scalar_one()
+        except OperationalError as exc:
+            raise DatabaseInitializationError(
+                "Database unavailable while validating privileged users"
+            ) from exc
+        if count:
+            return
+        message = (
+            "No admin/trader user exists. Configure ADMIN_BOOTSTRAP_EMAIL and "
+            "ADMIN_BOOTSTRAP_PASSWORD_HASH before enabling RBAC_MODE=enforce."
+        )
+        if str(settings.RBAC_MODE).lower() == "enforce":
+            raise RuntimeError(message)
+        logger.warning("no_privileged_user_configured", message=message)
 
     def _warn_if_no_users(self) -> None:
         if not self._is_sqlite:
@@ -564,12 +661,34 @@ class DatabaseManager:
         )
 
         now = self.now_utc()
+        state_key = f"admin_bootstrap_completed:{settings.ADMIN_BOOTSTRAP_EMAIL}"
         with self.engine.begin() as conn:
-            admin_exists = conn.execute(
-                text("SELECT id FROM users WHERE email = :email LIMIT 1"),
-                {"email": settings.ADMIN_BOOTSTRAP_EMAIL},
-            ).scalar_one_or_none()
-            if admin_exists is not None:
+            # Check if bootstrap has already completed once for this email
+            try:
+                state_completed = conn.execute(
+                    text("SELECT value FROM bootstrap_state WHERE key = :key LIMIT 1"),
+                    {"key": state_key},
+                ).scalar_one_or_none()
+            except OperationalError:
+                state_completed = None
+
+            if state_completed is not None:
+                logger.warning(
+                    "admin_bootstrap_skipped_one_shot",
+                    reason="bootstrap has already completed for this email; delete bootstrap_state row to re-arm",
+                    email=_mask_email(settings.ADMIN_BOOTSTRAP_EMAIL),
+                )
+                return
+
+            admin_row = (
+                conn.execute(
+                    text("SELECT id, role FROM users WHERE email = :email LIMIT 1"),
+                    {"email": settings.ADMIN_BOOTSTRAP_EMAIL},
+                )
+                .mappings()
+                .first()
+            )
+            if admin_row is not None:
                 if settings.ADMIN_BOOTSTRAP_UPDATE_EXISTING:
                     logger.warning(
                         "admin_bootstrap_overwrite_enabled",
@@ -578,7 +697,8 @@ class DatabaseManager:
                     )
                     conn.execute(
                         text(
-                            "UPDATE users SET password_hash = :password_hash, updated_at = :updated_at WHERE email = :email"
+                            "UPDATE users SET password_hash = :password_hash, role = 'admin', "
+                            "updated_at = :updated_at WHERE email = :email"
                         ),
                         {
                             "email": settings.ADMIN_BOOTSTRAP_EMAIL,
@@ -590,10 +710,22 @@ class DatabaseManager:
                         "admin_bootstrap_existing_admin_updated",
                         email=_mask_email(settings.ADMIN_BOOTSTRAP_EMAIL),
                     )
+                    self._write_bootstrap_audit(
+                        conn,
+                        event_type="admin_bootstrap_promoted_existing",
+                        user_id=int(admin_row["id"]),
+                        previous_role=str(admin_row["role"]),
+                    )
+                    self._mark_bootstrap_completed(conn, state_key, "promoted")
                 else:
-                    logger.info(
+                    log_method = (
+                        logger.info if str(admin_row["role"]) == "admin" else logger.warning
+                    )
+                    log_method(
                         "admin_bootstrap_existing_admin_update_skipped",
-                        reason="admin_exists",
+                        reason="admin_exists"
+                        if str(admin_row["role"]) == "admin"
+                        else "existing_user_not_admin",
                         email=_mask_email(settings.ADMIN_BOOTSTRAP_EMAIL),
                     )
                 return
@@ -619,12 +751,69 @@ class DatabaseManager:
                     "admin_bootstrap_created",
                     email=_mask_email(settings.ADMIN_BOOTSTRAP_EMAIL),
                 )
+                created_id = conn.execute(
+                    text("SELECT id FROM users WHERE email = :email"),
+                    {"email": settings.ADMIN_BOOTSTRAP_EMAIL},
+                ).scalar_one()
+                self._write_bootstrap_audit(
+                    conn,
+                    event_type="admin_bootstrap_created",
+                    user_id=int(created_id),
+                    previous_role=None,
+                )
+                self._mark_bootstrap_completed(conn, state_key, "created")
             except IntegrityError:
                 logger.warning(
                     "admin_bootstrap_duplicate",
                     email=settings.ADMIN_BOOTSTRAP_EMAIL,
                 )
                 return
+
+    def _mark_bootstrap_completed(self, conn, key: str, value: str) -> None:
+        try:
+            conn.execute(
+                text(
+                    "INSERT INTO bootstrap_state (key, value, created_at) "
+                    "VALUES (:key, :value, :created_at)"
+                ),
+                {"key": key, "value": value, "created_at": self.now_utc()},
+            )
+        except Exception:
+            logger.warning("bootstrap_state_record_failed", key=key)
+
+    def _write_bootstrap_audit(
+        self,
+        conn,
+        *,
+        event_type: str,
+        user_id: int,
+        previous_role: str | None,
+    ) -> None:
+        now = self.now_utc()
+        conn.execute(
+            text(
+                "INSERT INTO audit_trail "
+                "(timestamp, event_type, agent_state, details, trigger_source, created_at) "
+                "VALUES (:timestamp, :event_type, :agent_state, :details, "
+                ":trigger_source, :created_at)"
+            ),
+            {
+                "timestamp": now,
+                "event_type": event_type,
+                "agent_state": "security",
+                "details": json.dumps(
+                    {
+                        "user_id": user_id,
+                        "previous_role": previous_role,
+                        "new_role": "admin",
+                        "email": _mask_email(settings.ADMIN_BOOTSTRAP_EMAIL),
+                    },
+                    ensure_ascii=False,
+                ),
+                "trigger_source": "bootstrap",
+                "created_at": now,
+            },
+        )
 
     @contextmanager
     def session_scope(self, *, read_only: bool = False) -> Iterator[Session]:

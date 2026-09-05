@@ -37,6 +37,13 @@ DEDUPE_KEYS = {
     "app_settings": ("key",),
 }
 
+SQLITE_TABLE_QUERIES = {
+    "signals": ("SELECT * FROM signals", "PRAGMA table_info(signals)"),
+    "paper_trades": ("SELECT * FROM paper_trades", "PRAGMA table_info(paper_trades)"),
+    "scan_log": ("SELECT * FROM scan_log", "PRAGMA table_info(scan_log)"),
+    "app_settings": ("SELECT * FROM app_settings", "PRAGMA table_info(app_settings)"),
+}
+
 
 def _parse_dt(value: Any) -> datetime | None:
     if value is None or str(value).strip() == "":
@@ -93,12 +100,13 @@ def import_table(
 ) -> tuple[int, int]:
     dt_columns = DATETIME_COLUMNS[table_name]
     keys = DEDUPE_KEYS[table_name]
+    select_query, schema_query = SQLITE_TABLE_QUERIES[table_name]
 
-    src_rows = [dict(row) for row in src_conn.execute(f"SELECT * FROM {table_name}")]
+    src_rows = [dict(row) for row in src_conn.execute(select_query)]
     if not src_rows:
         return 0, 0
 
-    src_columns = {column[1] for column in src_conn.execute(f"PRAGMA table_info({table_name})")}
+    src_columns = {column[1] for column in src_conn.execute(schema_query)}
 
     inspector = inspect(target_engine)
     target_columns = {col["name"] for col in inspector.get_columns(table_name)}

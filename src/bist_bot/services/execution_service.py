@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from typing import Any
 
@@ -158,13 +159,36 @@ class ExecutionService:
         order_db_id = (
             int(order_row["id"]) if order_row and order_row.get("id") is not None else None
         )
+        signal_snapshot = json.dumps(
+            {
+                "stop_loss": signal.stop_loss,
+                "target_price": signal.target_price,
+                "signal_type": signal.signal_type.value
+                if hasattr(signal.signal_type, "value")
+                else str(signal.signal_type),
+                "score": getattr(signal, "score", 70.0),
+                "regime": getattr(signal, "regime", None),
+            },
+            ensure_ascii=False,
+        )
         try:
-            result = self.broker.place_order(
-                ticker=signal.ticker,
-                side=side,
-                quantity=quantity,
-                order_type=OrderType.MARKET,
-            )
+            try:
+                result = self.broker.place_order(
+                    ticker=signal.ticker,
+                    side=side,
+                    quantity=quantity,
+                    order_type=OrderType.MARKET,
+                    order_db_id=order_db_id,
+                    signal_snapshot=signal_snapshot,
+                )
+            except TypeError:
+                # Broker does not support intent linkage (e.g. PaperBroker / stub)
+                result = self.broker.place_order(
+                    ticker=signal.ticker,
+                    side=side,
+                    quantity=quantity,
+                    order_type=OrderType.MARKET,
+                )
             state_value = (
                 result.state.value if hasattr(result.state, "value") else str(result.state)
             )

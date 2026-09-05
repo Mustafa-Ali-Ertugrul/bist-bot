@@ -63,7 +63,11 @@ def test_scan_once_orchestrates_side_effect_services():
         engine,
         notifier,
         db,
-        settings=settings.replace(PAPER_MODE=True, AGENT_ENABLED=False),
+        settings=settings.replace(
+            PAPER_MODE=True,
+            AGENT_ENABLED=False,
+            AUTO_EXECUTE_ENABLED=True,
+        ),
         signal_change_service=signal_change_service,
         execution_service=execution_service,
         paper_trade_service=paper_trade_service,
@@ -120,7 +124,11 @@ def test_scan_once_skips_paper_trade_updates_when_disabled():
         engine,
         notifier,
         db,
-        settings=settings.replace(PAPER_MODE=False, AGENT_ENABLED=False),
+        settings=settings.replace(
+            PAPER_MODE=False,
+            AGENT_ENABLED=False,
+            AUTO_EXECUTE_ENABLED=True,
+        ),
         paper_trade_service=paper_trade_service,
     )
 
@@ -147,6 +155,7 @@ def test_scan_service_backwards_compatible_wrappers_delegate():
         signal_change_service=signal_change_service,
         execution_service=execution_service,
         paper_trade_service=paper_trade_service,
+        settings=settings.replace(AUTO_EXECUTE_ENABLED=True),
     )
     signal = Signal(ticker="THYAO.IS", signal_type=SignalType.STRONG_BUY, score=80, price=100.0)
 
@@ -302,7 +311,7 @@ def test_scan_once_persists_all_signals_including_hold():
         execution_service=execution_service,
         paper_trade_service=paper_trade_service,
         notification_service=notification_service,
-        settings=settings.replace(AGENT_ENABLED=False),
+        settings=settings.replace(AGENT_ENABLED=False, AUTO_EXECUTE_ENABLED=True),
     )
     result = service.scan_once()
 
@@ -367,6 +376,23 @@ def test_scan_once_skips_auto_execute_when_agent_enabled():
     result = service.scan_once()
 
     assert result == [signal]
+    execution_service.auto_execute_signals.assert_not_called()
+
+
+def test_auto_execute_requires_independent_enable_gate():
+    execution_service = MagicMock()
+    service = ScanService(
+        MagicMock(),
+        MagicMock(),
+        MagicMock(),
+        MagicMock(),
+        settings=settings.replace(AUTO_EXECUTE=True, AUTO_EXECUTE_ENABLED=False),
+        execution_service=execution_service,
+    )
+    signal = Signal(ticker="THYAO.IS", signal_type=SignalType.STRONG_BUY, score=80, price=100.0)
+
+    service._auto_execute_signals([signal])
+
     execution_service.auto_execute_signals.assert_not_called()
 
 

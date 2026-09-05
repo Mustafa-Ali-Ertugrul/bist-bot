@@ -1,0 +1,110 @@
+"""Calculate the documented AppSec score from finding status metadata.
+
+Scoring criteria (also documented in docs/security/phase0_phase1_report.md):
+- fixed / accepted: weight x 0.0 (closed)
+- mitigated_warn: weight x 0.5 (partially mitigated, enforcement pending)
+- open: weight x 1.0
+
+Finding 2 (order idempotency) graduates from mitigated_warn to fixed only when
+ALL of these hold: pending_open == sent_open == unknown_open ==
+ack_unaccounted_open == 0 on the live ledger AND the vendor contract
+(client_order_id echo, cancel-404 semantics, status dictionary) is verified in
+live staging. Until then it stays mitigated_warn regardless of code state.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+from collections import Counter
+from datetime import UTC, datetime
+from pathlib import Path
+
+WEIGHTS = {
+    "critical": 10.0,
+    "high": 7.0,
+    "medium": 4.0,
+    "low": 1.5,
+    "best_practice": 0.5,
+}
+
+# A finding leaves the open score only after it is fixed or explicitly accepted.
+# Warn-only mitigations count at half weight until enforcement is deployed.
+STATUS_FACTORS = {
+    "fixed": 0.0,
+    "accepted": 0.0,
+    "mitigated_warn": 0.5,
+    "open": 1.0,
+}
+FINDINGS = [
+    {"id": 1, "severity": "high", "status": "mitigated_warn", "title": "scan RBAC"},
+    {"id": 2, "severity": "high", "status": "mitigated_warn", "title": "order idempotency"},
+    {"id": 3, "severity": "high", "status": "mitigated_warn", "title": "joblib trust"},
+    {"id": 4, "severity": "high", "status": "fixed", "title": "dependency lock"},
+    {"id": 5, "severity": "medium", "status": "open", "title": "login rate limit"},
+    {"id": 6, "severity": "medium", "status": "open", "title": "scan TOCTOU"},
+    {"id": 7, "severity": "medium", "status": "open", "title": "quote plausibility"},
+    {"id": 8, "severity": "medium", "status": "open", "title": "silent exceptions"},
+    {"id": 9, "severity": "medium", "status": "open", "title": "Android WebView"},
+    {"id": 10, "severity": "medium", "status": "open", "title": "health disclosure"},
+    {"id": 11, "severity": "medium", "status": "open", "title": "gitignore coverage"},
+    {"id": 12, "severity": "medium", "status": "open", "title": "compose credentials"},
+    {"id": 13, "severity": "low", "status": "open", "title": "temporary CA bundle"},
+    {"id": 14, "severity": "low", "status": "open", "title": "broker JSON validation"},
+    {"id": 15, "severity": "low", "status": "open", "title": "RSS URL encoding"},
+    {"id": 16, "severity": "low", "status": "open", "title": "ephemeral Cloud Run DB"},
+    {"id": 17, "severity": "low", "status": "open", "title": "fetcher cache locking"},
+    {"id": 18, "severity": "low", "status": "open", "title": "JWT revocation"},
+    {"id": 19, "severity": "low", "status": "open", "title": "exception log redaction"},
+    {"id": 20, "severity": "low", "status": "fixed", "title": "script SQL identifiers"},
+    {"id": 21, "severity": "best_practice", "status": "open", "title": "nosec review"},
+    {"id": 22, "severity": "best_practice", "status": "open", "title": "security headers"},
+    {"id": 23, "severity": "best_practice", "status": "open", "title": "Telegram HTML escape"},
+]
+
+
+def calculate() -> dict[str, object]:
+    baseline_score = sum(WEIGHTS[item["severity"]] for item in FINDINGS)
+    open_findings = [item for item in FINDINGS if item["status"] not in {"fixed", "accepted"}]
+    open_score = round(
+        sum(WEIGHTS[item["severity"]] * STATUS_FACTORS[item["status"]] for item in open_findings),
+        1,
+    )
+    status_counts = Counter(str(item["status"]) for item in FINDINGS)
+    return {
+        "schema_version": 2,
+        "generated_at": datetime.now(UTC).isoformat(),
+        "weights": WEIGHTS,
+        "status_factors": STATUS_FACTORS,
+        "scoring_criteria": (
+            "fixed/accepted x0.0, mitigated_warn x0.5, open x1.0; "
+            "warn-only mitigations stay partially open until enforcement"
+        ),
+        "baseline_score": baseline_score,
+        "open_score": open_score,
+        "finding_count": len(FINDINGS),
+        "open_count": len(open_findings),
+        "status_counts": dict(sorted(status_counts.items())),
+        "findings": FINDINGS,
+        "notes": [
+            "mitigated_warn counts at half weight until enforcement is deployed",
+            "finding 2 is fail-closed when daily history is unavailable",
+            "finding 2 graduates to fixed only when pending/sent/unknown/ack_unaccounted "
+            "open counts are all 0 AND the vendor contract is verified in live staging",
+            "the historical leaked API key is tracked separately as an incident blocker",
+        ],
+    }
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--out", type=Path, required=True)
+    args = parser.parse_args()
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    args.out.write_text(json.dumps(calculate(), indent=2, sort_keys=True), encoding="utf-8")
+    print(args.out)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

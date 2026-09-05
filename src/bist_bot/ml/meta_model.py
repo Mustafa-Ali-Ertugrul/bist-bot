@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
+from itertools import pairwise
 from pathlib import Path
 from typing import Any, Literal, cast
 
@@ -17,6 +20,7 @@ from sklearn.linear_model import LogisticRegression  # type: ignore[import-not-f
 from sklearn.model_selection import TimeSeriesSplit  # type: ignore[import-not-found]
 
 from bist_bot.app_logging import get_logger
+from bist_bot.config.settings import settings
 
 try:  # pragma: no cover - optional heavy dependency
     from xgboost import XGBClassifier  # type: ignore[import-not-found]
@@ -34,6 +38,7 @@ class ProbabilityCalibrator:
     def __init__(self, method: CalibrationMethod = "platt") -> None:
         self.method = method
         self._model: LogisticRegression | IsotonicRegression | None = None
+        self._serialized_params: dict[str, Any] | None = None
 
     def fit(
         self, raw_probabilities: Iterable[float], labels: Iterable[int]
@@ -57,6 +62,21 @@ class ProbabilityCalibrator:
 
     def predict(self, raw_probabilities: Iterable[float]) -> npt.NDArray[np.float64]:
         probabilities = np.clip(np.asarray(list(raw_probabilities), dtype=float), 1e-6, 1.0 - 1e-6)
+        if self._serialized_params is not None:
+            if self.method == "platt":
+                coefficient = float(self._serialized_params["coefficient"])
+                intercept = float(self._serialized_params["intercept"])
+                logits = coefficient * probabilities + intercept
+                return cast(npt.NDArray[np.float64], 1.0 / (1.0 + np.exp(-logits)))
+            if self.method == "isotonic":
+                x_values = np.asarray(self._serialized_params["x_thresholds"], dtype=float)
+                y_values = np.asarray(self._serialized_params["y_thresholds"], dtype=float)
+                return cast(
+                    npt.NDArray[np.float64],
+                    np.interp(
+                        probabilities, x_values, y_values, left=y_values[0], right=y_values[-1]
+                    ),
+                )
         if self._model is None:
             return cast(npt.NDArray[np.float64], probabilities)
         if self.method == "platt":
@@ -74,6 +94,147 @@ class ProbabilityCalibrator:
                 1.0,
             ),
         )
+
+    def to_json_dict(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {"version": 1, "method": self.method}
+        if self.method == "none":
+            return payload
+        if self._serialized_params is not None:
+            payload.update(self._serialized_params)
+            return payload
+        if self._model is None:
+            raise ValueError("Calibrator has not been fitted")
+        if self.method == "platt":
+            model = cast(LogisticRegression, self._model)
+            payload.update(
+                coefficient=float(model.coef_[0][0]),
+                intercept=float(model.intercept_[0]),
+            )
+            return payload
+        model = cast(IsotonicRegression, self._model)
+        payload.update(
+            x_thresholds=[float(value) for value in model.X_thresholds_],
+            y_thresholds=[float(value) for value in model.y_thresholds_],
+        )
+        return payload
+
+    @classmethod
+    def from_json_dict(cls, payload: Mapping[str, Any]) -> ProbabilityCalibrator:
+        if int(payload.get("version", 0)) != 1:
+            raise ValueError("Unsupported calibrator JSON version")
+        method = str(payload.get("method", ""))
+        if method not in {"none", "platt", "isotonic"}:
+            raise ValueError("Unsupported calibrator method")
+        instance = cls(cast(CalibrationMethod, method))
+        if method == "platt":
+            params = {
+                "coefficient": float(payload["coefficient"]),
+                "intercept": float(payload["intercept"]),
+            }
+            if not all(np.isfinite(value) for value in params.values()):
+                raise ValueError("Non-finite Platt calibrator parameter")
+            instance._serialized_params = params
+        elif method == "isotonic":
+            x_values = [float(value) for value in cast(Iterable[Any], payload["x_thresholds"])]
+            y_values = [float(value) for value in cast(Iterable[Any], payload["y_thresholds"])]
+            if len(x_values) < 2 or len(x_values) != len(y_values):
+                raise ValueError("Invalid isotonic calibrator thresholds")
+            if not all(np.isfinite(value) for value in [*x_values, *y_values]):
+                raise ValueError("Non-finite isotonic calibrator threshold")
+            if any(right <= left for left, right in pairwise(x_values)):
+                raise ValueError("Isotonic thresholds must be strictly increasing")
+            instance._serialized_params = {
+                "x_thresholds": x_values,
+                "y_thresholds": y_values,
+            }
+        return instance
+
+
+def _canonical_json(payload: Mapping[str, Any]) -> bytes:
+    return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _write_artifact_manifest(path: Path, file_names: Iterable[str]) -> None:
+    payload: dict[str, Any] = {
+        "version": 1,
+        "files": {name: _sha256(path / name) for name in sorted(file_names)},
+    }
+    signature: str | None = None
+    private_key_path = str(settings.MODEL_SIGNING_PRIVATE_KEY_FILE or "").strip()
+    if private_key_path:
+        try:
+            from cryptography.hazmat.primitives import serialization
+            from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+        except ImportError as exc:  # pragma: no cover - dependency enforced in production lock
+            raise RuntimeError("cryptography is required to sign model artifacts") from exc
+        key = serialization.load_pem_private_key(
+            Path(private_key_path).read_bytes(),
+            password=None,
+        )
+        if not isinstance(key, Ed25519PrivateKey):
+            raise ValueError("Model signing key must be an Ed25519 private key")
+        signature = base64.b64encode(key.sign(_canonical_json(payload))).decode("ascii")
+    manifest = {
+        "payload": payload,
+        "signature_algorithm": "ed25519" if signature else None,
+        "signature": signature,
+    }
+    (path / "artifact_manifest.json").write_text(
+        json.dumps(manifest, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+
+
+def _verify_artifact_manifest(path: Path, trust_mode: str) -> None:
+    manifest_path = path / "artifact_manifest.json"
+    if not manifest_path.exists():
+        if trust_mode == "enforce":
+            raise ValueError("Signed artifact manifest is required")
+        logger.warning("artifact_manifest_missing", path=str(path))
+        return
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    payload = manifest.get("payload")
+    if not isinstance(payload, dict) or int(payload.get("version", 0)) != 1:
+        raise ValueError("Invalid artifact manifest")
+    files = payload.get("files")
+    if not isinstance(files, dict) or not files:
+        raise ValueError("Artifact manifest has no files")
+    for name, expected_hash in files.items():
+        safe_name = str(name)
+        if Path(safe_name).name != safe_name:
+            raise ValueError("Artifact manifest contains an invalid file name")
+        artifact = path / safe_name
+        if not artifact.is_file() or _sha256(artifact) != str(expected_hash):
+            raise ValueError(f"Artifact integrity check failed: {name}")
+
+    signature = manifest.get("signature")
+    public_key_path = str(settings.MODEL_VERIFY_PUBLIC_KEY_FILE or "").strip()
+    if not signature or not public_key_path:
+        if trust_mode == "enforce":
+            raise ValueError("Ed25519 artifact signature and public key are required")
+        logger.warning("artifact_signature_not_verified", path=str(path))
+        return
+    try:
+        from cryptography.exceptions import InvalidSignature
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+    except ImportError as exc:  # pragma: no cover - dependency enforced in production lock
+        raise RuntimeError("cryptography is required to verify model artifacts") from exc
+    key = serialization.load_pem_public_key(Path(public_key_path).read_bytes())
+    if not isinstance(key, Ed25519PublicKey):
+        raise ValueError("Model verification key must be an Ed25519 public key")
+    try:
+        key.verify(base64.b64decode(str(signature), validate=True), _canonical_json(payload))
+    except (InvalidSignature, ValueError) as exc:
+        raise ValueError("Artifact signature verification failed") from exc
 
 
 # ---------------------------------------------------------------------------
@@ -218,10 +379,14 @@ class SignalMetaModel:
         # Model: XGBoost native format (safe) if available, else joblib
         if _HAS_XGBOOST and hasattr(self.model, "save_model"):
             self.model.save_model(str(path / "meta_model.ubj"))
+            model_file = "meta_model.ubj"
         else:
             joblib.dump(self.model, path / "meta_model.joblib")
-        # Calibrator: always use joblib (safer than pickle)
-        joblib.dump(self.calibrator, path / "probability_calibrator.joblib")
+            model_file = "meta_model.joblib"
+        (path / "probability_calibrator.json").write_text(
+            json.dumps(self.calibrator.to_json_dict(), indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
         (path / "feature_columns.json").write_text(
             json.dumps(self.feature_names, indent=2, ensure_ascii=False),
             encoding="utf-8",
@@ -234,11 +399,25 @@ class SignalMetaModel:
             json.dumps(dict(metrics), indent=2, ensure_ascii=False, default=str),
             encoding="utf-8",
         )
+        _write_artifact_manifest(
+            path,
+            (
+                model_file,
+                "probability_calibrator.json",
+                "feature_columns.json",
+                "training_manifest.json",
+                "metrics.json",
+            ),
+        )
         return path
 
     @classmethod
     def load_artifacts(cls, artifact_dir: str | Path) -> SignalMetaModel:
         path = Path(artifact_dir)
+        trust_mode = str(settings.CALIBRATOR_TRUST or "warn").lower()
+        if trust_mode not in {"warn", "enforce"}:
+            raise ValueError(f"Unsupported CALIBRATOR_TRUST mode: {trust_mode}")
+        _verify_artifact_manifest(path, trust_mode)
         feature_names = json.loads((path / "feature_columns.json").read_text(encoding="utf-8"))
 
         # Model: try XGBoost native (.ubj), then joblib (.joblib).
@@ -260,21 +439,30 @@ class SignalMetaModel:
         else:
             raise FileNotFoundError(f"No model file (ubj/joblib) found in {path}")
 
-        # Calibrator: joblib only with safety validation.
+        # Calibrator: safe JSON is primary; joblib is warn-mode migration only.
+        cal_json = path / "probability_calibrator.json"
         cal_joblib = path / "probability_calibrator.joblib"
         cal_pkl = path / "probability_calibrator.pkl"
-        if cal_joblib.exists():
+        if cal_json.exists():
+            calibrator_payload = json.loads(cal_json.read_text(encoding="utf-8"))
+            if not isinstance(calibrator_payload, dict):
+                raise ValueError("Calibrator JSON must contain an object")
+            calibrator = ProbabilityCalibrator.from_json_dict(calibrator_payload)
+        elif cal_joblib.exists() and trust_mode != "enforce":
             # Validate that the file is not empty and resides in a trusted path
             if cal_joblib.stat().st_size == 0:
                 raise ValueError(f"Corrupt or empty calibrator file: {cal_joblib}")
+            logger.warning("legacy_joblib_calibrator_loaded", path=str(cal_joblib))
             calibrator = joblib.load(cal_joblib)
+        elif cal_joblib.exists():
+            raise ValueError("JSON calibrator is required in enforce mode")
         elif cal_pkl.exists():
             logger.warning("pickle_calibrator_rejected", path=str(cal_pkl))
             raise FileNotFoundError(
                 f"Pickle calibrator format is not supported. Convert {cal_pkl} to .joblib"
             )
         else:
-            raise FileNotFoundError(f"No calibrator file (joblib) found in {path}")
+            raise FileNotFoundError(f"No calibrator file (JSON/joblib) found in {path}")
 
         instance = cls(getattr(calibrator, "method", "platt"))
         instance.model = model

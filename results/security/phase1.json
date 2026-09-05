@@ -1,0 +1,173 @@
+{
+  "baseline_score": 73.5,
+  "finding_count": 23,
+  "findings": [
+    {
+      "id": 1,
+      "severity": "high",
+      "status": "mitigated_warn",
+      "title": "scan RBAC"
+    },
+    {
+      "id": 2,
+      "severity": "high",
+      "status": "mitigated_warn",
+      "title": "order idempotency"
+    },
+    {
+      "id": 3,
+      "severity": "high",
+      "status": "mitigated_warn",
+      "title": "joblib trust"
+    },
+    {
+      "id": 4,
+      "severity": "high",
+      "status": "fixed",
+      "title": "dependency lock"
+    },
+    {
+      "id": 5,
+      "severity": "medium",
+      "status": "open",
+      "title": "login rate limit"
+    },
+    {
+      "id": 6,
+      "severity": "medium",
+      "status": "open",
+      "title": "scan TOCTOU"
+    },
+    {
+      "id": 7,
+      "severity": "medium",
+      "status": "open",
+      "title": "quote plausibility"
+    },
+    {
+      "id": 8,
+      "severity": "medium",
+      "status": "open",
+      "title": "silent exceptions"
+    },
+    {
+      "id": 9,
+      "severity": "medium",
+      "status": "open",
+      "title": "Android WebView"
+    },
+    {
+      "id": 10,
+      "severity": "medium",
+      "status": "open",
+      "title": "health disclosure"
+    },
+    {
+      "id": 11,
+      "severity": "medium",
+      "status": "open",
+      "title": "gitignore coverage"
+    },
+    {
+      "id": 12,
+      "severity": "medium",
+      "status": "open",
+      "title": "compose credentials"
+    },
+    {
+      "id": 13,
+      "severity": "low",
+      "status": "open",
+      "title": "temporary CA bundle"
+    },
+    {
+      "id": 14,
+      "severity": "low",
+      "status": "open",
+      "title": "broker JSON validation"
+    },
+    {
+      "id": 15,
+      "severity": "low",
+      "status": "open",
+      "title": "RSS URL encoding"
+    },
+    {
+      "id": 16,
+      "severity": "low",
+      "status": "open",
+      "title": "ephemeral Cloud Run DB"
+    },
+    {
+      "id": 17,
+      "severity": "low",
+      "status": "open",
+      "title": "fetcher cache locking"
+    },
+    {
+      "id": 18,
+      "severity": "low",
+      "status": "open",
+      "title": "JWT revocation"
+    },
+    {
+      "id": 19,
+      "severity": "low",
+      "status": "open",
+      "title": "exception log redaction"
+    },
+    {
+      "id": 20,
+      "severity": "low",
+      "status": "fixed",
+      "title": "script SQL identifiers"
+    },
+    {
+      "id": 21,
+      "severity": "best_practice",
+      "status": "open",
+      "title": "nosec review"
+    },
+    {
+      "id": 22,
+      "severity": "best_practice",
+      "status": "open",
+      "title": "security headers"
+    },
+    {
+      "id": 23,
+      "severity": "best_practice",
+      "status": "open",
+      "title": "Telegram HTML escape"
+    }
+  ],
+  "generated_at": "2026-09-04T16:25:18.260684+00:00",
+  "notes": [
+    "mitigated_warn counts at half weight until enforcement is deployed",
+    "finding 2 is fail-closed when daily history is unavailable",
+    "finding 2 graduates to fixed only when pending/sent/unknown/ack_unaccounted open counts are all 0 AND the vendor contract is verified in live staging",
+    "the historical leaked API key is tracked separately as an incident blocker"
+  ],
+  "open_count": 21,
+  "open_score": 54.5,
+  "schema_version": 2,
+  "scoring_criteria": "fixed/accepted x0.0, mitigated_warn x0.5, open x1.0; warn-only mitigations stay partially open until enforcement",
+  "status_counts": {
+    "fixed": 2,
+    "mitigated_warn": 3,
+    "open": 18
+  },
+  "status_factors": {
+    "accepted": 0.0,
+    "fixed": 0.0,
+    "mitigated_warn": 0.5,
+    "open": 1.0
+  },
+  "weights": {
+    "best_practice": 0.5,
+    "critical": 10.0,
+    "high": 7.0,
+    "low": 1.5,
+    "medium": 4.0
+  }
+}
