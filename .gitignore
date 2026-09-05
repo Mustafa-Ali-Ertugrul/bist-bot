@@ -33,6 +33,10 @@ NUL
 .ruff_cache/
 .pip-audit-cache/
 .pip-audit-tmp/
+
+# OpenCode local workspace configuration
+.opencode/
+*opencode*
 .coverage
 htmlcov/
 pytest_tmp_*/
