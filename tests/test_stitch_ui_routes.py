@@ -158,6 +158,10 @@ def test_stitch_static_assets_served(app: Flask) -> None:
         # Login gate: unauthenticated visitors are bounced to /login.
         assert "bistbot_token" in body
         assert "window.location.replace('/login')" in body
+        # Scan buttons surface real API outcomes (no fake success).
+        assert "Oturum süresi doldu" in body
+        assert "hydrateDashboardCounters" in body
+        assert "totalPages()" in body
         css = client.get("/static/tailwind.css")
         assert css.status_code == 200
         assert len(css.data) > 1000

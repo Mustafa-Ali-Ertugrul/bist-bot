@@ -111,7 +111,7 @@
 </span>
 </div>
 <div class="my-space-xs flex items-baseline justify-between">
-<div class="font-metric-display text-metric-display text-on-surface font-extrabold tracking-tight">100</div>
+<div class="font-metric-display text-metric-display text-on-surface font-extrabold tracking-tight" id="stat-scanned">100</div>
 <span class="inline-flex items-center px-space-2xs py-space-3xs rounded text-primary font-label-code text-label-code bg-surface-container-highest">
             %100 Kapsam
           </span>
@@ -122,7 +122,7 @@
 </div>
 <div class="flex justify-between font-label-code text-label-code text-outline">
 <span>BIST100 Aktif</span>
-<span class="text-on-surface-variant font-medium">100/100 Sembol</span>
+<span class="text-on-surface-variant font-medium" id="stat-scanned-sub">100/100 Sembol</span>
 </div>
 </div>
 </div>
@@ -135,7 +135,7 @@
 </span>
 </div>
 <div class="my-space-xs flex items-baseline justify-between">
-<div class="font-metric-display text-metric-display text-primary font-extrabold tracking-tight">4</div>
+<div class="font-metric-display text-metric-display text-primary font-extrabold tracking-tight" id="stat-actionable">4</div>
 <span class="font-label-code text-label-code text-primary-fixed bg-surface-container-highest px-space-2xs py-space-3xs rounded flex items-center gap-space-3xs">
 <span class="material-symbols-outlined text-[14px]">arrow_upward</span> Aktif Al
           </span>
@@ -154,7 +154,7 @@
 </span>
 </div>
 <div class="my-space-xs flex items-baseline justify-between">
-<div class="font-metric-display text-metric-display text-secondary font-extrabold tracking-tight">14</div>
+<div class="font-metric-display text-metric-display text-secondary font-extrabold tracking-tight" id="stat-generated">14</div>
 <span class="font-label-code text-label-code text-outline">Son 24 Saat</span>
 </div>
 <div class="flex items-center justify-between font-label-code text-label-code text-outline pt-space-2xs">
@@ -171,14 +171,14 @@
 </span>
 </div>
 <div class="my-space-xs flex items-baseline justify-between">
-<div class="font-metric-display text-metric-display text-error font-extrabold tracking-tight">96</div>
+<div class="font-metric-display text-metric-display text-error font-extrabold tracking-tight" id="stat-filtered">96</div>
 <span class="font-label-code text-label-code text-error bg-surface-container-highest px-space-2xs py-space-3xs rounded">
             Filtre Dışı
           </span>
 </div>
 <div class="flex items-center justify-between font-label-code text-label-code text-outline pt-space-2xs">
 <span>Sinyalsiz BIST Hissesi</span>
-<span class="text-on-surface-variant font-medium">%96 Red Oranı</span>
+<span class="text-on-surface-variant font-medium" id="stat-filtered-sub">%96 Red Oranı</span>
 </div>
 </div>
 </div>
@@ -674,11 +674,11 @@
 <!-- Pagination / Log Stats Bar -->
 <div class="flex flex-col sm:flex-row items-center justify-between gap-space-xs pt-space-xs text-outline font-label-code text-label-code">
 <div>
-<span>Toplam <strong class="text-on-surface">14 sinyal</strong> kaydedildi. Son güncelleme: <strong class="text-primary">Şimdi</strong></span>
+<span>Toplam <strong class="text-on-surface" id="stat-total">14 sinyal</strong> kaydedildi. Son güncelleme: <strong class="text-primary">Şimdi</strong></span>
 </div>
 <div class="flex items-center gap-space-xs">
 <button class="px-space-xs py-space-3xs rounded bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface cursor-pointer transition-colors">Önceki</button>
-<span class="text-on-surface px-space-xs">1 / 2</span>
+<span class="text-on-surface px-space-xs" id="page-indicator">1 / 2</span>
 <button class="px-space-xs py-space-3xs rounded bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface cursor-pointer transition-colors">Sonraki</button>
 </div>
 </div>

@@ -53,6 +53,25 @@
   }
 
   // -------------------------------------------------------------------------
+  // Auth Gate: unauthenticated visitors always land on /login
+  // -------------------------------------------------------------------------
+  function enforceAuth() {
+    const path = window.location.pathname;
+    const onLoginPage = path === '/login' || path === '/' || path === '/ui';
+    const token = localStorage.getItem('bistbot_token');
+
+    if (!token && !onLoginPage) {
+      window.location.replace('/login');
+      return false;
+    }
+    if (token && onLoginPage) {
+      window.location.replace('/ui/dashboard');
+      return false;
+    }
+    return true;
+  }
+
+  // -------------------------------------------------------------------------
   // Topbar Global Handlers
   // -------------------------------------------------------------------------
   function initTopbar() {
@@ -109,9 +128,65 @@
   }
 
   // -------------------------------------------------------------------------
+  // Dashboard Counters: hydrate from /api/stats, static HTML stays as fallback
+  // -------------------------------------------------------------------------
+  async function hydrateDashboardCounters() {
+    const ids = ['stat-scanned', 'stat-actionable', 'stat-generated', 'stat-filtered'];
+    if (!ids.some(id => document.getElementById(id))) return;
+
+    const setText = (id, value) => {
+      const el = document.getElementById(id);
+      if (el && value !== null && value !== undefined) el.textContent = String(value);
+    };
+    const asCount = (value) => {
+      const n = Math.floor(Number(value));
+      return (Number.isFinite(n) && n >= 0) ? n : null;
+    };
+
+    try {
+      const token = localStorage.getItem('bistbot_token');
+      const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+      const res = await fetch('/api/stats', { headers: headers });
+      if (!res.ok) {
+        console.warn(`[bistbot] /api/stats HTTP ${res.status}; static counters kept`);
+        return;
+      }
+      const data = await res.json();
+      const scan = (data && data.latest_scan) || {};
+      const total = asCount(scan.total_scanned);
+      const generated = asCount(scan.signals_generated);
+      const buy = asCount(scan.buy_signals);
+      const sell = asCount(scan.sell_signals);
+      let actionable = asCount(scan.actionable);
+      if (actionable === null && buy !== null && sell !== null) actionable = buy + sell;
+
+      if (total !== null) {
+        setText('stat-scanned', total);
+        setText('stat-scanned-sub', `${total}/${total} Sembol`);
+      }
+      setText('stat-actionable', actionable);
+      setText('stat-generated', generated);
+      if (total !== null && generated !== null && total >= generated) {
+        const filtered = total - generated;
+        setText('stat-filtered', filtered);
+        setText('stat-filtered-sub', `%${Math.round((filtered / total) * 100)} Red Oranı`);
+      }
+      if (generated !== null) {
+        setText('btn-tab-all', `Tüm Sinyaller (${generated})`);
+        setText('stat-total', `${generated} sinyal`);
+      }
+      if (buy !== null) setText('btn-tab-buy', `Alış Sinyalleri (${buy})`);
+      if (sell !== null) setText('btn-tab-sell', `Satış Sinyalleri (${sell})`);
+    } catch (err) {
+      console.warn('[bistbot] /api/stats unreachable; static counters kept', err);
+    }
+  }
+
+  // -------------------------------------------------------------------------
   // Dashboard Page Interactivity
   // -------------------------------------------------------------------------
   function initDashboard() {
+    hydrateDashboardCounters();
     // Scan Trigger Button
     const scanBtn = document.getElementById('scanButton');
     if (scanBtn) {
@@ -128,17 +203,30 @@
           const headers = { 'Content-Type': 'application/json' };
           if (token) headers['Authorization'] = `Bearer ${token}`;
 
+          // Bearer header (not the HttpOnly UI cookie) authenticates this
+          // POST, so no CSRF token dance is needed.
           const res = await fetch('/api/scan', { method: 'POST', headers: headers });
-          const data = await res.json();
 
-          if (res.ok && data.status === 'ok') {
-            showToast(`Tarama tamamlandı! Üretilen sinyal: ${data.signals_generated || data.actionable_signals || 14}`, 'success', 4000);
+          if (res.status === 401) {
+            showToast('Oturum süresi doldu. Yeniden giriş yapın.', 'error', 3000);
+            localStorage.removeItem('bistbot_token');
+            localStorage.removeItem('bistbot_email');
+            setTimeout(() => window.location.replace('/login'), 1200);
+            return;
+          }
+          if (!res.ok) {
+            showToast(`Tarama başarısız (HTTP ${res.status}).`, 'error', 3000);
+            return;
+          }
+          const data = await res.json();
+          if (data.status === 'ok') {
+            showToast(`Tarama tamamlandı! Üretilen sinyal: ${data.signals_generated || data.actionable_signals || 0}`, 'success', 4000);
             setTimeout(() => window.location.reload(), 1500);
           } else {
-            showToast(`Tarama tamamlandı: ${data.message || '100 hisse kontrol edildi.'}`, 'success', 3000);
+            showToast(`Tarama tamamlanamadı: ${data.message || 'bilinmeyen hata.'}`, 'error', 3000);
           }
         } catch (err) {
-          showToast('Tarama motoru tetiklendi. Yerel veriler güncellendi.', 'success', 3000);
+          showToast('Tarama isteği gönderilemedi. Bağlantıyı kontrol edin.', 'error', 3000);
         } finally {
           if (scanIcon) scanIcon.classList.remove('animate-spin');
           scanBtn.disabled = false;
@@ -183,21 +271,34 @@
     // Table pagination buttons
     const prevBtn = Array.from(document.querySelectorAll('button')).find(b => b.textContent.includes('Önceki'));
     const nextBtn = Array.from(document.querySelectorAll('button')).find(b => b.textContent.includes('Sonraki'));
+    const pageIndicator = document.getElementById('page-indicator');
+    const pageSize = 7;
     let currentPage = 1;
 
+    function totalPages() {
+      return Math.max(1, Math.ceil(tableRows.length / pageSize));
+    }
+
+    function updatePager() {
+      if (pageIndicator) pageIndicator.textContent = `${currentPage} / ${totalPages()}`;
+      if (prevBtn) prevBtn.disabled = currentPage <= 1;
+      if (nextBtn) nextBtn.disabled = currentPage >= totalPages();
+    }
+
     function renderPage(p) {
-      currentPage = p;
-      const pageSize = 7;
+      currentPage = Math.min(Math.max(1, p), totalPages());
       tableRows.forEach((r, idx) => {
-        const start = (p - 1) * pageSize;
+        const start = (currentPage - 1) * pageSize;
         const end = start + pageSize;
         r.style.display = (idx >= start && idx < end) ? '' : 'none';
       });
-      showToast(`Sayfa ${p} gösteriliyor.`, 'info', 1000);
+      updatePager();
+      showToast(`Sayfa ${currentPage} gösteriliyor.`, 'info', 1000);
     }
 
+    if (prevBtn || nextBtn) updatePager();
     if (prevBtn) prevBtn.onclick = () => { if (currentPage > 1) renderPage(currentPage - 1); };
-    if (nextBtn) nextBtn.onclick = () => { if (currentPage < 2) renderPage(currentPage + 1); };
+    if (nextBtn) nextBtn.onclick = () => { if (currentPage < totalPages()) renderPage(currentPage + 1); };
   }
 
   // -------------------------------------------------------------------------
@@ -402,10 +503,23 @@
       scanNowBtn.onclick = async function () {
         showToast('Piyasa tarama isteği gönderildi...', 'info', 2000);
         try {
-          const res = await fetch('/api/scan', { method: 'POST' });
+          const token = localStorage.getItem('bistbot_token');
+          const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+          const res = await fetch('/api/scan', { method: 'POST', headers: headers });
+          if (res.status === 401) {
+            showToast('Oturum süresi doldu. Yeniden giriş yapın.', 'error', 3000);
+            localStorage.removeItem('bistbot_token');
+            localStorage.removeItem('bistbot_email');
+            setTimeout(() => window.location.replace('/login'), 1200);
+            return;
+          }
+          if (!res.ok) {
+            showToast(`Tarama başarısız (HTTP ${res.status}).`, 'error', 3000);
+            return;
+          }
           showToast('Tarama tamamlandı. Sonuçlar işlendi.', 'success', 3000);
         } catch(e) {
-          showToast('Tarama tetiklendi.', 'success', 2000);
+          showToast('Tarama isteği gönderilemedi. Bağlantıyı kontrol edin.', 'error', 3000);
         }
       };
     }
@@ -454,6 +568,7 @@
   // DOM Ready Initializer
   // -------------------------------------------------------------------------
   document.addEventListener('DOMContentLoaded', () => {
+    if (!enforceAuth()) return;
     initTopbar();
     fixBottomNav();
 
