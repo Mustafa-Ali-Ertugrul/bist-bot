@@ -198,28 +198,28 @@
 <div class="grid grid-cols-2 sm:grid-cols-3 gap-space-sm">
 <div class="bg-surface-container-low p-space-sm rounded-xl">
 <span class="font-label-caps text-label-caps text-outline uppercase">Ortalama RSI</span>
-<div class="font-metric-display text-metric-display text-on-surface mt-space-3xs">57.8</div>
-<div class="flex items-center gap-space-3xs font-label-code text-label-code text-primary mt-space-3xs">
+<div class="font-metric-display text-metric-display text-on-surface mt-space-3xs" id="macro-avg-rsi">57.8</div>
+<div class="flex items-center gap-space-3xs font-label-code text-label-code text-primary mt-space-3xs" id="macro-rsi-status">
 <span class="material-symbols-outlined text-[14px]">trending_up</span> Dinamik Nötr-Alış
             </div>
 </div>
 <div class="bg-surface-container-low p-space-sm rounded-xl">
 <span class="font-label-caps text-label-caps text-outline uppercase">BIST Hacim Çarpanı</span>
-<div class="font-metric-display text-metric-display text-tertiary mt-space-3xs">2.14x</div>
+<div class="font-metric-display text-metric-display text-tertiary mt-space-3xs" id="macro-vol-ratio">2.14x</div>
 <div class="flex items-center gap-space-3xs font-label-code text-label-code text-tertiary mt-space-3xs">
 <span class="material-symbols-outlined text-[14px]">equalizer</span> 20 Günlük Ort. Üstü
             </div>
 </div>
 <div class="bg-surface-container-low p-space-sm rounded-xl col-span-2 sm:col-span-1">
 <span class="font-label-caps text-label-caps text-outline uppercase">Algoritma Güven Skoru</span>
-<div class="font-metric-display text-metric-display text-primary mt-space-3xs">%88.4</div>
+<div class="font-metric-display text-metric-display text-primary mt-space-3xs" id="macro-win-rate">%88.4</div>
 <div class="flex items-center gap-space-3xs font-label-code text-label-code text-secondary mt-space-3xs">
 <span class="material-symbols-outlined text-[14px]">auto_awesome</span> Yüksek Doğruluk
             </div>
 </div>
 </div>
-<!-- Radar Opportunities List -->
-<div class="space-y-space-xs">
+<!-- Opportunity Card Container -->
+<div class="space-y-space-xs" id="radarOpportunitiesContainer">
 <!-- Opportunity Card 1: MAGEN -->
 <div class="group bg-surface-container-low hover:bg-surface-container p-space-md rounded-xl transition-all duration-200 shadow-md hover:shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-space-md">
 <div class="flex items-center gap-space-md">

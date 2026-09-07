@@ -187,6 +187,7 @@
       }
       const data = await res.json();
       const scan = (data && data.latest_scan) || {};
+      const stats = (data && data.stats) || {};
       const total = asCount(scan.total_scanned);
       const generated = asCount(scan.signals_generated);
       const buy = asCount(scan.buy_signals);
@@ -211,15 +212,59 @@
       }
       if (buy !== null) setText('btn-tab-buy', `Alış Sinyalleri (${buy})`);
       if (sell !== null) setText('btn-tab-sell', `Satış Sinyalleri (${sell})`);
+
+      // Hydrate Algoritma Güven Skoru (win_rate from stats)
+      const winRate = Number(stats.win_rate);
+      if (Number.isFinite(winRate) && winRate > 0) {
+        setText('macro-win-rate', `%${winRate.toFixed(1)}`);
+      }
     } catch (err) {
       console.warn('[bistbot] /api/stats unreachable; static counters kept', err);
     }
   }
 
   // -------------------------------------------------------------------------
-  // Dashboard Signal Table: render live rows from /api/signals/history.
-  // Static template rows stay as fallback when the API is unreachable.
+  // Dashboard Opportunities Radar: render top 3 actionable/high-score signals
   // -------------------------------------------------------------------------
+  function renderOpportunityCard(sig) {
+    const symbol = escapeHtml(String(sig.ticker || '').replace(/\.IS$/i, ''));
+    const pfx = symbol.slice(0, 3).toUpperCase();
+    const sfx = symbol.slice(3, 5).toUpperCase() || symbol.slice(-2).toUpperCase();
+    const kind = signalRowKind(sig.signal_type);
+    const typeLabel = escapeHtml(String(sig.signal_type || '').replace(/^[^\p{L}\p{N}]+/u, ''));
+    const accent = kind === 'sell' ? 'error' : (kind === 'buy' ? 'primary' : 'tertiary');
+    const price = Number(sig.price);
+    const score = Math.round(Number(sig.score));
+    const reasons = Array.isArray(sig.reasons) ? sig.reasons : [];
+    const reasonText = escapeHtml(reasons[0] || (kind === 'buy' ? 'Trend Onayı' : 'Momentum'));
+    const conf = sig.confidence === 'confidence.high' ? 'Yüksek' : 'Orta';
+
+    return (
+      `<div class="group bg-surface-container-low hover:bg-surface-container p-space-md rounded-xl transition-all duration-200 shadow-md hover:shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-space-md">` +
+      `<div class="flex items-center gap-space-md">` +
+      `<div class="w-12 h-12 rounded-xl bg-surface-container-high flex flex-col items-center justify-center font-metric-value text-metric-value text-${accent} font-bold shadow-inner">` +
+      `${escapeHtml(pfx)}<span class="font-label-caps text-[8px] text-outline">${escapeHtml(sfx)}</span></div>` +
+      `<div><div class="flex items-center gap-space-xs">` +
+      `<span class="font-headline-md text-headline-md text-on-surface font-extrabold">${symbol}</span>` +
+      `<span class="inline-flex items-center px-space-xs py-space-3xs rounded-full bg-${accent}/10 text-${accent} font-label-caps text-label-caps uppercase">${typeLabel}</span></div>` +
+      `<div class="flex items-center gap-space-xs font-label-code text-label-code text-outline mt-space-3xs">` +
+      `<span class="material-symbols-outlined text-${accent} text-[14px]">auto_awesome</span>` +
+      `<span>${reasonText} • Güven: <span class="text-${accent} font-bold">${conf}</span></span>` +
+      `</div></div></div>` +
+      `<div class="flex sm:flex-col items-baseline sm:items-end justify-between w-full sm:w-auto gap-space-xs">` +
+      `<div class="font-metric-display text-metric-display text-on-surface font-bold">${Number.isFinite(price) ? 'TL' + price.toFixed(2) : '—'}</div>` +
+      `<div class="flex items-center gap-space-xs">` +
+      `<span class="font-label-caps text-label-caps px-space-2xs py-space-3xs rounded bg-surface-container-high text-${accent}">Skor: ${score > 0 ? '+' : ''}${score}</span>` +
+      `</div></div></div>`
+    );
+  }
+
+  async function hydrateOpportunitiesRadar(signals) {
+    const container = document.getElementById('radarOpportunitiesContainer');
+    if (!container || !signals || !signals.length) return;
+    const topSignals = signals.slice(0, 3);
+    container.innerHTML = topSignals.map(renderOpportunityCard).join('');
+  }
   function escapeHtml(value) {
     return String(value ?? '')
       .replace(/&/g, '&amp;')
@@ -301,6 +346,7 @@
         return;
       }
       tbody.innerHTML = signals.map(renderSignalRow).join('');
+      hydrateOpportunitiesRadar(signals);
     } catch (err) {
       console.warn('[bistbot] signal table hydration failed; static rows kept', err);
     }
@@ -428,9 +474,93 @@
   }
 
   // -------------------------------------------------------------------------
+  // Signals Page Stream: render live cards from /api/signals/history
+  // -------------------------------------------------------------------------
+  function renderSignalCard(sig, index) {
+    const symbol = escapeHtml(String(sig.ticker || '').replace(/\.IS$/i, ''));
+    const kind = signalRowKind(sig.signal_type);
+    const typeLabel = escapeHtml(String(sig.signal_type || '').replace(/^[^\p{L}\p{N}]+/u, ''));
+    const price = Number(sig.price);
+    const stop = Number(sig.stop_loss);
+    const target = Number(sig.target_price);
+    const size = Math.floor(Number(sig.position_size));
+    const score = Math.round(Number(sig.score));
+    const reasons = Array.isArray(sig.reasons) ? sig.reasons : [];
+    const reasonText = escapeHtml(reasons[0] || (kind === 'buy' ? 'Trend Onayı' : 'Momentum'));
+    const isActive = index === 0;
+
+    return (
+      `<div class="signal-card group relative bg-surface-container-low/95 p-space-md rounded-xl shadow-[0_4px_16px_rgba(0,0,0,0.4)] transition-all cursor-pointer overflow-hidden ${isActive ? 'active' : ''}" ` +
+      `data-name="${symbol}.IS" data-price="${Number.isFinite(price) ? price.toFixed(2) : '—'}" data-score="${score > 0 ? '+' : ''}${score}" ` +
+      `data-size="${size}" data-stop="${Number.isFinite(stop) ? stop.toFixed(2) : '—'}" data-target="${Number.isFinite(target) ? target.toFixed(2) : '—'}" ` +
+      `data-symbol="${symbol}" data-trend="+24" data-volume="+6" data-struct="+6">` +
+      (isActive ? '<div class="absolute left-0 top-0 bottom-0 w-1.5 bg-primary shadow-[0_0_12px_#4edea3]"></div>' : '') +
+      `<div class="flex items-start justify-between mb-space-xs pl-space-xs"><div><div class="flex items-center gap-space-xs">` +
+      `<span class="font-headline-md text-headline-md font-extrabold text-on-surface tracking-tight">${symbol}</span>` +
+      `<span class="bg-primary/15 text-primary px-space-xs py-space-3xs rounded font-label-caps text-label-caps uppercase font-bold">${typeLabel}</span>` +
+      `<span class="bg-surface-container-high text-on-surface-variant px-space-xs py-space-3xs rounded font-label-code text-label-code">${symbol}.IS</span>` +
+      `</div><span class="font-body-sm text-body-sm text-outline">${reasonText}</span></div>` +
+      `<div class="flex flex-col items-end"><span class="bg-primary/20 text-primary px-space-xs py-space-3xs rounded-full font-metric-value text-metric-value font-bold">${score > 0 ? '+' : ''}${score} SKOR</span></div></div>` +
+      `<div class="grid grid-cols-3 gap-space-2xs bg-surface-container p-space-xs rounded-lg my-space-xs shadow-inner">` +
+      `<div><span class="font-label-caps text-label-caps text-outline block">GİRİŞ FİYATI</span><span class="font-metric-value text-metric-value text-on-surface font-bold">₺${Number.isFinite(price) ? price.toFixed(2) : '—'}</span></div>` +
+      `<div><span class="font-label-caps text-label-caps text-error block">STOP LOSS</span><span class="font-metric-value text-metric-value text-error font-semibold">₺${Number.isFinite(stop) ? stop.toFixed(2) : '—'}</span></div>` +
+      `<div><span class="font-label-caps text-label-caps text-primary block">HEDEF TP</span><span class="font-metric-value text-metric-value text-primary font-semibold">₺${Number.isFinite(target) ? target.toFixed(2) : '—'}</span></div></div>` +
+      `<div class="flex items-center justify-between pt-space-2xs pl-space-xs font-label-code text-label-code text-on-surface-variant">` +
+      `<span>Pozisyon: <strong class="text-on-surface">${size > 0 ? size.toLocaleString('en-US') + ' Lot' : '—'}</strong></span>` +
+      `<span>${typeLabel}</span></div></div>`
+    );
+  }
+
+  async function hydrateSignalsStream() {
+    const container = document.getElementById('signalsStreamContainer');
+    if (!container) return;
+    try {
+      const token = localStorage.getItem('bistbot_token');
+      const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+      const res = await fetch('/api/signals/history?limit=15', { headers: headers });
+      if (!res.ok) return;
+      const data = await res.json();
+      const signals = Array.isArray(data.signals) ? data.signals : [];
+      if (!signals.length) return;
+      container.innerHTML = signals.map(renderSignalCard).join('');
+      // Attach click listeners to update precision view
+      const cards = container.querySelectorAll('.signal-card');
+      cards.forEach(card => {
+        card.onclick = function () {
+          cards.forEach(c => {
+            c.classList.remove('active');
+            const b = c.querySelector('.bg-primary.w-1\\.5');
+            if (b) b.remove();
+          });
+          this.classList.add('active');
+          const bar = document.createElement('div');
+          bar.className = 'absolute left-0 top-0 bottom-0 w-1.5 bg-primary shadow-[0_0_12px_#4edea3]';
+          this.prepend(bar);
+
+          const title = document.getElementById('active-symbol-title');
+          const pVal = document.getElementById('current-price-val');
+          const sVal = document.getElementById('current-score-val');
+          const slVal = document.getElementById('current-stop-val');
+          const tpVal = document.getElementById('current-target-val');
+          if (title) title.textContent = this.dataset.name;
+          if (pVal) pVal.textContent = '₺' + this.dataset.price;
+          if (sVal) sVal.textContent = this.dataset.score;
+          if (slVal) slVal.textContent = '₺' + this.dataset.stop;
+          if (tpVal) tpVal.textContent = '₺' + this.dataset.target;
+        };
+      });
+      // Trigger click on first card to populate detail view
+      if (cards[0]) cards[0].click();
+    } catch (err) {
+      console.warn('[bistbot] signals stream hydration failed', err);
+    }
+  }
+
+  // -------------------------------------------------------------------------
   // Signals Page Interactivity
   // -------------------------------------------------------------------------
-  function initSignals() {
+  async function initSignals() {
+    await hydrateSignalsStream();
     // Filter chips
     const chips = document.querySelectorAll('button.inline-flex.items-center.gap-space-2xs');
     const signalCards = document.querySelectorAll('.signal-card, div[data-symbol]');
@@ -663,7 +793,7 @@
     if (path.includes('dashboard')) {
       await initDashboard();
     } else if (path.includes('signals')) {
-      initSignals();
+      await initSignals();
     } else if (path.includes('analysis')) {
       initAnalysis();
     } else if (path.includes('settings')) {
