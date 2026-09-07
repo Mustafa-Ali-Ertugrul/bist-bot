@@ -15,6 +15,9 @@ PAGE_META = {
 }
 
 
+FOOTER_NAV_PAGES = ["dashboard", "signals", "analysis", "settings"]
+
+
 def set_active_page(page: str) -> None:
     target = page if page in PAGE_META else "dashboard"
     st.query_params["page"] = target
@@ -65,26 +68,66 @@ def render_sidebar_nav(active_page: str) -> None:
             set_active_page("dashboard")
 
 
+TOPNAV_PAGES = [
+    ("dashboard", "Dashboard"),
+    ("signals", "Canlı Sinyaller"),
+    ("analysis", "Varlık Analizi"),
+    ("settings", "Terminal Ayarları"),
+]
+
+
+def _tape_html() -> str:
+    try:
+        from bist_bot.ui.runtime_data import fetch_index_data
+
+        data = fetch_index_data() or {}
+    except Exception:
+        return ""
+    order = ["XU100", "XU030", "USDTRY"]
+    chips = []
+    for name in order:
+        item = data.get(name) or {}
+        value = float(item.get("value", 0.0) or 0.0)
+        change = float(item.get("change_pct", 0.0) or 0.0)
+        if value <= 0:
+            continue
+        cls = "up" if change >= 0 else "down"
+        sign = "+" if change >= 0 else ""
+        chips.append(
+            f"<span class='bb-tape-item'><b>{name}</b> {value:,.2f} "
+            f"<i class='{cls}'>{sign}{change:.2f}%</i></span>"
+        )
+    if not chips:
+        return ""
+    return "<div class='bb-tape'>" + "<span class='bb-tape-sep'>•</span>".join(chips) + "</div>"
+
+
 def render_shell(active_page: str, email: str = "") -> str | None:
     active_label = PAGE_META[active_page]["label"]
     email_label = html.escape(email or "Guest Session")
 
+    links = "".join(
+        f"<a class='bb-nav-link{' active' if pg == active_page else ''}' href='?page={pg}'>{label}</a>"
+        for pg, label in TOPNAV_PAGES
+    )
     st.markdown(
         (
             "<header class='bb-topbar'>"
             "<div class='bb-topbar-brand'>"
             "<div class='bb-brand-mark'>BB</div>"
             "<div>"
-            "<div class='bb-topbar-kicker'>Live Terminal</div>"
             "<div class='bb-topbar-title'>Bist-Bot</div>"
             "</div>"
+            "<span class='bb-live-pill'><i></i>BIST 100 CANLI</span>"
             "</div>"
+            f"<nav class='bb-topnav'>{links}</nav>"
             "<div class='bb-topbar-actions'>"
             f"<span class='bb-badge bb-badge-positive'>{html.escape(active_label)}</span>"
             f"<span class='bb-session-pill'>{email_label}</span>"
             "<a class='bb-logout-link' href='?action=logout'>Logout</a>"
             "</div>"
             "</header>"
+            f"{_tape_html()}"
         ),
         unsafe_allow_html=True,
     )
@@ -114,6 +157,25 @@ def render_shell(active_page: str, email: str = "") -> str | None:
     action: str | None = None
     render_sidebar_nav(active_page)
     return action
+
+
+def render_footer(active_page: str = "dashboard") -> None:
+    """Bottom navigation bar (page shortcuts) plus the shared meta row."""
+    from bist_bot.ui.runtime_styles import footer_meta_html
+
+    with st.container(key="footer_navigation"):
+        cols = st.columns(len(FOOTER_NAV_PAGES), gap="small")
+        for i, pg in enumerate(FOOTER_NAV_PAGES):
+            meta = PAGE_META[pg]
+            with cols[i]:
+                if st.button(
+                    meta["label"],
+                    key=f"footer_nav_{pg}",
+                    type="primary" if pg == active_page else "secondary",
+                    use_container_width=True,
+                ):
+                    set_active_page(pg)
+        st.markdown(footer_meta_html(), unsafe_allow_html=True)
 
 
 def render_page_hero(

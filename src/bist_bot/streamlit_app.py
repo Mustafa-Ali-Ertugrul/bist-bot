@@ -12,6 +12,9 @@ from bist_bot.ui.components.app_shell import (
     render_shell,
     set_active_page,
 )
+from bist_bot.ui.components.app_shell import (
+    render_footer as render_nav_footer,
+)
 from bist_bot.ui.pages.analyze_page import render_analyze_page
 from bist_bot.ui.pages.overview_page import render_overview_page
 from bist_bot.ui.pages.scan_detail_page import render_scan_detail_page
@@ -23,7 +26,7 @@ from bist_bot.ui.runtime import (
     finalize_streamlit_runtime,
     prepare_streamlit_runtime,
 )
-from bist_bot.ui.runtime_styles import inject_styles
+from bist_bot.ui.runtime_styles import inject_styles, render_footer
 
 st.set_page_config(
     page_title="BIST Bot",
@@ -245,6 +248,7 @@ def main() -> None:
     if not st.session_state.get("is_authenticated"):
         inject_styles()
         _login_form()
+        render_footer()
         return
 
     inject_styles()
@@ -276,6 +280,7 @@ def main() -> None:
         render_settings_page()
 
     finalize_streamlit_runtime()
+    render_nav_footer(page)
 
 
 if __name__ == "__main__":

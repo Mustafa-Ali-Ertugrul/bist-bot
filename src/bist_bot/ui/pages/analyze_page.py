@@ -315,6 +315,23 @@ def render_analyze_page() -> None:
         df_ind = TechnicalIndicators().add_all(df.copy())
         latest_indicator = df_ind.iloc[-1]
 
+        ohlc = df.iloc[-1]
+        ohlc_open = float(ohlc.get("open", 0) or 0)
+        ohlc_high = float(ohlc.get("high", 0) or 0)
+        ohlc_low = float(ohlc.get("low", 0) or 0)
+        ohlc_close = float(ohlc.get("close", 0) or 0)
+        ohlc_vol = float(ohlc.get("volume", 0) or 0)
+        st.markdown(
+            "<div class='bb-stat-strip'>"
+            f"<span class='bb-stat'>Açılış <b>TL{ohlc_open:.2f}</b></span>"
+            f"<span class='bb-stat'>Yüksek <b class='up'>TL{ohlc_high:.2f}</b></span>"
+            f"<span class='bb-stat'>Düşük <b class='down'>TL{ohlc_low:.2f}</b></span>"
+            f"<span class='bb-stat'>Kapanış <b>TL{ohlc_close:.2f}</b></span>"
+            f"<span class='bb-stat'>Hacim <b>{ohlc_vol:,.0f}</b></span>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+
         render_section_title("Teknik Görünüm", "Fiyat yapısı ve momentum")
         render_html_panel(_render_indicator_grid(latest_indicator), accent="secondary")
         render_chart(plot_candlestick(df_ind, ticker_input), "analysis_candlestick_main")

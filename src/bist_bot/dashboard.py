@@ -13,7 +13,7 @@ from datetime import UTC, datetime, timedelta, timezone
 from functools import wraps
 from typing import Any, cast
 
-from flask import Flask, g, has_request_context, jsonify, request
+from flask import Flask, g, has_request_context, jsonify, render_template, request
 from flask_cors import CORS
 from flask_jwt_extended import (
     JWTManager,
@@ -238,7 +238,14 @@ def create_dashboard_app(
     """Create the authenticated Flask API application."""
     settings.require_security_config()
 
-    app = Flask(__name__)
+    from pathlib import Path
+
+    base_dir = Path(__file__).resolve().parent
+    app = Flask(
+        __name__,
+        template_folder=str(base_dir / "templates"),
+        static_folder=str(base_dir / "static"),
+    )
     app.config["fetcher"] = fetcher
     app.config["engine"] = engine
     app.config["db"] = db
@@ -521,7 +528,11 @@ def create_dashboard_app(
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; form-action 'self'; frame-ancestors 'none'"
+            "default-src 'self'; script-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "img-src 'self' data: https://lh3.googleusercontent.com; "
+            "font-src 'self' data: https://fonts.gstatic.com; "
+            "form-action 'self'; frame-ancestors 'none'"
         )
         return response
 
@@ -1340,6 +1351,32 @@ def create_dashboard_app(
         scan_rows = get_db().get_recent_scan_logs(limit=limit)
         history = _build_scan_history_payload(scan_rows, limit)
         return jsonify({"status": "ok", "history": history})
+
+    # -----------------------------------------------------------------------
+    # Stitch 1:1 Pixel-Exact UI Routes (Modern Web Sitesi Yenileme)
+    # -----------------------------------------------------------------------
+    @app.route("/login")
+    @app.route("/ui/login")
+    def ui_login():
+        return render_template("stitch/login.html")
+
+    @app.route("/")
+    @app.route("/ui")
+    @app.route("/ui/dashboard")
+    def ui_dashboard():
+        return render_template("stitch/dashboard.html")
+
+    @app.route("/ui/signals")
+    def ui_signals():
+        return render_template("stitch/signals.html")
+
+    @app.route("/ui/analysis")
+    def ui_analysis():
+        return render_template("stitch/analysis.html")
+
+    @app.route("/ui/settings")
+    def ui_settings():
+        return render_template("stitch/settings.html")
 
     return app
 

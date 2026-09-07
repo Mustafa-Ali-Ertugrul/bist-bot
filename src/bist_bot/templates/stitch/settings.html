@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="tr"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+
+
+<link rel="stylesheet" href="/static/tailwind.css"/>
+<style>
+.material-symbols-outlined {
+  font-family: 'Material Symbols Outlined' !important;
+  font-weight: normal;
+  font-style: normal;
+  font-size: 20px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+}
+</style>
+</head><body class="bg-background font-body-md text-body-md text-on-surface antialiased selection:bg-primary-container selection:text-on-primary"><header class="fixed top-0 left-0 w-full z-50 bg-surface-container-lowest/90 backdrop-blur-xl shadow-[0_4px_20px_rgba(0,0,0,0.4)]"><div class="h-24 w-full px-terminal-margin flex flex-col justify-between pt-space-xs pb-space-2xs"><div class="flex items-center justify-between w-full"><div class="flex items-center gap-space-lg"><div class="flex items-center gap-space-xs"><div class="relative flex items-center justify-center"><span class="w-2.5 h-2.5 rounded-full bg-primary animate-ping absolute opacity-75"></span><span class="w-2.5 h-2.5 rounded-full bg-primary relative"></span></div><span class="font-headline-md text-headline-md tracking-tight text-on-surface font-extrabold">Bist<span class="text-primary">-Bot</span></span><span class="bg-surface-container-high px-space-xs py-space-3xs rounded text-secondary font-label-caps text-label-caps uppercase tracking-wider">v2.4 Algo</span></div><div class="hidden xl:flex items-center gap-space-2xs bg-surface-container px-space-xs py-space-3xs rounded-full shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"><span class="w-1.5 h-1.5 rounded-full bg-primary"></span><span class="font-label-caps text-label-caps text-primary uppercase">BIST 100 CANLI</span></div><nav class="hidden lg:flex items-center gap-space-2xs bg-surface-container-low p-space-3xs rounded-lg" data-active-classes="bg-surface-container-high text-primary font-bold"><a class="px-space-sm py-space-2xs rounded text-on-surface-variant hover:bg-surface-container hover:text-on-surface font-body-md text-body-md transition-all" data-path="dashboard" href="/ui/dashboard">Dashboard</a><a class="px-space-sm py-space-2xs rounded text-on-surface-variant hover:bg-surface-container hover:text-on-surface font-body-md text-body-md transition-all" data-path="canli-sinyaller" href="/ui/signals">Canlı Sinyaller</a><a class="px-space-sm py-space-2xs rounded text-on-surface-variant hover:bg-surface-container hover:text-on-surface font-body-md text-body-md transition-all" data-path="varlik-analiz" href="/ui/analysis">Varlık Analiz</a><a class="px-space-sm py-space-2xs rounded text-on-surface-variant hover:bg-surface-container hover:text-on-surface font-body-md text-body-md transition-all" data-path="terminal-ayarlari" href="/ui/settings">Terminal Ayarları</a></nav></div><div class="flex items-center gap-space-md"><div class="hidden md:flex items-center gap-space-xs bg-surface-container px-space-sm py-space-2xs rounded-full shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"><span class="w-2 h-2 rounded-full bg-primary"></span><span class="font-label-code text-label-code text-on-surface-variant">Sistem Aktif <span class="text-outline">•</span> <span class="text-primary">100 Varlık Taranıyor</span></span></div><div class="flex items-center gap-space-xs pl-space-xs bg-surface-container-low p-space-3xs rounded-full"><span class="hidden sm:inline-block font-label-code text-label-code text-on-surface-variant px-space-xs">admin@bistbot.com</span><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center shadow-[0_0_12px_rgba(78,222,163,0.35)]"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div><div class="flex items-center gap-space-3xs"><button class="w-8 h-8 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors" title="Yenile" type="button"><span class="material-symbols-outlined text-[18px]">refresh</span></button><button class="relative w-8 h-8 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors" title="Bildirimler" type="button"><span class="material-symbols-outlined text-[18px]">notifications</span><span class="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-primary"></span></button><button class="w-8 h-8 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-error flex items-center justify-center transition-colors" title="Çıkış" type="button"><span class="material-symbols-outlined text-[18px]">logout</span></button></div></div></div><div class="w-full overflow-x-auto flex items-center gap-space-lg py-space-3xs bg-surface-container-low/70 px-space-sm rounded shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"><div class="flex items-center gap-space-2xs shrink-0"><span class="font-label-caps text-label-caps text-outline">BIST ENDEKSLER:</span></div><div class="flex items-center gap-space-xs shrink-0"><span class="font-label-code text-label-code text-on-surface font-semibold">XU100</span><span class="font-metric-value text-metric-value text-on-surface">14,012.40</span><span class="font-label-code text-label-code text-primary flex items-center"><span class="material-symbols-outlined text-[14px]">arrow_drop_up</span>+0.57%</span></div><span class="text-outline text-[10px] shrink-0">|</span><div class="flex items-center gap-space-xs shrink-0"><span class="font-label-code text-label-code text-on-surface font-semibold">XU030</span><span class="font-metric-value text-metric-value text-on-surface">16,445.40</span><span class="font-label-code text-label-code text-primary flex items-center"><span class="material-symbols-outlined text-[14px]">arrow_drop_up</span>+0.90%</span></div><span class="text-outline text-[10px] shrink-0">|</span><div class="flex items-center gap-space-xs shrink-0"><span class="font-label-code text-label-code text-on-surface font-semibold">USD/TRY</span><span class="font-metric-value text-metric-value text-on-surface">38.41</span><span class="font-label-code text-label-code text-primary flex items-center"><span class="material-symbols-outlined text-[14px]">arrow_drop_up</span>+0.03%</span></div><span class="text-outline text-[10px] shrink-0">|</span><div class="flex items-center gap-space-xs shrink-0"><span class="font-label-code text-label-code text-outline">BIST HACİM</span><span class="font-metric-value text-metric-value text-tertiary">142.8B TL</span></div></div></div></header><main class="w-full pt-24 bg-background min-h-screen"><div class="flex flex-col w-full">
+<!-- Interactive Canvas Root with Ambient Glow -->
+<div class="relative w-full px-terminal-margin py-space-lg max-w-[1560px] mx-auto overflow-hidden">
+<!-- Ambient Radial Lighting (Aesthetic Backdrop) -->
+<div class="absolute -top-32 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-3xl pointer-events-none -z-10"></div>
+<div class="absolute top-1/2 -right-20 w-[450px] h-[450px] bg-secondary-container/5 rounded-full blur-3xl pointer-events-none -z-10"></div>
+<!-- Header & Quick Nav Matrix -->
+<div class="flex flex-col xl:flex-row xl:items-end justify-between gap-space-md mb-space-xl">
+<div class="space-y-space-2xs">
+<div class="flex items-center gap-space-xs">
+<span class="font-label-caps text-label-caps text-primary uppercase tracking-widest bg-surface-container-high px-space-xs py-space-3xs rounded-full flex items-center gap-1.5 shadow-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-primary animate-ping"></span>
+            PARAMETRE MATRİSİ • V2.4 ALGO
+          </span>
+<span class="font-label-code text-label-code text-outline">•</span>
+<span class="font-label-code text-label-code text-on-surface-variant">ENV: <span class="text-tertiary">PRODUCTION-EQX</span></span>
+</div>
+<h1 class="font-headline-lg text-headline-lg text-on-surface tracking-tight font-extrabold flex items-center gap-space-xs">
+          Terminal Ayarları &amp; Algoritma Filtreleri
+          <span class="material-symbols-outlined text-primary text-[26px]">tune</span>
+</h1>
+<p class="font-body-md text-body-md text-on-surface-variant max-w-2xl">
+          Tarama döngüsü, anlık teknik gösterge eşikleri ve Telegram/Discord bot tetikleyicilerini gerçek zamanlı kalibre edin.
+        </p>
+</div>
+<!-- Quick Preset Filter Chips -->
+<div class="flex items-center flex-wrap gap-space-xs bg-surface-container-lowest/80 p-space-2xs rounded-xl shadow-md backdrop-blur-md">
+<button class="preset-pill active px-space-sm py-space-2xs rounded-lg font-label-code text-label-code text-primary bg-surface-container-high shadow-sm flex items-center gap-1.5 transition-all" data-preset="agresif" type="button">
+<span class="material-symbols-outlined text-[15px]">bolt</span> Agresif Scalp
+        </button>
+<button class="preset-pill px-space-sm py-space-2xs rounded-lg font-label-code text-label-code text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-all" data-preset="dengeli" type="button">
+<span class="material-symbols-outlined text-[15px]">balance</span> Dengeli BIST100
+        </button>
+<button class="preset-pill px-space-sm py-space-2xs rounded-lg font-label-code text-label-code text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-all" data-preset="trend" type="button">
+<span class="material-symbols-outlined text-[15px]">trending_up</span> Trend Takipçisi
+        </button>
+</div>
+</div>
+<!-- Main Grid Section (3 Columns on Big screens, Modular Stack) -->
+<div class="grid grid-cols-1 xl:grid-cols-12 gap-space-lg mb-space-xl">
+<!-- LEFT SECTION: 1. Çalışma Zamanı & Tarama (col-span-5) -->
+<div class="xl:col-span-5 flex flex-col gap-space-lg">
+<!-- CARD 1: Çalışma Zamanı -->
+<div class="bg-surface-container-low/90 rounded-xl p-space-lg shadow-lg relative overflow-hidden backdrop-blur-xl group">
+<div class="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-primary via-secondary-container to-transparent opacity-80"></div>
+<div class="flex items-center justify-between pb-space-sm mb-space-md">
+<div class="flex items-center gap-space-xs">
+<div class="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center text-primary shadow-inner">
+<span class="material-symbols-outlined text-[20px]">schedule</span>
+</div>
+<div>
+<span class="font-headline-md text-headline-md text-on-surface font-bold">Çalışma Zamanı</span>
+<span class="block font-label-caps text-label-caps text-outline uppercase">Tarama Frekansı &amp; Döngü</span>
+</div>
+</div>
+<!-- Auto Refresh Toggle Switch -->
+<label class="flex items-center gap-space-xs cursor-pointer select-none">
+<span class="font-label-code text-label-code text-on-surface-variant">Oto-Yenile</span>
+<div class="relative">
+<input checked="" class="sr-only peer" id="auto-refresh-toggle" type="checkbox"/>
+<div class="w-11 h-6 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-on-surface after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+</div>
+</label>
+</div>
+<!-- Controls Stack -->
+<div class="space-y-space-md">
+<!-- Slider 1: Tarama Aralığı -->
+<div class="bg-surface-container/60 p-space-sm rounded-lg">
+<div class="flex items-center justify-between mb-space-xs">
+<div class="flex items-center gap-space-2xs">
+<span class="font-body-md text-body-md text-on-surface font-medium">Tarama Aralığı (Dakika)</span>
+<span class="material-symbols-outlined text-[16px] text-outline cursor-help" title="Algoritmanın tüm BIST hisselerini baştan sona kontrol etme periyodu.">help</span>
+</div>
+<div class="flex items-center gap-1.5 bg-surface-container-lowest px-2 py-0.5 rounded shadow-inner">
+<input class="w-10 bg-transparent font-metric-value text-metric-value text-primary text-right focus:outline-none" id="scan-interval-input" max="60" min="1" type="number" value="5"/>
+<span class="font-label-code text-label-code text-outline">DK</span>
+</div>
+</div>
+<input class="w-full h-1.5 bg-surface-container-highest rounded-lg appearance-none cursor-pointer accent-primary" id="scan-interval-slider" max="60" min="1" type="range" value="5"/>
+<div class="flex justify-between font-label-code text-label-code text-outline mt-1.5">
+<span>1 dk (HFT)</span>
+<span class="text-primary font-semibold">5 dk (Önerilen)</span>
+<span>60 dk</span>
+</div>
+</div>
+<!-- Slider 2: Bildirim Min Skor -->
+<div class="bg-surface-container/60 p-space-sm rounded-lg">
+<div class="flex items-center justify-between mb-space-xs">
+<div class="flex items-center gap-space-2xs">
+<span class="font-body-md text-body-md text-on-surface font-medium">Bildirim Min. Skor Eşiği</span>
+<span class="material-symbols-outlined text-[16px] text-outline cursor-help" title="Yalnızca hesaplanan skor bu değerin üzerine çıktığında bildirim gönderilir.">info</span>
+</div>
+<div class="flex items-center gap-1.5 bg-surface-container-lowest px-2 py-0.5 rounded shadow-inner">
+<span class="text-primary font-metric-value text-metric-value">+</span>
+<input class="w-8 bg-transparent font-metric-value text-metric-value text-primary text-right focus:outline-none" id="min-score-input" max="100" min="0" type="number" value="30"/>
+<span class="font-label-code text-label-code text-outline">PNT</span>
+</div>
+</div>
+<input class="w-full h-1.5 bg-surface-container-highest rounded-lg appearance-none cursor-pointer accent-primary" id="min-score-slider" max="100" min="0" type="range" value="30"/>
+<div class="flex justify-between font-label-code text-label-code text-outline mt-1.5">
+<span>Nötr (0)</span>
+<span class="text-primary font-semibold">+30 (Alım Teyidi)</span>
+<span>+100 (Mutlak)</span>
+</div>
+</div>
+<!-- Active Scan Engine Status Box -->
+<div class="flex items-center justify-between bg-surface-container-lowest p-space-sm rounded-lg">
+<div class="flex items-center gap-space-xs">
+<div class="w-2.5 h-2.5 rounded-full bg-primary animate-pulse"></div>
+<div class="flex flex-col">
+<span class="font-label-code text-label-code text-on-surface font-semibold">Sonraki Otomatik Tetikleme</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">03 dakika 42 saniye kaldı</span>
+</div>
+</div>
+<button class="px-space-xs py-space-3xs rounded bg-surface-container hover:bg-surface-container-high text-primary hover:text-primary-fixed font-label-code text-label-code transition-colors flex items-center gap-1" type="button">
+<span class="material-symbols-outlined text-[14px]">play_arrow</span> Şimdi Tara
+              </button>
+</div>
+</div>
+</div>
+<!-- CARD 2: Bildirim & Webhook Entegrasyonu -->
+<div class="bg-surface-container-low/90 rounded-xl p-space-lg shadow-lg relative overflow-hidden backdrop-blur-xl">
+<div class="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-tertiary-container via-secondary to-transparent opacity-80"></div>
+<div class="flex items-center justify-between pb-space-sm mb-space-md">
+<div class="flex items-center gap-space-xs">
+<div class="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center text-tertiary shadow-inner">
+<span class="material-symbols-outlined text-[20px]">send</span>
+</div>
+<div>
+<span class="font-headline-md text-headline-md text-on-surface font-bold">Bot &amp; Yönlendirme</span>
+<span class="block font-label-caps text-label-caps text-outline uppercase">Telegram &amp; Webhook Servisleri</span>
+</div>
+</div>
+<div class="flex items-center gap-1.5 bg-primary/10 px-space-xs py-space-3xs rounded-full shadow-sm" id="connection-status-badge">
+<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
+<span class="font-label-code text-label-code text-primary font-bold">BAĞLANTI AKTİF</span>
+</div>
+</div>
+<div class="space-y-space-md">
+<!-- Telegram Bot Token Field -->
+<div class="space-y-space-3xs">
+<div class="flex items-center justify-between">
+<label class="font-label-code text-label-code text-on-surface-variant flex items-center gap-1">
+                  TELEGRAM BOT TOKEN
+                  <span class="text-outline text-[10px]">(ReadOnly .env)</span>
+</label>
+<button class="font-label-code text-label-code text-secondary hover:underline flex items-center gap-1" id="toggle-token-btn" type="button">
+<span class="material-symbols-outlined text-[14px]">visibility</span> Göster
+                </button>
+</div>
+<div class="relative flex items-center">
+<input class="w-full bg-surface-container-lowest font-metric-value text-metric-value text-on-surface px-space-sm py-2 rounded-lg focus:outline-none select-all tracking-wider shadow-inner" id="bot-token-input" readonly="" type="password" value="8406981142:AAF20wM-qPz79WKLx0084YgG78yf8"/>
+<button class="absolute right-2 text-outline hover:text-on-surface p-1" onclick="navigator.clipboard.writeText('8406981142:AAF20wM-qPz79WKLx0084YgG78yf8')" title="Kopyala" type="button">
+<span class="material-symbols-outlined text-[16px]">content_copy</span>
+</button>
+</div>
+</div>
+<!-- Chat ID & Discord Hook in 2 columns -->
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-space-sm">
+<div class="space-y-space-3xs">
+<label class="font-label-code text-label-code text-on-surface-variant">CHAT / CHANNEL ID</label>
+<div class="flex items-center bg-surface-container-lowest px-space-sm py-2 rounded-lg shadow-inner">
+<span class="text-outline font-label-code text-label-code mr-1">#</span>
+<input class="w-full bg-transparent font-metric-value text-metric-value text-on-surface focus:outline-none" type="text" value="-1005798442002"/>
+</div>
+</div>
+<div class="space-y-space-3xs">
+<label class="font-label-code text-label-code text-on-surface-variant">DISCORD WEBHOOK (OPSİYONEL)</label>
+<div class="flex items-center bg-surface-container-lowest px-space-sm py-2 rounded-lg shadow-inner">
+<span class="material-symbols-outlined text-outline text-[16px] mr-1">link</span>
+<input class="w-full bg-transparent font-metric-value text-metric-value text-on-surface placeholder:text-outline/50 focus:outline-none" placeholder="https://discord.com/api/webhooks/..." type="password" value=""/>
+</div>
+</div>
+</div>
+<!-- Bildirim Gönderim Tetikleyicileri (Checkboxes) -->
+<div class="pt-space-xs">
+<span class="block font-label-caps text-label-caps text-outline uppercase mb-space-xs">ANLIK BİLDİRİM TETİKLEYİCİLERİ</span>
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-space-xs">
+<label class="flex items-center gap-2 p-space-xs bg-surface-container/60 hover:bg-surface-container rounded-lg cursor-pointer transition-colors">
+<input checked="" class="w-4 h-4 rounded bg-surface-container-highest accent-primary" type="checkbox"/>
+<span class="font-body-sm text-body-sm text-on-surface font-medium">Yeni Güçlü Sinyal</span>
+</label>
+<label class="flex items-center gap-2 p-space-xs bg-surface-container/60 hover:bg-surface-container rounded-lg cursor-pointer transition-colors">
+<input checked="" class="w-4 h-4 rounded bg-surface-container-highest accent-primary" type="checkbox"/>
+<span class="font-body-sm text-body-sm text-on-surface font-medium">Hedef (TP) Ulaşıldı</span>
+</label>
+<label class="flex items-center gap-2 p-space-xs bg-surface-container/60 hover:bg-surface-container rounded-lg cursor-pointer transition-colors">
+<input checked="" class="w-4 h-4 rounded bg-surface-container-highest accent-primary" type="checkbox"/>
+<span class="font-body-sm text-body-sm text-on-surface font-medium">Stop-Loss İhlali</span>
+</label>
+</div>
+</div>
+<!-- Bot Test Action Button -->
+<div class="flex items-center justify-between pt-space-xs">
+<span class="font-body-sm text-body-sm text-outline flex items-center gap-1">
+<span class="material-symbols-outlined text-[15px] text-primary">verified_user</span> API Anahtarları korumalı depolanmaktadır
+              </span>
+<button class="px-space-sm py-space-xs rounded-lg bg-surface-container-high hover:bg-surface-variant text-secondary font-label-code text-label-code flex items-center gap-1.5 transition-all shadow-sm" id="test-notification-btn" type="button">
+<span class="material-symbols-outlined text-[16px]">notifications_active</span> Test Mesajı Gönder
+              </button>
+</div>
+</div>
+</div>
+</div>
+<!-- RIGHT SECTION: 2. Sinyal & Gösterge Filtreleri (col-span-7) -->
+<div class="xl:col-span-7 flex flex-col gap-space-lg">
+<div class="bg-surface-container-low/90 rounded-xl p-space-lg shadow-lg relative overflow-hidden backdrop-blur-xl h-full flex flex-col justify-between">
+<div class="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-secondary via-primary to-transparent opacity-80"></div>
+<div>
+<!-- Header of Indicators Panel -->
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-space-xs pb-space-sm mb-space-md">
+<div class="flex items-center gap-space-xs">
+<div class="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center text-primary shadow-inner">
+<span class="material-symbols-outlined text-[20px]">analytics</span>
+</div>
+<div>
+<span class="font-headline-md text-headline-md text-on-surface font-bold">Teknik Gösterge Modelleri</span>
+<span class="block font-label-caps text-label-caps text-outline uppercase">Osilatörler, Hareketli Ortalamalar ve Hacim Eşikleri</span>
+</div>
+</div>
+<span class="font-label-code text-label-code bg-surface-container px-space-xs py-space-3xs rounded text-on-surface-variant self-start sm:self-auto">
+                BIST 100 CANLI FİLTRE
+              </span>
+</div>
+<!-- Indicator Sub-panels Bento -->
+<div class="space-y-space-md">
+<!-- RSI Panel With Dual-Range Visualizer -->
+<div class="bg-surface-container/60 p-space-md rounded-xl space-y-space-sm">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="font-headline-md text-headline-md text-on-surface font-bold">RSI (Relative Strength Index)</span>
+<span class="font-label-code text-label-code bg-surface-container-high text-tertiary px-space-2xs py-0.5 rounded">14 Periyot</span>
+</div>
+<div class="flex items-center gap-space-md">
+<span class="font-label-code text-label-code text-on-surface-variant">Aşırı Satım: <span class="text-primary font-bold" id="rsi-low-val">30</span></span>
+<span class="text-outline">|</span>
+<span class="font-label-code text-label-code text-on-surface-variant">Aşırı Alım: <span class="text-error font-bold" id="rsi-high-val">70</span></span>
+</div>
+</div>
+<!-- Visual Bar Gradient -->
+<div class="relative w-full h-3 bg-surface-container-highest rounded-full overflow-hidden">
+<!-- Oversold green zone -->
+<div class="absolute left-0 top-0 bottom-0 w-[30%] bg-primary/40"></div>
+<!-- Safe range blue zone -->
+<div class="absolute left-[30%] right-[30%] top-0 bottom-0 bg-secondary-container/20"></div>
+<!-- Overbought red zone -->
+<div class="absolute right-0 top-0 bottom-0 w-[30%] bg-error/40"></div>
+<!-- Active Cursor markers -->
+<div class="absolute top-0 bottom-0 w-1 bg-primary shadow-sm" id="rsi-low-marker" style="left: 30%;"></div>
+<div class="absolute top-0 bottom-0 w-1 bg-error shadow-sm" id="rsi-high-marker" style="left: 70%;"></div>
+</div>
+<!-- Sliders for RSI -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-space-md pt-space-2xs">
+<div>
+<div class="flex justify-between font-label-code text-label-code mb-1">
+<span class="text-on-surface-variant">RSI Min Eşik (Alım Kanalı)</span>
+<span class="text-primary font-metric-value text-metric-value">0 - 45</span>
+</div>
+<input class="w-full h-1.5 bg-surface-container-highest rounded-lg appearance-none cursor-pointer accent-primary" id="rsi-min-slider" max="45" min="10" type="range" value="30"/>
+</div>
+<div>
+<div class="flex justify-between font-label-code text-label-code mb-1">
+<span class="text-on-surface-variant">RSI Max Eşik (Satım / Doyum)</span>
+<span class="text-error font-metric-value text-metric-value">55 - 90</span>
+</div>
+<input class="w-full h-1.5 bg-surface-container-highest rounded-lg appearance-none cursor-pointer accent-error" id="rsi-max-slider" max="90" min="55" type="range" value="70"/>
+</div>
+</div>
+</div>
+<!-- Moving Averages Matrix: SMA & EMA (2x2 Grid) -->
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-space-md">
+<!-- SMA Card -->
+<div class="bg-surface-container/60 p-space-sm rounded-xl space-y-space-xs">
+<div class="flex items-center justify-between pb-space-2xs">
+<span class="font-body-md text-body-md text-on-surface font-semibold flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-tertiary"></span> Basit Ortalama (SMA)
+                    </span>
+<span class="font-label-code text-label-code text-outline">Kesişim Sinyali</span>
+</div>
+<div>
+<div class="flex justify-between font-label-code text-label-code mb-1">
+<span class="text-on-surface-variant">Hızlı SMA</span>
+<span class="font-metric-value text-metric-value text-tertiary" id="sma-fast-val">5 Gün</span>
+</div>
+<input class="w-full h-1.5 bg-surface-container-highest rounded-lg appearance-none cursor-pointer accent-tertiary" id="sma-fast-slider" max="20" min="3" type="range" value="5"/>
+</div>
+<div>
+<div class="flex justify-between font-label-code text-label-code mb-1">
+<span class="text-on-surface-variant">Yavaş SMA</span>
+<span class="font-metric-value text-metric-value text-outline" id="sma-slow-val">20 Gün</span>
+</div>
+<input class="w-full h-1.5 bg-surface-container-highest rounded-lg appearance-none cursor-pointer accent-outline" id="sma-slow-slider" max="100" min="15" type="range" value="20"/>
+</div>
+</div>
+<!-- EMA Card -->
+<div class="bg-surface-container/60 p-space-sm rounded-xl space-y-space-xs">
+<div class="flex items-center justify-between pb-space-2xs">
+<span class="font-body-md text-body-md text-on-surface font-semibold flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-secondary-container"></span> Üssel Ortalama (EMA)
+                    </span>
+<span class="font-label-code text-label-code text-outline">MACD Tabanı</span>
+</div>
+<div>
+<div class="flex justify-between font-label-code text-label-code mb-1">
+<span class="text-on-surface-variant">Hızlı EMA</span>
+<span class="font-metric-value text-metric-value text-secondary" id="ema-fast-val">12 Gün</span>
+</div>
+<input class="w-full h-1.5 bg-surface-container-highest rounded-lg appearance-none cursor-pointer accent-secondary" id="ema-fast-slider" max="30" min="5" type="range" value="12"/>
+</div>
+<div>
+<div class="flex justify-between font-label-code text-label-code mb-1">
+<span class="text-on-surface-variant">Yavaş EMA</span>
+<span class="font-metric-value text-metric-value text-outline" id="ema-slow-val">26 Gün</span>
+</div>
+<input class="w-full h-1.5 bg-surface-container-highest rounded-lg appearance-none cursor-pointer accent-outline" id="ema-slow-slider" max="100" min="20" type="range" value="26"/>
+</div>
+</div>
+</div>
+<!-- Hacim Artış Oranı & ADX Trend Gücü -->
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-space-md">
+<!-- Volume Multiplier -->
+<div class="bg-surface-container/60 p-space-sm rounded-xl space-y-space-2xs">
+<div class="flex items-center justify-between">
+<span class="font-body-md text-body-md text-on-surface font-semibold">Hacim Patlaması (Volume Ratio)</span>
+<span class="font-metric-value text-metric-value text-primary" id="vol-ratio-val">1.50x</span>
+</div>
+<p class="font-body-sm text-body-sm text-outline">Son 20 günlük ortalama hacme göre minimum çarpan eşiği.</p>
+<input class="w-full h-1.5 bg-surface-container-highest rounded-lg appearance-none cursor-pointer accent-primary" id="vol-ratio-slider" max="5.0" min="1.0" step="0.1" type="range" value="1.5"/>
+<div class="flex justify-between font-label-code text-label-code text-outline">
+<span>1.0x (Normal)</span>
+<span>2.5x (Yüksek)</span>
+<span>5.0x (Sıra Dışı)</span>
+</div>
+</div>
+<!-- ADX Trend Filter -->
+<div class="bg-surface-container/60 p-space-sm rounded-xl space-y-space-2xs">
+<div class="flex items-center justify-between">
+<span class="font-body-md text-body-md text-on-surface font-semibold">ADX Trend Gücü Eşiği</span>
+<span class="font-metric-value text-metric-value text-tertiary" id="adx-val">20 ADX</span>
+</div>
+<p class="font-body-sm text-body-sm text-outline">Yatay piyasa tuzaklarından kaçınmak için minimum trend ivmesi.</p>
+<input class="w-full h-1.5 bg-surface-container-highest rounded-lg appearance-none cursor-pointer accent-tertiary" id="adx-slider" max="50" min="10" type="range" value="20"/>
+<div class="flex justify-between font-label-code text-label-code text-outline">
+<span>10 (Yatay)</span>
+<span>25 (Güçlü Trend)</span>
+<span>50 (Ekstrem)</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Bottom Summary Status inside Indicators Panel -->
+<div class="mt-space-md pt-space-sm flex items-center justify-between text-outline font-label-code text-label-code">
+<span class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px] text-tertiary">info</span>
+              Filtre değişiklikleri sonraki tarama periyodunda devreye alınır.
+            </span>
+<span class="text-on-surface-variant font-mono">100 / 100 Varlık Filtre Kapsamında</span>
+</div>
+</div>
+</div>
+</div>
+<!-- PERSISTENT BOTTOM ACTION FOOTER BAR -->
+<div class="w-full bg-surface-container-low/95 backdrop-blur-2xl rounded-2xl p-space-md shadow-2xl flex flex-col md:flex-row items-center justify-between gap-space-md relative overflow-hidden">
+<!-- Glow Accent Line -->
+<div class="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-primary/50 to-transparent"></div>
+<!-- Feedback Message -->
+<div class="flex items-center gap-space-sm">
+<div class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary shrink-0">
+<span class="material-symbols-outlined text-[22px]">memory</span>
+</div>
+<div>
+<div class="flex items-center gap-space-xs">
+<span class="font-body-md text-body-md text-on-surface font-semibold">Konfigürasyon Hazır</span>
+<span class="hidden font-label-caps text-label-caps bg-secondary-container/20 text-secondary px-2 py-0.5 rounded uppercase" id="dirty-state-badge">Kaydedilmemiş Değişiklikler Var</span>
+</div>
+<p class="font-body-sm text-body-sm text-outline">
+            Tüm Telegram gizli anahtarları salt okunur olarak tutulur, depolama alanına geri yazılmaz.
+          </p>
+</div>
+</div>
+<!-- Action Buttons -->
+<div class="flex items-center gap-space-sm w-full md:w-auto shrink-0 justify-end">
+<button class="px-space-md py-space-sm rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface font-label-code text-label-code font-semibold transition-all flex items-center gap-space-xs" id="reset-defaults-btn" type="button">
+<span class="material-symbols-outlined text-[16px]">restart_alt</span> Varsayılan Parametrelere Dön
+        </button>
+<button class="px-space-lg py-space-sm rounded-xl bg-gradient-to-r from-primary-container to-primary text-on-primary font-headline-md text-headline-md tracking-tight font-bold shadow-[0_0_20px_rgba(78,222,163,0.4)] hover:shadow-[0_0_28px_rgba(78,222,163,0.6)] hover:brightness-110 active:scale-95 transition-all flex items-center gap-space-xs" id="save-apply-btn" type="button">
+<span class="material-symbols-outlined text-[20px]">save</span>
+<span>Değişiklikleri Kaydet ve Taramayı Yenile</span>
+</button>
+</div>
+</div>
+<!-- Toast Notification Overlay (Micro-interaction) -->
+<div class="fixed bottom-6 right-6 transform translate-y-24 opacity-0 transition-all duration-300 pointer-events-none z-50 flex items-center gap-space-sm bg-surface-container-highest/95 text-on-surface p-space-md rounded-xl shadow-2xl backdrop-blur-lg" id="toast">
+<span class="material-symbols-outlined text-primary text-[24px]">check_circle</span>
+<div>
+<span class="font-headline-md text-headline-md text-on-surface block font-bold" id="toast-title">İşlem Tamamlandı</span>
+<span class="font-body-sm text-body-sm text-outline block" id="toast-desc">Yeni parametreler tarama motoruna iletildi.</span>
+</div>
+</div>
+</div>
+<!-- Inline Micro-Interactions Script -->
+<script>
+    (function() {
+      // Connect inputs & sliders
+      function syncSlider(sliderId, inputId, suffix = '') {
+        const slider = document.getElementById(sliderId);
+        const input = document.getElementById(inputId);
+        if (!slider || !input) return;
+
+        slider.addEventListener('input', (e) => {
+          if (input.tagName === 'INPUT') {
+            input.value = e.target.value;
+          } else {
+            input.textContent = e.target.value + suffix;
+          }
+          notifyDirtyState();
+        });
+
+        if (input.tagName === 'INPUT') {
+          input.addEventListener('input', (e) => {
+            slider.value = e.target.value;
+            notifyDirtyState();
+          });
+        }
+      }
+
+      syncSlider('scan-interval-slider', 'scan-interval-input');
+      syncSlider('min-score-slider', 'min-score-input');
+      syncSlider('sma-fast-slider', 'sma-fast-val', ' Gün');
+      syncSlider('sma-slow-slider', 'sma-slow-val', ' Gün');
+      syncSlider('ema-fast-slider', 'ema-fast-val', ' Gün');
+      syncSlider('ema-slow-slider', 'ema-slow-val', ' Gün');
+      syncSlider('vol-ratio-slider', 'vol-ratio-val', 'x');
+      syncSlider('adx-slider', 'adx-val', ' ADX');
+
+      // RSI Sync & Visual Track
+      const rsiMin = document.getElementById('rsi-min-slider');
+      const rsiMax = document.getElementById('rsi-max-slider');
+      const rsiLowVal = document.getElementById('rsi-low-val');
+      const rsiHighVal = document.getElementById('rsi-high-val');
+      const rsiLowMarker = document.getElementById('rsi-low-marker');
+      const rsiHighMarker = document.getElementById('rsi-high-marker');
+
+      if (rsiMin && rsiMax) {
+        rsiMin.addEventListener('input', (e) => {
+          rsiLowVal.textContent = e.target.value;
+          if (rsiLowMarker) rsiLowMarker.style.left = e.target.value + '%';
+          notifyDirtyState();
+        });
+        rsiMax.addEventListener('input', (e) => {
+          rsiHighVal.textContent = e.target.value;
+          if (rsiHighMarker) rsiHighMarker.style.left = e.target.value + '%';
+          notifyDirtyState();
+        });
+      }
+
+      // Show/Hide Token Toggle
+      const toggleTokenBtn = document.getElementById('toggle-token-btn');
+      const botTokenInput = document.getElementById('bot-token-input');
+      if (toggleTokenBtn && botTokenInput) {
+        let visible = false;
+        toggleTokenBtn.addEventListener('click', () => {
+          visible = !visible;
+          botTokenInput.type = visible ? 'text' : 'password';
+          toggleTokenBtn.innerHTML = visible 
+            ? '<span class="material-symbols-outlined text-[14px]">visibility_off</span> Gizle' 
+            : '<span class="material-symbols-outlined text-[14px]">visibility</span> Göster';
+        });
+      }
+
+      // Dirty State indicator
+      const dirtyBadge = document.getElementById('dirty-state-badge');
+      function notifyDirtyState() {
+        if (dirtyBadge) dirtyBadge.classList.remove('hidden');
+      }
+
+      // Toast Feedback
+      function showToast(title, desc) {
+        const toast = document.getElementById('toast');
+        const tTitle = document.getElementById('toast-title');
+        const tDesc = document.getElementById('toast-desc');
+        if (!toast) return;
+        tTitle.textContent = title;
+        tDesc.textContent = desc;
+        toast.classList.remove('translate-y-24', 'opacity-0');
+        setTimeout(() => {
+          toast.classList.add('translate-y-24', 'opacity-0');
+        }, 3500);
+      }
+
+      // Save and Refresh action
+      const saveBtn = document.getElementById('save-apply-btn');
+      if (saveBtn) {
+        saveBtn.addEventListener('click', () => {
+          saveBtn.classList.add('scale-95');
+          setTimeout(() => saveBtn.classList.remove('scale-95'), 150);
+          if (dirtyBadge) dirtyBadge.classList.add('hidden');
+          showToast('Parametreler Başarıyla Güncellendi', 'Tarama motoru 100 hisse için yeni filtrelerle başlatıldı.');
+        });
+      }
+
+      // Test notification action
+      const testBtn = document.getElementById('test-notification-btn');
+      if (testBtn) {
+        testBtn.addEventListener('click', () => {
+          showToast('Test Mesajı İletildi', 'Telegram bot kanalına doğrulama paketi gönderildi (Gecikme: 24ms).');
+        });
+      }
+
+      // Preset pills handler
+      const pills = document.querySelectorAll('.preset-pill');
+      pills.forEach(pill => {
+        pill.addEventListener('click', () => {
+          pills.forEach(p => {
+            p.classList.remove('active', 'bg-surface-container-high', 'text-primary');
+            p.classList.add('text-on-surface-variant');
+          });
+          pill.classList.add('active', 'bg-surface-container-high', 'text-primary');
+          pill.classList.remove('text-on-surface-variant');
+
+          const preset = pill.getAttribute('data-preset');
+          if (preset === 'agresif') {
+            document.getElementById('scan-interval-slider').value = 1;
+            document.getElementById('scan-interval-input').value = 1;
+            document.getElementById('min-score-slider').value = 20;
+            document.getElementById('min-score-input').value = 20;
+            document.getElementById('vol-ratio-slider').value = 2.0;
+            document.getElementById('vol-ratio-val').textContent = '2.00x';
+          } else if (preset === 'dengeli') {
+            document.getElementById('scan-interval-slider').value = 5;
+            document.getElementById('scan-interval-input').value = 5;
+            document.getElementById('min-score-slider').value = 30;
+            document.getElementById('min-score-input').value = 30;
+            document.getElementById('vol-ratio-slider').value = 1.5;
+            document.getElementById('vol-ratio-val').textContent = '1.50x';
+          } else if (preset === 'trend') {
+            document.getElementById('scan-interval-slider').value = 15;
+            document.getElementById('scan-interval-input').value = 15;
+            document.getElementById('min-score-slider').value = 50;
+            document.getElementById('min-score-input').value = 50;
+            document.getElementById('adx-slider').value = 30;
+            document.getElementById('adx-val').textContent = '30 ADX';
+          }
+          notifyDirtyState();
+          showToast('Hazır Şablon Yüklendi', `${pill.innerText.trim()} konfigürasyonu uygulandı.`);
+        });
+      });
+
+      // Reset to defaults
+      const resetBtn = document.getElementById('reset-defaults-btn');
+      if (resetBtn) {
+        resetBtn.addEventListener('click', () => {
+          document.getElementById('scan-interval-slider').value = 5;
+          document.getElementById('scan-interval-input').value = 5;
+          document.getElementById('min-score-slider').value = 30;
+          document.getElementById('min-score-input').value = 30;
+          document.getElementById('rsi-min-slider').value = 30;
+          document.getElementById('rsi-max-slider').value = 70;
+          rsiLowVal.textContent = '30';
+          rsiHighVal.textContent = '70';
+          if (rsiLowMarker) rsiLowMarker.style.left = '30%';
+          if (rsiHighMarker) rsiHighMarker.style.left = '70%';
+          document.getElementById('sma-fast-slider').value = 5;
+          document.getElementById('sma-slow-slider').value = 20;
+          document.getElementById('sma-fast-val').textContent = '5 Gün';
+          document.getElementById('sma-slow-val').textContent = '20 Gün';
+          document.getElementById('ema-fast-slider').value = 12;
+          document.getElementById('ema-slow-slider').value = 26;
+          document.getElementById('ema-fast-val').textContent = '12 Gün';
+          document.getElementById('ema-slow-val').textContent = '26 Gün';
+          document.getElementById('vol-ratio-slider').value = 1.5;
+          document.getElementById('vol-ratio-val').textContent = '1.50x';
+          document.getElementById('adx-slider').value = 20;
+          document.getElementById('adx-val').textContent = '20 ADX';
+          if (dirtyBadge) dirtyBadge.classList.add('hidden');
+          showToast('Varsayılan Değerler', 'Tüm algoritmik parametreler fabrika ayarlarına sıfırlandı.');
+        });
+      }
+    })();
+  </script>
+</div></main><footer class="w-full bg-surface-container-lowest py-space-sm shadow-[0_-1px_12px_rgba(0,0,0,0.5)]"><div class="w-full px-terminal-margin flex flex-col sm:flex-row items-center justify-between gap-space-xs"><div class="flex items-center gap-space-md font-label-code text-label-code"><div class="flex items-center gap-space-2xs"><span class="w-2 h-2 rounded-full bg-primary"></span><span class="text-on-surface-variant">API: <span class="text-primary font-semibold">ONLINE</span></span></div><span class="text-outline">•</span><div class="flex items-center gap-space-2xs"><span class="material-symbols-outlined text-[14px] text-tertiary">wifi_tethering</span><span class="text-on-surface-variant">WS Latency: <span class="text-tertiary font-metric-value text-metric-value">18ms</span></span></div><span class="text-outline">•</span><span class="text-on-surface-variant hidden md:inline">Sunucu: <span class="text-on-surface">ist-eqx-algo-01</span></span></div><div class="font-body-sm text-body-sm text-outline text-center sm:text-right"><p>Yasal Uyarı: Burada yer alan algoritmik veriler yatırım danışmanlığı kapsamında değildir. Gecikmesiz BIST veri akışı.</p></div></div></footer><script src="/static/app.js"></script>
+</body></html>
