@@ -106,6 +106,16 @@
       brand.style.cursor = 'pointer';
       brand.onclick = () => window.location.href = '/ui/dashboard';
     }
+
+    // Show the logged-in operator email instead of the template placeholder.
+    const storedEmail = localStorage.getItem('bistbot_email');
+    if (storedEmail) {
+      document.querySelectorAll('header span').forEach(el => {
+        if (el.children.length === 0 && el.textContent.includes('@')) {
+          el.textContent = storedEmail;
+        }
+      });
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -476,26 +486,11 @@
   // Settings Page Interactivity
   // -------------------------------------------------------------------------
   function initSettings() {
-    // Strategy presets: Agresif Scalp, Dengeli BIST100, Trend Takipçisi
-    const scalpBtn = Array.from(document.querySelectorAll('button')).find(b => b.textContent.includes('Agresif Scalp'));
-    const balancedBtn = Array.from(document.querySelectorAll('button')).find(b => b.textContent.includes('Dengeli BIST100'));
-    const trendBtn = Array.from(document.querySelectorAll('button')).find(b => b.textContent.includes('Trend Takipçisi'));
-
-    if (scalpBtn) scalpBtn.onclick = () => applyPreset('scalp');
-    if (balancedBtn) balancedBtn.onclick = () => applyPreset('balanced');
-    if (trendBtn) trendBtn.onclick = () => applyPreset('trend');
-
-    function applyPreset(name) {
-      const presets = {
-        scalp: { rsiPeriod: 9, smaFast: 5, smaSlow: 13, adx: 15, name: 'Agresif Scalp' },
-        balanced: { rsiPeriod: 14, smaFast: 5, smaSlow: 20, adx: 20, name: 'Dengeli BIST100' },
-        trend: { rsiPeriod: 21, smaFast: 10, smaSlow: 50, adx: 25, name: 'Trend Takipçisi' }
-      };
-      const p = presets[name];
-      if (!p) return;
-
-      showToast(`Strateji profili yüklendi: ${p.name}`, 'success', 2500);
-    }
+    // NOTE: Strategy presets, test-notification, reset-defaults and
+    // save-apply controls are Demo-locked in settings.html (disabled) until
+    // a real settings backend exists — no handlers are attached on purpose.
+    // Only "Şimdi Tara" (real /api/scan call) and the token toggle below
+    // are wired.
 
     // "Şimdi Tara" button
     const scanNowBtn = Array.from(document.querySelectorAll('button')).find(b => b.textContent.includes('Şimdi Tara'));
@@ -536,30 +531,6 @@
           tokenInput.type = 'password';
           toggleTokenBtn.innerHTML = '<span class="material-symbols-outlined text-[16px]">visibility</span><span>Göster</span>';
         }
-      };
-    }
-
-    // Send Test Message
-    const testMsgBtn = document.getElementById('test-notification-btn');
-    if (testMsgBtn) {
-      testMsgBtn.onclick = function () {
-        showToast('Telegram bildirim testi gönderildi: BIST Bot bağlantısı aktif.', 'success', 3500);
-      };
-    }
-
-    // Reset Defaults
-    const resetBtn = document.getElementById('reset-defaults-btn');
-    if (resetBtn) {
-      resetBtn.onclick = function () {
-        showToast('Tüm gösterge ve tarama parametreleri varsayılan değerlere sıfırlandı.', 'info', 2500);
-      };
-    }
-
-    // Save & Apply
-    const saveBtn = document.getElementById('save-apply-btn');
-    if (saveBtn) {
-      saveBtn.onclick = function () {
-        showToast('Parametreler kaydedildi ve yeni ayarlar ile tarama yenilendi.', 'success', 3000);
       };
     }
   }

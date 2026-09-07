@@ -306,19 +306,19 @@
       if (res.ok && data.status === 'ok') {
         localStorage.setItem('bistbot_token', data.access_token);
         localStorage.setItem('bistbot_email', email);
-        btn.innerHTML = '<span class="material-symbols-outlined text-[20px]">check_circle</span><span>Ba?lant? Kuruldu</span>';
+        btn.innerHTML = '<span class="material-symbols-outlined text-[20px]">check_circle</span><span>Bağlantı Kuruldu</span>';
         setTimeout(() => {
           window.location.href = '/ui/dashboard';
         }, 400);
       } else {
         btn.innerHTML = originalContent;
         btn.disabled = false;
-        showLoginError(data.message || 'Ge?ersiz kurumsal kimlik bilgileri.');
+        showLoginError(data.message || 'Geçersiz kurumsal kimlik bilgileri.');
       }
     } catch (err) {
       btn.innerHTML = originalContent;
       btn.disabled = false;
-      showLoginError('API sunucusuna eri?ilemedi: ' + err.message);
+      showLoginError('API sunucusuna erişilemedi: ' + err.message);
     }
   }
 
@@ -337,11 +337,27 @@
   async function handleTokenLogin() {
     const tokenVal = document.getElementById('jwt-token').value.trim();
     if (!tokenVal) {
-      alert("L?tfen ge?erli bir JWT Token veya API Key giriniz.");
+      alert("Lütfen geçerli bir JWT Token veya API Key giriniz.");
       return;
     }
-    localStorage.setItem('bistbot_token', tokenVal);
-    window.location.href = '/ui/dashboard';
+    // Never persist an unverified token: validate first, store only on 200.
+    try {
+      const res = await fetch('/api/auth/verify', {
+        headers: { 'Authorization': 'Bearer ' + tokenVal }
+      });
+      if (!res.ok) {
+        alert("Token doğrulanamadı. Geçerli bir token giriniz.");
+        return;
+      }
+      localStorage.setItem('bistbot_token', tokenVal);
+      try {
+        const data = await res.json();
+        if (data.email) localStorage.setItem('bistbot_email', data.email);
+      } catch (parseErr) { /* email stays as-is */ }
+      window.location.href = '/ui/dashboard';
+    } catch (err) {
+      alert('Doğrulama isteği gönderilemedi: ' + err.message);
+    }
   }
 
 </script></main><footer class="relative z-10 w-full px-terminal-margin py-space-md bg-surface-container-lowest/60 backdrop-blur-lg"><div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-space-sm text-on-surface-variant"><div class="flex items-center gap-space-md flex-wrap justify-center"><div class="flex items-center gap-space-2xs"><span class="material-symbols-outlined text-primary text-[14px]">verified_user</span><span class="font-label-code text-label-code text-on-surface-variant">256-Bit SSL Şifreleme</span></div><div class="flex items-center gap-space-2xs"><span class="material-symbols-outlined text-secondary-container text-[14px]">bolt</span><span class="font-label-code text-label-code text-on-surface-variant">API Statüsü:</span><span class="font-label-code text-label-code text-primary uppercase font-bold">Online (1.2ms)</span></div><div class="flex items-center gap-space-2xs"><span class="material-symbols-outlined text-on-surface-variant text-[14px]">shield</span><span class="font-label-code text-label-code text-on-surface-variant">SPK Uyumlu Altyapı</span></div></div><div class="flex items-center gap-space-xs"><span class="font-label-code text-label-code text-on-surface-variant">© 2024 Bist-Bot Quantitative Systems. Tüm Hakları Saklıdır.</span></div></div></footer><script src="/static/app.js"></script>
