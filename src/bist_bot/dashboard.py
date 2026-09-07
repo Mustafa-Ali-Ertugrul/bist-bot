@@ -13,7 +13,7 @@ from datetime import UTC, datetime, timedelta, timezone
 from functools import wraps
 from typing import Any, cast
 
-from flask import Flask, g, has_request_context, jsonify, render_template, request
+from flask import Flask, g, has_request_context, jsonify, redirect, render_template, request
 from flask_cors import CORS
 from flask_jwt_extended import (
     JWTManager,
@@ -21,6 +21,8 @@ from flask_jwt_extended import (
     get_jwt,
     get_jwt_identity,
     jwt_required,
+    set_access_cookies,
+    verify_jwt_in_request,
 )
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -254,6 +256,12 @@ def create_dashboard_app(
     app.config["JWT_SECRET_KEY"] = settings.JWT_SECRET_KEY
     access_token_minutes = max(1, min(int(settings.JWT_ACCESS_TOKEN_MINUTES), 15))
     app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(minutes=access_token_minutes)
+    # HttpOnly UI cookie is the server-side authority for /ui/* page renders.
+    # /api/* keeps using the Authorization header; cookie CSRF stays at the
+    # Flask-JWT-Extended default (enforced only for unsafe methods).
+    app.config["JWT_COOKIE_HTTPONLY"] = True
+    app.config["JWT_COOKIE_SAMESITE"] = "Strict"
+    app.config["JWT_COOKIE_SECURE"] = settings.JWT_COOKIE_SECURE
     app.config["RATELIMIT_STORAGE_URI"] = settings.RATE_LIMIT_STORAGE_URI
     app.config["ALLOW_PUBLIC_REGISTRATION"] = settings.ALLOW_PUBLIC_REGISTRATION
     app.config["RBAC_MODE"] = settings.RBAC_MODE
@@ -774,7 +782,7 @@ def create_dashboard_app(
             identity=str(user["id"]),
             additional_claims={"role": user["role"], "email": user["email"]},
         )
-        return jsonify(
+        response = jsonify(
             {
                 "status": "ok",
                 "access_token": token,
@@ -782,6 +790,10 @@ def create_dashboard_app(
                 "expires_in_seconds": access_token_minutes * 60,
             }
         )
+        # HttpOnly cookie is the server-side authority for /ui/* page renders.
+        # /api/* keeps using the Authorization header (see _ui_auth_required).
+        set_access_cookies(response, token)
+        return response
 
     @app.route("/api/auth/register", methods=["POST"])
     @limiter.limit("5 per minute", key_func=_auth_rate_limit_key)
@@ -814,6 +826,24 @@ def create_dashboard_app(
             ),
             201,
         )
+
+    @app.route("/api/auth/verify", methods=["GET"])
+    @jwt_required()
+    def api_auth_verify():
+        """Validate a Bearer token without side effects (used by the login UI).
+
+        The token itself is never echoed back in logs or the response body.
+        """
+        claims = get_jwt()
+        return jsonify(
+            {
+                "status": "ok",
+                "valid": True,
+                "user_id": str(get_jwt_identity() or ""),
+                "email": str(claims.get("email") or ""),
+                "role": str(claims.get("role") or ""),
+            }
+        ), 200
 
     @app.route("/api/scan", methods=["POST"])
     @jwt_required()
@@ -1355,6 +1385,29 @@ def create_dashboard_app(
     # -----------------------------------------------------------------------
     # Stitch 1:1 Pixel-Exact UI Routes (Modern Web Sitesi Yenileme)
     # -----------------------------------------------------------------------
+    def _ui_auth_required(view):
+        """Server-side gate for /ui/* HTML pages (the login page stays public).
+
+        The HttpOnly JWT cookie is the authority here; /api/* keeps using the
+        Authorization header. Cookie auth only ever guards GET page renders,
+        so no CSRF token dance is needed (unsafe methods still require the
+        header). Missing/invalid cookie -> 302 to /login.
+        """
+
+        @wraps(view)
+        def wrapped(*args, **kwargs):
+            try:
+                verify_jwt_in_request(locations=["cookies"])
+            except Exception:
+                # Fail closed: missing, malformed (raw PyJWT errors escape
+                # Flask-JWT-Extended's own hierarchy on the cookie path),
+                # expired, or wrong-type tokens all bounce to /login.
+                logger.info("ui_auth_redirect_login", route=request.path)
+                return redirect("/login", code=302)
+            return view(*args, **kwargs)
+
+        return wrapped
+
     @app.route("/login")
     @app.route("/ui/login")
     def ui_login():
@@ -1363,18 +1416,22 @@ def create_dashboard_app(
     @app.route("/")
     @app.route("/ui")
     @app.route("/ui/dashboard")
+    @_ui_auth_required
     def ui_dashboard():
         return render_template("stitch/dashboard.html")
 
     @app.route("/ui/signals")
+    @_ui_auth_required
     def ui_signals():
         return render_template("stitch/signals.html")
 
     @app.route("/ui/analysis")
+    @_ui_auth_required
     def ui_analysis():
         return render_template("stitch/analysis.html")
 
     @app.route("/ui/settings")
+    @_ui_auth_required
     def ui_settings():
         return render_template("stitch/settings.html")
 

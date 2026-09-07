@@ -173,8 +173,8 @@
                 </button>
 </div>
 <div class="relative flex items-center">
-<input class="w-full bg-surface-container-lowest font-metric-value text-metric-value text-on-surface px-space-sm py-2 rounded-lg focus:outline-none select-all tracking-wider shadow-inner" id="bot-token-input" readonly="" type="password" value="8406981142:AAF20wM-qPz79WKLx0084YgG78yf8"/>
-<button class="absolute right-2 text-outline hover:text-on-surface p-1" onclick="navigator.clipboard.writeText('8406981142:AAF20wM-qPz79WKLx0084YgG78yf8')" title="Kopyala" type="button">
+<input class="w-full bg-surface-container-lowest font-metric-value text-metric-value text-on-surface px-space-sm py-2 rounded-lg focus:outline-none select-all tracking-wider shadow-inner" id="bot-token-input" readonly="" type="password" value="" placeholder="Token ayarlardan yönetilir"/>
+<button class="absolute right-2 text-outline hover:text-on-surface p-1" onclick="navigator.clipboard.writeText(document.getElementById('bot-token-input').value)" title="Kopyala" type="button">
 <span class="material-symbols-outlined text-[16px]">content_copy</span>
 </button>
 </div>
@@ -185,7 +185,7 @@
 <label class="font-label-code text-label-code text-on-surface-variant">CHAT / CHANNEL ID</label>
 <div class="flex items-center bg-surface-container-lowest px-space-sm py-2 rounded-lg shadow-inner">
 <span class="text-outline font-label-code text-label-code mr-1">#</span>
-<input class="w-full bg-transparent font-metric-value text-metric-value text-on-surface focus:outline-none" type="text" value="-1005798442002"/>
+<input class="w-full bg-transparent font-metric-value text-metric-value text-on-surface focus:outline-none" type="text" value="" placeholder="örn. -1001234567890"/>
 </div>
 </div>
 <div class="space-y-space-3xs">

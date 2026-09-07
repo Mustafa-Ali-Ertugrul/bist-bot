@@ -338,6 +338,7 @@ class AuthSettings:
     ADMIN_BOOTSTRAP_EMAIL: str = _get_str_env("ADMIN_BOOTSTRAP_EMAIL")
     ADMIN_BOOTSTRAP_PASSWORD_HASH: str = _get_str_env("ADMIN_BOOTSTRAP_PASSWORD_HASH")
     ADMIN_BOOTSTRAP_UPDATE_EXISTING: bool = _get_bool_env("ADMIN_BOOTSTRAP_UPDATE_EXISTING", False)
+    JWT_COOKIE_SECURE: bool = _get_bool_env("JWT_COOKIE_SECURE", False)
     ALLOW_PUBLIC_REGISTRATION: bool = _get_bool_env("ALLOW_PUBLIC_REGISTRATION", False)
     CORS_ORIGINS: tuple[str, ...] = field(default_factory=lambda: _get_csv_env("CORS_ORIGINS"))
 
