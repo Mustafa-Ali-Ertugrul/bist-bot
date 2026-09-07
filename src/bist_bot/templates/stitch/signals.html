@@ -577,6 +577,13 @@
 </div>
 </div>
 </div>
+<!-- Quick Execute Modal / Trigger -->
+<div class="mt-space-md p-space-xs bg-surface-container rounded-lg flex items-center justify-between font-label-code text-label-code">
+<span class="text-outline">Hızlı İşlem / Alım-Satım:</span>
+<button class="bg-primary text-on-primary px-space-md py-1.5 rounded-lg font-bold hover:bg-primary-fixed transition-all flex items-center gap-1 cursor-pointer shadow-md" id="quick-execute-btn" type="button">
+<span class="material-symbols-outlined text-[16px]">bolt</span> Emri İlet
+</button>
+</div>
 <!-- Quantitative Risk Ratio -->
 <div class="mt-space-md p-space-xs bg-surface-container rounded-lg flex items-center justify-between font-label-code text-label-code">
 <span class="text-outline">Risk/Kazanç Oranı:</span>
@@ -687,159 +694,7 @@
 </div>
 <!-- Client-Side Vanilla JS Interactive Logic -->
 <script>
-    (function () {
-      const cards = document.querySelectorAll('.signal-card');
-      const symbolTitle = document.getElementById('active-symbol-title');
-      const currentPriceVal = document.getElementById('current-price-val');
-      const currentScoreVal = document.getElementById('current-score-val');
-      const currentStopVal = document.getElementById('current-stop-val');
-      const currentTargetVal = document.getElementById('current-target-val');
-      const trendVal = document.getElementById('trend-val');
-      const trendBar = document.getElementById('trend-bar');
-      const volumeVal = document.getElementById('volume-val');
-      const volumeBar = document.getElementById('volume-bar');
-      const structVal = document.getElementById('struct-val');
-      const structBar = document.getElementById('struct-bar');
-      
-      const filterTabs = document.querySelectorAll('.filter-tab');
-      const watchlistBtn = document.getElementById('watchlist-toggle-btn');
-      const watchlistText = document.getElementById('watchlist-text');
-      const quickExecuteBtn = document.getElementById('quick-execute-btn');
-      const toast = document.getElementById('toast');
-      const toastMessage = document.getElementById('toast-message');
-
-      // Modal Elements
-      const openModalBtn = document.getElementById('open-filter-modal-btn');
-      const closeModalBtn = document.getElementById('close-filter-modal-btn');
-      const filterModal = document.getElementById('filter-modal');
-      const applyFilterBtn = document.getElementById('apply-filter-btn');
-      const resetFilterBtn = document.getElementById('reset-filter-btn');
-      const scoreSlider = document.getElementById('score-slider');
-      const filterScoreLabel = document.getElementById('filter-score-label');
-      const rsiSlider = document.getElementById('rsi-slider');
-      const filterRsiLabel = document.getElementById('filter-rsi-label');
-
-      function showToast(msg) {
-        toastMessage.textContent = msg;
-        toast.classList.remove('translate-y-24', 'opacity-0', 'pointer-events-none');
-        setTimeout(() => {
-          toast.classList.add('translate-y-24', 'opacity-0', 'pointer-events-none');
-        }, 3000);
-      }
-
-      // Card Selection Behavior
-      cards.forEach(card => {
-        card.addEventListener('click', () => {
-          cards.forEach(c => {
-            c.classList.remove('active');
-            const bar = c.querySelector('.bg-primary.w-1\\.5');
-            if (bar) bar.remove();
-          });
-
-          card.classList.add('active');
-          const bar = document.createElement('div');
-          bar.className = 'absolute left-0 top-0 bottom-0 w-1.5 bg-primary shadow-[0_0_12px_#4edea3]';
-          card.prepend(bar);
-
-          // Update Right Column Info
-          const name = card.dataset.name;
-          const price = card.dataset.price;
-          const score = card.dataset.score;
-          const stop = card.dataset.stop;
-          const target = card.dataset.target;
-          const trend = card.dataset.trend;
-          const vol = card.dataset.volume;
-          const str = card.dataset.struct;
-
-          symbolTitle.textContent = name;
-          currentPriceVal.textContent = '₺' + price;
-          currentScoreVal.textContent = score;
-          currentStopVal.textContent = '₺' + stop;
-          currentTargetVal.textContent = '₺' + target;
-
-          trendVal.textContent = trend + ' / 30';
-          const trendPct = Math.min(100, Math.round((parseInt(trend.replace('+', '')) / 30) * 100));
-          trendBar.style.width = trendPct + '%';
-
-          volumeVal.textContent = vol + ' / 10';
-          const volPct = Math.min(100, Math.round((parseInt(vol.replace('+', '')) / 10) * 100));
-          volumeBar.style.width = volPct + '%';
-
-          structVal.textContent = str + ' / 10';
-          const strPct = Math.min(100, Math.round((parseInt(str.replace('+', '')) / 10) * 100));
-          structBar.style.width = strPct + '%';
-
-          showToast(card.dataset.symbol + ' verileri ve grafiği yüklendi.');
-        });
-      });
-
-      // Filter Tabs Switching
-      filterTabs.forEach(tab => {
-        tab.addEventListener('click', () => {
-          filterTabs.forEach(t => {
-            t.className = 'filter-tab bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface font-label-code text-label-code px-space-sm py-space-2xs rounded-full shadow-sm transition-all flex items-center gap-1.5';
-          });
-          tab.className = 'filter-tab active-tab bg-primary text-on-primary font-label-code text-label-code px-space-sm py-space-2xs rounded-full shadow-[0_0_16px_rgba(78,222,163,0.35)] transition-all flex items-center gap-1.5';
-          
-          const filter = tab.dataset.filter;
-          if (filter === 'high-conviction') {
-            cards.forEach(c => {
-              const score = parseInt(c.dataset.score.replace('+', ''));
-              c.style.display = score >= 30 ? 'block' : 'none';
-            });
-            showToast('Yüksek güvene sahip sinyaller filtrelendi.');
-          } else {
-            cards.forEach(c => c.style.display = 'block');
-          }
-        });
-      });
-
-      // Watchlist Button
-      let isWatching = false;
-      watchlistBtn.addEventListener('click', () => {
-        isWatching = !isWatching;
-        watchlistText.textContent = isWatching ? 'İzleniyor' : 'İzle';
-        watchlistBtn.className = isWatching
-          ? 'bg-primary/20 text-primary px-space-sm py-space-xs rounded-lg font-label-code text-label-code flex items-center gap-1.5 transition-all shadow-sm'
-          : 'bg-surface-container hover:bg-surface-container-high text-tertiary px-space-sm py-space-xs rounded-lg font-label-code text-label-code flex items-center gap-1.5 transition-all shadow-sm';
-        showToast(isWatching ? 'Varlık izleme listesine eklendi.' : 'İzleme listesinden çıkarıldı.');
-      });
-
-      // Quick Order Button
-      quickExecuteBtn.addEventListener('click', () => {
-        const symbol = symbolTitle.textContent;
-        showToast(symbol + ' için simüle edilmiş piyasa emri iletildi.');
-      });
-
-      // Modal Open/Close
-      openModalBtn.addEventListener('click', () => {
-        filterModal.classList.remove('opacity-0', 'pointer-events-none');
-      });
-
-      closeModalBtn.addEventListener('click', () => {
-        filterModal.classList.add('opacity-0', 'pointer-events-none');
-      });
-
-      scoreSlider.addEventListener('input', (e) => {
-        filterScoreLabel.textContent = '+' + e.target.value;
-      });
-
-      rsiSlider.addEventListener('input', (e) => {
-        filterRsiLabel.textContent = e.target.value;
-      });
-
-      applyFilterBtn.addEventListener('click', () => {
-        filterModal.classList.add('opacity-0', 'pointer-events-none');
-        showToast('Filtre parametreleri tarayıcıya uygulandı.');
-      });
-
-      resetFilterBtn.addEventListener('click', () => {
-        scoreSlider.value = 25;
-        filterScoreLabel.textContent = '+25';
-        rsiSlider.value = 65;
-        filterRsiLabel.textContent = '65';
-      });
-    })();
-  </script>
+    // Legacy inline script disabled: interactive behavior is fully handled by /static/app.js
+</script>
 </div></main><footer class="w-full bg-surface-container-lowest py-space-sm shadow-[0_-1px_12px_rgba(0,0,0,0.5)]"><div class="w-full px-terminal-margin flex flex-col sm:flex-row items-center justify-between gap-space-xs"><div class="flex items-center gap-space-md font-label-code text-label-code"><div class="flex items-center gap-space-2xs"><span class="w-2 h-2 rounded-full bg-primary"></span><span class="text-on-surface-variant">API: <span class="text-primary font-semibold">ONLINE</span></span></div><span class="text-outline">•</span><div class="flex items-center gap-space-2xs"><span class="material-symbols-outlined text-[14px] text-tertiary">wifi_tethering</span><span class="text-on-surface-variant">WS Latency: <span class="text-tertiary font-metric-value text-metric-value">18ms</span></span></div><span class="text-outline">•</span><span class="text-on-surface-variant hidden md:inline">Sunucu: <span class="text-on-surface">ist-eqx-algo-01</span></span></div><div class="font-body-sm text-body-sm text-outline text-center sm:text-right"><p>Yasal Uyarı: Burada yer alan algoritmik veriler yatırım danışmanlığı kapsamında değildir. Gecikmesiz BIST veri akışı.</p></div></div></footer><script src="/static/app.js"></script>
 </body></html>

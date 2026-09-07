@@ -58,7 +58,7 @@
 <span class="font-metric-value text-metric-value text-primary font-bold">%94.2</span>
 </div>
 </div>
-<button class="group relative inline-flex items-center justify-center gap-space-xs px-space-lg py-space-sm rounded-lg bg-gradient-to-r from-primary-container via-primary to-primary text-on-primary font-body-md text-body-md font-bold shadow-[0_0_20px_rgba(78,222,163,0.35)] hover:shadow-[0_0_28px_rgba(78,222,163,0.55)] active:scale-[0.98] transition-all duration-150 cursor-pointer" id="scanButton" onclick="triggerBistScan()">
+<button class="group relative inline-flex items-center justify-center gap-space-xs px-space-lg py-space-sm rounded-lg bg-gradient-to-r from-primary-container via-primary to-primary text-on-primary font-body-md text-body-md font-bold shadow-[0_0_20px_rgba(78,222,163,0.35)] hover:shadow-[0_0_28px_rgba(78,222,163,0.55)] active:scale-[0.98] transition-all duration-150 cursor-pointer" id="scanButton">
 <span class="material-symbols-outlined text-[20px] transition-transform duration-500 group-hover:rotate-180" id="scanIcon">sync</span>
 <span id="scanBtnText">BIST100 Taramasını Başlat</span>
 <span class="relative flex h-2 w-2">
@@ -412,13 +412,13 @@
 </div>
 <!-- Filter Controls -->
 <div class="flex items-center gap-space-xs overflow-x-auto w-full sm:w-auto p-space-3xs bg-surface-container rounded-lg">
-<button class="signal-tab-btn px-space-sm py-space-2xs rounded bg-surface-container-high text-primary font-label-code text-label-code font-bold cursor-pointer transition-all" id="btn-tab-all" onclick="filterSignals('all')">
+<button class="signal-tab-btn px-space-sm py-space-2xs rounded bg-surface-container-high text-primary font-label-code text-label-code font-bold cursor-pointer transition-all" id="btn-tab-all">
             Tüm Sinyaller (10)
           </button>
-<button class="signal-tab-btn px-space-sm py-space-2xs rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high font-label-code text-label-code cursor-pointer transition-all" id="btn-tab-buy" onclick="filterSignals('buy')">
+<button class="signal-tab-btn px-space-sm py-space-2xs rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high font-label-code text-label-code cursor-pointer transition-all" id="btn-tab-buy">
             Alış Sinyalleri (6)
           </button>
-<button class="signal-tab-btn px-space-sm py-space-2xs rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high font-label-code text-label-code cursor-pointer transition-all" id="btn-tab-sell" onclick="filterSignals('sell')">
+<button class="signal-tab-btn px-space-sm py-space-2xs rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high font-label-code text-label-code cursor-pointer transition-all" id="btn-tab-sell">
             Satış Sinyalleri (3)
           </button>
 </div>
@@ -702,60 +702,8 @@
 </nav>
 </div>
 </div>
-<!-- Interactive Terminal Engine Script -->
 <script>
-    function triggerBistScan() {
-      const scanBtn = document.getElementById('scanButton');
-      const scanIcon = document.getElementById('scanIcon');
-      const scanText = document.getElementById('scanBtnText');
-      
-      scanIcon.classList.add('animate-spin');
-      scanText.innerText = "BIST 100 Taranıyor...";
-      scanBtn.disabled = true;
-
-      setTimeout(() => {
-        scanIcon.classList.remove('animate-spin');
-        scanText.innerText = "Tarama Başarıyla Tamamlandı";
-        
-        // Flash updated table rows
-        const rows = document.querySelectorAll('.signal-row');
-        rows.forEach(r => {
-          r.classList.add('bg-primary/20');
-          setTimeout(() => r.classList.remove('bg-primary/20'), 600);
-        });
-
-        setTimeout(() => {
-          scanText.innerText = "BIST100 Taramasını Başlat";
-          scanBtn.disabled = false;
-        }, 2200);
-      }, 1400);
-    }
-
-    function filterSignals(type) {
-      const rows = document.querySelectorAll('.signal-row');
-      const buttons = document.querySelectorAll('.signal-tab-btn');
-      
-      buttons.forEach(btn => {
-        btn.classList.remove('bg-surface-container-high', 'text-primary', 'font-bold');
-        btn.classList.add('text-on-surface-variant');
-      });
-
-      const activeBtn = document.getElementById(`btn-tab-${type}`);
-      if (activeBtn) {
-        activeBtn.classList.add('bg-surface-container-high', 'text-primary', 'font-bold');
-        activeBtn.classList.remove('text-on-surface-variant');
-      }
-
-      rows.forEach(row => {
-        if (type === 'all') {
-          row.style.display = '';
-        } else if (row.getAttribute('data-type') === type) {
-          row.style.display = '';
-        } else {
-          row.style.display = 'none';
-        }
-      });
-    }
-  </script>
+    // Legacy inline script disabled: interactive behavior is fully handled by /static/app.js
+</script>
 </div></main><footer class="w-full bg-surface-container-lowest py-space-sm shadow-[0_-1px_12px_rgba(0,0,0,0.5)]"><div class="w-full px-terminal-margin flex flex-col sm:flex-row items-center justify-between gap-space-xs"><div class="flex items-center gap-space-md font-label-code text-label-code"><div class="flex items-center gap-space-2xs"><span class="w-2 h-2 rounded-full bg-primary"></span><span class="text-on-surface-variant">API: <span class="text-primary font-semibold">ONLINE</span></span></div><span class="text-outline">•</span><div class="flex items-center gap-space-2xs"><span class="material-symbols-outlined text-[14px] text-tertiary">wifi_tethering</span><span class="text-on-surface-variant">WS Latency: <span class="text-tertiary font-metric-value text-metric-value">18ms</span></span></div><span class="text-outline">•</span><span class="text-on-surface-variant hidden md:inline">Sunucu: <span class="text-on-surface">ist-eqx-algo-01</span></span></div><div class="font-body-sm text-body-sm text-outline text-center sm:text-right"><p>Yasal Uyarı: Burada yer alan algoritmik veriler yatırım danışmanlığı kapsamında değildir. Gecikmesiz BIST veri akışı.</p></div></div></footer><script src="/static/app.js"></script>
 </body></html>

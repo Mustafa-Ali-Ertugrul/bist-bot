@@ -161,6 +161,13 @@
     });
   }
 
+  function getAuthHeaders(extra) {
+    const token = localStorage.getItem('bistbot_token');
+    const h = Object.assign({}, extra || {});
+    if (token) h['Authorization'] = 'Bearer ' + token;
+    return h;
+  }
+
   // -------------------------------------------------------------------------
   // Dashboard Counters: hydrate from /api/stats, static HTML stays as fallback
   // -------------------------------------------------------------------------
@@ -178,8 +185,7 @@
     };
 
     try {
-      const token = localStorage.getItem('bistbot_token');
-      const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+      const headers = getAuthHeaders();
       const res = await fetch('/api/stats', { headers: headers });
       if (!res.ok) {
         console.warn(`[bistbot] /api/stats HTTP ${res.status}; static counters kept`);
@@ -332,8 +338,7 @@
     const tbody = document.getElementById('signalsTableBody');
     if (!tbody) return;
     try {
-      const token = localStorage.getItem('bistbot_token');
-      const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+      const headers = getAuthHeaders();
       const res = await fetch('/api/signals/history?limit=10', { headers: headers });
       if (!res.ok) {
         console.warn(`[bistbot] /api/signals/history HTTP ${res.status}; static rows kept`);
@@ -515,8 +520,7 @@
     const container = document.getElementById('signalsStreamContainer');
     if (!container) return;
     try {
-      const token = localStorage.getItem('bistbot_token');
-      const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+      const headers = getAuthHeaders();
       const res = await fetch('/api/signals/history?limit=15', { headers: headers });
       if (!res.ok) return;
       const data = await res.json();
@@ -561,30 +565,56 @@
   // -------------------------------------------------------------------------
   async function initSignals() {
     await hydrateSignalsStream();
-    // Filter chips
-    const chips = document.querySelectorAll('button.inline-flex.items-center.gap-space-2xs');
-    const signalCards = document.querySelectorAll('.signal-card, div[data-symbol]');
 
-    chips.forEach(chip => {
-      chip.onclick = function () {
-        chips.forEach(c => {
-          c.className = "inline-flex items-center gap-space-2xs px-space-md py-space-xs rounded-full bg-surface-container border border-surface-container-highest/60 text-on-surface-variant hover:text-on-surface font-label-code text-label-code transition-all cursor-pointer";
+    // Strategy Category Filters Ribbon (Tümü, Yüksek Güven, Momentum, Reversal, Breakout)
+    const filterTabs = document.querySelectorAll('.filter-tab, button[data-filter]');
+    const getCards = () => document.querySelectorAll('#signalsStreamContainer .signal-card');
+
+    filterTabs.forEach(tab => {
+      tab.onclick = function () {
+        filterTabs.forEach(t => {
+          t.className = 'filter-tab bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface font-label-code text-label-code px-space-sm py-space-2xs rounded-full shadow-sm transition-all flex items-center gap-1.5 cursor-pointer';
         });
-        this.className = "inline-flex items-center gap-space-2xs px-space-md py-space-xs rounded-full bg-primary/15 text-primary border border-primary/30 font-label-code text-label-code font-bold shadow-[0_0_12px_rgba(78,222,163,0.2)] transition-all cursor-pointer";
+        this.className = 'filter-tab active-tab bg-primary text-on-primary font-label-code text-label-code px-space-sm py-space-2xs rounded-full shadow-[0_0_16px_rgba(78,222,163,0.35)] transition-all flex items-center gap-1.5 cursor-pointer font-bold';
+
+        const filter = (this.dataset.filter || this.getAttribute('data-filter') || 'all').toLowerCase();
+        const cards = getCards();
+        let matchCount = 0;
+
+        cards.forEach(c => {
+          const score = parseInt(String(c.dataset.score || '0').replace('+', ''), 10) || 0;
+          const text = (c.innerText || '').toLocaleUpperCase('tr-TR');
+          let show = true;
+
+          if (filter === 'high-conviction') {
+            show = score >= 30;
+          } else if (filter === 'momentum') {
+            show = text.includes('MOMENTUM') || score >= 20;
+          } else if (filter === 'reversal') {
+            show = text.includes('DÖNÜŞ') || text.includes('DIP') || text.includes('SAT') || score < 0;
+          } else if (filter === 'breakout') {
+            show = text.includes('KIRILIM') || text.includes('BREAKOUT') || score >= 25;
+          } else {
+            show = true;
+          }
+
+          c.style.display = show ? 'block' : 'none';
+          if (show) matchCount++;
+        });
 
         const label = this.innerText.trim();
-        showToast(`Filtre uygulandı: ${label}`, 'info', 1500);
+        showToast(`${label} filtresi uygulandı (${matchCount} sinyal).`, 'info', 1500);
       };
     });
 
-    // Timeframe buttons
-    const tfButtons = document.querySelectorAll('div.flex.items-center.bg-surface-container button');
+    // Timeframe buttons (15m, 1H, 4H, Günlük)
+    const tfButtons = document.querySelectorAll('div.flex.items-center.bg-surface-container button, .timeframe-btn');
     tfButtons.forEach(btn => {
       btn.onclick = function () {
         tfButtons.forEach(b => {
-          b.className = "px-space-xs py-space-3xs text-on-surface-variant hover:text-on-surface font-label-code text-label-code transition-all";
+          b.className = "px-space-xs py-space-3xs text-on-surface-variant hover:text-on-surface font-label-code text-label-code transition-all cursor-pointer";
         });
-        this.className = "px-space-xs py-space-3xs bg-surface-container-highest text-primary font-bold font-label-code text-label-code rounded shadow-sm";
+        this.className = "px-space-xs py-space-3xs bg-surface-container-highest text-primary font-bold font-label-code text-label-code rounded shadow-sm cursor-pointer";
         showToast(`Grafik periyodu: ${this.innerText.trim()}`, 'info', 1200);
       };
     });
@@ -595,13 +625,14 @@
       let watched = false;
       watchBtn.onclick = function () {
         watched = !watched;
+        const icon = watched ? 'check' : 'visibility';
+        const txt = watched ? 'İzleniyor' : 'İzle';
+        this.innerHTML = `<span class="material-symbols-outlined text-[18px]">${icon}</span><span id="watchlist-text">${txt}</span>`;
         if (watched) {
-          this.innerHTML = '<span class="material-symbols-outlined text-[18px]">check</span><span>İzleniyor</span>';
-          this.classList.add('bg-primary/20', 'text-primary');
+          this.className = 'bg-primary/20 text-primary px-space-sm py-space-xs rounded-lg font-label-code text-label-code flex items-center gap-1.5 transition-all shadow-sm cursor-pointer';
           showToast('Varlık izleme listenize ve anlık bildirimlere eklendi.', 'success', 2500);
         } else {
-          this.innerHTML = '<span class="material-symbols-outlined text-[18px]">visibility</span><span>İzle</span>';
-          this.classList.remove('bg-primary/20', 'text-primary');
+          this.className = 'bg-surface-container hover:bg-surface-container-high text-tertiary px-space-sm py-space-xs rounded-lg font-label-code text-label-code flex items-center gap-1.5 transition-all shadow-sm cursor-pointer';
           showToast('Varlık izleme listesinden çıkarıldı.', 'info', 2000);
         }
       };
@@ -612,27 +643,46 @@
     if (execBtn) {
       execBtn.onclick = function () {
         const symbol = document.getElementById('active-symbol-title')?.innerText || 'MAGEN.IS';
-        showToast(`${symbol} için AlgoLab emir iletim modülü tetiklendi. Simülasyon modunda hazır.`, 'success', 3500);
+        showToast(`${symbol} için AlgoLab emir iletim modülü tetiklendi (Simülasyon Modu).`, 'success', 3500);
       };
     }
 
-    // Filter Modal
+    // Filter Modal open/close & sliders
     const openModalBtn = document.getElementById('open-filter-modal-btn');
     const closeModalBtn = document.getElementById('close-filter-modal-btn');
     const filterModal = document.getElementById('filter-modal');
     const applyFilterBtn = document.getElementById('apply-filter-btn');
     const resetFilterBtn = document.getElementById('reset-filter-btn');
+    const scoreSlider = document.getElementById('score-slider');
+    const filterScoreLabel = document.getElementById('filter-score-label');
+    const rsiSlider = document.getElementById('rsi-slider');
+    const filterRsiLabel = document.getElementById('filter-rsi-label');
 
     if (openModalBtn && filterModal) {
-      openModalBtn.onclick = () => filterModal.classList.remove('hidden');
+      openModalBtn.onclick = () => filterModal.classList.remove('opacity-0', 'pointer-events-none');
     }
     if (closeModalBtn && filterModal) {
-      closeModalBtn.onclick = () => filterModal.classList.add('hidden');
+      closeModalBtn.onclick = () => filterModal.classList.add('opacity-0', 'pointer-events-none');
+    }
+    if (scoreSlider && filterScoreLabel) {
+      scoreSlider.oninput = (e) => filterScoreLabel.textContent = '+' + e.target.value;
+    }
+    if (rsiSlider && filterRsiLabel) {
+      rsiSlider.oninput = (e) => filterRsiLabel.textContent = e.target.value;
     }
     if (applyFilterBtn && filterModal) {
       applyFilterBtn.onclick = () => {
-        filterModal.classList.add('hidden');
-        showToast('Özel tarama filtreleri başarıyla uygulandı.', 'success', 2500);
+        filterModal.classList.add('opacity-0', 'pointer-events-none');
+        const minScore = parseInt(scoreSlider?.value || '25', 10);
+        const cards = getCards();
+        let cnt = 0;
+        cards.forEach(c => {
+          const score = parseInt(String(c.dataset.score || '0').replace('+', ''), 10) || 0;
+          const show = score >= minScore;
+          c.style.display = show ? 'block' : 'none';
+          if (show) cnt++;
+        });
+        showToast(`Filtre uygulandı: Min Skor +${minScore} (${cnt} eşleşti)`, 'success', 2500);
       };
     }
     if (resetFilterBtn) {
@@ -670,10 +720,7 @@
       showToast(`${cleanTicker} derinlemesine analizi çekiliyor...`, 'info', 2000);
       
       try {
-        const token = localStorage.getItem('bistbot_token');
-        const headers = { 'Content-Type': 'application/json' };
-        if (token) headers['Authorization'] = `Bearer ${token}`;
-
+        const headers = getAuthHeaders({ 'Content-Type': 'application/json' });
         const res = await fetch(`/api/analyze/${cleanTicker}`, { headers: headers });
         const data = await res.json();
 
@@ -681,11 +728,16 @@
           const snap = data.snapshot || {};
           const sig = data.signal || {};
           
-          // Update hero header title if present
-          const titleEl = document.querySelector('h1.font-headline-xl') || document.querySelector('h2');
-          if (titleEl && snap.close) {
-            showToast(`${cleanTicker} Son Fiyat: ₺${snap.close.toFixed(2)} | Skor: ${sig.score || '+28'}`, 'success', 4000);
+          // Update hero header title
+          const titleEl = document.querySelector('h1.font-headline-lg') || document.querySelector('h1');
+          if (titleEl) titleEl.innerText = cleanTicker;
+
+          const closePrice = Number(snap.close || (data.price_data && data.price_data.close));
+          if (Number.isFinite(closePrice)) {
+            const priceEls = document.querySelectorAll('.font-metric-display');
+            if (priceEls[0]) priceEls[0].textContent = '₺' + closePrice.toFixed(2);
           }
+          showToast(`${cleanTicker} analiz verileri başarıyla güncellendi. Skor: ${sig.score || '+28'}`, 'success', 3500);
         } else {
           showToast(`${cleanTicker} analiz verisi yüklendi.`, 'success', 2500);
         }
@@ -723,7 +775,9 @@
     const addWatchBtn = Array.from(document.querySelectorAll('button')).find(b => b.textContent.includes('İzleme Listeme'));
     if (addWatchBtn) {
       addWatchBtn.onclick = function () {
-        showToast('Varlık izleme listenize ve fiyat kırılım alarmlarına başarıyla eklendi.', 'success', 3000);
+        const titleEl = document.querySelector('h1.font-headline-lg') || document.querySelector('h1');
+        const sym = titleEl ? titleEl.innerText.trim() : 'THYAO.IS';
+        showToast(`${sym} izleme listenize ve fiyat kırılım alarmlarına başarıyla eklendi.`, 'success', 3000);
       };
     }
   }
