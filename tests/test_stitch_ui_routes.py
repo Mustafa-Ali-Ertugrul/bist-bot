@@ -203,6 +203,10 @@ def test_stitch_static_assets_served(app: Flask) -> None:
         assert "Oturum süresi doldu" in body
         assert "hydrateDashboardCounters" in body
         assert "totalPages()" in body
+        # Signal table renders live rows from /api/signals/history.
+        assert "hydrateSignalTable" in body
+        assert "generated_signals_count" in body
+        assert "signalsTableBody" in body
         css = client.get("/static/tailwind.css")
         assert css.status_code == 200
         assert len(css.data) > 1000

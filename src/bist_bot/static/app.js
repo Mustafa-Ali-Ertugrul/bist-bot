@@ -217,10 +217,101 @@
   }
 
   // -------------------------------------------------------------------------
+  // Dashboard Signal Table: render live rows from /api/signals/history.
+  // Static template rows stay as fallback when the API is unreachable.
+  // -------------------------------------------------------------------------
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function signalRowKind(typeText) {
+    const upper = String(typeText || '').toLocaleUpperCase('tr-TR');
+    if (upper.includes('SAT')) return 'sell';
+    if (upper.includes('AL')) return 'buy';
+    return 'hold';
+  }
+
+  function renderSignalRow(sig) {
+    // NOTE: only utility classes already present in the prebuilt tailwind.css
+    // may be used here (no runtime-generated bg-*/text-* variants).
+    const kind = signalRowKind(sig.signal_type);
+    const palette = kind === 'sell'
+      ? { pill: 'bg-error/15 text-error', dot: 'bg-error', score: 'text-error',
+          hover: 'group-hover:text-error' }
+      : (kind === 'buy'
+        ? { pill: 'bg-primary/15 text-primary', dot: 'bg-primary', score: 'text-primary',
+            hover: 'group-hover:text-primary' }
+        : { pill: 'bg-surface-container-highest text-on-surface-variant', dot: 'bg-outline',
+            score: 'text-on-surface-variant', hover: 'group-hover:text-tertiary' });
+    const symbol = escapeHtml(String(sig.ticker || '').replace(/\.IS$/i, ''));
+    const typeLabel = escapeHtml(String(sig.signal_type || '').replace(/^[^\p{L}\p{N}]+/u, ''));
+    const price = Number(sig.price);
+    const lots = Math.floor(Number(sig.position_size));
+    const score = Math.round(Number(sig.score));
+    let time = '';
+    try {
+      time = new Date(sig.timestamp).toLocaleTimeString('tr-TR', {
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+        hour12: false, timeZone: 'Europe/Istanbul'
+      });
+    } catch (err) { time = ''; }
+    const outcome = String(sig.outcome || 'PENDING').toUpperCase();
+    const statusLabel = outcome === 'PENDING' ? 'Beklemede' : escapeHtml(sig.outcome);
+    return (
+      `<tr class="signal-row hover:bg-surface-container/60 transition-colors group" data-type="${kind}">` +
+      `<td class="py-space-sm px-space-md font-label-code text-label-code text-tertiary font-bold">` +
+      `<span class="${palette.hover} transition-colors">${symbol}</span></td>` +
+      `<td class="py-space-sm px-space-md">` +
+      `<span class="inline-flex items-center gap-space-2xs px-space-xs py-space-3xs rounded-full ${palette.pill} font-label-caps text-label-caps font-bold uppercase">` +
+      `<span class="w-1.5 h-1.5 rounded-full ${palette.dot}"></span>${typeLabel}</span></td>` +
+      `<td class="py-space-sm px-space-md font-metric-value text-metric-value text-on-surface font-semibold">` +
+      `${Number.isFinite(price) ? 'TL' + price.toFixed(2) : '—'}</td>` +
+      `<td class="py-space-sm px-space-md font-label-code text-label-code text-on-surface-variant">` +
+      `${Number.isFinite(lots) ? lots.toLocaleString('en-US') : '—'}</td>` +
+      `<td class="py-space-sm px-space-md">` +
+      `<span class="font-metric-value text-metric-value ${palette.score} font-bold">` +
+      `${Number.isFinite(score) ? (score > 0 ? '+' : '') + score : '—'}</span></td>` +
+      `<td class="py-space-sm px-space-md">` +
+      `<span class="inline-flex items-center gap-space-3xs text-outline font-label-code text-label-code">` +
+      `<span class="w-1.5 h-1.5 rounded-full bg-outline"></span>${statusLabel}</span></td>` +
+      `<td class="py-space-sm px-space-md text-right font-label-code text-label-code text-on-surface-variant">` +
+      `${escapeHtml(time)}</td></tr>`
+    );
+  }
+
+  async function hydrateSignalTable() {
+    const tbody = document.getElementById('signalsTableBody');
+    if (!tbody) return;
+    try {
+      const token = localStorage.getItem('bistbot_token');
+      const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+      const res = await fetch('/api/signals/history?limit=10', { headers: headers });
+      if (!res.ok) {
+        console.warn(`[bistbot] /api/signals/history HTTP ${res.status}; static rows kept`);
+        return;
+      }
+      const data = await res.json();
+      const signals = Array.isArray(data.signals) ? data.signals : [];
+      if (!signals.length) {
+        console.warn('[bistbot] signal history empty; static rows kept');
+        return;
+      }
+      tbody.innerHTML = signals.map(renderSignalRow).join('');
+    } catch (err) {
+      console.warn('[bistbot] signal table hydration failed; static rows kept', err);
+    }
+  }
+
+  // -------------------------------------------------------------------------
   // Dashboard Page Interactivity
   // -------------------------------------------------------------------------
-  function initDashboard() {
+  async function initDashboard() {
     hydrateDashboardCounters();
+    await hydrateSignalTable();
     // Scan Trigger Button
     const scanBtn = document.getElementById('scanButton');
     if (scanBtn) {
@@ -254,7 +345,8 @@
           }
           const data = await res.json();
           if (data.status === 'ok') {
-            showToast(`Tarama tamamlandı! Üretilen sinyal: ${data.signals_generated || data.actionable_signals || 0}`, 'success', 4000);
+            const produced = data.generated_signals_count ?? data.actionable_count ?? 0;
+            showToast(`Tarama tamamlandı! Üretilen sinyal: ${produced}`, 'success', 4000);
             setTimeout(() => window.location.reload(), 1500);
           } else {
             showToast(`Tarama tamamlanamadı: ${data.message || 'bilinmeyen hata.'}`, 'error', 3000);
@@ -569,7 +661,7 @@
 
     const path = window.location.pathname;
     if (path.includes('dashboard')) {
-      initDashboard();
+      await initDashboard();
     } else if (path.includes('signals')) {
       initSignals();
     } else if (path.includes('analysis')) {
