@@ -139,6 +139,47 @@ def test_verify_endpoint_rejects_bogus_or_missing_token(app: Flask) -> None:
         assert bad.status_code == 422
 
 
+def test_session_endpoint_mints_cookie_from_bearer(app: Flask) -> None:
+    with app.test_client() as client:
+        payload = _register_and_login(client, "session@bistbot.local", "Str0ng-test-pass!")
+        resp = client.post(
+            "/api/auth/session",
+            headers={"Authorization": f"Bearer {payload['access_token']}"},
+        )
+        assert resp.status_code == 200
+        set_cookies = resp.headers.getlist("Set-Cookie")
+        access = [c for c in set_cookies if c.startswith(f"{ACCESS_COOKIE}=")]
+        assert access, f"access cookie missing in {set_cookies}"
+        assert "HttpOnly" in access[0]
+
+
+def test_session_endpoint_rejects_bogus_or_missing_token(app: Flask) -> None:
+    with app.test_client() as client:
+        assert client.post("/api/auth/session").status_code == 401
+        bad = client.post(
+            "/api/auth/session", headers={"Authorization": "Bearer bogus-token"}
+        )
+        assert bad.status_code == 422
+
+
+def test_session_cookie_grants_gated_page_without_prior_login_cookie(app: Flask) -> None:
+    """End-to-end bootstrap flow: Bearer -> session cookie -> gated page 200.
+
+    Mirrors what the login page JS does, proving no redirect loop is needed.
+    """
+    with app.test_client() as naked_client:
+        payload = _register_and_login(naked_client, "boot@bistbot.local", "Str0ng-test-pass!")
+        # Drop every cookie to simulate "token in storage, no cookie" state.
+        naked_client.delete_cookie(ACCESS_COOKIE)
+        assert naked_client.get("/ui/dashboard").status_code == 302
+        sess = naked_client.post(
+            "/api/auth/session",
+            headers={"Authorization": f"Bearer {payload['access_token']}"},
+        )
+        assert sess.status_code == 200
+        assert naked_client.get("/ui/dashboard").status_code == 200
+
+
 def test_settings_html_contains_no_embedded_credentials(app: Flask) -> None:
     with app.test_client() as client:
         _register_and_login(client, "audit@bistbot.local", "Str0ng-test-pass!")

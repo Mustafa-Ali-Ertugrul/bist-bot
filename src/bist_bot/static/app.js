@@ -55,7 +55,26 @@
   // -------------------------------------------------------------------------
   // Auth Gate: unauthenticated visitors always land on /login
   // -------------------------------------------------------------------------
-  function enforceAuth() {
+  async function ensureSession(token) {
+    // Confirm a usable session AND the UI cookie before any navigation.
+    // Returns false without navigating, so a stale token can never
+    // ping-pong between /login and a gated page (and burn rate limits).
+    try {
+      const verify = await fetch('/api/auth/verify', {
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+      if (!verify.ok) return false;
+      const session = await fetch('/api/auth/session', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+      return session.ok;
+    } catch (err) {
+      return false;
+    }
+  }
+
+  async function enforceAuth() {
     const path = window.location.pathname;
     const onLoginPage = path === '/login' || path === '/' || path === '/ui';
     const token = localStorage.getItem('bistbot_token');
@@ -65,8 +84,13 @@
       return false;
     }
     if (token && onLoginPage) {
-      window.location.replace('/ui/dashboard');
-      return false;
+      if (await ensureSession(token)) {
+        window.location.replace('/ui/dashboard');
+        return false;
+      }
+      localStorage.removeItem('bistbot_token');
+      localStorage.removeItem('bistbot_email');
+      return true; // stay on the login page
     }
     return true;
   }
@@ -538,8 +562,8 @@
   // -------------------------------------------------------------------------
   // DOM Ready Initializer
   // -------------------------------------------------------------------------
-  document.addEventListener('DOMContentLoaded', () => {
-    if (!enforceAuth()) return;
+  document.addEventListener('DOMContentLoaded', async () => {
+    if (!(await enforceAuth())) return;
     initTopbar();
     fixBottomNav();
 

@@ -284,6 +284,21 @@
     }
   }
 
+  async function establishSession(token) {
+    // Ask the server to mint the HttpOnly UI cookie for this Bearer token.
+    // Returns true only when the cookie was set; the caller must NOT
+    // navigate to a gated page otherwise (that would ping-pong 302s).
+    try {
+      const res = await fetch('/api/auth/session', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+      return res.ok;
+    } catch (err) {
+      return false;
+    }
+  }
+
   async function handleLogin(e) {
     e.preventDefault();
     const btn = document.getElementById('submit-btn');
@@ -307,9 +322,15 @@
         localStorage.setItem('bistbot_token', data.access_token);
         localStorage.setItem('bistbot_email', email);
         btn.innerHTML = '<span class="material-symbols-outlined text-[20px]">check_circle</span><span>Bağlantı Kuruldu</span>';
-        setTimeout(() => {
-          window.location.href = '/ui/dashboard';
-        }, 400);
+        if (await establishSession(data.access_token)) {
+          setTimeout(() => {
+            window.location.href = '/ui/dashboard';
+          }, 400);
+        } else {
+          btn.innerHTML = originalContent;
+          btn.disabled = false;
+          showLoginError('Oturum çerezi oluşturulamadı. Lütfen tekrar deneyin.');
+        }
       } else {
         btn.innerHTML = originalContent;
         btn.disabled = false;
@@ -340,7 +361,8 @@
       alert("Lütfen geçerli bir JWT Token veya API Key giriniz.");
       return;
     }
-    // Never persist an unverified token: validate first, store only on 200.
+    // Never persist an unverified token: validate first, store only on 200,
+    // then establish the UI cookie before navigating (no blind redirects).
     try {
       const res = await fetch('/api/auth/verify', {
         headers: { 'Authorization': 'Bearer ' + tokenVal }
@@ -354,7 +376,11 @@
         const data = await res.json();
         if (data.email) localStorage.setItem('bistbot_email', data.email);
       } catch (parseErr) { /* email stays as-is */ }
-      window.location.href = '/ui/dashboard';
+      if (await establishSession(tokenVal)) {
+        window.location.href = '/ui/dashboard';
+      } else {
+        alert("Oturum çerezi oluşturulamadı. Lütfen tekrar deneyin.");
+      }
     } catch (err) {
       alert('Doğrulama isteği gönderilemedi: ' + err.message);
     }

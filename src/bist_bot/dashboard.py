@@ -845,6 +845,32 @@ def create_dashboard_app(
             }
         ), 200
 
+    @app.route("/api/auth/session", methods=["POST"])
+    @jwt_required()
+    @limiter.limit("10 per minute")
+    def api_auth_session():
+        """Mint the HttpOnly UI cookie from a valid Bearer token.
+
+        Used by the login page AFTER verify succeeds, so the browser never
+        navigates to a gated /ui/* page without a cookie the server accepts.
+        This ordering (verify -> session -> navigate) makes a login<->dashboard
+        redirect loop structurally impossible.
+        """
+        claims = get_jwt()
+        identity = str(get_jwt_identity() or "")
+        if not identity:
+            return jsonify({"status": "error", "message": "Authentication required"}), 401
+        cookie_token = create_access_token(
+            identity=identity,
+            additional_claims={
+                "role": str(claims.get("role") or ""),
+                "email": str(claims.get("email") or ""),
+            },
+        )
+        response = jsonify({"status": "ok"})
+        set_access_cookies(response, cookie_token)
+        return response, 200
+
     @app.route("/api/scan", methods=["POST"])
     @jwt_required()
     @require_roles("admin", "trader")
