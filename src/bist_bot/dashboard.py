@@ -1746,16 +1746,29 @@ def create_dashboard_app(
             "actionable_summary": actionable_summary,
         }
 
-        return jsonify(
-            {
-                "status": "ok",
-                "stats": stats,
-                "latest_scan": latest_scan,
-                "rejection_breakdown": latest_scan["rejection_breakdown"],
-                "breadth": breadth,
-                "benchmarks": _get_live_benchmarks(),
-            }
-        )
+        response: dict[str, Any] = {
+            "status": "ok",
+            "stats": stats,
+            "latest_scan": latest_scan,
+            "rejection_breakdown": latest_scan["rejection_breakdown"],
+            "breadth": breadth,
+            "benchmarks": _get_live_benchmarks(),
+        }
+        if _coerce_bool(request.args.get("include_signals")):
+            # Dashboard boot piggy-backs the top-10 signals on this response
+            # (reuses the recent_signals query above: zero extra DB hit) so
+            # the UI can skip its second /api/signals/history round trip.
+            embedded = []
+            for sig in recent_signals[:10]:
+                s = dict(sig)
+                s.pop("conditions", None)
+                s.pop("score_breakdown", None)
+                reasons = s.get("reasons")
+                if isinstance(reasons, list):
+                    s["reasons"] = reasons[:1]
+                embedded.append(s)
+            response["top_signals"] = embedded
+        return jsonify(response)
 
     @app.route("/api/scans/history")
     @jwt_required()

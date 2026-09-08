@@ -196,7 +196,7 @@
 
     try {
       const headers = getAuthHeaders();
-      const res = await fetch('/api/stats', { headers: headers });
+      const res = await fetch('/api/stats?include_signals=1', { headers: headers });
       if (res.status === 401) {
         handleSessionExpired();
         return;
@@ -272,6 +272,12 @@
       setBench('benchmark-xu100-val', 'benchmark-xu100-chg', benchmarks.XU100);
       setBench('benchmark-xu030-val', 'benchmark-xu030-chg', benchmarks.XU030);
       setBench('benchmark-usdtry-val', 'benchmark-usdtry-chg', benchmarks.USDTRY);
+
+      // Embedded top-10 signals piggy-backed on stats: render table + radar
+      // immediately so hydrateSignalTable can skip its own round trip.
+      if (Array.isArray(data.top_signals) && renderDashboardSignals(data.top_signals)) {
+        window.__dashSignalsEmbedded = true;
+      }
     } catch (err) {
       console.warn('[bistbot] /api/stats unreachable; static counters kept', err);
     }
@@ -382,9 +388,18 @@
     );
   }
 
+  function renderDashboardSignals(signals) {
+    const tbody = document.getElementById('signalsTableBody');
+    if (!tbody || !Array.isArray(signals) || !signals.length) return false;
+    tbody.innerHTML = signals.map(renderSignalRow).join('');
+    hydrateOpportunitiesRadar(signals);
+    return true;
+  }
+
   async function hydrateSignalTable() {
     const tbody = document.getElementById('signalsTableBody');
     if (!tbody) return;
+    if (window.__dashSignalsEmbedded) return;
     try {
       const headers = getAuthHeaders();
       const res = await fetch('/api/signals/history?limit=10&compact=1', { headers: headers });
@@ -398,12 +413,9 @@
       }
       const data = await res.json();
       const signals = Array.isArray(data.signals) ? data.signals : [];
-      if (!signals.length) {
+      if (!renderDashboardSignals(signals)) {
         console.warn('[bistbot] signal history empty; static rows kept');
-        return;
       }
-      tbody.innerHTML = signals.map(renderSignalRow).join('');
-      hydrateOpportunitiesRadar(signals);
     } catch (err) {
       console.warn('[bistbot] signal table hydration failed; static rows kept', err);
     }
@@ -413,7 +425,9 @@
   // Dashboard Page Interactivity
   // -------------------------------------------------------------------------
   async function initDashboard() {
-    hydrateDashboardCounters();
+    // Sequential: counters response piggy-backs top-10 signals
+    // (?include_signals=1), so the table usually needs no second trip.
+    await hydrateDashboardCounters();
     await hydrateSignalTable();
     // Scan Trigger Button
     const scanBtn = document.getElementById('scanButton');
