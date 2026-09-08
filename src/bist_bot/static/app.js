@@ -647,7 +647,7 @@
     if (interval) currentSignalTimeframe = interval;
     const cleanTicker = String(currentSignalTicker || '').replace(/\.IS$/i, '') + '.IS';
     try {
-      const url = `/api/analyze/${encodeURIComponent(cleanTicker)}?interval=${encodeURIComponent(currentSignalTimeframe)}`;
+      const url = `/api/analyze/${encodeURIComponent(cleanTicker)}?interval=${encodeURIComponent(currentSignalTimeframe)}&bars=30`;
       const res = await fetch(url, {
         headers: getAuthHeaders()
       });
@@ -1080,7 +1080,7 @@
     
     try {
       const headers = getAuthHeaders({ 'Content-Type': 'application/json' });
-      const url = `/api/analyze/${cleanTicker}?interval=${encodeURIComponent(currentActiveAnalysisTimeframe)}`;
+      const url = `/api/analyze/${cleanTicker}?interval=${encodeURIComponent(currentActiveAnalysisTimeframe)}&bars=30`;
       const res = await fetch(url, { headers: headers });
       const data = await res.json();
 

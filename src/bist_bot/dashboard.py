@@ -227,6 +227,24 @@ def _safe_json_payload() -> dict[str, Any]:
     return raw if isinstance(raw, dict) else {}
 
 
+def _apply_bars_limit(payload: dict[str, Any]) -> dict[str, Any]:
+    """Trim price_data to the last N bars (opt-in via ?bars=N, 5..120).
+
+    Charts render at most the last 30 bars; callers that only draw charts
+    can halve the payload. Applied after cache store/load so the shared
+    analysis cache always keeps the full 60-bar series.
+    """
+    raw_bars = request.args.get("bars", type=int)
+    if raw_bars is None:
+        return payload
+    n = max(5, min(raw_bars, 120))
+    bars = payload.get("price_data")
+    if isinstance(bars, list) and len(bars) > n:
+        payload = dict(payload)
+        payload["price_data"] = bars[-n:]
+    return payload
+
+
 def _auth_rate_limit_key() -> str:
     payload = _safe_json_payload()
     email = str(payload.get("email", "")).strip().lower()
@@ -1506,6 +1524,7 @@ def create_dashboard_app(
                 payload["duration_ms"] = round((time.time() - start_time) * 1000, 2)
                 payload["force_refresh"] = force_refresh
                 payload["timeframe"] = {"period": target_period, "interval": target_interval}
+                payload = _apply_bars_limit(payload)
                 logger.info(
                     "api_analyze_completed",
                     ticker=normalized_ticker,
@@ -1603,6 +1622,7 @@ def create_dashboard_app(
             runtime_fetcher.store_analysis(cache_key, response_payload)
             response_payload["force_refresh"] = force_refresh
             response_payload["duration_ms"] = round((time.time() - start_time) * 1000, 2)
+            response_payload = _apply_bars_limit(response_payload)
             logger.info(
                 "api_analyze_completed",
                 ticker=normalized_ticker,
@@ -1637,6 +1657,7 @@ def create_dashboard_app(
             for sig in signals:
                 s = dict(sig)
                 s.pop("conditions", None)
+                s.pop("score_breakdown", None)
                 reasons = s.get("reasons")
                 if isinstance(reasons, list):
                     s["reasons"] = reasons[:1]
