@@ -227,6 +227,30 @@ def _safe_json_payload() -> dict[str, Any]:
     return raw if isinstance(raw, dict) else {}
 
 
+_COMPACT_SNAPSHOT_KEYS = ("close", "low", "high", "rsi")
+
+
+def _compact_analyze_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Trim analyze response to what the UI renders (opt-in via ?compact=1).
+
+    Charts use price_data; header uses snapshot close/low/high/rsi; detail
+    uses signal score/stop/target. Full reasons list and auxiliary snapshot
+    indicators are never read client-side.
+    """
+    out = dict(payload)
+    sig = out.get("signal")
+    if isinstance(sig, dict):
+        sig = dict(sig)
+        reasons = sig.get("reasons")
+        if isinstance(reasons, list):
+            sig["reasons"] = reasons[:1]
+        out["signal"] = sig
+    snap = out.get("snapshot")
+    if isinstance(snap, dict):
+        out["snapshot"] = {k: snap[k] for k in _COMPACT_SNAPSHOT_KEYS if k in snap}
+    return out
+
+
 def _apply_bars_limit(payload: dict[str, Any]) -> dict[str, Any]:
     """Trim price_data to the last N bars (opt-in via ?bars=N, 5..120).
 
@@ -1525,6 +1549,8 @@ def create_dashboard_app(
                 payload["force_refresh"] = force_refresh
                 payload["timeframe"] = {"period": target_period, "interval": target_interval}
                 payload = _apply_bars_limit(payload)
+                if _coerce_bool(request.args.get("compact")):
+                    payload = _compact_analyze_payload(payload)
                 logger.info(
                     "api_analyze_completed",
                     ticker=normalized_ticker,
@@ -1623,6 +1649,8 @@ def create_dashboard_app(
             response_payload["force_refresh"] = force_refresh
             response_payload["duration_ms"] = round((time.time() - start_time) * 1000, 2)
             response_payload = _apply_bars_limit(response_payload)
+            if _coerce_bool(request.args.get("compact")):
+                response_payload = _compact_analyze_payload(response_payload)
             logger.info(
                 "api_analyze_completed",
                 ticker=normalized_ticker,
