@@ -104,15 +104,7 @@
               AUTH_ID: #BIST-7709
             </span>
 </div>
-<!-- Segmented Tab Pills -->
-<div class="flex items-center p-space-3xs rounded-full bg-surface-container-highest/60 backdrop-blur-md">
-<button class="px-space-sm py-space-2xs rounded-full font-label-code text-label-code transition-all text-on-primary bg-primary-container font-semibold shadow-[0_0_12px_rgba(16,185,129,0.3)]" id="tab-standard" onclick="switchAuthMode('standard')">
-              Operatör Girişi
-            </button>
-<button class="px-space-sm py-space-2xs rounded-full font-label-code text-label-code transition-all text-on-surface-variant hover:text-on-surface" id="tab-token" onclick="switchAuthMode('token')">
-              API Anahtarı / JWT
-            </button>
-</div>
+
 </div>
 <!-- Form Context Overline -->
 <div class="mb-space-md">
@@ -178,28 +170,6 @@
 <div class="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
 </button>
 </form>
-<!-- Alternative JWT Token Access Panel (Hidden by default) -->
-<div class="hidden flex-col gap-space-md" id="auth-form-token">
-<div class="flex flex-col gap-space-3xs">
-<label class="font-label-caps text-label-caps uppercase text-on-surface-variant tracking-wider" for="jwt-token">
-              Bearer JWT Token veya BIST API Key
-            </label>
-<div class="relative">
-<textarea class="w-full bg-surface-container-high/70 text-on-surface placeholder:text-on-surface-variant/40 font-label-code text-label-code p-space-sm rounded-lg focus:outline-none focus:bg-surface-container-highest/90 transition-all shadow-inner resize-none" id="jwt-token" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkJpc3RPcGVyYXRvciIsImFkbWluIjp0cnVlfQ..." rows="4"></textarea>
-</div>
-</div>
-<div class="flex items-center justify-between text-on-surface-variant font-label-code text-label-code">
-<span class="flex items-center gap-space-3xs">
-<span class="material-symbols-outlined text-secondary-container text-[14px]">vpn_key</span>
-              HMAC SHA-256 İmzalı
-            </span>
-<span class="text-tertiary">Maks. 24 Saat Geçerli</span>
-</div>
-<button class="w-full flex items-center justify-center gap-space-xs py-space-sm px-space-md rounded-lg bg-surface-container-highest hover:bg-surface-bright text-secondary-container font-headline-md text-headline-md tracking-tight transition-all shadow-lg" onclick="handleTokenLogin()" type="button">
-<span class="material-symbols-outlined text-[18px]">terminal</span>
-<span>Token ile Oturumu Doğrula</span>
-</button>
-</div>
 <!-- Hardware & Security Status Integrated Strip -->
 <div class="mt-space-lg pt-space-sm border-t border-surface-container-highest/40 flex flex-col sm:flex-row items-center justify-between gap-space-xs text-on-surface-variant">
 <div class="flex items-center gap-space-xs font-label-code text-label-code">
@@ -247,31 +217,6 @@
 </div>
 </div>
 <script>
-  function switchAuthMode(mode) {
-    const stdForm = document.getElementById('auth-form-standard');
-    const tokenForm = document.getElementById('auth-form-token');
-    const stdTab = document.getElementById('tab-standard');
-    const tokenTab = document.getElementById('tab-token');
-
-    if (mode === 'standard') {
-      stdForm.classList.remove('hidden');
-      stdForm.classList.add('flex');
-      tokenForm.classList.add('hidden');
-      tokenForm.classList.remove('flex');
-
-      stdTab.className = "px-space-sm py-space-2xs rounded-full font-label-code text-label-code transition-all text-on-primary bg-primary-container font-semibold shadow-[0_0_12px_rgba(16,185,129,0.3)]";
-      tokenTab.className = "px-space-sm py-space-2xs rounded-full font-label-code text-label-code transition-all text-on-surface-variant hover:text-on-surface";
-    } else {
-      tokenForm.classList.remove('hidden');
-      tokenForm.classList.add('flex');
-      stdForm.classList.add('hidden');
-      stdForm.classList.remove('flex');
-
-      tokenTab.className = "px-space-sm py-space-2xs rounded-full font-label-code text-label-code transition-all text-on-primary bg-primary-container font-semibold shadow-[0_0_12px_rgba(16,185,129,0.3)]";
-      stdTab.className = "px-space-sm py-space-2xs rounded-full font-label-code text-label-code transition-all text-on-surface-variant hover:text-on-surface";
-    }
-  }
-
   function togglePasswordVisibility() {
     const passInput = document.getElementById('operator-password');
     const passIcon = document.getElementById('pass-icon');
@@ -322,15 +267,10 @@
         localStorage.setItem('bistbot_token', data.access_token);
         localStorage.setItem('bistbot_email', email);
         btn.innerHTML = '<span class="material-symbols-outlined text-[20px]">check_circle</span><span>Bağlantı Kuruldu</span>';
-        if (await establishSession(data.access_token)) {
-          setTimeout(() => {
-            window.location.href = '/ui/dashboard';
-          }, 400);
-        } else {
-          btn.innerHTML = originalContent;
-          btn.disabled = false;
-          showLoginError('Oturum çerezi oluşturulamadı. Lütfen tekrar deneyin.');
-        }
+        await establishSession(data.access_token);
+        setTimeout(() => {
+          window.location.href = '/ui/dashboard';
+        }, 300);
       } else {
         btn.innerHTML = originalContent;
         btn.disabled = false;
@@ -355,36 +295,5 @@
     err.innerHTML = '<span class="material-symbols-outlined text-[18px]">error</span><span>' + msg + '</span>';
   }
 
-  async function handleTokenLogin() {
-    const tokenVal = document.getElementById('jwt-token').value.trim();
-    if (!tokenVal) {
-      alert("Lütfen geçerli bir JWT Token veya API Key giriniz.");
-      return;
-    }
-    // Never persist an unverified token: validate first, store only on 200,
-    // then establish the UI cookie before navigating (no blind redirects).
-    try {
-      const res = await fetch('/api/auth/verify', {
-        headers: { 'Authorization': 'Bearer ' + tokenVal }
-      });
-      if (!res.ok) {
-        alert("Token doğrulanamadı. Geçerli bir token giriniz.");
-        return;
-      }
-      localStorage.setItem('bistbot_token', tokenVal);
-      try {
-        const data = await res.json();
-        if (data.email) localStorage.setItem('bistbot_email', data.email);
-      } catch (parseErr) { /* email stays as-is */ }
-      if (await establishSession(tokenVal)) {
-        window.location.href = '/ui/dashboard';
-      } else {
-        alert("Oturum çerezi oluşturulamadı. Lütfen tekrar deneyin.");
-      }
-    } catch (err) {
-      alert('Doğrulama isteği gönderilemedi: ' + err.message);
-    }
-  }
-
-</script></main><footer class="relative z-10 w-full px-terminal-margin py-space-md bg-surface-container-lowest/60 backdrop-blur-lg"><div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-space-sm text-on-surface-variant"><div class="flex items-center gap-space-md flex-wrap justify-center"><div class="flex items-center gap-space-2xs"><span class="material-symbols-outlined text-primary text-[14px]">verified_user</span><span class="font-label-code text-label-code text-on-surface-variant">256-Bit SSL Şifreleme</span></div><div class="flex items-center gap-space-2xs"><span class="material-symbols-outlined text-secondary-container text-[14px]">bolt</span><span class="font-label-code text-label-code text-on-surface-variant">API Statüsü:</span><span class="font-label-code text-label-code text-primary uppercase font-bold">Online (1.2ms)</span></div><div class="flex items-center gap-space-2xs"><span class="material-symbols-outlined text-on-surface-variant text-[14px]">shield</span><span class="font-label-code text-label-code text-on-surface-variant">SPK Uyumlu Altyapı</span></div></div><div class="flex items-center gap-space-xs"><span class="font-label-code text-label-code text-on-surface-variant">© 2024 Bist-Bot Quantitative Systems. Tüm Hakları Saklıdır.</span></div></div></footer><script src="/static/app.js"></script>
+</script></main><footer class="relative z-10 w-full px-terminal-margin py-space-md bg-surface-container-lowest/60 backdrop-blur-lg"><div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-space-sm text-on-surface-variant"><div class="flex items-center gap-space-md flex-wrap justify-center"><div class="flex items-center gap-space-2xs"><span class="material-symbols-outlined text-primary text-[14px]">verified_user</span><span class="font-label-code text-label-code text-on-surface-variant">256-Bit SSL Şifreleme</span></div><div class="flex items-center gap-space-2xs"><span class="material-symbols-outlined text-secondary-container text-[14px]">bolt</span><span class="font-label-code text-label-code text-on-surface-variant">API Statüsü:</span><span class="font-label-code text-label-code text-primary uppercase font-bold">Online (1.2ms)</span></div><div class="flex items-center gap-space-2xs"><span class="material-symbols-outlined text-on-surface-variant text-[14px]">shield</span><span class="font-label-code text-label-code text-on-surface-variant">SPK Uyumlu Altyapı</span></div></div><div class="flex items-center gap-space-xs"><span class="font-label-code text-label-code text-on-surface-variant">© 2024 Bist-Bot Quantitative Systems. Tüm Hakları Saklıdır.</span></div></div></footer><script src="/static/app.js?nocache=100008"></script>
 </body></html>

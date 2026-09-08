@@ -238,6 +238,25 @@ class BISTDataFetcher:
             )
         return skipped
 
+    _MAX_ANALYSIS_CACHE = 250
+    _MAX_HISTORY_CACHE = 500
+    _MAX_QUOTE_CACHE = 500
+
+    def _evict_oldest_if_needed(self, cache: dict[Any, CacheEntry], max_size: int) -> None:
+        if len(cache) < max_size:
+            return
+        now = self._now()
+        # 1. Purge expired entries
+        expired = [k for k, v in list(cache.items()) if (now - v.cached_at).total_seconds() > 3600]
+        for k in expired:
+            cache.pop(k, None)
+        # 2. If still at/over capacity, evict oldest entries by insertion time
+        if len(cache) >= max_size:
+            sorted_keys = sorted(cache.keys(), key=lambda k: cache[k].cached_at)
+            excess = len(cache) - max_size + 1
+            for k in sorted_keys[:excess]:
+                cache.pop(k, None)
+
     def _get_valid_cache_entry(
         self, cache: dict[Any, CacheEntry], cache_key: Any, ttl: timedelta
     ) -> Any | None:
@@ -304,6 +323,7 @@ class BISTDataFetcher:
             df: Normalized dataframe to cache.
         """
         cache_key = self._cache_key(ticker, period, interval)
+        self._evict_oldest_if_needed(self._history_cache, self._MAX_HISTORY_CACHE)
         self._history_cache[cache_key] = CacheEntry(value=df, cached_at=self._now())
         self.clear_cache(scope="analysis", ticker=ticker)
 
@@ -345,6 +365,7 @@ class BISTDataFetcher:
         return self._get_valid_cache_entry(self._analysis_cache, cache_key, self._analysis_ttl())
 
     def store_analysis(self, cache_key: str, value: Any) -> None:
+        self._evict_oldest_if_needed(self._analysis_cache, self._MAX_ANALYSIS_CACHE)
         self._analysis_cache[cache_key] = CacheEntry(value=value, cached_at=self._now())
 
     def get_cached_quote(self, ticker: str, force: bool = False) -> float | None:
@@ -356,6 +377,7 @@ class BISTDataFetcher:
         return float(cached)
 
     def _store_quote(self, ticker: str, price: float) -> None:
+        self._evict_oldest_if_needed(self._quote_cache, self._MAX_QUOTE_CACHE)
         self._quote_cache[ticker] = CacheEntry(value=float(price), cached_at=self._now())
 
     def _record_quote_resolution_meta(

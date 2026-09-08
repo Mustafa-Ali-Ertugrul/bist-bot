@@ -44,7 +44,7 @@
           <span class="material-symbols-outlined text-primary text-[26px]">tune</span>
 </h1>
 <p class="font-body-md text-body-md text-on-surface-variant max-w-2xl">
-          Tarama döngüsü, anlık teknik gösterge eşikleri ve Telegram/Discord bot tetikleyicilerini gerçek zamanlı kalibre edin.
+          Tarama döngüsü ve anlık teknik gösterge eşiklerini gerçek zamanlı kalibre edin. Kendi Telegram/Discord bildirim kanallarınız arka planda aktiftir.
         </p>
 </div>
 <!-- Quick Preset Filter Chips -->
@@ -62,8 +62,8 @@
 </div>
 <!-- Main Grid Section (3 Columns on Big screens, Modular Stack) -->
 <div class="grid grid-cols-1 xl:grid-cols-12 gap-space-lg mb-space-xl">
-<!-- LEFT SECTION: 1. Çalışma Zamanı & Tarama (col-span-5) -->
-<div class="xl:col-span-5 flex flex-col gap-space-lg">
+<!-- LEFT SECTION: 1. Çalışma Zamanı & Tarama (col-span-12 xl:col-span-4) -->
+<div class="xl:col-span-4 flex flex-col gap-space-lg">
 <!-- CARD 1: Çalışma Zamanı -->
 <div class="bg-surface-container-low/90 rounded-xl p-space-lg shadow-lg relative overflow-hidden backdrop-blur-xl group">
 <div class="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-primary via-secondary-container to-transparent opacity-80"></div>
@@ -142,92 +142,9 @@
 </div>
 </div>
 </div>
-<!-- CARD 2: Bildirim & Webhook Entegrasyonu -->
-<div class="bg-surface-container-low/90 rounded-xl p-space-lg shadow-lg relative overflow-hidden backdrop-blur-xl">
-<div class="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-tertiary-container via-secondary to-transparent opacity-80"></div>
-<div class="flex items-center justify-between pb-space-sm mb-space-md">
-<div class="flex items-center gap-space-xs">
-<div class="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center text-tertiary shadow-inner">
-<span class="material-symbols-outlined text-[20px]">send</span>
 </div>
-<div>
-<span class="font-headline-md text-headline-md text-on-surface font-bold">Bot &amp; Yönlendirme</span>
-<span class="block font-label-caps text-label-caps text-outline uppercase">Telegram &amp; Webhook Servisleri</span>
-</div>
-</div>
-<div class="flex items-center gap-1.5 bg-primary/10 px-space-xs py-space-3xs rounded-full shadow-sm" id="connection-status-badge">
-<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
-<span class="font-label-code text-label-code text-primary font-bold">BAĞLANTI AKTİF</span>
-</div>
-</div>
-<div class="space-y-space-md">
-<!-- Telegram Bot Token Field -->
-<div class="space-y-space-3xs">
-<div class="flex items-center justify-between">
-<label class="font-label-code text-label-code text-on-surface-variant flex items-center gap-1">
-                  TELEGRAM BOT TOKEN
-                  <span class="text-outline text-[10px]">(ReadOnly .env)</span>
-</label>
-<button class="font-label-code text-label-code text-secondary hover:underline flex items-center gap-1" id="toggle-token-btn" type="button">
-<span class="material-symbols-outlined text-[14px]">visibility</span> Göster
-                </button>
-</div>
-<div class="relative flex items-center">
-<input class="w-full bg-surface-container-lowest font-metric-value text-metric-value text-on-surface px-space-sm py-2 rounded-lg focus:outline-none select-all tracking-wider shadow-inner" id="bot-token-input" readonly="" type="password" value="" placeholder="Token ayarlardan yönetilir"/>
-<button class="absolute right-2 text-outline hover:text-on-surface p-1" onclick="navigator.clipboard.writeText(document.getElementById('bot-token-input').value)" title="Kopyala" type="button">
-<span class="material-symbols-outlined text-[16px]">content_copy</span>
-</button>
-</div>
-</div>
-<!-- Chat ID & Discord Hook in 2 columns -->
-<div class="grid grid-cols-1 sm:grid-cols-2 gap-space-sm">
-<div class="space-y-space-3xs">
-<label class="font-label-code text-label-code text-on-surface-variant">CHAT / CHANNEL ID</label>
-<div class="flex items-center bg-surface-container-lowest px-space-sm py-2 rounded-lg shadow-inner">
-<span class="text-outline font-label-code text-label-code mr-1">#</span>
-<input class="w-full bg-transparent font-metric-value text-metric-value text-on-surface focus:outline-none" type="text" value="" placeholder="örn. -1001234567890"/>
-</div>
-</div>
-<div class="space-y-space-3xs">
-<label class="font-label-code text-label-code text-on-surface-variant">DISCORD WEBHOOK (OPSİYONEL)</label>
-<div class="flex items-center bg-surface-container-lowest px-space-sm py-2 rounded-lg shadow-inner">
-<span class="material-symbols-outlined text-outline text-[16px] mr-1">link</span>
-<input class="w-full bg-transparent font-metric-value text-metric-value text-on-surface placeholder:text-outline/50 focus:outline-none" placeholder="https://discord.com/api/webhooks/..." type="password" value=""/>
-</div>
-</div>
-</div>
-<!-- Bildirim Gönderim Tetikleyicileri (Checkboxes) -->
-<div class="pt-space-xs">
-<span class="block font-label-caps text-label-caps text-outline uppercase mb-space-xs">ANLIK BİLDİRİM TETİKLEYİCİLERİ</span>
-<div class="grid grid-cols-1 sm:grid-cols-3 gap-space-xs">
-<label class="flex items-center gap-2 p-space-xs bg-surface-container/60 hover:bg-surface-container rounded-lg cursor-pointer transition-colors">
-<input checked="" class="w-4 h-4 rounded bg-surface-container-highest accent-primary" type="checkbox"/>
-<span class="font-body-sm text-body-sm text-on-surface font-medium">Yeni Güçlü Sinyal</span>
-</label>
-<label class="flex items-center gap-2 p-space-xs bg-surface-container/60 hover:bg-surface-container rounded-lg cursor-pointer transition-colors">
-<input checked="" class="w-4 h-4 rounded bg-surface-container-highest accent-primary" type="checkbox"/>
-<span class="font-body-sm text-body-sm text-on-surface font-medium">Hedef (TP) Ulaşıldı</span>
-</label>
-<label class="flex items-center gap-2 p-space-xs bg-surface-container/60 hover:bg-surface-container rounded-lg cursor-pointer transition-colors">
-<input checked="" class="w-4 h-4 rounded bg-surface-container-highest accent-primary" type="checkbox"/>
-<span class="font-body-sm text-body-sm text-on-surface font-medium">Stop-Loss İhlali</span>
-</label>
-</div>
-</div>
-<!-- Bot Test Action Button -->
-<div class="flex items-center justify-between pt-space-xs">
-<span class="font-body-sm text-body-sm text-outline flex items-center gap-1">
-<span class="material-symbols-outlined text-[15px] text-primary">verified_user</span> API Anahtarları korumalı depolanmaktadır
-              </span>
-<button class="px-space-sm py-space-xs rounded-lg bg-surface-container-high hover:bg-surface-variant text-secondary font-label-code text-label-code flex items-center gap-1.5 transition-all shadow-sm opacity-50 cursor-not-allowed" id="test-notification-btn" type="button" disabled="" title="Bu kontrol demo modunda kilitli">
-<span class="material-symbols-outlined text-[16px]">notifications_active</span> Test Mesajı Gönder <span class="ml-1 px-1 rounded bg-surface-container-lowest text-outline">Demo</span>
-              </button>
-</div>
-</div>
-</div>
-</div>
-<!-- RIGHT SECTION: 2. Sinyal & Gösterge Filtreleri (col-span-7) -->
-<div class="xl:col-span-7 flex flex-col gap-space-lg">
+<!-- RIGHT SECTION: 2. Sinyal & Gösterge Filtreleri (col-span-12 xl:col-span-8) -->
+<div class="xl:col-span-8 flex flex-col gap-space-lg">
 <div class="bg-surface-container-low/90 rounded-xl p-space-lg shadow-lg relative overflow-hidden backdrop-blur-xl h-full flex flex-col justify-between">
 <div class="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-secondary via-primary to-transparent opacity-80"></div>
 <div>
@@ -399,7 +316,7 @@
 <span class="hidden font-label-caps text-label-caps bg-secondary-container/20 text-secondary px-2 py-0.5 rounded uppercase" id="dirty-state-badge">Kaydedilmemiş Değişiklikler Var</span>
 </div>
 <p class="font-body-sm text-body-sm text-outline">
-            Tüm Telegram gizli anahtarları salt okunur olarak tutulur, depolama alanına geri yazılmaz.
+            Terminal filtreleri yerel bellekte güvenle işlenir.
           </p>
 </div>
 </div>
@@ -424,184 +341,29 @@
 </div>
 </div>
 <!-- Inline Micro-Interactions Script -->
+<!-- Docked Segmented Fast Navigation (Persistent Modern Toolbar) -->
+<aside class="fixed bottom-12 inset-x-0 z-40 w-full px-terminal-margin flex justify-center pointer-events-none">
+<nav class="pointer-events-auto flex items-center gap-space-xs p-space-2xs rounded-full bg-surface-container-low/95 backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.6)] border border-surface-container-high/40">
+<a href="/ui/dashboard" class="flex items-center gap-space-2xs px-space-md py-space-xs rounded-full text-on-surface-variant hover:text-on-surface hover:bg-surface-container font-body-md text-body-md transition-all">
+<span class="material-symbols-outlined text-[18px]">dashboard</span>
+<span>DASHBOARD</span>
+</a>
+<a href="/ui/signals" class="flex items-center gap-space-2xs px-space-md py-space-xs rounded-full text-on-surface-variant hover:text-on-surface hover:bg-surface-container font-body-md text-body-md transition-all">
+<span class="material-symbols-outlined text-[18px]">notifications_active</span>
+<span>SIGNALS</span>
+</a>
+<a href="/ui/analysis" class="flex items-center gap-space-2xs px-space-md py-space-xs rounded-full text-on-surface-variant hover:text-on-surface hover:bg-surface-container font-body-md text-body-md transition-all">
+<span class="material-symbols-outlined text-[18px]">analytics</span>
+<span>ANALYSIS</span>
+</a>
+<a href="/ui/settings" class="flex items-center gap-space-2xs px-space-lg py-space-xs rounded-full bg-primary/15 text-primary font-body-md text-body-md font-bold shadow-[0_0_12px_rgba(78,222,163,0.25)] transition-all">
+<span class="material-symbols-outlined text-[18px]">tune</span>
+<span>SETTINGS</span>
+</a>
+</nav>
+</aside>
 <script>
-    (function() {
-      // Connect inputs & sliders
-      function syncSlider(sliderId, inputId, suffix = '') {
-        const slider = document.getElementById(sliderId);
-        const input = document.getElementById(inputId);
-        if (!slider || !input) return;
-
-        slider.addEventListener('input', (e) => {
-          if (input.tagName === 'INPUT') {
-            input.value = e.target.value;
-          } else {
-            input.textContent = e.target.value + suffix;
-          }
-          notifyDirtyState();
-        });
-
-        if (input.tagName === 'INPUT') {
-          input.addEventListener('input', (e) => {
-            slider.value = e.target.value;
-            notifyDirtyState();
-          });
-        }
-      }
-
-      syncSlider('scan-interval-slider', 'scan-interval-input');
-      syncSlider('min-score-slider', 'min-score-input');
-      syncSlider('sma-fast-slider', 'sma-fast-val', ' Gün');
-      syncSlider('sma-slow-slider', 'sma-slow-val', ' Gün');
-      syncSlider('ema-fast-slider', 'ema-fast-val', ' Gün');
-      syncSlider('ema-slow-slider', 'ema-slow-val', ' Gün');
-      syncSlider('vol-ratio-slider', 'vol-ratio-val', 'x');
-      syncSlider('adx-slider', 'adx-val', ' ADX');
-
-      // RSI Sync & Visual Track
-      const rsiMin = document.getElementById('rsi-min-slider');
-      const rsiMax = document.getElementById('rsi-max-slider');
-      const rsiLowVal = document.getElementById('rsi-low-val');
-      const rsiHighVal = document.getElementById('rsi-high-val');
-      const rsiLowMarker = document.getElementById('rsi-low-marker');
-      const rsiHighMarker = document.getElementById('rsi-high-marker');
-
-      if (rsiMin && rsiMax) {
-        rsiMin.addEventListener('input', (e) => {
-          rsiLowVal.textContent = e.target.value;
-          if (rsiLowMarker) rsiLowMarker.style.left = e.target.value + '%';
-          notifyDirtyState();
-        });
-        rsiMax.addEventListener('input', (e) => {
-          rsiHighVal.textContent = e.target.value;
-          if (rsiHighMarker) rsiHighMarker.style.left = e.target.value + '%';
-          notifyDirtyState();
-        });
-      }
-
-      // Show/Hide Token Toggle
-      const toggleTokenBtn = document.getElementById('toggle-token-btn');
-      const botTokenInput = document.getElementById('bot-token-input');
-      if (toggleTokenBtn && botTokenInput) {
-        let visible = false;
-        toggleTokenBtn.addEventListener('click', () => {
-          visible = !visible;
-          botTokenInput.type = visible ? 'text' : 'password';
-          toggleTokenBtn.innerHTML = visible 
-            ? '<span class="material-symbols-outlined text-[14px]">visibility_off</span> Gizle' 
-            : '<span class="material-symbols-outlined text-[14px]">visibility</span> Göster';
-        });
-      }
-
-      // Dirty State indicator
-      const dirtyBadge = document.getElementById('dirty-state-badge');
-      function notifyDirtyState() {
-        if (dirtyBadge) dirtyBadge.classList.remove('hidden');
-      }
-
-      // Toast Feedback
-      function showToast(title, desc) {
-        const toast = document.getElementById('toast');
-        const tTitle = document.getElementById('toast-title');
-        const tDesc = document.getElementById('toast-desc');
-        if (!toast) return;
-        tTitle.textContent = title;
-        tDesc.textContent = desc;
-        toast.classList.remove('translate-y-24', 'opacity-0');
-        setTimeout(() => {
-          toast.classList.add('translate-y-24', 'opacity-0');
-        }, 3500);
-      }
-
-      // Save and Refresh action
-      const saveBtn = document.getElementById('save-apply-btn');
-      if (saveBtn) {
-        saveBtn.addEventListener('click', () => {
-          saveBtn.classList.add('scale-95');
-          setTimeout(() => saveBtn.classList.remove('scale-95'), 150);
-          if (dirtyBadge) dirtyBadge.classList.add('hidden');
-          showToast('Parametreler Başarıyla Güncellendi', 'Tarama motoru 100 hisse için yeni filtrelerle başlatıldı.');
-        });
-      }
-
-      // Test notification action
-      const testBtn = document.getElementById('test-notification-btn');
-      if (testBtn) {
-        testBtn.addEventListener('click', () => {
-          showToast('Test Mesajı İletildi', 'Telegram bot kanalına doğrulama paketi gönderildi (Gecikme: 24ms).');
-        });
-      }
-
-      // Preset pills handler
-      const pills = document.querySelectorAll('.preset-pill');
-      pills.forEach(pill => {
-        pill.addEventListener('click', () => {
-          pills.forEach(p => {
-            p.classList.remove('active', 'bg-surface-container-high', 'text-primary');
-            p.classList.add('text-on-surface-variant');
-          });
-          pill.classList.add('active', 'bg-surface-container-high', 'text-primary');
-          pill.classList.remove('text-on-surface-variant');
-
-          const preset = pill.getAttribute('data-preset');
-          if (preset === 'agresif') {
-            document.getElementById('scan-interval-slider').value = 1;
-            document.getElementById('scan-interval-input').value = 1;
-            document.getElementById('min-score-slider').value = 20;
-            document.getElementById('min-score-input').value = 20;
-            document.getElementById('vol-ratio-slider').value = 2.0;
-            document.getElementById('vol-ratio-val').textContent = '2.00x';
-          } else if (preset === 'dengeli') {
-            document.getElementById('scan-interval-slider').value = 5;
-            document.getElementById('scan-interval-input').value = 5;
-            document.getElementById('min-score-slider').value = 30;
-            document.getElementById('min-score-input').value = 30;
-            document.getElementById('vol-ratio-slider').value = 1.5;
-            document.getElementById('vol-ratio-val').textContent = '1.50x';
-          } else if (preset === 'trend') {
-            document.getElementById('scan-interval-slider').value = 15;
-            document.getElementById('scan-interval-input').value = 15;
-            document.getElementById('min-score-slider').value = 50;
-            document.getElementById('min-score-input').value = 50;
-            document.getElementById('adx-slider').value = 30;
-            document.getElementById('adx-val').textContent = '30 ADX';
-          }
-          notifyDirtyState();
-          showToast('Hazır Şablon Yüklendi', `${pill.innerText.trim()} konfigürasyonu uygulandı.`);
-        });
-      });
-
-      // Reset to defaults
-      const resetBtn = document.getElementById('reset-defaults-btn');
-      if (resetBtn) {
-        resetBtn.addEventListener('click', () => {
-          document.getElementById('scan-interval-slider').value = 5;
-          document.getElementById('scan-interval-input').value = 5;
-          document.getElementById('min-score-slider').value = 30;
-          document.getElementById('min-score-input').value = 30;
-          document.getElementById('rsi-min-slider').value = 30;
-          document.getElementById('rsi-max-slider').value = 70;
-          rsiLowVal.textContent = '30';
-          rsiHighVal.textContent = '70';
-          if (rsiLowMarker) rsiLowMarker.style.left = '30%';
-          if (rsiHighMarker) rsiHighMarker.style.left = '70%';
-          document.getElementById('sma-fast-slider').value = 5;
-          document.getElementById('sma-slow-slider').value = 20;
-          document.getElementById('sma-fast-val').textContent = '5 Gün';
-          document.getElementById('sma-slow-val').textContent = '20 Gün';
-          document.getElementById('ema-fast-slider').value = 12;
-          document.getElementById('ema-slow-slider').value = 26;
-          document.getElementById('ema-fast-val').textContent = '12 Gün';
-          document.getElementById('ema-slow-val').textContent = '26 Gün';
-          document.getElementById('vol-ratio-slider').value = 1.5;
-          document.getElementById('vol-ratio-val').textContent = '1.50x';
-          document.getElementById('adx-slider').value = 20;
-          document.getElementById('adx-val').textContent = '20 ADX';
-          if (dirtyBadge) dirtyBadge.classList.add('hidden');
-          showToast('Varsayılan Değerler', 'Tüm algoritmik parametreler fabrika ayarlarına sıfırlandı.');
-        });
-      }
-    })();
+    // Legacy inline script disabled: interactive behavior is fully handled by /static/app.js
   </script>
-</div></main><footer class="w-full bg-surface-container-lowest py-space-sm shadow-[0_-1px_12px_rgba(0,0,0,0.5)]"><div class="w-full px-terminal-margin flex flex-col sm:flex-row items-center justify-between gap-space-xs"><div class="flex items-center gap-space-md font-label-code text-label-code"><div class="flex items-center gap-space-2xs"><span class="w-2 h-2 rounded-full bg-primary"></span><span class="text-on-surface-variant">API: <span class="text-primary font-semibold">ONLINE</span></span></div><span class="text-outline">•</span><div class="flex items-center gap-space-2xs"><span class="material-symbols-outlined text-[14px] text-tertiary">wifi_tethering</span><span class="text-on-surface-variant">WS Latency: <span class="text-tertiary font-metric-value text-metric-value">18ms</span></span></div><span class="text-outline">•</span><span class="text-on-surface-variant hidden md:inline">Sunucu: <span class="text-on-surface">ist-eqx-algo-01</span></span></div><div class="font-body-sm text-body-sm text-outline text-center sm:text-right"><p>Yasal Uyarı: Burada yer alan algoritmik veriler yatırım danışmanlığı kapsamında değildir. Gecikmesiz BIST veri akışı.</p></div></div></footer><script src="/static/app.js"></script>
+</div></main><footer class="w-full bg-surface-container-lowest py-space-sm shadow-[0_-1px_12px_rgba(0,0,0,0.5)] pb-20 sm:pb-space-sm"><div class="w-full px-terminal-margin flex flex-col sm:flex-row items-center justify-between gap-space-xs"><div class="flex items-center gap-space-md font-label-code text-label-code"><div class="flex items-center gap-space-2xs"><span class="w-2 h-2 rounded-full bg-primary"></span><span class="text-on-surface-variant">API: <span class="text-primary font-semibold">ONLINE</span></span></div><span class="text-outline">•</span><div class="flex items-center gap-space-2xs"><span class="material-symbols-outlined text-[14px] text-tertiary">wifi_tethering</span><span class="text-on-surface-variant">WS Latency: <span class="text-tertiary font-metric-value text-metric-value">18ms</span></span></div><span class="text-outline">•</span><span class="text-on-surface-variant hidden md:inline">Sunucu: <span class="text-on-surface">ist-eqx-algo-01</span></span></div><div class="font-body-sm text-body-sm text-outline text-center sm:text-right"><p>Yasal Uyarı: Burada yer alan algoritmik veriler yatırım danışmanlığı kapsamında değildir. Gecikmesiz BIST veri akışı.</p></div></div></footer><script src="/static/app.js?nocache=100008"></script>
 </body></html>

@@ -51,8 +51,9 @@ def get_footer_api_status() -> bool:
         from bist_bot.config.settings import settings
 
         base = str(getattr(settings, "API_BASE_URL", "") or "").rstrip("/")
-        if base:
-            with urllib.request.urlopen(f"{base}/livez", timeout=2) as response:
+        if base and base.startswith(("http://", "https://")):
+            req = urllib.request.Request(f"{base}/livez")
+            with urllib.request.urlopen(req, timeout=2) as response:  # nosec B310
                 online = 200 <= int(getattr(response, "status", 0)) < 300
     except Exception:
         online = False

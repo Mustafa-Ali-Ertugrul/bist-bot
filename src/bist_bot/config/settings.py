@@ -112,7 +112,7 @@ _SUB_SETTINGS_GROUPS = (
 )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, repr=False)
 class Settings:
     DEFAULT_BIST100_WATCHLIST: list[str] = field(
         default_factory=lambda: list(DEFAULT_BIST100_WATCHLIST)
@@ -174,6 +174,32 @@ class Settings:
             group = object.__getattribute__(self, group_name)
             direct_overrides[group_name] = dataclass_replace(group, **group_overrides)
         return dataclass_replace(self, **direct_overrides)
+
+    def __repr__(self) -> str:
+        sensitive_keys = {
+            "jwt_secret_key",
+            "admin_bootstrap_password_hash",
+            "algolab_password",
+            "algolab_api_key",
+            "telegram_bot_token",
+            "midas_api_key",
+            "database_url",
+        }
+        items = []
+        for grp in _SUB_SETTINGS_GROUPS:
+            sub = getattr(self, grp, None)
+            if sub is not None:
+                sub_fields = []
+                for f_name in getattr(sub, "__dataclass_fields__", {}):
+                    val = getattr(sub, f_name)
+                    if f_name.lower() in sensitive_keys and val:
+                        val = "***REDACTED***"
+                    sub_fields.append(f"{f_name}={val!r}")
+                items.append(f"{grp}=<{type(sub).__name__} {', '.join(sub_fields)}>")
+        return f"Settings({', '.join(items)})"
+
+    def __str__(self) -> str:
+        return self.__repr__()
 
     def require_security_config(self) -> None:
         if not self.JWT_SECRET_KEY:

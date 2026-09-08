@@ -142,7 +142,7 @@
 </div>
 <div class="flex items-center justify-between font-label-code text-label-code text-outline pt-space-2xs">
 <span>İzleme &amp; Tetiklenen</span>
-<span class="text-primary font-semibold">MAGEN, ISMEN +2</span>
+<span class="text-primary font-semibold" id="stat-actionable-tickers">—</span>
 </div>
 </div>
 <!-- Card 3: Üretilen Sinyaller -->
@@ -220,92 +220,9 @@
 </div>
 <!-- Opportunity Card Container -->
 <div class="space-y-space-xs" id="radarOpportunitiesContainer">
-<!-- Opportunity Card 1: MAGEN -->
-<div class="group bg-surface-container-low hover:bg-surface-container p-space-md rounded-xl transition-all duration-200 shadow-md hover:shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-space-md">
-<div class="flex items-center gap-space-md">
-<div class="w-12 h-12 rounded-xl bg-surface-container-high flex flex-col items-center justify-center font-metric-value text-metric-value text-primary font-bold shadow-inner">
-                MAG
-                <span class="font-label-caps text-[8px] text-outline">EN</span>
-</div>
-<div>
-<div class="flex items-center gap-space-xs">
-<span class="font-headline-md text-headline-md text-on-surface font-extrabold">MAGEN</span>
-<span class="inline-flex items-center px-space-xs py-space-3xs rounded-full bg-primary/10 text-primary font-label-caps text-label-caps uppercase">
-                    Güçlü Al
-                  </span>
-</div>
-<div class="flex items-center gap-space-xs font-label-code text-label-code text-outline mt-space-3xs">
-<span class="material-symbols-outlined text-primary text-[14px]">qr_code_2</span>
-<span>Trend Kırılımı • Güven: <span class="text-primary font-bold">Yüksek</span></span>
-<span>• RSI: <span class="text-on-surface">62.4</span></span>
-</div>
-</div>
-</div>
-<div class="flex sm:flex-col items-baseline sm:items-end justify-between w-full sm:w-auto gap-space-xs">
-<div class="font-metric-display text-metric-display text-on-surface font-bold">TL34.06</div>
-<div class="flex items-center gap-space-xs">
-<span class="font-label-code text-label-code text-primary font-semibold">+%4.82</span>
-<span class="font-label-caps text-label-caps px-space-2xs py-space-3xs rounded bg-surface-container-high text-primary">Skor: +36</span>
-</div>
-</div>
-</div>
-<!-- Opportunity Card 2: ISMEN -->
-<div class="group bg-surface-container-low hover:bg-surface-container p-space-md rounded-xl transition-all duration-200 shadow-md hover:shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-space-md">
-<div class="flex items-center gap-space-md">
-<div class="w-12 h-12 rounded-xl bg-surface-container-high flex flex-col items-center justify-center font-metric-value text-metric-value text-tertiary font-bold shadow-inner">
-                ISM
-                <span class="font-label-caps text-[8px] text-outline">EN</span>
-</div>
-<div>
-<div class="flex items-center gap-space-xs">
-<span class="font-headline-md text-headline-md text-on-surface font-extrabold">ISMEN</span>
-<span class="inline-flex items-center px-space-xs py-space-3xs rounded-full bg-tertiary/10 text-tertiary font-label-caps text-label-caps uppercase">
-                    İzle / Hazırlık
-                  </span>
-</div>
-<div class="flex items-center gap-space-xs font-label-code text-label-code text-outline mt-space-3xs">
-<span class="material-symbols-outlined text-tertiary text-[14px]">visibility</span>
-<span>Destek Testi • Güven: <span class="text-tertiary font-bold">Orta-Yüksek</span></span>
-<span>• Hacim: <span class="text-on-surface">+1.8x</span></span>
-</div>
-</div>
-</div>
-<div class="flex sm:flex-col items-baseline sm:items-end justify-between w-full sm:w-auto gap-space-xs">
-<div class="font-metric-display text-metric-display text-on-surface font-bold">TL35.28</div>
-<div class="flex items-center gap-space-xs">
-<span class="font-label-code text-label-code text-tertiary font-semibold">+%2.16</span>
-<span class="font-label-caps text-label-caps px-space-2xs py-space-3xs rounded bg-surface-container-high text-tertiary">Skor: +31</span>
-</div>
-</div>
-</div>
-<!-- Opportunity Card 3: THYAO -->
-<div class="group bg-surface-container-low hover:bg-surface-container p-space-md rounded-xl transition-all duration-200 shadow-md hover:shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-space-md">
-<div class="flex items-center gap-space-md">
-<div class="w-12 h-12 rounded-xl bg-surface-container-high flex flex-col items-center justify-center font-metric-value text-metric-value text-primary font-bold shadow-inner">
-                THY
-                <span class="font-label-caps text-[8px] text-outline">AO</span>
-</div>
-<div>
-<div class="flex items-center gap-space-xs">
-<span class="font-headline-md text-headline-md text-on-surface font-extrabold">THYAO</span>
-<span class="inline-flex items-center px-space-xs py-space-3xs rounded-full bg-primary/10 text-primary font-label-caps text-label-caps uppercase">
-                    Al Sinyali
-                  </span>
-</div>
-<div class="flex items-center gap-space-xs font-label-code text-label-code text-outline mt-space-3xs">
-<span class="material-symbols-outlined text-primary text-[14px]">flight_takeoff</span>
-<span>Kanal Çıkışı • Güven: <span class="text-primary font-bold">Yüksek</span></span>
-<span>• Para Girişi: <span class="text-on-surface">+412M TL</span></span>
-</div>
-</div>
-</div>
-<div class="flex sm:flex-col items-baseline sm:items-end justify-between w-full sm:w-auto gap-space-xs">
-<div class="font-metric-display text-metric-display text-on-surface font-bold">TL312.50</div>
-<div class="flex items-center gap-space-xs">
-<span class="font-label-code text-label-code text-primary font-semibold">+%1.75</span>
-<span class="font-label-caps text-label-caps px-space-2xs py-space-3xs rounded bg-surface-container-high text-primary">Skor: +28</span>
-</div>
-</div>
+<div class="p-space-md rounded-xl bg-surface-container-low/60 animate-pulse text-on-surface-variant font-label-code text-label-code flex items-center gap-space-xs">
+<span class="w-3 h-3 rounded-full bg-primary animate-ping"></span>
+<span>Canlı BIST 100 radar fırsatları taranıyor ve yükleniyor...</span>
 </div>
 </div>
 </div>
@@ -331,8 +248,8 @@
 <p class="font-body-sm text-body-sm text-outline">Canlı referans gösterge piyasa tabanı</p>
 </div>
 <div class="text-right">
-<div class="font-metric-display text-metric-display text-on-surface font-extrabold">14,012.40</div>
-<div class="font-metric-value text-metric-value text-primary flex items-center justify-end">
+<div class="font-metric-display text-metric-display text-on-surface font-extrabold" id="benchmark-xu100-val">14,120.64</div>
+<div class="font-metric-value text-metric-value text-primary flex items-center justify-end" id="benchmark-xu100-chg">
 <span class="material-symbols-outlined text-[16px]">arrow_drop_up</span> +0.57%
               </div>
 </div>
@@ -347,8 +264,8 @@
 <p class="font-body-sm text-body-sm text-outline">Büyük ölçekli lokomotif hisse sepeti</p>
 </div>
 <div class="text-right">
-<div class="font-metric-display text-metric-display text-on-surface font-extrabold">16,445.40</div>
-<div class="font-metric-value text-metric-value text-primary flex items-center justify-end">
+<div class="font-metric-display text-metric-display text-on-surface font-extrabold" id="benchmark-xu030-val">16,734.88</div>
+<div class="font-metric-value text-metric-value text-primary flex items-center justify-end" id="benchmark-xu030-chg">
 <span class="material-symbols-outlined text-[16px]">arrow_drop_up</span> +0.90%
               </div>
 </div>
@@ -360,12 +277,12 @@
 <span class="font-headline-md text-headline-md text-on-surface font-extrabold">USD/TRY</span>
 <span class="px-space-2xs py-space-3xs rounded bg-surface-container text-outline font-label-caps text-label-caps">KUR PARİTESİ</span>
 </div>
-<p class="font-body-sm text-body-sm text-outline">Merkez Bankası interbank canlı kur</p>
+<p class="font-body-sm text-body-sm text-outline">Piyasa canlı interbank kuru</p>
 </div>
 <div class="text-right">
-<div class="font-metric-display text-metric-display text-on-surface font-extrabold">38.41</div>
-<div class="font-metric-value text-metric-value text-error flex items-center justify-end">
-<span class="material-symbols-outlined text-[16px]">arrow_drop_down</span> -0.03%
+<div class="font-metric-display text-metric-display text-on-surface font-extrabold" id="benchmark-usdtry-val">48.45</div>
+<div class="font-metric-value text-metric-value text-primary flex items-center justify-end" id="benchmark-usdtry-chg">
+<span class="material-symbols-outlined text-[16px]">arrow_drop_up</span> +0.07%
               </div>
 </div>
 </div>
@@ -438,237 +355,14 @@
 </tr>
 </thead>
 <tbody class="divide-y-0" id="signalsTableBody">
-<!-- Row 1: GENIL -->
-<tr class="signal-row hover:bg-surface-container/60 transition-colors group" data-type="buy">
-<td class="py-space-sm px-space-md font-label-code text-label-code text-tertiary font-bold">
-<span class="group-hover:text-primary transition-colors">GENIL</span>
+<tr>
+<td colspan="7" class="py-space-lg text-center text-outline animate-pulse font-label-code text-label-code">
+<div class="flex items-center justify-center gap-space-xs">
+<span class="material-symbols-outlined animate-spin text-primary text-[18px]">sync</span>
+<span>Canlı sinyal akışı veri tabanından senkronize ediliyor...</span>
+</div>
 </td>
-<td class="py-space-sm px-space-md">
-<span class="inline-flex items-center gap-space-2xs px-space-xs py-space-3xs rounded-full bg-primary/15 text-primary font-label-caps text-label-caps font-bold uppercase">
-<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
-                  Zayıf Al
-                </span>
-</td>
-<td class="py-space-sm px-space-md font-metric-value text-metric-value text-on-surface font-semibold">TL11.32</td>
-<td class="py-space-sm px-space-md font-label-code text-label-code text-on-surface-variant">7,950</td>
-<td class="py-space-sm px-space-md">
-<span class="font-metric-value text-metric-value text-primary font-bold">+20</span>
-</td>
-<td class="py-space-sm px-space-md">
-<span class="inline-flex items-center gap-space-3xs text-outline font-label-code text-label-code">
-<span class="w-1.5 h-1.5 rounded-full bg-outline"></span> Beklemede
-                </span>
-</td>
-<td class="py-space-sm px-space-md text-right font-label-code text-label-code text-on-surface-variant">15:42:19</td>
-</tr>
-<!-- Row 2: KONTR -->
-<tr class="signal-row hover:bg-surface-container/60 transition-colors group" data-type="sell">
-<td class="py-space-sm px-space-md font-label-code text-label-code text-tertiary font-bold">
-<span class="group-hover:text-error transition-colors">KONTR</span>
-</td>
-<td class="py-space-sm px-space-md">
-<span class="inline-flex items-center gap-space-2xs px-space-xs py-space-3xs rounded-full bg-error/15 text-error font-label-caps text-label-caps font-bold uppercase">
-<span class="w-1.5 h-1.5 rounded-full bg-error"></span>
-                  Zayıf Sat
-                </span>
-</td>
-<td class="py-space-sm px-space-md font-metric-value text-metric-value text-on-surface font-semibold">TL43.25</td>
-<td class="py-space-sm px-space-md font-label-code text-label-code text-outline">0</td>
-<td class="py-space-sm px-space-md">
-<span class="font-metric-value text-metric-value text-error font-bold">-14</span>
-</td>
-<td class="py-space-sm px-space-md">
-<span class="inline-flex items-center gap-space-3xs text-error font-label-code text-label-code">
-<span class="w-1.5 h-1.5 rounded-full bg-error"></span> Çıkış Emri
-                </span>
-</td>
-<td class="py-space-sm px-space-md text-right font-label-code text-label-code text-on-surface-variant">15:38:04</td>
-</tr>
-<!-- Row 3: MAVI -->
-<tr class="signal-row hover:bg-surface-container/60 transition-colors group" data-type="sell">
-<td class="py-space-sm px-space-md font-label-code text-label-code text-tertiary font-bold">
-<span class="group-hover:text-error transition-colors">MAVI</span>
-</td>
-<td class="py-space-sm px-space-md">
-<span class="inline-flex items-center gap-space-2xs px-space-xs py-space-3xs rounded-full bg-error/15 text-error font-label-caps text-label-caps font-bold uppercase">
-<span class="w-1.5 h-1.5 rounded-full bg-error"></span>
-                  Zayıf Sat
-                </span>
-</td>
-<td class="py-space-sm px-space-md font-metric-value text-metric-value text-on-surface font-semibold">TL36.70</td>
-<td class="py-space-sm px-space-md font-label-code text-label-code text-outline">0</td>
-<td class="py-space-sm px-space-md">
-<span class="font-metric-value text-metric-value text-error font-bold">-10</span>
-</td>
-<td class="py-space-sm px-space-md">
-<span class="inline-flex items-center gap-space-3xs text-outline font-label-code text-label-code">
-<span class="w-1.5 h-1.5 rounded-full bg-outline"></span> Beklemede
-                </span>
-</td>
-<td class="py-space-sm px-space-md text-right font-label-code text-label-code text-on-surface-variant">15:35:12</td>
-</tr>
-<!-- Row 4: SAHOL -->
-<tr class="signal-row hover:bg-surface-container/60 transition-colors group" data-type="buy">
-<td class="py-space-sm px-space-md font-label-code text-label-code text-tertiary font-bold">
-<span class="group-hover:text-primary transition-colors">SAHOL</span>
-</td>
-<td class="py-space-sm px-space-md">
-<span class="inline-flex items-center gap-space-2xs px-space-xs py-space-3xs rounded-full bg-primary/15 text-primary font-label-caps text-label-caps font-bold uppercase">
-<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
-                  Zayıf Al
-                </span>
-</td>
-<td class="py-space-sm px-space-md font-metric-value text-metric-value text-on-surface font-semibold">TL93.05</td>
-<td class="py-space-sm px-space-md font-label-code text-label-code text-on-surface-variant">764</td>
-<td class="py-space-sm px-space-md">
-<span class="font-metric-value text-metric-value text-primary font-bold">+14</span>
-</td>
-<td class="py-space-sm px-space-md">
-<span class="inline-flex items-center gap-space-3xs text-outline font-label-code text-label-code">
-<span class="w-1.5 h-1.5 rounded-full bg-outline"></span> Beklemede
-                </span>
-</td>
-<td class="py-space-sm px-space-md text-right font-label-code text-label-code text-on-surface-variant">15:29:45</td>
-</tr>
-<!-- Row 5: HEKTS -->
-<tr class="signal-row hover:bg-surface-container/60 transition-colors group" data-type="sell">
-<td class="py-space-sm px-space-md font-label-code text-label-code text-tertiary font-bold">
-<span class="group-hover:text-error transition-colors">HEKTS</span>
-</td>
-<td class="py-space-sm px-space-md">
-<span class="inline-flex items-center gap-space-2xs px-space-xs py-space-3xs rounded-full bg-error/15 text-error font-label-caps text-label-caps font-bold uppercase">
-<span class="w-1.5 h-1.5 rounded-full bg-error"></span>
-                  Zayıf Sat
-                </span>
-</td>
-<td class="py-space-sm px-space-md font-metric-value text-metric-value text-on-surface font-semibold">TL4.62</td>
-<td class="py-space-sm px-space-md font-label-code text-label-code text-outline">0</td>
-<td class="py-space-sm px-space-md">
-<span class="font-metric-value text-metric-value text-error font-bold">-16</span>
-</td>
-<td class="py-space-sm px-space-md">
-<span class="inline-flex items-center gap-space-3xs text-outline font-label-code text-label-code">
-<span class="w-1.5 h-1.5 rounded-full bg-outline"></span> Beklemede
-                </span>
-</td>
-<td class="py-space-sm px-space-md text-right font-label-code text-label-code text-on-surface-variant">15:20:10</td>
-</tr>
-<!-- Row 6: ULKER -->
-<tr class="signal-row hover:bg-surface-container/60 transition-colors group" data-type="buy">
-<td class="py-space-sm px-space-md font-label-code text-label-code text-tertiary font-bold">
-<span class="group-hover:text-secondary transition-colors">ULKER</span>
-</td>
-<td class="py-space-sm px-space-md">
-<span class="inline-flex items-center gap-space-2xs px-space-xs py-space-3xs rounded-full bg-secondary-container/15 text-secondary-fixed font-label-caps text-label-caps font-bold uppercase">
-<span class="material-symbols-outlined text-[13px]">qr_code_2</span>
-                  İzle
-                </span>
-</td>
-<td class="py-space-sm px-space-md font-metric-value text-metric-value text-on-surface font-semibold">TL90.15</td>
-<td class="py-space-sm px-space-md font-label-code text-label-code text-on-surface-variant">439</td>
-<td class="py-space-sm px-space-md">
-<span class="font-metric-value text-metric-value text-secondary-fixed font-bold">+26</span>
-</td>
-<td class="py-space-sm px-space-md">
-<span class="inline-flex items-center gap-space-3xs text-primary font-label-code text-label-code">
-<span class="w-1.5 h-1.5 rounded-full bg-primary animate-ping"></span> İzleme Listesinde
-                </span>
-</td>
-<td class="py-space-sm px-space-md text-right font-label-code text-label-code text-on-surface-variant">15:15:33</td>
-</tr>
-<!-- Row 7: KCHOL -->
-<tr class="signal-row hover:bg-surface-container/60 transition-colors group" data-type="buy">
-<td class="py-space-sm px-space-md font-label-code text-label-code text-tertiary font-bold">
-<span class="group-hover:text-primary transition-colors">KCHOL</span>
-</td>
-<td class="py-space-sm px-space-md">
-<span class="inline-flex items-center gap-space-2xs px-space-xs py-space-3xs rounded-full bg-primary/15 text-primary font-label-caps text-label-caps font-bold uppercase">
-<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
-                  Zayıf Al
-                </span>
-</td>
-<td class="py-space-sm px-space-md font-metric-value text-metric-value text-on-surface font-semibold">TL214.60</td>
-<td class="py-space-sm px-space-md font-label-code text-label-code text-on-surface-variant">419</td>
-<td class="py-space-sm px-space-md">
-<span class="font-metric-value text-metric-value text-primary font-bold">+14</span>
-</td>
-<td class="py-space-sm px-space-md">
-<span class="inline-flex items-center gap-space-3xs text-outline font-label-code text-label-code">
-<span class="w-1.5 h-1.5 rounded-full bg-outline"></span> Beklemede
-                </span>
-</td>
-<td class="py-space-sm px-space-md text-right font-label-code text-label-code text-on-surface-variant">15:11:02</td>
-</tr>
-<!-- Row 8: VAKBN -->
-<tr class="signal-row hover:bg-surface-container/60 transition-colors group" data-type="buy">
-<td class="py-space-sm px-space-md font-label-code text-label-code text-tertiary font-bold">
-<span class="group-hover:text-primary transition-colors">VAKBN</span>
-</td>
-<td class="py-space-sm px-space-md">
-<span class="inline-flex items-center gap-space-2xs px-space-xs py-space-3xs rounded-full bg-primary/15 text-primary font-label-caps text-label-caps font-bold uppercase">
-<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
-                  Zayıf Al
-                </span>
-</td>
-<td class="py-space-sm px-space-md font-metric-value text-metric-value text-on-surface font-semibold">TL34.38</td>
-<td class="py-space-sm px-space-md font-label-code text-label-code text-on-surface-variant">2,096</td>
-<td class="py-space-sm px-space-md">
-<span class="font-metric-value text-metric-value text-primary font-bold">+19</span>
-</td>
-<td class="py-space-sm px-space-md">
-<span class="inline-flex items-center gap-space-3xs text-outline font-label-code text-label-code">
-<span class="w-1.5 h-1.5 rounded-full bg-outline"></span> Beklemede
-                </span>
-</td>
-<td class="py-space-sm px-space-md text-right font-label-code text-label-code text-on-surface-variant">15:05:44</td>
-</tr>
-<!-- Row 9: HALKB -->
-<tr class="signal-row hover:bg-surface-container/60 transition-colors group" data-type="buy">
-<td class="py-space-sm px-space-md font-label-code text-label-code text-tertiary font-bold">
-<span class="group-hover:text-primary transition-colors">HALKB</span>
-</td>
-<td class="py-space-sm px-space-md">
-<span class="inline-flex items-center gap-space-2xs px-space-xs py-space-3xs rounded-full bg-primary/15 text-primary font-label-caps text-label-caps font-bold uppercase">
-<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
-                  Zayıf Al
-                </span>
-</td>
-<td class="py-space-sm px-space-md font-metric-value text-metric-value text-on-surface font-semibold">TL49.44</td>
-<td class="py-space-sm px-space-md font-label-code text-label-code text-on-surface-variant">1,587</td>
-<td class="py-space-sm px-space-md">
-<span class="font-metric-value text-metric-value text-primary font-bold">+15</span>
-</td>
-<td class="py-space-sm px-space-md">
-<span class="inline-flex items-center gap-space-3xs text-outline font-label-code text-label-code">
-<span class="w-1.5 h-1.5 rounded-full bg-outline"></span> Beklemede
-                </span>
-</td>
-<td class="py-space-sm px-space-md text-right font-label-code text-label-code text-on-surface-variant">14:59:18</td>
-</tr>
-<!-- Row 10: TUPRS -->
-<tr class="signal-row hover:bg-surface-container/60 transition-colors group" data-type="buy">
-<td class="py-space-sm px-space-md font-label-code text-label-code text-tertiary font-bold">
-<span class="group-hover:text-primary transition-colors">TUPRS</span>
-</td>
-<td class="py-space-sm px-space-md">
-<span class="inline-flex items-center gap-space-2xs px-space-xs py-space-3xs rounded-full bg-primary-container/20 text-primary-fixed font-label-caps text-label-caps font-bold uppercase">
-<span class="material-symbols-outlined text-[13px]">bolt</span>
-                  Güçlü Al
-                </span>
-</td>
-<td class="py-space-sm px-space-md font-metric-value text-metric-value text-on-surface font-semibold">TL184.20</td>
-<td class="py-space-sm px-space-md font-label-code text-label-code text-on-surface-variant">850</td>
-<td class="py-space-sm px-space-md">
-<span class="font-metric-value text-metric-value text-primary font-bold">+34</span>
-</td>
-<td class="py-space-sm px-space-md">
-<span class="inline-flex items-center gap-space-3xs text-primary font-label-code text-label-code">
-<span class="w-1.5 h-1.5 rounded-full bg-primary"></span> Emre Hazır
-                </span>
-</td>
-<td class="py-space-sm px-space-md text-right font-label-code text-label-code text-on-surface-variant">14:52:01</td>
-</tr>
-</tbody>
+</tr></tbody>
 </table>
 </div>
 <!-- Pagination / Log Stats Bar -->
@@ -684,26 +378,26 @@
 </div>
 </div>
 <!-- Docked Segmented Fast Navigation (Persistent Modern Toolbar) -->
-<div class="w-full flex justify-center pb-space-sm pt-space-xs">
-<nav class="flex items-center gap-space-xs p-space-2xs rounded-full bg-surface-container-low/95 backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.6)]">
-<a href="/ui/dashboard" class="flex items-center gap-space-2xs px-space-lg py-space-xs rounded-full bg-primary/15 text-primary font-body-md text-body-md font-bold shadow-[0_0_12px_rgba(78,222,163,0.25)] transition-all" href="/ui/dashboard"><span class="material-symbols-outlined text-[18px]">dashboard</span><span>DASHBOARD</span></a>
-<a class="flex items-center gap-space-2xs px-space-md py-space-xs rounded-full text-on-surface-variant hover:text-on-surface hover:bg-surface-container font-body-md text-body-md transition-all" href="#">
+<aside class="fixed bottom-12 inset-x-0 z-40 w-full px-terminal-margin flex justify-center pointer-events-none">
+<nav class="pointer-events-auto flex items-center gap-space-xs p-space-2xs rounded-full bg-surface-container-low/95 backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.6)] border border-surface-container-high/40">
+<a href="/ui/dashboard" class="flex items-center gap-space-2xs px-space-lg py-space-xs rounded-full bg-primary/15 text-primary font-body-md text-body-md font-bold shadow-[0_0_12px_rgba(78,222,163,0.25)] transition-all"><span class="material-symbols-outlined text-[18px]">dashboard</span><span>DASHBOARD</span></a>
+<a href="/ui/signals" class="flex items-center gap-space-2xs px-space-md py-space-xs rounded-full text-on-surface-variant hover:text-on-surface hover:bg-surface-container font-body-md text-body-md transition-all">
 <span class="material-symbols-outlined text-[18px]">notifications_active</span>
 <span>SIGNALS</span>
 </a>
-<a class="flex items-center gap-space-2xs px-space-md py-space-xs rounded-full text-on-surface-variant hover:text-on-surface hover:bg-surface-container font-body-md text-body-md transition-all" href="#">
+<a href="/ui/analysis" class="flex items-center gap-space-2xs px-space-md py-space-xs rounded-full text-on-surface-variant hover:text-on-surface hover:bg-surface-container font-body-md text-body-md transition-all">
 <span class="material-symbols-outlined text-[18px]">analytics</span>
 <span>ANALYSIS</span>
 </a>
-<a class="flex items-center gap-space-2xs px-space-md py-space-xs rounded-full text-on-surface-variant hover:text-on-surface hover:bg-surface-container font-body-md text-body-md transition-all" href="#">
+<a href="/ui/settings" class="flex items-center gap-space-2xs px-space-md py-space-xs rounded-full text-on-surface-variant hover:text-on-surface hover:bg-surface-container font-body-md text-body-md transition-all">
 <span class="material-symbols-outlined text-[18px]">tune</span>
 <span>SETTINGS</span>
 </a>
 </nav>
-</div>
+</aside>
 </div>
 <script>
     // Legacy inline script disabled: interactive behavior is fully handled by /static/app.js
 </script>
-</div></main><footer class="w-full bg-surface-container-lowest py-space-sm shadow-[0_-1px_12px_rgba(0,0,0,0.5)]"><div class="w-full px-terminal-margin flex flex-col sm:flex-row items-center justify-between gap-space-xs"><div class="flex items-center gap-space-md font-label-code text-label-code"><div class="flex items-center gap-space-2xs"><span class="w-2 h-2 rounded-full bg-primary"></span><span class="text-on-surface-variant">API: <span class="text-primary font-semibold">ONLINE</span></span></div><span class="text-outline">•</span><div class="flex items-center gap-space-2xs"><span class="material-symbols-outlined text-[14px] text-tertiary">wifi_tethering</span><span class="text-on-surface-variant">WS Latency: <span class="text-tertiary font-metric-value text-metric-value">18ms</span></span></div><span class="text-outline">•</span><span class="text-on-surface-variant hidden md:inline">Sunucu: <span class="text-on-surface">ist-eqx-algo-01</span></span></div><div class="font-body-sm text-body-sm text-outline text-center sm:text-right"><p>Yasal Uyarı: Burada yer alan algoritmik veriler yatırım danışmanlığı kapsamında değildir. Gecikmesiz BIST veri akışı.</p></div></div></footer><script src="/static/app.js"></script>
+</div></main><footer class="w-full bg-surface-container-lowest py-space-sm shadow-[0_-1px_12px_rgba(0,0,0,0.5)] pb-20 sm:pb-space-sm"><div class="w-full px-terminal-margin flex flex-col sm:flex-row items-center justify-between gap-space-xs"><div class="flex items-center gap-space-md font-label-code text-label-code"><div class="flex items-center gap-space-2xs"><span class="w-2 h-2 rounded-full bg-primary"></span><span class="text-on-surface-variant">API: <span class="text-primary font-semibold">ONLINE</span></span></div><span class="text-outline">•</span><div class="flex items-center gap-space-2xs"><span class="material-symbols-outlined text-[14px] text-tertiary">wifi_tethering</span><span class="text-on-surface-variant">WS Latency: <span class="text-tertiary font-metric-value text-metric-value">18ms</span></span></div><span class="text-outline">•</span><span class="text-on-surface-variant hidden md:inline">Sunucu: <span class="text-on-surface">ist-eqx-algo-01</span></span></div><div class="font-body-sm text-body-sm text-outline text-center sm:text-right"><p>Yasal Uyarı: Burada yer alan algoritmik veriler yatırım danışmanlığı kapsamında değildir. Gecikmesiz BIST veri akışı.</p></div></div></footer><script src="/static/app.js?nocache=100008"></script>
 </body></html>

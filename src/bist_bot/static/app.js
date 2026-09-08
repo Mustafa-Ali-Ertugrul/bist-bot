@@ -114,13 +114,16 @@
       };
     });
 
-    // Logout button
+    // Logout button (revokes server HttpOnly cookie + Bearer JTI + clears localStorage)
     document.querySelectorAll('button[title="Çıkış"]').forEach(btn => {
-      btn.onclick = () => {
+      btn.onclick = async () => {
+        try {
+          await fetch('/api/auth/logout', { method: 'POST', headers: getAuthHeaders() });
+        } catch (e) { /* ignore network error on logout */ }
         localStorage.removeItem('bistbot_token');
         localStorage.removeItem('bistbot_email');
         showToast('Oturum kapatıldı. Yönlendiriliyorsunuz...', 'info', 1500);
-        setTimeout(() => window.location.href = '/login', 500);
+        setTimeout(() => window.location.href = '/login', 400);
       };
     });
 
@@ -161,6 +164,13 @@
     });
   }
 
+  function handleSessionExpired() {
+    localStorage.removeItem('bistbot_token');
+    localStorage.removeItem('bistbot_email');
+    showToast('Oturum süresi doldu. Yeniden giriş yapın.', 'error', 3000);
+    setTimeout(() => window.location.replace('/login'), 1200);
+  }
+
   function getAuthHeaders(extra) {
     const token = localStorage.getItem('bistbot_token');
     const h = Object.assign({}, extra || {});
@@ -187,6 +197,10 @@
     try {
       const headers = getAuthHeaders();
       const res = await fetch('/api/stats', { headers: headers });
+      if (res.status === 401) {
+        handleSessionExpired();
+        return;
+      }
       if (!res.ok) {
         console.warn(`[bistbot] /api/stats HTTP ${res.status}; static counters kept`);
         return;
@@ -224,6 +238,40 @@
       if (Number.isFinite(winRate) && winRate > 0) {
         setText('macro-win-rate', `%${winRate.toFixed(1)}`);
       }
+
+      // Hydrate Market Breadth (Average RSI, Volume Ratio, Actionable Tickers)
+      const breadth = (data && data.breadth) || {};
+      if (breadth.avg_rsi) setText('macro-avg-rsi', Number(breadth.avg_rsi).toFixed(1));
+      if (breadth.rsi_status) {
+        const rsiEl = document.getElementById('macro-rsi-status');
+        if (rsiEl) rsiEl.innerHTML = `<span class="material-symbols-outlined text-[14px]">trending_up</span> ${escapeHtml(breadth.rsi_status)}`;
+      }
+      if (breadth.vol_ratio) setText('macro-vol-ratio', String(breadth.vol_ratio));
+      if (breadth.actionable_summary) setText('stat-actionable-tickers', String(breadth.actionable_summary));
+
+      // Hydrate Live Benchmarks (XU100, XU030, USD/TRY)
+      const benchmarks = (data && data.benchmarks) || {};
+      const setBench = (valId, chgId, item) => {
+        if (!item) return;
+        const valEl = document.getElementById(valId);
+        const chgEl = document.getElementById(chgId);
+        if (valEl && Number.isFinite(Number(item.val))) {
+          valEl.textContent = valId.includes('usd')
+            ? Number(item.val).toFixed(2)
+            : Number(item.val).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+        if (chgEl && item.chg !== undefined && item.chg !== null) {
+          const chg = Number(item.chg);
+          const pos = chg >= 0;
+          const color = pos ? 'text-primary' : 'text-error';
+          const icon = pos ? 'arrow_drop_up' : 'arrow_drop_down';
+          chgEl.className = `font-metric-value text-metric-value ${color} flex items-center justify-end`;
+          chgEl.innerHTML = `<span class="material-symbols-outlined text-[16px]">${icon}</span> ${pos ? '+' : ''}${chg.toFixed(2)}%`;
+        }
+      };
+      setBench('benchmark-xu100-val', 'benchmark-xu100-chg', benchmarks.XU100);
+      setBench('benchmark-xu030-val', 'benchmark-xu030-chg', benchmarks.XU030);
+      setBench('benchmark-usdtry-val', 'benchmark-usdtry-chg', benchmarks.USDTRY);
     } catch (err) {
       console.warn('[bistbot] /api/stats unreachable; static counters kept', err);
     }
@@ -340,6 +388,10 @@
     try {
       const headers = getAuthHeaders();
       const res = await fetch('/api/signals/history?limit=10', { headers: headers });
+      if (res.status === 401) {
+        handleSessionExpired();
+        return;
+      }
       if (!res.ok) {
         console.warn(`[bistbot] /api/signals/history HTTP ${res.status}; static rows kept`);
         return;
@@ -522,12 +574,16 @@
     try {
       const headers = getAuthHeaders();
       const res = await fetch('/api/signals/history?limit=15', { headers: headers });
+      if (res.status === 401) {
+        handleSessionExpired();
+        return;
+      }
       if (!res.ok) return;
       const data = await res.json();
       const signals = Array.isArray(data.signals) ? data.signals : [];
       if (!signals.length) return;
       container.innerHTML = signals.map(renderSignalCard).join('');
-      // Attach click listeners to update precision view
+      // Attach click listeners to update precision view + live chart
       const cards = container.querySelectorAll('.signal-card');
       cards.forEach(card => {
         card.onclick = function () {
@@ -541,23 +597,234 @@
           bar.className = 'absolute left-0 top-0 bottom-0 w-1.5 bg-primary shadow-[0_0_12px_#4edea3]';
           this.prepend(bar);
 
-          const title = document.getElementById('active-symbol-title');
-          const pVal = document.getElementById('current-price-val');
-          const sVal = document.getElementById('current-score-val');
-          const slVal = document.getElementById('current-stop-val');
-          const tpVal = document.getElementById('current-target-val');
-          if (title) title.textContent = this.dataset.name;
-          if (pVal) pVal.textContent = '₺' + this.dataset.price;
-          if (sVal) sVal.textContent = this.dataset.score;
-          if (slVal) slVal.textContent = '₺' + this.dataset.stop;
-          if (tpVal) tpVal.textContent = '₺' + this.dataset.target;
+          selectSignalCard(this);
         };
       });
-      // Trigger click on first card to populate detail view
+      // Trigger click on first card to populate detail view + chart
       if (cards[0]) cards[0].click();
     } catch (err) {
       console.warn('[bistbot] signals stream hydration failed', err);
     }
+  }
+
+  // -------------------------------------------------------------------------
+  // Signals Detail: instant card values, then live chart via /api/analyze
+  // -------------------------------------------------------------------------
+  let currentSignalTicker = '';
+  let currentSignalFallback = {};
+  let currentSignalTimeframe = '1d';
+
+  function selectSignalCard(card) {
+    const fallback = {
+      name: card.dataset.name || '',
+      price: card.dataset.price || '',
+      score: card.dataset.score || '',
+      stop: card.dataset.stop || '',
+      target: card.dataset.target || ''
+    };
+    const title = document.getElementById('active-symbol-title');
+    const pVal = document.getElementById('current-price-val');
+    const sVal = document.getElementById('current-score-val');
+    const slVal = document.getElementById('current-stop-val');
+    const tpVal = document.getElementById('current-target-val');
+    if (title && fallback.name) title.textContent = fallback.name;
+    if (pVal && Number(fallback.price) > 0) pVal.textContent = '₺' + Number(fallback.price).toFixed(2);
+    if (sVal && fallback.score) sVal.textContent = fallback.score;
+    if (slVal && Number(fallback.stop) > 0) slVal.textContent = '₺' + Number(fallback.stop).toFixed(2);
+    if (tpVal && Number(fallback.target) > 0) tpVal.textContent = '₺' + Number(fallback.target).toFixed(2);
+
+    const ticker = String(fallback.name || card.dataset.symbol || '').replace(/\.IS$/i, '');
+    if (ticker) {
+      currentSignalTicker = ticker;
+      currentSignalFallback = fallback;
+      loadSignalChart(ticker, fallback, currentSignalTimeframe);
+    }
+  }
+
+  async function loadSignalChart(ticker, fallback, interval) {
+    if (ticker) currentSignalTicker = ticker;
+    if (fallback) currentSignalFallback = fallback;
+    if (interval) currentSignalTimeframe = interval;
+    const cleanTicker = String(currentSignalTicker || '').replace(/\.IS$/i, '') + '.IS';
+    try {
+      const url = `/api/analyze/${encodeURIComponent(cleanTicker)}?interval=${encodeURIComponent(currentSignalTimeframe)}`;
+      const res = await fetch(url, {
+        headers: getAuthHeaders()
+      });
+      if (res.status === 401) {
+        handleSessionExpired();
+        return;
+      }
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      if (!data || data.status !== 'ok') throw new Error('bad payload');
+      applySignalDetail(data, currentSignalFallback || {});
+    } catch (err) {
+      console.warn('[bistbot] signal chart load failed for ' + cleanTicker + '; card values kept', err);
+    }
+  }
+
+  function applySignalDetail(data, fallback) {
+    const snap = data.snapshot || {};
+    const sig = data.signal || {};
+    const priceData = Array.isArray(data.price_data) ? data.price_data : [];
+    const ticker = data.ticker || fallback.name || '';
+
+    const numOrNaN = (v) => {
+      const n = Number(String(v ?? '').replace('₺', '').replace('+', ''));
+      return Number.isFinite(n) ? n : NaN;
+    };
+    const positiveOrNaN = (v) => {
+      const n = numOrNaN(v);
+      return n > 0 ? n : NaN;
+    };
+
+    const close = Number(snap.close);
+    const price = Number.isFinite(close) && close > 0 ? close : positiveOrNaN(fallback.price);
+    const scoreRaw = (sig.score !== undefined && sig.score !== null) ? sig.score : String(fallback.score || '').replace('+', '');
+    const score = Math.round(Number(scoreRaw));
+    const stopVal = positiveOrNaN(sig.stop_loss) || positiveOrNaN(fallback.stop);
+    const targetVal = positiveOrNaN(sig.target) || positiveOrNaN(fallback.target);
+
+    const setText = (id, value) => {
+      const el = document.getElementById(id);
+      if (el && value !== undefined && value !== null && value !== '') el.textContent = value;
+    };
+    const pctOf = (val) => {
+      if (!Number.isFinite(val) || !Number.isFinite(price) || price === 0) return null;
+      const p = ((val - price) / price) * 100;
+      return (p > 0 ? '+' : '') + p.toFixed(2) + '%';
+    };
+
+    if (ticker) setText('active-symbol-title', ticker);
+    if (Number.isFinite(price)) setText('current-price-val', '₺' + price.toFixed(2));
+    if (Number.isFinite(score)) setText('current-score-val', (score > 0 ? '+' : '') + score);
+    if (Number.isFinite(stopVal)) setText('current-stop-val', '₺' + stopVal.toFixed(2));
+    if (Number.isFinite(targetVal)) setText('current-target-val', '₺' + targetVal.toFixed(2));
+
+    // % distances relative to close
+    const stopPct = pctOf(stopVal);
+    const targetPct = pctOf(targetVal);
+    if (stopPct) setText('current-stop-pct', stopPct);
+    if (targetPct) setText('current-target-pct', targetPct);
+    setText('current-price-pct', 'Canlı');
+
+    if (Number.isFinite(stopVal) && Number.isFinite(targetVal) && Number.isFinite(price)) {
+      const risk = price - stopVal;
+      const reward = targetVal - price;
+      if (risk > 0 && reward > 0) {
+        setText('current-rr-val', '1 : ' + (reward / risk).toFixed(2) + ' R:R');
+      }
+    }
+
+    // Legend: last SMA values from live bars
+    const lastBar = priceData.length ? priceData[priceData.length - 1] : null;
+    if (lastBar) {
+      const smaFast = Number(lastBar.sma_fast);
+      const smaSlow = Number(lastBar.sma_slow);
+      if (Number.isFinite(smaFast)) setText('signals-sma-fast-label', 'SMA 20 (' + smaFast.toFixed(2) + ')');
+      if (Number.isFinite(smaSlow)) setText('signals-sma-slow-label', 'SMA 50 (' + smaSlow.toFixed(2) + ')');
+    }
+    if (Number.isFinite(targetVal)) {
+      setText('signals-tp-label', 'TP ' + targetVal.toFixed(2));
+      setText('signals-tp-legend', 'Hedef: ₺' + targetVal.toFixed(2));
+    }
+    if (Number.isFinite(stopVal)) {
+      setText('signals-sl-label', 'SL ' + stopVal.toFixed(2));
+      setText('signals-sl-legend', 'Stop: ₺' + stopVal.toFixed(2));
+    }
+
+    renderSignalsChart(priceData, { stop: stopVal, target: targetVal });
+  }
+
+  function renderSignalsChart(priceData, levels) {
+    const svg = document.getElementById('signalsChartSvg');
+    if (!svg || !Array.isArray(priceData) || priceData.length < 5) return;
+    const data = priceData.slice(-30);
+    const highs = data.map(d => Number(d.high)).filter(Number.isFinite);
+    const lows = data.map(d => Number(d.low)).filter(Number.isFinite);
+    if (!highs.length || !lows.length) return;
+
+    let yMin = Math.min(...lows);
+    let yMax = Math.max(...highs);
+    const stop = levels && Number.isFinite(Number(levels.stop)) ? Number(levels.stop) : NaN;
+    const target = levels && Number.isFinite(Number(levels.target)) ? Number(levels.target) : NaN;
+    if (Number.isFinite(stop)) { yMin = Math.min(yMin, stop); yMax = Math.max(yMax, stop); }
+    if (Number.isFinite(target)) { yMin = Math.min(yMin, target); yMax = Math.max(yMax, target); }
+    const padding = (yMax - yMin) * 0.08 || 1.0;
+    yMin = Math.max(0, yMin - padding);
+    yMax = yMax + padding;
+    const range = yMax - yMin || 1;
+
+    // Position TP/SL overlay lines by live price scale
+    const placeLine = (id, value) => {
+      const el = document.getElementById(id);
+      if (el && Number.isFinite(value)) {
+        const pct = Math.min(96, Math.max(3, (1 - (value - yMin) / range) * 100));
+        el.style.top = pct.toFixed(1) + '%';
+      }
+    };
+    placeLine('signals-tp-line', target);
+    placeLine('signals-sl-line', stop);
+
+    const W = 640;
+    const candleTop = 8;
+    const candleBottom = 188;
+    const candleH = candleBottom - candleTop;
+    const volTop = 196;
+    const volBottom = 236;
+    const volH = volBottom - volTop;
+    const getY = (v) => candleBottom - ((v - yMin) / range) * candleH;
+    const stepX = W / data.length;
+    const barW = Math.max(4, Math.min(10, stepX * 0.5));
+    const volumes = data.map(d => Number(d.volume)).filter(v => Number.isFinite(v) && v > 0);
+    const maxVol = volumes.length ? Math.max(...volumes) : 1;
+
+    let html = '<defs><linearGradient id="volGradient" x1="0" x2="0" y1="0" y2="1">' +
+      '<stop offset="0%" stop-color="#4edea3" stop-opacity="0.25"></stop>' +
+      '<stop offset="100%" stop-color="#4edea3" stop-opacity="0.0"></stop></linearGradient></defs>';
+    let fastPts = [];
+    let slowPts = [];
+
+    data.forEach((d, idx) => {
+      const cx = (idx + 0.5) * stepX;
+      const o = Number(d.open);
+      const h = Number(d.high);
+      const l = Number(d.low);
+      const c = Number(d.close);
+      if (![o, h, l, c].every(Number.isFinite)) return;
+      const green = c >= o;
+      const color = green ? '#4edea3' : '#ffb4ab';
+      const yH = getY(h).toFixed(1);
+      const yL = getY(l).toFixed(1);
+      const yO = getY(o);
+      const yC = getY(c);
+      const bodyTop = Math.min(yO, yC).toFixed(1);
+      const bodyH = Math.max(2, Math.abs(yC - yO)).toFixed(1);
+      const x = (cx - barW / 2).toFixed(1);
+      const isLast = idx === data.length - 1;
+      html += '<line x1="' + cx.toFixed(1) + '" x2="' + cx.toFixed(1) + '" y1="' + yH + '" y2="' + yL +
+        '" stroke="' + color + '" stroke-width="' + (isLast ? '2' : '1.5') + '" />';
+      html += '<rect x="' + x + '" y="' + bodyTop + '" width="' + barW.toFixed(1) + '" height="' + bodyH +
+        '" fill="' + color + '"' + (isLast ? ' class="animate-pulse shadow-[0_0_12px_#4edea3]"' : '') + ' />';
+      const vol = Number(d.volume);
+      if (Number.isFinite(vol) && vol > 0) {
+        const vh = Math.max(3, (vol / maxVol) * volH);
+        html += '<rect x="' + x + '" y="' + (volBottom - vh).toFixed(1) + '" width="' + barW.toFixed(1) +
+          '" height="' + vh.toFixed(1) + '" fill="' + color + '" opacity="0.45" />';
+      }
+      if (Number.isFinite(Number(d.sma_fast))) fastPts.push(cx.toFixed(1) + ',' + getY(Number(d.sma_fast)).toFixed(1));
+      if (Number.isFinite(Number(d.sma_slow))) slowPts.push(cx.toFixed(1) + ',' + getY(Number(d.sma_slow)).toFixed(1));
+    });
+
+    let smaHtml = '';
+    if (slowPts.length > 1) {
+      smaHtml += '<path d="M ' + slowPts.join(' L ') + '" fill="none" opacity="0.6" stroke="#dcfdff" stroke-width="2" />';
+    }
+    if (fastPts.length > 1) {
+      smaHtml += '<path d="M ' + fastPts.join(' L ') + '" fill="none" opacity="0.9" stroke="#7bd0ff" stroke-width="2" />';
+    }
+    svg.innerHTML = html + smaHtml;
   }
 
   // -------------------------------------------------------------------------
@@ -609,13 +876,22 @@
 
     // Timeframe buttons (15m, 1H, 4H, Günlük)
     const tfButtons = document.querySelectorAll('div.flex.items-center.bg-surface-container button, .timeframe-btn');
+    const tfMapSignals = {
+      '15m': '15m',
+      '1H': '1h',
+      '4H': '4h',
+      'Günlük': '1d'
+    };
     tfButtons.forEach(btn => {
       btn.onclick = function () {
         tfButtons.forEach(b => {
           b.className = "px-space-xs py-space-3xs text-on-surface-variant hover:text-on-surface font-label-code text-label-code transition-all cursor-pointer";
         });
         this.className = "px-space-xs py-space-3xs bg-surface-container-highest text-primary font-bold font-label-code text-label-code rounded shadow-sm cursor-pointer";
-        showToast(`Grafik periyodu: ${this.innerText.trim()}`, 'info', 1200);
+        const txt = this.innerText.trim();
+        const tf = tfMapSignals[txt] || '1d';
+        showToast(`Grafik periyodu: ${txt} yükleniyor...`, 'info', 1200);
+        loadSignalChart(currentSignalTicker, currentSignalFallback, tf);
       };
     });
 
@@ -693,68 +969,245 @@
   }
 
   // -------------------------------------------------------------------------
+  // Dynamic Candlestick Chart Engine (Analysis Page)
+  // Renders real OHLC candlesticks, EMA lines and grid levels via SVG
+  // -------------------------------------------------------------------------
+  window.renderCandlestickChart = function(priceData) {
+    const svg = document.getElementById('candlestickSvg');
+    if (!svg || !Array.isArray(priceData) || priceData.length < 5) return;
+
+    // Take last 30 bars for a crisp, readable candlestick chart
+    const data = priceData.slice(-30);
+    const highs = data.map(d => Number(d.high)).filter(Number.isFinite);
+    const lows = data.map(d => Number(d.low)).filter(Number.isFinite);
+    if (!highs.length || !lows.length) return;
+
+    const minPrice = Math.min(...lows);
+    const maxPrice = Math.max(...highs);
+    const padding = (maxPrice - minPrice) * 0.08 || 1.0;
+    const yMin = Math.max(0, minPrice - padding);
+    const yMax = maxPrice + padding;
+    const priceRange = yMax - yMin;
+
+    // Update Grid text labels
+    for (let i = 0; i <= 4; i++) {
+      const p = yMin + (priceRange * (i / 4));
+      const elL = document.getElementById(`grid-p${i}`);
+      const elR = document.getElementById(`grid-p${i}-r`);
+      if (elL) elL.textContent = '₺' + p.toFixed(2);
+      if (elR) elR.textContent = p.toFixed(2);
+    }
+
+    // SVG dimensions: 800 x 320
+    const W = 800;
+    const H = 320;
+    const chartBottom = H - 20;
+    const chartTop = 20;
+    const chartH = chartBottom - chartTop;
+
+    const getY = (val) => chartBottom - ((val - yMin) / priceRange) * chartH;
+    const barW = Math.max(6, Math.min(18, (W / data.length) * 0.55));
+    const stepX = W / data.length;
+
+    let barsHtml = '';
+    let emaFastPoints = [];
+    let emaSlowPoints = [];
+
+    data.forEach((d, idx) => {
+      const cx = (idx + 0.5) * stepX;
+      const o = Number(d.open);
+      const h = Number(d.high);
+      const l = Number(d.low);
+      const c = Number(d.close);
+      const isGreen = c >= o;
+      const color = isGreen ? '#4edea3' : '#ffb4ab';
+
+      const yHigh = getY(h);
+      const yLow = getY(l);
+      const yOpen = getY(o);
+      const yClose = getY(c);
+
+      const bodyTop = Math.min(yOpen, yClose);
+      const bodyH = Math.max(2, Math.abs(yClose - yOpen));
+
+      // Wick
+      barsHtml += `<line x1="${cx.toFixed(1)}" x2="${cx.toFixed(1)}" y1="${yHigh.toFixed(1)}" y2="${yLow.toFixed(1)}" stroke="${color}" stroke-width="1.5" />`;
+      // Body
+      barsHtml += `<rect x="${(cx - barW / 2).toFixed(1)}" y="${bodyTop.toFixed(1)}" width="${barW.toFixed(1)}" height="${bodyH.toFixed(1)}" rx="1.5" fill="${color}" />`;
+
+      // EMA points
+      if (Number.isFinite(d.sma_fast)) emaFastPoints.push(`${cx.toFixed(1)},${getY(d.sma_fast).toFixed(1)}`);
+      if (Number.isFinite(d.sma_slow)) emaSlowPoints.push(`${cx.toFixed(1)},${getY(d.sma_slow).toFixed(1)}`);
+    });
+
+    let emaHtml = '';
+    if (emaFastPoints.length > 1) {
+      emaHtml += `<polyline points="${emaFastPoints.join(' ')}" fill="none" stroke="#7bd0ff" stroke-width="2" stroke-linecap="round" />`;
+    }
+    if (emaSlowPoints.length > 1) {
+      emaHtml += `<polyline points="${emaSlowPoints.join(' ')}" fill="none" stroke="#dcfdff" stroke-width="1.5" stroke-dasharray="4,4" stroke-linecap="round" />`;
+    }
+
+    svg.innerHTML = `
+      <defs>
+        <linearGradient id="chartGrad" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stop-color="#4edea3" stop-opacity="0.15" />
+          <stop offset="100%" stop-color="#4edea3" stop-opacity="0.0" />
+        </linearGradient>
+      </defs>
+      ${emaHtml}
+      ${barsHtml}
+    `;
+  };
+
+  let currentActiveAnalysisTicker = 'THYAO';
+  let currentActiveAnalysisTimeframe = '4s';
+
+  window.runAnalysis = async function(ticker, timeframe) {
+    if (ticker) currentActiveAnalysisTicker = String(ticker).replace('.IS', '');
+    if (timeframe) currentActiveAnalysisTimeframe = timeframe;
+    const cleanTicker = currentActiveAnalysisTicker + '.IS';
+    showToast(`${cleanTicker} (${currentActiveAnalysisTimeframe.toUpperCase()}) analizi çekiliyor...`, 'info', 1500);
+
+    // Active chip visual toggle
+    document.querySelectorAll('.ticker-chip').forEach(c => {
+      if (c.getAttribute('data-ticker') === cleanTicker.replace('.IS', '')) {
+        c.className = 'ticker-chip px-space-sm py-1 rounded bg-surface-container-high text-primary font-label-code text-label-code hover:bg-primary hover:text-on-primary transition-all cursor-pointer font-bold shadow-sm';
+      } else {
+        c.className = 'ticker-chip px-space-sm py-1 rounded bg-surface-container text-on-surface-variant font-label-code text-label-code hover:bg-surface-container-high transition-all cursor-pointer';
+      }
+    });
+    
+    try {
+      const headers = getAuthHeaders({ 'Content-Type': 'application/json' });
+      const url = `/api/analyze/${cleanTicker}?interval=${encodeURIComponent(currentActiveAnalysisTimeframe)}`;
+      const res = await fetch(url, { headers: headers });
+      const data = await res.json();
+
+      if (res.ok && data.status === 'ok') {
+        const snap = data.snapshot || {};
+        const sig = data.signal || {};
+        const priceData = Array.isArray(data.price_data) ? data.price_data : [];
+        
+        // Update Header & Avatar
+        const cleanName = cleanTicker.replace('.IS', '');
+        const avatar = document.getElementById('asset-avatar');
+        const title = document.getElementById('asset-ticker-title');
+        const compName = document.getElementById('asset-company-name');
+        if (avatar) avatar.textContent = cleanName.slice(0, 4);
+        if (title) title.textContent = cleanTicker;
+        if (compName && data.name) compName.textContent = data.name;
+
+        // Update Chart Subheader Title
+        const chartTitle = document.getElementById('asset-chart-title') || document.querySelector('span.font-label-code.text-label-code.text-on-surface.font-semibold');
+        if (chartTitle) chartTitle.innerHTML = `<span class="w-2 h-2 rounded-full bg-primary"></span> ${cleanName} [${currentActiveAnalysisTimeframe.toUpperCase()}]`;
+
+        // Update Price & Range
+        const closePrice = Number(snap.close || (priceData[priceData.length - 1] && priceData[priceData.length - 1].close));
+        const pEl = document.getElementById('asset-current-price');
+        if (pEl && Number.isFinite(closePrice)) pEl.textContent = '₺' + closePrice.toFixed(2);
+
+        const low = Number(snap.low || (priceData[priceData.length - 1] && priceData[priceData.length - 1].low));
+        const high = Number(snap.high || (priceData[priceData.length - 1] && priceData[priceData.length - 1].high));
+        const rangeEl = document.getElementById('asset-day-range');
+        if (rangeEl && Number.isFinite(low) && Number.isFinite(high)) {
+          rangeEl.textContent = `₺${low.toFixed(2)} - ₺${high.toFixed(2)}`;
+        }
+
+        // Update Signal Badge & Metrics (API uses type/target keys)
+        const sigText = document.getElementById('asset-signal-text');
+        const algoScore = document.getElementById('asset-algo-score');
+        const stopLoss = document.getElementById('asset-stop-loss');
+        const targetPrice = document.getElementById('asset-target-price');
+        const rsiVal = document.getElementById('asset-rsi-val');
+        const sigType = sig.signal_type ?? sig.type;
+        const sigTarget = sig.target_price ?? sig.target;
+
+        if (sigText && sigType) sigText.textContent = String(sigType).toUpperCase();
+        if (algoScore && sig.score !== undefined) {
+          algoScore.innerHTML = `${Math.round(sig.score)}<span class="font-body-sm text-body-sm text-outline">/100</span>`;
+        }
+        if (stopLoss && Number.isFinite(Number(sig.stop_loss))) {
+          stopLoss.textContent = '₺' + Number(sig.stop_loss).toFixed(2);
+        }
+        if (targetPrice && Number.isFinite(Number(sigTarget))) {
+          targetPrice.textContent = '₺' + Number(sigTarget).toFixed(2);
+        }
+        if (rsiVal && Number.isFinite(Number(snap.rsi))) {
+          rsiVal.textContent = Number(snap.rsi).toFixed(1);
+        }
+
+        // Render Real Candlestick Chart!
+        window.renderCandlestickChart(priceData);
+
+        showToast(`${cleanTicker} analiz verileri ve mum grafiği başarıyla güncellendi.`, 'success', 3000);
+      } else {
+        showToast(`${cleanTicker} analiz verisi yüklendi.`, 'success', 2500);
+      }
+    } catch (e) {
+      showToast(`${cleanTicker} analiz verisi hazır.`, 'success', 2500);
+    }
+  };
+
+  // -------------------------------------------------------------------------
   // Analysis Page Interactivity
   // -------------------------------------------------------------------------
   function initAnalysis() {
-    // Quick symbol chips: THYAO, EREGL, ASELS, BIMAS, TUPRS, KCHOL
-    const quickChips = document.querySelectorAll('button');
-    quickChips.forEach(b => {
-      const txt = b.innerText.trim().toUpperCase();
-      if (['THYAO', 'EREGL', 'ASELS', 'BIMAS', 'TUPRS', 'KCHOL'].includes(txt)) {
-        b.onclick = () => runAnalysis(txt);
-      }
-    });
+    // Ticker search input and trigger button
+    const analyzeBtn = document.getElementById('asset-analyze-btn') ||
+                       Array.from(document.querySelectorAll('button')).find(b => b.textContent.includes('Varlığı Analiz Et'));
+    const searchInput = document.getElementById('asset-search-input') ||
+                        document.querySelector('input[placeholder*="Hisse kodu"]') ||
+                        document.querySelector('input[type="text"]');
 
-    // "Varlığı Analiz Et" button
-    const analyzeBtn = Array.from(document.querySelectorAll('button')).find(b => b.textContent.includes('Varlığı Analiz Et'));
+    function triggerSearch() {
+      const raw = (searchInput?.value || 'THYAO').trim();
+      const match = raw.match(/^[A-Za-z0-9]+/);
+      const sym = match ? match[0].toUpperCase() : 'THYAO';
+      window.runAnalysis(sym);
+    }
+
     if (analyzeBtn) {
-      analyzeBtn.onclick = () => {
-        const select = document.querySelector('select') || document.querySelector('input[placeholder*="Ara"]');
-        const sym = select ? (select.value || 'THYAO') : 'THYAO';
-        runAnalysis(sym.replace('.IS', ''));
+      analyzeBtn.onclick = (e) => {
+        e.preventDefault();
+        triggerSearch();
+      };
+    }
+    if (searchInput) {
+      searchInput.onkeydown = (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          triggerSearch();
+        }
       };
     }
 
-    async function runAnalysis(ticker) {
-      const cleanTicker = ticker.replace('.IS', '') + '.IS';
-      showToast(`${cleanTicker} derinlemesine analizi çekiliyor...`, 'info', 2000);
-      
-      try {
-        const headers = getAuthHeaders({ 'Content-Type': 'application/json' });
-        const res = await fetch(`/api/analyze/${cleanTicker}`, { headers: headers });
-        const data = await res.json();
-
-        if (res.ok && data.status === 'ok') {
-          const snap = data.snapshot || {};
-          const sig = data.signal || {};
-          
-          // Update hero header title
-          const titleEl = document.querySelector('h1.font-headline-lg') || document.querySelector('h1');
-          if (titleEl) titleEl.innerText = cleanTicker;
-
-          const closePrice = Number(snap.close || (data.price_data && data.price_data.close));
-          if (Number.isFinite(closePrice)) {
-            const priceEls = document.querySelectorAll('.font-metric-display');
-            if (priceEls[0]) priceEls[0].textContent = '₺' + closePrice.toFixed(2);
-          }
-          showToast(`${cleanTicker} analiz verileri başarıyla güncellendi. Skor: ${sig.score || '+28'}`, 'success', 3500);
-        } else {
-          showToast(`${cleanTicker} analiz verisi yüklendi.`, 'success', 2500);
-        }
-      } catch (e) {
-        showToast(`${cleanTicker} analiz verisi hazır.`, 'success', 2500);
-      }
-    }
-
-    // Timeframe selector
-    const tfBtns = document.querySelectorAll('div.flex.items-center.bg-surface-container-high button');
+    // Timeframe selector (15D, 1S, 4S, 1G, 1H)
+    const tfContainer = document.querySelector('div.flex.items-center.gap-space-3xs.bg-surface-container-highest') ||
+                        document.querySelector('div.flex.items-center.bg-surface-container-high');
+    const tfBtns = tfContainer ? tfContainer.querySelectorAll('button') : document.querySelectorAll('.timeframe-btn');
+    const tfMapAnalysis = {
+      '15D': '15m',
+      '15d': '15m',
+      '1S': '1h',
+      '1s': '1h',
+      '4S': '4h',
+      '4s': '4h',
+      '1G': '1d',
+      '1g': '1d',
+      '1H': '1wk',
+      '1h': '1wk'
+    };
     tfBtns.forEach(btn => {
       btn.onclick = function () {
         tfBtns.forEach(b => {
-          b.className = "px-space-xs py-space-3xs rounded text-on-surface-variant hover:text-on-surface font-label-code text-label-code transition-all";
+          b.className = "px-space-sm py-1.5 rounded font-label-code text-label-code text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors";
         });
-        this.className = "px-space-xs py-space-3xs rounded bg-surface-container-lowest text-primary font-bold font-label-code text-label-code shadow-sm";
-        showToast(`Zaman aralığı: ${this.innerText.trim()}`, 'info', 1200);
+        this.className = "px-space-sm py-1.5 rounded font-label-code text-label-code bg-surface-container-high text-primary font-semibold shadow-sm";
+        const txt = this.innerText.trim();
+        const tf = tfMapAnalysis[txt] || '4h';
+        showToast(`Grafik periyodu: ${txt} yükleniyor...`, 'info', 1200);
+        window.runAnalysis(currentActiveAnalysisTicker, tf);
       };
     });
 
@@ -780,6 +1233,9 @@
         showToast(`${sym} izleme listenize ve fiyat kırılım alarmlarına başarıyla eklendi.`, 'success', 3000);
       };
     }
+
+    // Auto-load live analysis for the default ticker on page load
+    window.runAnalysis('THYAO');
   }
 
   // -------------------------------------------------------------------------
@@ -791,6 +1247,56 @@
     // a real settings backend exists — no handlers are attached on purpose.
     // Only "Şimdi Tara" (real /api/scan call) and the token toggle below
     // are wired.
+
+    // Slider-to-input and input-to-slider two-way synchronization
+    const pairs = [
+      ['scan-interval-slider', 'scan-interval-input', ''],
+      ['min-score-slider', 'min-score-input', ''],
+      ['rsi-min-slider', 'rsi-min-val', ' RSI'],
+      ['rsi-max-slider', 'rsi-max-val', ' RSI'],
+      ['sma-fast-slider', 'sma-fast-val', ' Gün'],
+      ['sma-slow-slider', 'sma-slow-val', ' Gün'],
+      ['ema-fast-slider', 'ema-fast-val', ' Gün'],
+      ['ema-slow-slider', 'ema-slow-val', ' Gün'],
+      ['vol-ratio-slider', 'vol-ratio-val', 'x'],
+      ['adx-slider', 'adx-val', ' ADX']
+    ];
+
+    pairs.forEach(([sliderId, targetId, suffix]) => {
+      const slider = document.getElementById(sliderId);
+      const target = document.getElementById(targetId);
+      if (!slider || !target) return;
+
+      slider.addEventListener('input', (e) => {
+        const val = e.target.value;
+        if (target.tagName === 'INPUT') {
+          target.value = val;
+        } else {
+          target.textContent = (sliderId === 'vol-ratio-slider' ? Number(val).toFixed(2) : val) + suffix;
+        }
+      });
+
+      if (target.tagName === 'INPUT') {
+        target.addEventListener('input', (e) => {
+          slider.value = e.target.value;
+        });
+      }
+    });
+
+    // Strategy preset pills (Muhafazakar, Dengeli, Agresif)
+    const presetPills = document.querySelectorAll('.preset-pill');
+    presetPills.forEach(pill => {
+      pill.onclick = function () {
+        presetPills.forEach(p => {
+          p.classList.remove('active', 'text-primary', 'bg-surface-container-high', 'shadow-sm');
+          p.classList.add('text-on-surface-variant');
+        });
+        this.classList.add('active', 'text-primary', 'bg-surface-container-high', 'shadow-sm');
+        this.classList.remove('text-on-surface-variant');
+        const name = this.innerText.trim();
+        showToast(`Strateji profili seçildi: ${name}`, 'info', 1500);
+      };
+    });
 
     // "Şimdi Tara" button
     const scanNowBtn = Array.from(document.querySelectorAll('button')).find(b => b.textContent.includes('Şimdi Tara'));
@@ -818,21 +1324,6 @@
         }
       };
     }
-
-    // Toggle token visibility
-    const toggleTokenBtn = document.getElementById('toggle-token-btn');
-    const tokenInput = document.querySelector('input[type="password"]');
-    if (toggleTokenBtn && tokenInput) {
-      toggleTokenBtn.onclick = () => {
-        if (tokenInput.type === 'password') {
-          tokenInput.type = 'text';
-          toggleTokenBtn.innerHTML = '<span class="material-symbols-outlined text-[16px]">visibility_off</span><span>Gizle</span>';
-        } else {
-          tokenInput.type = 'password';
-          toggleTokenBtn.innerHTML = '<span class="material-symbols-outlined text-[16px]">visibility</span><span>Göster</span>';
-        }
-      };
-    }
   }
 
   // -------------------------------------------------------------------------
@@ -844,14 +1335,18 @@
     fixBottomNav();
 
     const path = window.location.pathname;
-    if (path.includes('dashboard')) {
-      await initDashboard();
-    } else if (path.includes('signals')) {
-      await initSignals();
-    } else if (path.includes('analysis')) {
-      initAnalysis();
-    } else if (path.includes('settings')) {
-      initSettings();
+    try {
+      if (path.includes('dashboard')) {
+        await initDashboard();
+      } else if (path.includes('signals')) {
+        await initSignals();
+      } else if (path.includes('analysis')) {
+        initAnalysis();
+      } else if (path.includes('settings')) {
+        initSettings();
+      }
+    } catch (routeErr) {
+      console.error('[bistbot] route init error:', routeErr);
     }
   });
 
