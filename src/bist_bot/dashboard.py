@@ -564,6 +564,23 @@ def create_dashboard_app(
                     _benchmark_cache["data"].update(res)
             except Exception:
                 pass
+            try:
+                # Pre-warm history cache for the most-viewed tickers so the
+                # first /api/analyze click never pays a cold-fetch (~600ms).
+                # Respects fetcher TTLs: no-ops when cache entries are fresh.
+                fetcher = get_fetcher()
+                for sym, period, interval in (
+                    ("THYAO.IS", "6mo", "1d"),
+                    ("ASELS.IS", "6mo", "1d"),
+                    ("KCHOL.IS", "6mo", "1d"),
+                    ("THYAO.IS", "3mo", "60m"),
+                ):
+                    try:
+                        fetcher.fetch_single(sym, period=period, interval=interval)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
             finally:
                 _benchmark_updating.clear()
 
