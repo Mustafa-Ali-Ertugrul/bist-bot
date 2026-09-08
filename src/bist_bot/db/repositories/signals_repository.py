@@ -5,7 +5,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from typing import Any, cast
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 
 from bist_bot.db.database import DatabaseManager, ScanLogRecord, SignalRecord
 from bist_bot.strategy.signal_models import Signal, SignalType
@@ -347,35 +347,24 @@ class SignalsRepository:
 
     def get_performance_stats(self) -> dict[str, Any]:
         def _read(session):
-            total = session.scalar(select(func.count()).select_from(SignalRecord)) or 0
-            completed = (
-                session.scalar(
-                    select(func.count())
-                    .select_from(SignalRecord)
-                    .where(SignalRecord.outcome != "PENDING")
-                )
-                or 0
-            )
-            profitable = (
-                session.scalar(
-                    select(func.count())
-                    .select_from(SignalRecord)
-                    .where(SignalRecord.profit_pct > 0)
-                )
-                or 0
-            )
-            avg_profit = session.scalar(
-                select(func.avg(SignalRecord.profit_pct)).where(
-                    SignalRecord.profit_pct.is_not(None)
-                )
-            )
-            return total, completed, profitable, avg_profit
+            # Single conditional-aggregation query instead of 4 full-table
+            # scans (total / completed / profitable / avg in one round-trip).
+            return session.execute(
+                select(
+                    func.count(),
+                    func.sum(case((SignalRecord.outcome != "PENDING", 1), else_=0)),
+                    func.sum(case((SignalRecord.profit_pct > 0, 1), else_=0)),
+                    func.avg(SignalRecord.profit_pct),
+                ).select_from(SignalRecord)
+            ).one()
 
         total, completed, profitable, avg_profit = self.manager.run_session(_read, read_only=True)
+        completed = int(completed or 0)
+        profitable = int(profitable or 0)
         return {
-            "total_signals": int(total),
-            "completed": int(completed),
-            "profitable": int(profitable),
+            "total_signals": int(total or 0),
+            "completed": completed,
+            "profitable": profitable,
             "win_rate": round(profitable / completed * 100, 1) if completed > 0 else 0,
             "avg_profit_pct": round(float(avg_profit), 2) if avg_profit is not None else 0,
         }
