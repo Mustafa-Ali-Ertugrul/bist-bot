@@ -690,6 +690,28 @@ def create_dashboard_app(
             "font-src 'self' data: https://fonts.gstatic.com; "
             "form-action 'self'; frame-ancestors 'none'"
         )
+
+        if request.path.startswith("/static/"):
+            response.headers["Cache-Control"] = "public, max-age=86400, stale-while-revalidate=3600"
+
+        # Transparent Gzip compression for dynamic API JSON and template responses >= 512B
+        accept_enc = request.headers.get("Accept-Encoding", "").lower()
+        if (
+            "gzip" in accept_enc
+            and 200 <= response.status_code < 300
+            and not response.direct_passthrough
+            and "Content-Encoding" not in response.headers
+        ):
+            c_type = response.headers.get("Content-Type", "").lower()
+            if any(ct in c_type for ct in ("text/", "application/json", "application/javascript", "image/svg+xml")):
+                body_bytes = response.get_data()
+                if len(body_bytes) >= 512:
+                    import gzip
+                    compressed = gzip.compress(body_bytes, compresslevel=6)
+                    response.set_data(compressed)
+                    response.headers["Content-Encoding"] = "gzip"
+                    response.headers["Content-Length"] = str(len(compressed))
+
         return response
 
     @app.errorhandler(400)
