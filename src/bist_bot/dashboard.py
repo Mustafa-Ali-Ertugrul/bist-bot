@@ -1628,7 +1628,20 @@ def create_dashboard_app(
         raw_limit = request.args.get("limit", 50, type=int)
         limit = max(1, min(raw_limit if raw_limit is not None else 50, 200))
         ticker = request.args.get("ticker")
+        compact = _coerce_bool(request.args.get("compact"))
         signals = get_db().get_recent_signals(limit=limit, ticker=ticker)
+        if compact:
+            # UI renders only reasons[0]; conditions are never read client-side.
+            # Strip them to cut ~70% of payload (opt-in, default unchanged).
+            trimmed = []
+            for sig in signals:
+                s = dict(sig)
+                s.pop("conditions", None)
+                reasons = s.get("reasons")
+                if isinstance(reasons, list):
+                    s["reasons"] = reasons[:1]
+                trimmed.append(s)
+            signals = trimmed
         return jsonify({"status": "ok", "signals": signals})
 
     @app.route("/api/stats")

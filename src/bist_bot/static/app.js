@@ -387,7 +387,7 @@
     if (!tbody) return;
     try {
       const headers = getAuthHeaders();
-      const res = await fetch('/api/signals/history?limit=10', { headers: headers });
+      const res = await fetch('/api/signals/history?limit=10&compact=1', { headers: headers });
       if (res.status === 401) {
         handleSessionExpired();
         return;
@@ -573,7 +573,7 @@
     if (!container) return;
     try {
       const headers = getAuthHeaders();
-      const res = await fetch('/api/signals/history?limit=15', { headers: headers });
+      const res = await fetch('/api/signals/history?limit=15&compact=1', { headers: headers });
       if (res.status === 401) {
         handleSessionExpired();
         return;
