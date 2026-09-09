@@ -146,20 +146,17 @@ class LedgerRepository:
     def get_closed(
         self, kind: str | None = None, since: datetime | None = None
     ) -> list[TradeLedgerEntry]:
-        entries = self._query(status=STATUS_CLOSED, kind=kind)
-        if since is not None:
-            entries = [
-                entry
-                for entry in entries
-                if entry.exit_time is not None and entry.exit_time >= since
-            ]
-        return entries
+        return self._query(status=STATUS_CLOSED, kind=kind, since=since)
 
-    def _query(self, *, status: str, kind: str | None) -> list[TradeLedgerEntry]:
+    def _query(
+        self, *, status: str, kind: str | None, since: datetime | None = None
+    ) -> list[TradeLedgerEntry]:
         def _read(session):
             stmt = select(TradeLedgerRecord).where(TradeLedgerRecord.status == status)
             if kind is not None:
                 stmt = stmt.where(TradeLedgerRecord.kind == kind)
+            if since is not None:
+                stmt = stmt.where(TradeLedgerRecord.exit_time >= since)
             return session.scalars(stmt.order_by(TradeLedgerRecord.id.asc())).all()
 
         rows = self.manager.run_session(_read, read_only=True)

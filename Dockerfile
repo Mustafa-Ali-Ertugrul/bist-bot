@@ -33,7 +33,7 @@ ENV PYTHONPATH=/app/src
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 # Do not set PORT globally: settings prefer PORT over FLASK_PORT (Cloud Run).
-# API compose sets PORT/FLASK_PORT=5000; Streamlit CMD sets --server.port.
+# API compose sets PORT/FLASK_PORT=5000; gunicorn binds $PORT.
 ENV FLASK_PORT=5000
 
 RUN apt-get update \
@@ -53,10 +53,10 @@ COPY --chown=appuser:appuser main.py dashboard.py streamlit_app.py ./
 
 USER appuser
 
-EXPOSE 5000 8501
+EXPOSE 5000
 
-# Default: Streamlit UI (Cloud Run / generic). Override in compose for API/worker.
+# Default: Flask API + native Stitch UI (Cloud Run / generic). Override in compose for worker.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
-    CMD curl -fsS "http://127.0.0.1:${PORT}/_stcore/health" || exit 1
+    CMD curl -fsS "http://127.0.0.1:${PORT:-5000}/livez" || exit 1
 
-CMD ["sh", "-c", "streamlit run streamlit_app.py --server.port=${PORT:-8501} --server.address=0.0.0.0"]
+CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-5000} --workers 1 --threads 8 --timeout 330 --graceful-timeout 30 bist_bot.wsgi:app"]

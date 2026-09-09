@@ -1,10 +1,16 @@
-import runpy
-import sys
-from pathlib import Path
+"""Streamlit deprecation placeholder.
 
-SRC_DIR = Path(__file__).resolve().parent / "src"
-if str(SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(SRC_DIR))
+The legacy Streamlit web UI has been retired in favor of the pixel-exact
+Stitch UI served natively on the Flask API dashboard (port 5000).
+Access the web console at: http://localhost:5000/ui/dashboard
+"""
+
+import sys
 
 if __name__ == "__main__":
-    runpy.run_module("bist_bot.streamlit_app", run_name="__main__")
+    print(
+        "INFO: Legacy Streamlit UI is deprecated and retired.\n"
+        "Please use the new Stitch UI at http://localhost:5000/ui/dashboard\n"
+        "Start the application with: python dashboard.py"
+    )
+    sys.exit(0)

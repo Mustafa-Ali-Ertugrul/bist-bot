@@ -15,6 +15,7 @@ Readiness logic:
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
 
@@ -37,8 +38,6 @@ class WorkerHealthServer:
 
     # -- readiness -----------------------------------------------------
     def readiness(self) -> tuple[int, dict]:
-        from datetime import datetime
-
         now = datetime.now(TR)
         market_open = is_bist_open(now)
         last = getattr(self.scheduler, "_last_scan_success_at", None)

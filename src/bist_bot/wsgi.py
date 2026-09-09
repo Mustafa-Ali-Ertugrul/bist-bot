@@ -7,6 +7,14 @@ import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 
+# Hardening: Suppress Gunicorn server banner fingerprinting
+try:
+    import gunicorn.http.wsgi  # type: ignore[import-not-found]
+
+    gunicorn.http.wsgi.SERVER = "BistBot"
+except (ImportError, AttributeError):
+    pass
+
 from flask import Flask, jsonify
 
 from bist_bot.app_logging import get_logger

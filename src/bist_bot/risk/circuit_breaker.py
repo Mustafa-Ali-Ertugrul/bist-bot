@@ -20,10 +20,13 @@ from __future__ import annotations
 import threading
 import time
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from enum import StrEnum
 from typing import Any
 
 from bist_bot.app_logging import get_logger
+
+_TR = timezone(timedelta(hours=3))
 
 logger = get_logger(__name__, component="circuit_breaker")
 
@@ -322,7 +325,4 @@ class CircuitBreaker:
 
     @staticmethod
     def _today() -> str:
-        from datetime import datetime, timedelta, timezone
-
-        tr = timezone(timedelta(hours=3))
-        return datetime.now(tr).strftime("%Y-%m-%d")
+        return datetime.now(_TR).strftime("%Y-%m-%d")

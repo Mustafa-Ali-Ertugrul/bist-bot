@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import json
 import logging
+import re
 import sys
 from contextvars import ContextVar
 from datetime import UTC, datetime
@@ -27,13 +28,24 @@ _SENSITIVE_KEYS = {
     "key",
     "otp",
     "credential",
+    "cookie",
+    "session",
+    "private",
+    "cert",
+    "webhook",
 }
+
+_JWT_PATTERN_RE = re.compile(r"^[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}$")
 
 
 def _redact_value(key: str, val: Any) -> Any:
     key_lower = str(key).lower()
     if any(s in key_lower for s in _SENSITIVE_KEYS):
         return "[REDACTED]"
+    if isinstance(val, str):
+        val_trimmed = val.strip()
+        if val_trimmed.startswith("Bearer eyJ") or _JWT_PATTERN_RE.match(val_trimmed):
+            return "[REDACTED_TOKEN]"
     if isinstance(val, dict):
         return {k: _redact_value(k, v) for k, v in val.items()}
     if isinstance(val, list):

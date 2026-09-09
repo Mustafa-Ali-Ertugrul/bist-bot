@@ -46,10 +46,21 @@ def render_signal_card(signal, df_data=None, chart_factory=None) -> None:
         sorted(breakdown.items(), key=lambda kv: abs(kv[1]), reverse=True)[:3] if breakdown else []
     )
     breakdown_html = ""
+    scale = max((abs(value) for _, value in top_contributors), default=0.0)
     for name, value in top_contributors:
         arrow = "▲" if value >= 0 else "▼"
         sign = "+" if value >= 0 else ""
-        breakdown_html += f"<div class='bb-list-row'><div><div class='bb-label'>{html.escape(name.title())}</div><div style='color:var(--bb-text-muted);font-size:13px;'>{arrow} {sign}{value:.0f}</div></div></div>"
+        pct = (abs(value) / scale * 100.0) if scale > 0 else 0.0
+        color = "#4de2bf" if value >= 0 else "#ff8f8f"
+        breakdown_html += (
+            f"<div style='margin-bottom:10px;'><div style='display:flex;justify-content:space-between;gap:8px;'>"
+            f"<div class='bb-label'>{html.escape(name.title())}</div>"
+            f"<div class='bb-note-strong' style='color:{color};'>{arrow} {sign}{value:.0f}</div>"
+            "</div>"
+            "<div class='bb-meter' style='margin-top:6px;'>"
+            f"<div class='bb-meter-fill' style='width:{pct:.0f}%;background:{color};'></div>"
+            "</div></div>"
+        )
 
     content = f"""
     <div style='display:grid;gap:16px;'>

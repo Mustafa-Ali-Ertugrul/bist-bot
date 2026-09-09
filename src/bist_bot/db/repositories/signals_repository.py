@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, date, datetime, time, timedelta
+from collections.abc import Sequence
+from datetime import UTC, date, datetime, time, timedelta, tzinfo
 from typing import Any, cast
-from zoneinfo import ZoneInfo
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 
 from bist_bot.db.database import DatabaseManager, ScanLogRecord, SignalRecord
+from bist_bot.market_calendar import TR
 from bist_bot.strategy.signal_models import Signal, SignalType
 
 
@@ -140,6 +141,51 @@ class SignalsRepository:
 
         self.manager.run_session(_write)
 
+    def save_signals(self, signals: Sequence[Signal]) -> None:
+        """Batch-insert multiple signals in a single database transaction/checkout."""
+        if not signals:
+            return
+
+        def _write(session):
+            for signal in signals:
+                created_at = signal.timestamp
+                existing = session.scalar(
+                    select(SignalRecord)
+                    .where(
+                        SignalRecord.ticker == signal.ticker,
+                        SignalRecord.signal_type == signal.signal_type.value,
+                        SignalRecord.timestamp == created_at,
+                    )
+                    .limit(1)
+                )
+                if existing is not None:
+                    signal.record_id = int(existing.id)
+                    continue
+                rec = SignalRecord(
+                    timestamp=created_at,
+                    created_at=created_at,
+                    ticker=signal.ticker,
+                    signal_type=signal.signal_type.value,
+                    score=float(signal.score),
+                    price=float(signal.price),
+                    stop_loss=float(signal.stop_loss),
+                    target_price=float(signal.target_price),
+                    position_size=int(signal.position_size)
+                    if signal.position_size is not None
+                    else None,
+                    confidence=signal.confidence,
+                    reasons=" | ".join(signal.reasons),
+                    conditions=_serialize_reasons(signal.reasons),
+                    expires_at=signal.expires_at,
+                    score_breakdown=_serialize_breakdown(signal.score_breakdown),
+                )
+                session.add(rec)
+                session.flush()
+                signal.record_id = int(rec.id)
+            return None
+
+        self.manager.run_session(_write)
+
     def get_signals(self, limit: int = 50, ticker: str | None = None) -> list[dict[str, Any]]:
         def _read(session):
             statement = select(SignalRecord)
@@ -156,7 +202,7 @@ class SignalsRepository:
     def get_signals_for_day(
         self,
         day: date,
-        tz: ZoneInfo = ZoneInfo("Europe/Istanbul"),
+        tz: tzinfo = TR,
     ) -> list[dict[str, Any]]:
         """Return signals generated on the given local day (half-open interval [start, end) in UTC)."""
         start_local = datetime.combine(day, time.min, tzinfo=tz)
@@ -182,7 +228,7 @@ class SignalsRepository:
         self,
         signal_types: list[str],
         day: date,
-        tz: ZoneInfo = ZoneInfo("Europe/Istanbul"),
+        tz: tzinfo = TR,
     ) -> set[str]:
         """Return the set of unique tickers that already produced a signal of any
         listed ``signal_types`` on the given local day. Used for per-ticker dedup
@@ -266,14 +312,12 @@ class SignalsRepository:
         timestamp: str | None = None,
     ) -> bool:
         def _read(session) -> bool:
-            statement = (
-                select(func.count()).select_from(SignalRecord).where(SignalRecord.ticker == ticker)
-            )
+            inner = select(1).select_from(SignalRecord).where(SignalRecord.ticker == ticker)
             if signal_type:
-                statement = statement.where(SignalRecord.signal_type == signal_type)
+                inner = inner.where(SignalRecord.signal_type == signal_type)
             if timestamp:
-                statement = statement.where(SignalRecord.timestamp == timestamp)
-            return bool(session.scalar(statement))
+                inner = inner.where(SignalRecord.timestamp == timestamp)
+            return bool(session.scalar(select(inner.exists())))
 
         return cast(bool, self.manager.run_session(_read, read_only=True))
 
@@ -347,38 +391,67 @@ class SignalsRepository:
 
     def get_performance_stats(self) -> dict[str, Any]:
         def _read(session):
-            total = session.scalar(select(func.count()).select_from(SignalRecord)) or 0
-            completed = (
-                session.scalar(
-                    select(func.count())
-                    .select_from(SignalRecord)
-                    .where(SignalRecord.outcome != "PENDING")
-                )
-                or 0
-            )
-            profitable = (
-                session.scalar(
-                    select(func.count())
-                    .select_from(SignalRecord)
-                    .where(SignalRecord.profit_pct > 0)
-                )
-                or 0
-            )
-            avg_profit = session.scalar(
-                select(func.avg(SignalRecord.profit_pct)).where(
-                    SignalRecord.profit_pct.is_not(None)
-                )
-            )
-            return total, completed, profitable, avg_profit
+            # Single conditional-aggregation query instead of 4 full-table
+            # scans (total / completed / profitable / avg in one round-trip).
+            return session.execute(
+                select(
+                    func.count(),
+                    func.sum(case((SignalRecord.outcome != "PENDING", 1), else_=0)),
+                    func.sum(case((SignalRecord.profit_pct > 0, 1), else_=0)),
+                    func.avg(SignalRecord.profit_pct),
+                ).select_from(SignalRecord)
+            ).one()
 
         total, completed, profitable, avg_profit = self.manager.run_session(_read, read_only=True)
+        completed = int(completed or 0)
+        profitable = int(profitable or 0)
         return {
-            "total_signals": int(total),
-            "completed": int(completed),
-            "profitable": int(profitable),
+            "total_signals": int(total or 0),
+            "completed": completed,
+            "profitable": profitable,
             "win_rate": round(profitable / completed * 100, 1) if completed > 0 else 0,
             "avg_profit_pct": round(float(avg_profit), 2) if avg_profit is not None else 0,
         }
+
+    def get_dashboard_stats_bundle(
+        self, recent_limit: int = 40
+    ) -> tuple[dict[str, Any], dict[str, Any] | None, list[dict[str, Any]]]:
+        """Fetch performance stats, latest scan log, and recent signals in a single
+        session/connection checkout to reduce latency and connection pool pressure."""
+
+        def _read(session):
+            stats_row = session.execute(
+                select(
+                    func.count(),
+                    func.sum(case((SignalRecord.outcome != "PENDING", 1), else_=0)),
+                    func.sum(case((SignalRecord.profit_pct > 0, 1), else_=0)),
+                    func.avg(SignalRecord.profit_pct),
+                ).select_from(SignalRecord)
+            ).one()
+            scan_row = session.scalar(
+                select(ScanLogRecord).order_by(ScanLogRecord.timestamp.desc()).limit(1)
+            )
+            sig_rows = session.scalars(
+                select(SignalRecord)
+                .order_by(SignalRecord.timestamp.desc(), SignalRecord.id.desc())
+                .limit(recent_limit)
+            ).all()
+            return stats_row, scan_row, sig_rows
+
+        stats_row, scan_row, sig_rows = self.manager.run_session(_read, read_only=True)
+        total, completed, profitable, avg_profit = stats_row
+        completed = int(completed or 0)
+        profitable = int(profitable or 0)
+        perf_stats = {
+            "total_signals": int(total or 0),
+            "completed": completed,
+            "profitable": profitable,
+            "win_rate": round(profitable / completed * 100, 1) if completed > 0 else 0,
+            "avg_profit_pct": round(float(avg_profit), 2) if avg_profit is not None else 0,
+        }
+        latest_scan = self._scan_log_to_dict(scan_row) if scan_row else None
+        recent_signals = [self._signal_to_dict(r) for r in sig_rows]
+        return perf_stats, latest_scan, recent_signals
 
     def get_latest_scan_log(self) -> dict[str, Any] | None:
         row = self.manager.run_session(
@@ -404,7 +477,7 @@ class SignalsRepository:
     def get_scan_logs_for_day(
         self,
         day: date,
-        tz: ZoneInfo = ZoneInfo("Europe/Istanbul"),
+        tz: tzinfo = TR,
     ) -> list[dict[str, Any]]:
         """Return scan logs recorded on the given local day (half-open interval [start, end) in UTC)."""
         start_local = datetime.combine(day, time.min, tzinfo=tz)

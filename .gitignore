@@ -133,5 +133,18 @@ results/signal_replay_*.csv
 # Regenerable local caches / scratch exports (never commit)
 data/cache_ohlcv/
 results/*.parquet
+# Backtest / research experiment outputs (regenerable via scripts, never commit)
+results/*.csv
+results/*.txt
+results/analysis_comparison_report.md
+results/glm_analysis_report.md
+results/guncel_tarama_karsilastirma.md
+results/hisse_karsilastirma_raporu.md
+results/score_correlation.md
+results/bot_test_raporu_2026-08-29.md
+results/challenge_raporu_2026-08-29.md
+results/sinyal_isabet_raporu_2026-08-31.md
+results/winrate_duzeltme_uygulama_raporu.md
+results/telegram_messages_last_week_postgres.md
 numbers_check_summary.md
 telegram_messages_TODAY_*.md

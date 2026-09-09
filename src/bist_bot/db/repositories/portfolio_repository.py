@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, NamedTuple
 
-from sqlalchemy import select
+from sqlalchemy import case, func, select
 
 from bist_bot.db.database import DatabaseManager, PaperTradeRecord
 from bist_bot.strategy.signal_models import SignalType
@@ -190,9 +190,7 @@ class PortfolioRepository:
 
     def get_recent_closed_trades(self, ticker: str, days: int = 5) -> list[PaperTrade]:
         """Return closed trades for a ticker within the last N days."""
-        from datetime import timedelta as _td
-
-        cutoff = datetime.now(UTC) - _td(days=days)
+        cutoff = datetime.now(UTC) - timedelta(days=days)
 
         def _read(session):
             return session.scalars(
@@ -225,25 +223,25 @@ class PortfolioRepository:
         return [self._to_paper_trade(row) for row in rows]
 
     def get_paper_performance(self) -> dict[str, Any]:
-        trades = self.manager.run_session(
-            lambda session: session.scalars(
-                select(PaperTradeRecord).where(PaperTradeRecord.outcome == "CLOSED")
-            ).all(),
-            read_only=True,
-        )
-        if not trades:
+        def _read(session):
+            return session.execute(
+                select(
+                    func.count(),
+                    func.sum(case((PaperTradeRecord.actual_profit_pct > 0, 1), else_=0)),
+                    func.avg(PaperTradeRecord.actual_profit_pct),
+                )
+                .select_from(PaperTradeRecord)
+                .where(PaperTradeRecord.outcome == "CLOSED")
+            ).one()
+
+        total, profitable, avg_profit = self.manager.run_session(_read, read_only=True)
+        if not total:
             return {}
-        profitable = sum(
-            1 for trade in trades if trade.actual_profit_pct and trade.actual_profit_pct > 0
-        )
-        total = len(trades)
-        profits = [
-            trade.actual_profit_pct for trade in trades if trade.actual_profit_pct is not None
-        ]
-        avg_profit = sum(profits) / len(profits) if profits else 0
+        total = int(total or 0)
+        profitable = int(profitable or 0)
         return {
             "total_trades": total,
             "profitable": profitable,
             "win_rate": round(profitable / total * 100, 1) if total > 0 else 0,
-            "avg_profit_pct": round(avg_profit, 2),
+            "avg_profit_pct": round(float(avg_profit), 2) if avg_profit is not None else 0.0,
         }

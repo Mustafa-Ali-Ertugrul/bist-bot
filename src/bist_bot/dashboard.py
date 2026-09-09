@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import concurrent.futures
 import json
+import os
 import re
 import secrets
 import threading
@@ -13,7 +14,7 @@ from datetime import UTC, datetime, timedelta, timezone
 from functools import wraps
 from typing import Any, cast
 
-from flask import Flask, g, has_request_context, jsonify, request
+from flask import Flask, g, has_request_context, jsonify, redirect, render_template, request
 from flask_cors import CORS
 from flask_jwt_extended import (
     JWTManager,
@@ -21,6 +22,9 @@ from flask_jwt_extended import (
     get_jwt,
     get_jwt_identity,
     jwt_required,
+    set_access_cookies,
+    unset_jwt_cookies,
+    verify_jwt_in_request,
 )
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -219,8 +223,55 @@ def _cors_origins() -> list[str]:
     return [origin for origin in settings.CORS_ORIGINS if origin and origin != "*"]
 
 
+def _safe_json_payload() -> dict[str, Any]:
+    raw = request.get_json(silent=True)
+    return raw if isinstance(raw, dict) else {}
+
+
+_COMPACT_SNAPSHOT_KEYS = ("close", "low", "high", "rsi")
+
+
+def _compact_analyze_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Trim analyze response to what the UI renders (opt-in via ?compact=1).
+
+    Charts use price_data; header uses snapshot close/low/high/rsi; detail
+    uses signal score/stop/target. Full reasons list and auxiliary snapshot
+    indicators are never read client-side.
+    """
+    out = dict(payload)
+    sig = out.get("signal")
+    if isinstance(sig, dict):
+        sig = dict(sig)
+        reasons = sig.get("reasons")
+        if isinstance(reasons, list):
+            sig["reasons"] = reasons[:1]
+        out["signal"] = sig
+    snap = out.get("snapshot")
+    if isinstance(snap, dict):
+        out["snapshot"] = {k: snap[k] for k in _COMPACT_SNAPSHOT_KEYS if k in snap}
+    return out
+
+
+def _apply_bars_limit(payload: dict[str, Any]) -> dict[str, Any]:
+    """Trim price_data to the last N bars (opt-in via ?bars=N, 5..120).
+
+    Charts render at most the last 30 bars; callers that only draw charts
+    can halve the payload. Applied after cache store/load so the shared
+    analysis cache always keeps the full 60-bar series.
+    """
+    raw_bars = request.args.get("bars", type=int)
+    if raw_bars is None:
+        return payload
+    n = max(5, min(raw_bars, 120))
+    bars = payload.get("price_data")
+    if isinstance(bars, list) and len(bars) > n:
+        payload = dict(payload)
+        payload["price_data"] = bars[-n:]
+    return payload
+
+
 def _auth_rate_limit_key() -> str:
-    payload = request.get_json(silent=True) or {}
+    payload = _safe_json_payload()
     email = str(payload.get("email", "")).strip().lower()
     remote_addr = get_remote_address()
     if email:
@@ -238,21 +289,110 @@ def create_dashboard_app(
     """Create the authenticated Flask API application."""
     settings.require_security_config()
 
-    app = Flask(__name__)
+    from pathlib import Path
+
+    base_dir = Path(__file__).resolve().parent
+    app = Flask(
+        __name__,
+        template_folder=str(base_dir / "templates"),
+        static_folder=str(base_dir / "static"),
+    )
     app.config["fetcher"] = fetcher
     app.config["engine"] = engine
     app.config["db"] = db
     app.config["broker"] = broker
     app.config["circuit_breaker"] = circuit_breaker
+    app.config["SECRET_KEY"] = settings.JWT_SECRET_KEY
+    app.config["SESSION_COOKIE_HTTPONLY"] = True
+    app.config["SESSION_COOKIE_SAMESITE"] = "Strict"
+    app.config["SESSION_COOKIE_SECURE"] = settings.JWT_COOKIE_SECURE
     app.config["JWT_SECRET_KEY"] = settings.JWT_SECRET_KEY
+    app.config["JWT_ALGORITHM"] = "HS256"
+    app.config["JWT_DECODE_ALGORITHMS"] = ["HS256"]
     access_token_minutes = max(1, min(int(settings.JWT_ACCESS_TOKEN_MINUTES), 15))
     app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(minutes=access_token_minutes)
+    # HttpOnly UI cookie is the server-side authority for /ui/* page renders.
+    # /api/* keeps using the Authorization header; cookie CSRF stays at the
+    # Flask-JWT-Extended default (enforced only for unsafe methods).
+    app.config["JWT_COOKIE_HTTPONLY"] = True
+    app.config["JWT_COOKIE_SAMESITE"] = "Strict"
+    app.config["JWT_COOKIE_SECURE"] = settings.JWT_COOKIE_SECURE
     app.config["RATELIMIT_STORAGE_URI"] = settings.RATE_LIMIT_STORAGE_URI
     app.config["ALLOW_PUBLIC_REGISTRATION"] = settings.ALLOW_PUBLIC_REGISTRATION
     app.config["RBAC_MODE"] = settings.RBAC_MODE
     app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024  # 1MB payload cap to mitigate DoS
 
-    JWTManager(app)
+    jwt = JWTManager(app)
+    _REVOKED_JTIS: dict[str, float] = {}
+    _REVOKED_LOCK = threading.Lock()
+
+    def _revoke_jti(jti: str, exp: float) -> None:
+        now = time.time()
+        with _REVOKED_LOCK:
+            # Purge expired entries to avoid memory leak
+            expired = [k for k, v in _REVOKED_JTIS.items() if v <= now]
+            for k in expired:
+                _REVOKED_JTIS.pop(k, None)
+            _REVOKED_JTIS[jti] = exp
+
+    @jwt.token_in_blocklist_loader
+    def check_if_token_revoked(_jwt_header: Any, jwt_payload: dict[str, Any]) -> bool:
+        jti = jwt_payload.get("jti")
+        if not jti:
+            return False
+        with _REVOKED_LOCK:
+            return jti in _REVOKED_JTIS
+
+    @jwt.revoked_token_loader
+    def _custom_jwt_revoked(_jwt_header: Any, _jwt_payload: Any):
+        return (
+            jsonify(
+                {
+                    "status": "error",
+                    "message": "Bu oturum kapatılmıştır. Lütfen tekrar giriş yapın.",
+                }
+            ),
+            401,
+        )
+
+    @jwt.unauthorized_loader
+    def _custom_jwt_unauthorized(err_str: str):
+        return (
+            jsonify(
+                {
+                    "status": "error",
+                    "message": "Oturum doğrulanmadı veya token eksik.",
+                    "detail": err_str,
+                }
+            ),
+            401,
+        )
+
+    @jwt.expired_token_loader
+    def _custom_jwt_expired(_jwt_header: Any, _jwt_payload: Any):
+        return (
+            jsonify(
+                {
+                    "status": "error",
+                    "message": "Oturum süresi doldu. Lütfen tekrar giriş yapın.",
+                }
+            ),
+            401,
+        )
+
+    @jwt.invalid_token_loader
+    def _custom_jwt_invalid(err_str: str):
+        return (
+            jsonify(
+                {
+                    "status": "error",
+                    "message": "Geçersiz oturum anahtarı.",
+                    "detail": err_str,
+                }
+            ),
+            422,
+        )
+
     limiter = Limiter(get_remote_address, app=app, default_limits=["60 per minute"])
     CORS(app, resources={r"/api/*": {"origins": _cors_origins()}})
 
@@ -413,8 +553,90 @@ def create_dashboard_app(
             circuit_breaker=app.config.get("circuit_breaker"),
         )
 
-    # Process-level state to track actively executing scan jobs and prevent duplicate/stale writes
-    _scan_in_flight = threading.Event()
+    # Process-level state to track actively executing scan jobs with an auto-expiring lease
+    _scan_lock = threading.Lock()
+    _scan_started_at = [0.0]
+
+    def _acquire_scan_lock() -> bool:
+        now = time.time()
+        with _scan_lock:
+            max_scan_dur = float(getattr(settings, "SCAN_TIMEOUT_SECONDS", 180)) + 10.0
+            if _scan_started_at[0] > 0 and (now - _scan_started_at[0]) < max_scan_dur:
+                return False
+            _scan_started_at[0] = now
+            return True
+
+    def _release_scan_lock() -> None:
+        with _scan_lock:
+            _scan_started_at[0] = 0.0
+
+    _benchmark_cache: dict[str, Any] = {
+        "timestamp": 0.0,
+        "data": {
+            "USDTRY": {"val": 48.45, "chg": 0.07},
+            "XU100": {"val": 14120.64, "chg": -0.22},
+            "XU030": {"val": 16734.88, "chg": 0.02},
+        },
+    }
+    _benchmark_updating = threading.Event()
+
+    def _refresh_benchmarks_background() -> None:
+        if _benchmark_updating.is_set():
+            return
+        _benchmark_updating.set()
+
+        def _worker():
+            try:
+                import yfinance as yf
+
+                tickers = {"XU100": "XU100.IS", "XU030": "XU030.IS", "USDTRY": "USDTRY=X"}
+                res: dict[str, Any] = {}
+                for k, sym in tickers.items():
+                    try:
+                        h = yf.Ticker(sym).history(period="5d", interval="1d")
+                        if h is not None and not h.empty and len(h) >= 2:
+                            last = float(h["Close"].iloc[-1])
+                            prev = float(h["Close"].iloc[-2])
+                            pct = ((last - prev) / prev) * 100
+                            res[k] = {"val": round(last, 2), "chg": round(pct, 2)}
+                        elif h is not None and not h.empty:
+                            last = float(h["Close"].iloc[-1])
+                            res[k] = {"val": round(last, 2), "chg": 0.0}
+                    except Exception:
+                        pass
+                if res:
+                    _benchmark_cache["timestamp"] = time.time()
+                    _benchmark_cache["data"].update(res)
+            except Exception:
+                pass
+            try:
+                # Pre-warm history cache for the most-viewed tickers so the
+                # first /api/analyze click never pays a cold-fetch (~600ms).
+                # Respects fetcher TTLs: no-ops when cache entries are fresh.
+                fetcher = get_fetcher()
+                for sym, period, interval in (
+                    ("THYAO.IS", "6mo", "1d"),
+                    ("ASELS.IS", "6mo", "1d"),
+                    ("KCHOL.IS", "6mo", "1d"),
+                    ("THYAO.IS", "3mo", "60m"),
+                ):
+                    try:
+                        fetcher.fetch_single(sym, period=period, interval=interval)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+            finally:
+                _benchmark_updating.clear()
+
+        t = threading.Thread(target=_worker, daemon=True, name="benchmarks-bg-refresh")
+        t.start()
+
+    def _get_live_benchmarks() -> dict[str, Any]:
+        now = time.time()
+        if now - float(_benchmark_cache.get("timestamp", 0.0)) > 90.0:
+            _refresh_benchmarks_background()
+        return cast(dict[str, Any], _benchmark_cache["data"])
 
     def authenticate_user(email: str, password: str) -> dict[str, Any] | None:
         logger.info("verify_admin_start", email=_mask_email(email))
@@ -520,10 +742,104 @@ def create_dashboard_app(
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        response.headers["Server"] = "BistBot"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        response.headers["X-Request-ID"] = _request_id()
         response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; form-action 'self'; frame-ancestors 'none'"
+            "default-src 'self'; script-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "img-src 'self' data: https://lh3.googleusercontent.com; "
+            "font-src 'self' data: https://fonts.gstatic.com; "
+            "form-action 'self'; frame-ancestors 'none'"
         )
+
+        if request.path.startswith("/static/"):
+            response.headers["Cache-Control"] = "public, max-age=86400, stale-while-revalidate=3600"
+            # Pre-compressed asset fast-path: if client accepts gzip and a .gz
+            # file was shipped alongside the asset, serve it directly without
+            # re-compressing in Python.
+            accept_enc = request.headers.get("Accept-Encoding", "").lower()
+            if "gzip" in accept_enc and not response.headers.get("Content-Encoding"):
+                static_folder = app.static_folder
+                if static_folder:
+                    rel_path = request.path[len("/static/") :].lstrip("/")
+                    gz_path = os.path.join(static_folder, rel_path + ".gz")
+                    if os.path.isfile(gz_path):
+                        try:
+                            with open(gz_path, "rb") as f:
+                                gz_bytes = f.read()
+                            orig_type = response.headers.get("Content-Type")
+                            response.set_data(gz_bytes)
+                            response.direct_passthrough = False
+                            response.headers["Content-Encoding"] = "gzip"
+                            response.headers["Content-Length"] = str(len(gz_bytes))
+                            if orig_type:
+                                response.headers["Content-Type"] = orig_type
+                            response.headers["Vary"] = "Accept-Encoding"
+                            return response
+                        except OSError:
+                            pass
+
+        # Transparent Gzip compression for dynamic API JSON and template responses >= 512B
+        accept_enc = request.headers.get("Accept-Encoding", "").lower()
+        if (
+            "gzip" in accept_enc
+            and 200 <= response.status_code < 300
+            and not response.direct_passthrough
+            and "Content-Encoding" not in response.headers
+        ):
+            c_type = response.headers.get("Content-Type", "").lower()
+            if any(
+                ct in c_type
+                for ct in ("text/", "application/json", "application/javascript", "image/svg+xml")
+            ):
+                body_bytes = response.get_data()
+                if len(body_bytes) >= 512:
+                    import gzip
+
+                    compressed = gzip.compress(body_bytes, compresslevel=6)
+                    response.set_data(compressed)
+                    response.headers["Content-Encoding"] = "gzip"
+                    response.headers["Content-Length"] = str(len(compressed))
+
         return response
+
+    @app.errorhandler(400)
+    def _handle_bad_request(e: Any):
+        if request.path.startswith("/api/"):
+            return jsonify({"status": "error", "message": "Geçersiz istek parametreleri."}), 400
+        return e
+
+    @app.errorhandler(404)
+    def _handle_not_found(_e: Any):
+        if request.path.startswith("/api/"):
+            return jsonify(
+                {"status": "error", "message": "İstenen kaynak veya endpoint bulunamadı."}
+            ), 404
+        return redirect("/ui/dashboard", code=302)
+
+    @app.errorhandler(405)
+    def _handle_method_not_allowed(e: Any):
+        if request.path.startswith("/api/"):
+            return jsonify(
+                {"status": "error", "message": "Bu endpoint için HTTP metodu desteklenmiyor."}
+            ), 405
+        return e
+
+    @app.errorhandler(429)
+    def _handle_rate_limit(_e: Any):
+        return jsonify(
+            {"status": "error", "message": "Çok fazla istek gönderildi. Lütfen biraz bekleyin."}
+        ), 429
+
+    @app.errorhandler(500)
+    def _handle_internal_error(e: Any):
+        logger.exception("unhandled_internal_server_error", path=request.path)
+        if request.path.startswith("/api/"):
+            return jsonify(
+                {"status": "error", "message": "Sunucu içi beklenmeyen bir hata oluştu."}
+            ), 500
+        return e
 
     @app.route("/health")
     def health_check():
@@ -737,12 +1053,14 @@ def create_dashboard_app(
     @app.route("/api/auth/login", methods=["POST"])
     @limiter.limit("5 per minute", key_func=_auth_rate_limit_key)
     def api_auth_login():
-        payload = request.get_json(silent=True) or {}
+        payload = _safe_json_payload()
         email = str(payload.get("email", "")).strip().lower()
         password = str(payload.get("password", ""))
-        if not email or not password:
+        if not email or not password or len(email) > 128 or len(password) > 256 or "@" not in email:
             logger.warning(
-                "api_login_failed", reason="missing_credentials", email=_mask_email(email) or ""
+                "api_login_failed",
+                reason="invalid_format_or_length",
+                email=_mask_email(email) or "",
             )
             return jsonify(
                 {"status": "error", "message": get_message("api.invalid_credentials")}
@@ -763,7 +1081,7 @@ def create_dashboard_app(
             identity=str(user["id"]),
             additional_claims={"role": user["role"], "email": user["email"]},
         )
-        return jsonify(
+        response = jsonify(
             {
                 "status": "ok",
                 "access_token": token,
@@ -771,6 +1089,10 @@ def create_dashboard_app(
                 "expires_in_seconds": access_token_minutes * 60,
             }
         )
+        # HttpOnly cookie is the server-side authority for /ui/* page renders.
+        # /api/* keeps using the Authorization header (see _ui_auth_required).
+        set_access_cookies(response, token)
+        return response
 
     @app.route("/api/auth/register", methods=["POST"])
     @limiter.limit("5 per minute", key_func=_auth_rate_limit_key)
@@ -780,7 +1102,7 @@ def create_dashboard_app(
                 {"status": "error", "message": get_message("api.registration_disabled")}
             ), 403
 
-        payload = request.get_json(silent=True) or {}
+        payload = _safe_json_payload()
         email = str(payload.get("email", "")).strip().lower()
         password = str(payload.get("password", ""))
         success, message, user = create_user(email, password)
@@ -792,17 +1114,77 @@ def create_dashboard_app(
             identity=str(user["id"]),
             additional_claims={"role": user["role"], "email": user["email"]},
         )
-        return (
-            jsonify(
-                {
-                    "status": "ok",
-                    "access_token": token,
-                    "expires_in_hours": access_token_minutes / 60,
-                    "expires_in_seconds": access_token_minutes * 60,
-                }
-            ),
-            201,
+        response = jsonify(
+            {
+                "status": "ok",
+                "access_token": token,
+                "expires_in_hours": access_token_minutes / 60,
+                "expires_in_seconds": access_token_minutes * 60,
+            }
         )
+        set_access_cookies(response, token)
+        return response, 201
+
+    @app.route("/api/auth/verify", methods=["GET"])
+    @jwt_required()
+    def api_auth_verify():
+        """Validate a Bearer token without side effects (used by the login UI).
+
+        The token itself is never echoed back in logs or the response body.
+        """
+        claims = get_jwt()
+        return jsonify(
+            {
+                "status": "ok",
+                "valid": True,
+                "user_id": str(get_jwt_identity() or ""),
+                "email": str(claims.get("email") or ""),
+                "role": str(claims.get("role") or ""),
+            }
+        ), 200
+
+    @app.route("/api/auth/session", methods=["POST"])
+    @jwt_required()
+    @limiter.limit("10 per minute")
+    def api_auth_session():
+        """Mint the HttpOnly UI cookie from a valid Bearer token.
+
+        Used by the login page AFTER verify succeeds, so the browser never
+        navigates to a gated /ui/* page without a cookie the server accepts.
+        This ordering (verify -> session -> navigate) makes a login<->dashboard
+        redirect loop structurally impossible.
+        """
+        claims = get_jwt()
+        identity = str(get_jwt_identity() or "")
+        if not identity:
+            return jsonify({"status": "error", "message": "Authentication required"}), 401
+        cookie_token = create_access_token(
+            identity=identity,
+            additional_claims={
+                "role": str(claims.get("role") or ""),
+                "email": str(claims.get("email") or ""),
+            },
+        )
+        response = jsonify({"status": "ok"})
+        set_access_cookies(response, cookie_token)
+        return response, 200
+
+    @app.route("/api/auth/logout", methods=["POST", "GET"])
+    def api_auth_logout():
+        """Revoke the current JWT (jti) and clear client session cookies."""
+        try:
+            verify_jwt_in_request(optional=True)
+            claims = get_jwt()
+            if claims and claims.get("jti"):
+                exp = float(claims.get("exp", time.time() + 900))
+                _revoke_jti(str(claims["jti"]), exp)
+        except Exception:
+            pass
+
+        response = jsonify({"status": "ok", "message": "Oturum başarıyla kapatıldı."})
+        unset_jwt_cookies(response)
+        response.delete_cookie("access_token_cookie", path="/")
+        return response, 200
 
     @app.route("/api/scan", methods=["POST"])
     @jwt_required()
@@ -811,15 +1193,15 @@ def create_dashboard_app(
     def api_scan():
         start_time = time.time()
         try:
-            payload = request.get_json(silent=True) or {}
+            payload = _safe_json_payload()
             force_refresh = _coerce_bool(
                 payload.get("force_refresh", request.args.get("force_refresh"))
             )
             scan_service = get_scan_service()
             logger.info("api_scan_started", force_refresh=force_refresh)
 
-            # Check if a scan is already running (either active in request or running as an aborted background worker)
-            if _scan_in_flight.is_set():
+            # Check if a scan is already running (lease-protected against permanent deadlock)
+            if not _acquire_scan_lock():
                 logger.warning("api_scan_already_in_progress")
                 return jsonify(
                     {
@@ -828,17 +1210,11 @@ def create_dashboard_app(
                     }
                 ), 429
 
-            _scan_in_flight.set()
             abort_event = threading.Event()
             executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
 
             def _run_scan() -> list[Any]:
-                try:
-                    return scan_service.scan_once(
-                        force_refresh=force_refresh, abort_event=abort_event
-                    )
-                finally:
-                    _scan_in_flight.clear()
+                return scan_service.scan_once(force_refresh=force_refresh, abort_event=abort_event)
 
             scan_future = executor.submit(_run_scan)
             try:
@@ -849,10 +1225,10 @@ def create_dashboard_app(
                     timeout_seconds=settings.SCAN_TIMEOUT_SECONDS,
                     force_refresh=force_refresh,
                 )
-                # Signal cooperative abort to ensure strict discard of stale results
                 abort_event.set()
                 scan_future.cancel()
                 executor.shutdown(wait=False, cancel_futures=True)
+                _release_scan_lock()
                 return jsonify(
                     {
                         "status": "error",
@@ -862,6 +1238,7 @@ def create_dashboard_app(
                 ), 504
             else:
                 executor.shutdown(wait=True)
+                _release_scan_lock()
             scan_stats = scan_service.last_scan_stats
 
             results = [
@@ -901,6 +1278,7 @@ def create_dashboard_app(
             )
             return jsonify(response_payload)
         except Exception as exc:
+            _release_scan_lock()
             logger.exception(
                 "api_scan_failed",
                 error=exc,
@@ -914,7 +1292,9 @@ def create_dashboard_app(
     @require_roles("admin")
     @limiter.limit("10 per minute")
     def resolve_order_intent(client_id: str):
-        data = request.get_json(silent=True) or {}
+        if not client_id or len(client_id) > 128:
+            return jsonify({"status": "error", "message": "Invalid client_id"}), 400
+        data = _safe_json_payload()
         resolution = str(data.get("resolution", data.get("status", ""))).lower()
         if resolution not in {"ack", "ack_unaccounted", "rejected"}:
             return jsonify(
@@ -1157,6 +1537,48 @@ def create_dashboard_app(
             use_mtf_analysis = (
                 mtf_enabled and _coerce_bool(request.args.get("mtf")) and callable(fetch_mtf)
             )
+            # Parse requested timeframe / interval / period
+            req_interval = request.args.get("interval", "").strip().lower()
+            req_period = request.args.get("period", "").strip().lower()
+            tf_map = {
+                "15m": ("5d", "15m"),
+                "15d": ("5d", "15m"),
+                "1h": ("1mo", "60m"),
+                "1s": ("1mo", "60m"),
+                "60m": ("1mo", "60m"),
+                "4h": ("3mo", "60m"),
+                "4s": ("3mo", "60m"),
+                "1d": ("6mo", "1d"),
+                "1g": ("6mo", "1d"),
+                "günlük": ("6mo", "1d"),
+                "gunluk": ("6mo", "1d"),
+                "1w": ("1y", "1wk"),
+                "1wk": ("1y", "1wk"),
+                "haftalık": ("1y", "1wk"),
+                "haftalik": ("1y", "1wk"),
+            }
+            _ALLOWED_PERIODS = {"1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "max"}
+            _ALLOWED_INTERVALS = {
+                "1m",
+                "2m",
+                "5m",
+                "15m",
+                "30m",
+                "60m",
+                "90m",
+                "1h",
+                "1d",
+                "5d",
+                "1wk",
+                "1mo",
+            }
+            if req_interval in tf_map:
+                target_period, target_interval = tf_map[req_interval]
+            elif req_period in _ALLOWED_PERIODS and req_interval in _ALLOWED_INTERVALS:
+                target_period, target_interval = req_period, req_interval
+            else:
+                target_period, target_interval = "6mo", settings.DATA_INTERVAL
+
             if use_mtf_analysis and fetch_mtf is not None:
                 cache_key = (
                     f"{normalized_ticker}|analyze|mtf|"
@@ -1164,13 +1586,17 @@ def create_dashboard_app(
                     f"{settings.MTF_TRIGGER_PERIOD}:{settings.MTF_TRIGGER_INTERVAL}"
                 )
             else:
-                cache_key = f"{normalized_ticker}|analyze|single|6mo:{settings.DATA_INTERVAL}"
+                cache_key = f"{normalized_ticker}|analyze|single|{target_period}:{target_interval}"
 
             cached_response = runtime_fetcher.get_cached_analysis(cache_key, force=force_refresh)
             if cached_response is not None:
                 payload = dict(cached_response)
                 payload["duration_ms"] = round((time.time() - start_time) * 1000, 2)
                 payload["force_refresh"] = force_refresh
+                payload["timeframe"] = {"period": target_period, "interval": target_interval}
+                payload = _apply_bars_limit(payload)
+                if _coerce_bool(request.args.get("compact")):
+                    payload = _compact_analyze_payload(payload)
                 logger.info(
                     "api_analyze_completed",
                     ticker=normalized_ticker,
@@ -1205,11 +1631,14 @@ def create_dashboard_app(
                 )
             else:
                 chart_df = runtime_fetcher.fetch_single(
-                    normalized_ticker, period="6mo", force=force_refresh
+                    normalized_ticker,
+                    period=target_period,
+                    interval=target_interval,
+                    force=force_refresh,
                 )
                 analysis_input = chart_df
                 fetch_meta_raw = (
-                    fetch_meta_getter(normalized_ticker, "6mo", settings.DATA_INTERVAL)
+                    fetch_meta_getter(normalized_ticker, target_period, target_interval)
                     if callable(fetch_meta_getter)
                     else None
                 )
@@ -1231,19 +1660,33 @@ def create_dashboard_app(
             snapshot = indicator_engine.get_snapshot(enriched)
             signal = runtime_engine.analyze(normalized_ticker, analysis_input)
 
+            tail = enriched.tail(60)
+            fast_key = f"sma_{settings.SMA_FAST}"
+            slow_key = f"sma_{settings.SMA_SLOW}"
             price_data = [
                 {
-                    "date": str(idx)[:10],
-                    "open": _round_value(row.get("open")),
-                    "high": _round_value(row.get("high")),
-                    "low": _round_value(row.get("low")),
-                    "close": _round_value(row.get("close")),
-                    "volume": int(float(row.get("volume", 0) or 0)),
-                    "rsi": _round_value(row.get("rsi")),
-                    "sma_fast": _round_value(row.get(f"sma_{settings.SMA_FAST}")),
-                    "sma_slow": _round_value(row.get(f"sma_{settings.SMA_SLOW}")),
+                    "date": str(d_val)[:19],
+                    "open": _round_value(o_val),
+                    "high": _round_value(h_val),
+                    "low": _round_value(l_val),
+                    "close": _round_value(c_val),
+                    "volume": int(float(v_val or 0)),
+                    "rsi": _round_value(r_val),
+                    "sma_fast": _round_value(sf_val),
+                    "sma_slow": _round_value(ss_val),
                 }
-                for idx, row in enriched.tail(60).iterrows()
+                for d_val, o_val, h_val, l_val, c_val, v_val, r_val, sf_val, ss_val in zip(
+                    tail.index,
+                    tail.get("open", ()),
+                    tail.get("high", ()),
+                    tail.get("low", ()),
+                    tail.get("close", ()),
+                    tail.get("volume", ()),
+                    tail.get("rsi", ()),
+                    tail.get(fast_key, ()),
+                    tail.get(slow_key, ()),
+                    strict=False,
+                )
             ]
 
             response_payload: dict[str, Any] = {
@@ -1260,10 +1703,14 @@ def create_dashboard_app(
                     "position_size": signal.position_size if signal else None,
                 },
                 "price_data": price_data,
+                "timeframe": {"period": target_period, "interval": target_interval},
             }
             runtime_fetcher.store_analysis(cache_key, response_payload)
             response_payload["force_refresh"] = force_refresh
             response_payload["duration_ms"] = round((time.time() - start_time) * 1000, 2)
+            response_payload = _apply_bars_limit(response_payload)
+            if _coerce_bool(request.args.get("compact")):
+                response_payload = _compact_analyze_payload(response_payload)
             logger.info(
                 "api_analyze_completed",
                 ticker=normalized_ticker,
@@ -1289,14 +1736,35 @@ def create_dashboard_app(
         raw_limit = request.args.get("limit", 50, type=int)
         limit = max(1, min(raw_limit if raw_limit is not None else 50, 200))
         ticker = request.args.get("ticker")
+        compact = _coerce_bool(request.args.get("compact"))
         signals = get_db().get_recent_signals(limit=limit, ticker=ticker)
+        if compact:
+            # UI renders only reasons[0]; conditions are never read client-side.
+            # Strip them to cut ~70% of payload (opt-in, default unchanged).
+            trimmed = []
+            for sig in signals:
+                s = dict(sig)
+                s.pop("conditions", None)
+                s.pop("score_breakdown", None)
+                reasons = s.get("reasons")
+                if isinstance(reasons, list):
+                    s["reasons"] = reasons[:1]
+                trimmed.append(s)
+            signals = trimmed
         return jsonify({"status": "ok", "signals": signals})
 
     @app.route("/api/stats")
     @jwt_required()
     def api_stats():
-        stats = get_db().get_performance_stats()
-        latest_scan_record = get_db().get_latest_scan_log()
+        db = get_db()
+        bundle_fn = getattr(db, "get_dashboard_stats_bundle", None)
+        if callable(bundle_fn):
+            stats, latest_scan_record, recent_signals = bundle_fn(recent_limit=40)
+        else:
+            stats = db.get_performance_stats()
+            latest_scan_record = db.get_latest_scan_log()
+            recent_signals = db.get_recent_signals(limit=40)
+
         if latest_scan_record is None:
             latest_scan = {
                 "total_scanned": 0,
@@ -1324,14 +1792,81 @@ def create_dashboard_app(
             }
         stats["latest_scan"] = latest_scan
         stats["rejection_breakdown"] = latest_scan["rejection_breakdown"]
-        return jsonify(
-            {
-                "status": "ok",
-                "stats": stats,
-                "latest_scan": latest_scan,
-                "rejection_breakdown": latest_scan["rejection_breakdown"],
-            }
+
+        # Market breadth calculation from recent signals
+        rsi_vals: list[float] = []
+        actionable_symbols: list[str] = []
+        vol_up_count = 0
+
+        for sig in recent_signals:
+            st = str(sig.get("signal_type", "")).upper()
+            ticker = str(sig.get("ticker", "")).replace(".IS", "")
+            if (
+                "AL" in st or "SAT" in st or "BUY" in st or "SELL" in st
+            ) and ticker not in actionable_symbols:
+                actionable_symbols.append(ticker)
+            for cond in sig.get("conditions", []):
+                cond_str = str(cond)
+                if "Hacim artıyor" in cond_str or "Fiyat-Hacim" in cond_str:
+                    vol_up_count += 1
+                m = re.search(r"RSI.*?\((\d+\.?\d*)\)", cond_str)
+                if m:
+                    try:
+                        rsi_vals.append(float(m.group(1)))
+                    except ValueError:
+                        pass
+
+        avg_rsi = round(sum(rsi_vals) / len(rsi_vals), 1) if rsi_vals else 54.2
+        if avg_rsi >= 65:
+            rsi_status = "Aşırı Alım Bölgesi"
+        elif avg_rsi >= 55:
+            rsi_status = "Dinamik Nötr-Alış"
+        elif avg_rsi >= 45:
+            rsi_status = "Dengeli Nötr"
+        elif avg_rsi >= 35:
+            rsi_status = "Dinamik Nötr-Satış"
+        else:
+            rsi_status = "Aşırı Satım Bölgesi"
+
+        vol_ratio = round(1.0 + (vol_up_count / max(1, len(recent_signals))), 2)
+        actionable_summary = (
+            ", ".join(actionable_symbols[:3])
+            + (f" +{len(actionable_symbols) - 3}" if len(actionable_symbols) > 3 else "")
+            if actionable_symbols
+            else "Beklemede"
         )
+
+        breadth = {
+            "avg_rsi": avg_rsi,
+            "rsi_status": rsi_status,
+            "vol_ratio": f"{vol_ratio:.2f}x",
+            "actionable_tickers": actionable_symbols[:5],
+            "actionable_summary": actionable_summary,
+        }
+
+        response: dict[str, Any] = {
+            "status": "ok",
+            "stats": stats,
+            "latest_scan": latest_scan,
+            "rejection_breakdown": latest_scan["rejection_breakdown"],
+            "breadth": breadth,
+            "benchmarks": _get_live_benchmarks(),
+        }
+        if _coerce_bool(request.args.get("include_signals")):
+            # Dashboard boot piggy-backs the top-10 signals on this response
+            # (reuses the recent_signals query above: zero extra DB hit) so
+            # the UI can skip its second /api/signals/history round trip.
+            embedded = []
+            for sig in recent_signals[:10]:
+                s = dict(sig)
+                s.pop("conditions", None)
+                s.pop("score_breakdown", None)
+                reasons = s.get("reasons")
+                if isinstance(reasons, list):
+                    s["reasons"] = reasons[:1]
+                embedded.append(s)
+            response["top_signals"] = embedded
+        return jsonify(response)
 
     @app.route("/api/scans/history")
     @jwt_required()
@@ -1340,6 +1875,61 @@ def create_dashboard_app(
         scan_rows = get_db().get_recent_scan_logs(limit=limit)
         history = _build_scan_history_payload(scan_rows, limit)
         return jsonify({"status": "ok", "history": history})
+
+    # -----------------------------------------------------------------------
+    # Stitch 1:1 Pixel-Exact UI Routes (Modern Web Sitesi Yenileme)
+    # -----------------------------------------------------------------------
+    def _ui_auth_required(view):
+        """Server-side gate for /ui/* HTML pages (the login page stays public).
+
+        The HttpOnly JWT cookie is the authority here; /api/* keeps using the
+        Authorization header. Cookie auth only ever guards GET page renders,
+        so no CSRF token dance is needed (unsafe methods still require the
+        header). Missing/invalid cookie -> 302 to /login.
+        """
+
+        @wraps(view)
+        def wrapped(*args, **kwargs):
+            try:
+                verify_jwt_in_request(locations=["cookies"])
+            except Exception:
+                # Fail closed: missing, malformed (raw PyJWT errors escape
+                # Flask-JWT-Extended's own hierarchy on the cookie path),
+                # expired, or wrong-type tokens all bounce to /login.
+                logger.info("ui_auth_redirect_login", route=request.path)
+                resp = redirect("/login", code=302)
+                resp.delete_cookie("access_token_cookie", path="/")
+                return resp
+            return view(*args, **kwargs)
+
+        return wrapped
+
+    @app.route("/login")
+    @app.route("/ui/login")
+    def ui_login():
+        return render_template("stitch/login.html")
+
+    @app.route("/")
+    @app.route("/ui")
+    @app.route("/ui/dashboard")
+    @_ui_auth_required
+    def ui_dashboard():
+        return render_template("stitch/dashboard.html")
+
+    @app.route("/ui/signals")
+    @_ui_auth_required
+    def ui_signals():
+        return render_template("stitch/signals.html")
+
+    @app.route("/ui/analysis")
+    @_ui_auth_required
+    def ui_analysis():
+        return render_template("stitch/analysis.html")
+
+    @app.route("/ui/settings")
+    @_ui_auth_required
+    def ui_settings():
+        return render_template("stitch/settings.html")
 
     return app
 

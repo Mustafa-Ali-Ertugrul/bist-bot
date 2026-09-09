@@ -252,6 +252,16 @@ def render_overview_page() -> None:
         ],
         accent="secondary",
     )
+    st.markdown(
+        "<div class='bb-stat-strip'>"
+        f"<span class='bb-stat'>Canlı skor <b class='up'>{actionable_signals}</b></span>"
+        f"<span class='bb-stat'>Taranan <b>{scanned_assets}</b></span>"
+        f"<span class='bb-stat'>Üretilen <b>{generated_signals}</b></span>"
+        f"<span class='bb-stat'>Filtrelenen <b>{rejected_candidates}</b></span>"
+        f"<span class='bb-stat'>Ort. RSI <b>{summary.get('avg_rsi', 0.0):.1f}</b></span>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
     if not st.session_state.get("scan_in_progress"):
         if st.button("BIST100 taramasını başlat", type="primary", use_container_width=True):
             if request_scan(force_clear=True):
@@ -277,18 +287,25 @@ def render_overview_page() -> None:
 
     k1, k2, k3, k4 = st.columns(4)
     with k1:
-        render_metric_block("Taranan varlıklar", str(scanned_assets), "Toplam analiz edilen varlık")
+        render_metric_block(
+            "Taranan varlıklar",
+            str(scanned_assets),
+            "Toplam analiz edilen varlık",
+            bar_pct=100.0 if scanned_assets > 0 else 0.0,
+        )
     with k2:
         render_metric_block(
             "İşleme uygun sinyaller",
             str(actionable_signals),
             "İzleme veya işlem gerektiren sinyaller",
+            bar_pct=(actionable_signals / scanned_assets * 100.0) if scanned_assets > 0 else 0.0,
         )
     with k3:
         render_metric_block(
             "Üretilen sinyaller",
             str(generated_signals),
             "HOLD dahil toplam sinyal",
+            bar_pct=(generated_signals / scanned_assets * 100.0) if scanned_assets > 0 else 0.0,
         )
     with k4:
         render_metric_block(
@@ -296,6 +313,7 @@ def render_overview_page() -> None:
             str(rejected_candidates),
             "BIST100 içinde sinyale dönüşmeyen tekil varlık",
             accent="danger" if rejected_candidates else "positive",
+            bar_pct=(rejected_candidates / scanned_assets * 100.0) if scanned_assets > 0 else 0.0,
         )
 
     left, right = st.columns([1.35, 1], gap="large")
@@ -362,9 +380,12 @@ def render_overview_page() -> None:
                 f"<div class='bb-list-row-title'>{html.escape(name)}</div>"
                 f"<div class='bb-list-row-subtitle'>Canlı referans gösterge</div>"
                 "</div>"
-                "<div style='text-align:right;'>"
+                "<div style='text-align:right;min-width:130px;'>"
                 f"<div class='bb-note-strong'>{value:,.2f}</div>"
                 f"<div class='{'bb-text-positive' if change >= 0 else 'bb-text-danger'}'>{change:+.2f}%</div>"
+                "<div class='bb-meter' style='margin-top:8px;'>"
+                f"<div class='bb-meter-fill' style='width:{min(abs(change) / 5.0, 1.0) * 100.0:.0f}%'></div>"
+                "</div>"
                 "</div>"
                 "</div>"
             )

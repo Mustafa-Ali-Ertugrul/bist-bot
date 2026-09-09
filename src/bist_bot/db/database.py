@@ -88,6 +88,8 @@ class SignalRecord(Base):
     __table_args__ = (
         Index("idx_signals_created_at", "created_at"),
         Index("idx_signals_ticker_created_at", "ticker", "created_at"),
+        Index("ix_signals_timestamp_id", "timestamp", "id"),
+        Index("ix_signals_ticker_timestamp", "ticker", "timestamp"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -136,7 +138,7 @@ class PaperTradeRecord(Base):
     regime: Mapped[str | None] = mapped_column(String, nullable=True)
     filled_at: Mapped[float | None] = mapped_column(Float, nullable=True)
     direction: Mapped[str] = mapped_column(String, nullable=True)
-    outcome: Mapped[str] = mapped_column(String, nullable=False, default="OPEN")
+    outcome: Mapped[str] = mapped_column(String, nullable=False, default="OPEN", index=True)
     actual_profit_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     exit_price: Mapped[float | None] = mapped_column(Float, nullable=True)
     exit_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -192,7 +194,7 @@ class ScanLogRecord(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     timestamp: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+        DateTime, nullable=False, index=True, default=lambda: datetime.now(UTC)
     )
     total_scanned: Mapped[int | None] = mapped_column(Integer, nullable=True)
     signals_generated: Mapped[int | None] = mapped_column(Integer, nullable=True)

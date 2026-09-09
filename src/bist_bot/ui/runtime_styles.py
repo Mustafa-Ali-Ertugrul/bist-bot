@@ -2,7 +2,88 @@
 
 from __future__ import annotations
 
+import time
+import urllib.request
+from importlib.metadata import PackageNotFoundError, version
+
 import streamlit as st
+
+_FOOTER_STATUS_TTL_SECONDS = 60.0
+_FOOTER_VERSION_FALLBACK = "0.1.0"
+
+
+def get_footer_version() -> str:
+    cached = st.session_state.get("bb_footer_version")
+    if isinstance(cached, str) and cached:
+        return cached
+    detected = ""
+    try:
+        import tomllib
+        from pathlib import Path
+
+        pyproject = Path(__file__).resolve().parents[3] / "pyproject.toml"
+        detected = str(
+            tomllib.loads(pyproject.read_text(encoding="utf-8"))
+            .get("project", {})
+            .get("version", "")
+        )
+    except Exception:
+        detected = ""
+    if not detected:
+        try:
+            detected = version("bist-bot")
+        except PackageNotFoundError:
+            detected = ""
+    if not detected or detected == "0.0.0":
+        detected = _FOOTER_VERSION_FALLBACK
+    st.session_state["bb_footer_version"] = detected
+    return detected
+
+
+def get_footer_api_status() -> bool:
+    """Return cached API liveness (False when unreachable)."""
+    now = time.monotonic()
+    cached = st.session_state.get("bb_footer_api")
+    if isinstance(cached, dict) and now - float(cached.get("at", 0.0)) < _FOOTER_STATUS_TTL_SECONDS:
+        return bool(cached.get("online"))
+    online = False
+    try:
+        from bist_bot.config.settings import settings
+
+        base = str(getattr(settings, "API_BASE_URL", "") or "").rstrip("/")
+        if base and base.startswith(("http://", "https://")):
+            req = urllib.request.Request(f"{base}/livez")
+            with urllib.request.urlopen(req, timeout=2) as response:  # nosec B310
+                online = 200 <= int(getattr(response, "status", 0)) < 300
+    except Exception:
+        online = False
+    st.session_state["bb_footer_api"] = {"at": now, "online": online}
+    return online
+
+
+def footer_meta_html() -> str:
+    """Shared footer meta row (version, API status, disclaimer, GitHub)."""
+    online = get_footer_api_status()
+    dot = "#4de2bf" if online else "#ff8f8f"
+    label = "API çevrimiçi" if online else "API erişilemiyor"
+    return (
+        '<div class="bb-footer-meta">'
+        f"<span class='bb-footer-brand'>BIST Bot • v{get_footer_version()}</span>"
+        f"<span class='bb-footer-dot' style='background:{dot}'></span>"
+        f"<span class='bb-footer-status'>{label}</span>"
+        "<span class='bb-footer-sep'>•</span>"
+        "<span class='bb-footer-note'>Veriler bilgilendirme amaçlıdır, yatırım tavsiyesi değildir.</span>"
+        "<span class='bb-footer-sep'>•</span>"
+        "<a class='bb-footer-link' href='https://github.com/Mustafa-Ali-Ertugrul/bist-bot' "
+        "target='_blank' rel='noopener'>GitHub</a>"
+        "</div>"
+    )
+
+
+def render_footer() -> None:
+    """Render the shared bottom footer (meta row only, e.g. login page)."""
+    with st.container(key="footer_navigation"):
+        st.markdown(footer_meta_html(), unsafe_allow_html=True)
 
 
 def inject_styles() -> None:
@@ -48,7 +129,88 @@ def inject_styles() -> None:
             }
             .block-container {
                 max-width:1520px;
-                padding:5.5rem 2.5rem 3rem 2rem;
+                padding:8.5rem 2.5rem 3rem 2rem;
+            }
+            .bb-live-pill {
+                display:inline-flex;
+                align-items:center;
+                gap:6px;
+                margin-left:10px;
+                padding:5px 10px;
+                border-radius:999px;
+                background:rgba(77,226,191,.10);
+                border:1px solid rgba(77,226,191,.22);
+                color:var(--bb-secondary);
+                font-family:'Space Grotesk',sans-serif;
+                font-size:9px;
+                font-weight:700;
+                letter-spacing:.14em;
+            }
+            .bb-live-pill i {
+                width:7px;
+                height:7px;
+                border-radius:999px;
+                background:var(--bb-secondary);
+                box-shadow:0 0 8px rgba(77,226,191,.8);
+            }
+            .bb-topnav {
+                display:flex;
+                align-items:center;
+                gap:4px;
+            }
+            .bb-nav-link {
+                padding:9px 14px;
+                border-radius:12px;
+                color:var(--bb-muted) !important;
+                font-family:'Space Grotesk',sans-serif;
+                font-size:11px;
+                font-weight:700;
+                letter-spacing:.08em;
+                text-transform:uppercase;
+            }
+            .bb-nav-link:hover {
+                color:var(--bb-text) !important;
+                background:rgba(255,255,255,.05);
+            }
+            .bb-nav-link.active {
+                color:var(--bb-secondary) !important;
+                background:rgba(77,226,191,.10);
+            }
+            .bb-tape {
+                position:fixed;
+                top:68px;
+                left:0;
+                right:0;
+                z-index:998;
+                display:flex;
+                align-items:center;
+                gap:10px;
+                padding:7px 20px;
+                background:rgba(9,15,25,.82);
+                backdrop-filter:blur(22px);
+                border-bottom:1px solid rgba(255,255,255,.05);
+                font-family:'Space Grotesk',sans-serif;
+                font-size:10px;
+                font-weight:700;
+                letter-spacing:.1em;
+                color:var(--bb-muted);
+                overflow:hidden;
+                white-space:nowrap;
+            }
+            .bb-tape-item b {
+                color:var(--bb-text);
+            }
+            .bb-tape-item i {
+                font-style:normal;
+            }
+            .bb-tape-item i.up {
+                color:var(--bb-secondary);
+            }
+            .bb-tape-item i.down {
+                color:var(--bb-danger);
+            }
+            .bb-tape-sep {
+                opacity:.4;
             }
             [data-testid="stVerticalBlock"] > [style*="flex-direction: column"] {
                 gap:1rem;
@@ -388,6 +550,55 @@ def inject_styles() -> None:
                 font-size:12px;
                 line-height:1.6;
             }
+            .bb-meter {
+                position:relative;
+                margin-top:12px;
+                height:6px;
+                border-radius:999px;
+                background:rgba(255,255,255,.07);
+                overflow:hidden;
+            }
+            .bb-meter-fill {
+                height:100%;
+                border-radius:999px;
+                background:linear-gradient(90deg, var(--bb-secondary), var(--bb-primary));
+            }
+            .bb-metric-danger .bb-meter-fill {
+                background:linear-gradient(90deg, var(--bb-danger), #ff5d5d);
+            }
+            .bb-stat-strip {
+                display:flex;
+                flex-wrap:wrap;
+                gap:8px 22px;
+                align-items:center;
+                margin-bottom:12px;
+                padding:10px 16px;
+                border-radius:16px;
+                background:rgba(255,255,255,.02);
+                border:1px solid rgba(255,255,255,.05);
+                font-family:'Space Grotesk',sans-serif;
+            }
+            .bb-stat-strip .bb-stat {
+                display:flex;
+                align-items:baseline;
+                gap:7px;
+                font-size:10px;
+                font-weight:700;
+                letter-spacing:.14em;
+                text-transform:uppercase;
+                color:var(--bb-faint);
+            }
+            .bb-stat-strip .bb-stat b {
+                font-size:15px;
+                letter-spacing:-.02em;
+                color:var(--bb-text);
+            }
+            .bb-stat-strip .bb-stat b.up {
+                color:var(--bb-secondary);
+            }
+            .bb-stat-strip .bb-stat b.down {
+                color:var(--bb-danger);
+            }
             .bb-metric-positive .bb-metric-card-value,
             .bb-text-positive {
                 color:var(--bb-secondary);
@@ -459,6 +670,129 @@ def inject_styles() -> None:
             .bb-note-strong {
                 color:var(--bb-text);
                 font-weight:700;
+            }
+            .bb-footer {
+                display:flex;
+                align-items:center;
+                justify-content:center;
+                flex-wrap:wrap;
+                gap:8px;
+                margin:2.5rem 0 1rem;
+                padding-top:1rem;
+                border-top:1px solid rgba(255,255,255,.06);
+                font-family:'Space Grotesk',sans-serif;
+                font-size:10px;
+                font-weight:700;
+                letter-spacing:.14em;
+                text-transform:uppercase;
+                color:var(--bb-faint);
+            }
+            .bb-footer-brand {
+                color:var(--bb-muted);
+            }
+            .bb-footer-dot {
+                width:8px;
+                height:8px;
+                border-radius:999px;
+                display:inline-block;
+            }
+            .bb-footer-sep {
+                opacity:.5;
+            }
+            .bb-footer-note {
+                letter-spacing:.08em;
+            }
+            .st-key-footer_navigation {
+                position:fixed;
+                left:0;
+                right:0;
+                bottom:0;
+                z-index:999;
+                background:rgba(10,15,22,.94);
+                backdrop-filter:blur(16px);
+                -webkit-backdrop-filter:blur(16px);
+                border-top:1px solid rgba(173,198,255,.12);
+                box-shadow:0 -4px 24px rgba(0,0,0,.6);
+                padding:8px max(1rem, calc((100vw - 1520px) / 2));
+                pointer-events:auto !important;
+            }
+            .st-key-footer_navigation [data-testid="stHorizontalBlock"] {
+                gap:8px;
+            }
+            .st-key-footer_navigation .stButton > button {
+                min-height:34px;
+                padding:6px 14px;
+                border-radius:999px;
+                font-family:'Space Grotesk',sans-serif;
+                font-size:11px;
+                font-weight:700;
+                letter-spacing:.08em;
+                text-transform:uppercase;
+                white-space:nowrap;
+                cursor:pointer !important;
+            }
+            .st-key-footer_navigation .stButton > button:hover {
+                color:#ffffff !important;
+                border-color:rgba(138,180,255,.45) !important;
+                background:rgba(138,180,255,.14) !important;
+            }
+            .st-key-footer_navigation .stButton > button[kind="primary"] {
+                color:#ffffff !important;
+                border-color:var(--bb-secondary) !important;
+                background:rgba(77,226,191,.16) !important;
+                box-shadow:0 0 12px rgba(77,226,191,.2);
+            }
+            .bb-footer-meta {
+                display:flex;
+                align-items:center;
+                justify-content:center;
+                flex-wrap:wrap;
+                gap:8px;
+                margin-top:6px;
+                font-family:'Space Grotesk',sans-serif;
+                font-size:10px;
+                font-weight:700;
+                letter-spacing:.1em;
+                text-transform:uppercase;
+                color:var(--bb-faint);
+                pointer-events:auto !important;
+            }
+            .st-key-footer_navigation .bb-footer-brand {
+                color:var(--bb-secondary);
+                font-weight:800;
+                font-size:11px;
+            }
+            .st-key-footer_navigation .bb-footer-sep {
+                color:rgba(176,191,216,.28);
+                opacity:1;
+            }
+            .bb-footer-status {
+                color:var(--bb-muted);
+            }
+            .bb-footer-copy {
+                color:var(--bb-muted);
+                font-size:10px;
+            }
+            .bb-footer-link {
+                color:var(--bb-primary);
+                cursor:pointer;
+                text-decoration:none;
+                pointer-events:auto !important;
+            }
+            .bb-footer-link:hover {
+                color:#ffffff;
+                text-decoration:underline;
+            }
+            .block-container {
+                padding-bottom:150px;
+            }
+            @media (max-width: 900px) {
+                .bb-footer-note {
+                    display:none;
+                }
+                .block-container {
+                    padding-bottom:170px;
+                }
             }
             .bb-sidebar-shell {
                 position:relative;
@@ -637,7 +971,10 @@ def inject_styles() -> None:
             }
             @media (max-width: 900px) {
                 .block-container {
-                    padding:5.2rem .9rem 3rem;
+                    padding:7.5rem .9rem 3rem;
+                }
+                .bb-topnav {
+                    display:none;
                 }
                 section[data-testid="stSidebar"][aria-expanded="true"],
                 section[data-testid="stSidebar"][aria-expanded="true"] > div,

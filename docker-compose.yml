@@ -41,7 +41,7 @@ services:
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
       BROKER_MODE: ${BROKER_MODE:-paper}
       BROKER_PROVIDER: ${BROKER_PROVIDER:-paper}
-      RBAC_MODE: ${RBAC_MODE:-warn}
+      RBAC_MODE: ${RBAC_MODE:-enforce}
       ADMIN_BOOTSTRAP_EMAIL: ${ADMIN_BOOTSTRAP_EMAIL:-}
       ADMIN_BOOTSTRAP_PASSWORD_HASH: ${ADMIN_BOOTSTRAP_PASSWORD_HASH:-}
       DEGRADED_MAX_SECONDS: ${DEGRADED_MAX_SECONDS:-300}
@@ -67,49 +67,8 @@ services:
       start_period: 20s
     restart: unless-stopped
 
-  streamlit-ui:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: runtime
-    container_name: bist-bot-ui
-    command:
-      [
-        "streamlit",
-        "run",
-        "streamlit_app.py",
-        "--server.port=8501",
-        "--server.address=0.0.0.0",
-      ]
-    env_file:
-      - path: .env
-        required: false
-    environment:
-      PYTHONPATH: /app/src
-      PORT: "8501"
-      API_BASE_URL: http://bot:5000
-      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://bist:bist@postgres:5432/bist_bot}
-      DB_PATH: /app/data/bist_signals.db
-      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?JWT_SECRET_KEY must be set for secure startup}
-    ports:
-      - "127.0.0.1:8501:8501"
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    volumes:
-      - bot-data:/app/data:ro
-      - ./results:/app/results:ro
-    depends_on:
-      bot:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8501/_stcore/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 25s
-    restart: unless-stopped
+  # Note: The legacy streamlit-ui service was retired in favor of the unified
+  # Stitch UI served natively by the bot container at /ui/dashboard.
 
   scanner-worker:
     build:
