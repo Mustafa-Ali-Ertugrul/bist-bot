@@ -137,7 +137,7 @@ class PaperTradeRecord(Base):
     regime: Mapped[str | None] = mapped_column(String, nullable=True)
     filled_at: Mapped[float | None] = mapped_column(Float, nullable=True)
     direction: Mapped[str] = mapped_column(String, nullable=True)
-    outcome: Mapped[str] = mapped_column(String, nullable=False, default="OPEN")
+    outcome: Mapped[str] = mapped_column(String, nullable=False, default="OPEN", index=True)
     actual_profit_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     exit_price: Mapped[float | None] = mapped_column(Float, nullable=True)
     exit_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
