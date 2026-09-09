@@ -1639,19 +1639,33 @@ def create_dashboard_app(
             snapshot = indicator_engine.get_snapshot(enriched)
             signal = runtime_engine.analyze(normalized_ticker, analysis_input)
 
+            tail = enriched.tail(60)
+            fast_key = f"sma_{settings.SMA_FAST}"
+            slow_key = f"sma_{settings.SMA_SLOW}"
             price_data = [
                 {
-                    "date": str(idx)[:19],
-                    "open": _round_value(row.get("open")),
-                    "high": _round_value(row.get("high")),
-                    "low": _round_value(row.get("low")),
-                    "close": _round_value(row.get("close")),
-                    "volume": int(float(row.get("volume", 0) or 0)),
-                    "rsi": _round_value(row.get("rsi")),
-                    "sma_fast": _round_value(row.get(f"sma_{settings.SMA_FAST}")),
-                    "sma_slow": _round_value(row.get(f"sma_{settings.SMA_SLOW}")),
+                    "date": str(d_val)[:19],
+                    "open": _round_value(o_val),
+                    "high": _round_value(h_val),
+                    "low": _round_value(l_val),
+                    "close": _round_value(c_val),
+                    "volume": int(float(v_val or 0)),
+                    "rsi": _round_value(r_val),
+                    "sma_fast": _round_value(sf_val),
+                    "sma_slow": _round_value(ss_val),
                 }
-                for idx, row in enriched.tail(60).iterrows()
+                for d_val, o_val, h_val, l_val, c_val, v_val, r_val, sf_val, ss_val in zip(
+                    tail.index,
+                    tail.get("open", ()),
+                    tail.get("high", ()),
+                    tail.get("low", ()),
+                    tail.get("close", ()),
+                    tail.get("volume", ()),
+                    tail.get("rsi", ()),
+                    tail.get(fast_key, ()),
+                    tail.get(slow_key, ()),
+                    strict=False,
+                )
             ]
 
             response_payload: dict[str, Any] = {
