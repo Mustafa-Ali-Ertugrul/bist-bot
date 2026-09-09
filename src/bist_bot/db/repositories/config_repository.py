@@ -3,8 +3,6 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from sqlalchemy import select
-
 from bist_bot.db.database import ConfigRecord, DatabaseManager
 
 
@@ -28,9 +26,7 @@ class ConfigRepository:
 
     def get_config(self, key: str, default: Any = None) -> Any:
         record = self.manager.run_session(
-            lambda session: session.scalar(
-                select(ConfigRecord).where(ConfigRecord.key == key).limit(1)
-            ),
+            lambda session: session.get(ConfigRecord, key),
             read_only=True,
         )
         if record is None:
