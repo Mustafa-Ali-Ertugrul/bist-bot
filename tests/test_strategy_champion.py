@@ -82,7 +82,9 @@ def test_split_anomaly_guard() -> None:
     # +20% single-bar move: impossible under BIST ±10% circuits -> skip.
     assert fetcher._is_split_anomaly("THYAO.IS", _bars_with_jump(0.20), "6mo", "1d", "test") is True
     # Normal drift passes.
-    assert fetcher._is_split_anomaly("THYAO.IS", _bars_with_jump(0.02), "6mo", "1d", "test") is False
+    assert (
+        fetcher._is_split_anomaly("THYAO.IS", _bars_with_jump(0.02), "6mo", "1d", "test") is False
+    )
     # Too few bars: cannot judge -> pass.
     tiny = _bars_with_jump(0.50).head(1)
     assert fetcher._is_split_anomaly("THYAO.IS", tiny, "6mo", "1d", "test") is False

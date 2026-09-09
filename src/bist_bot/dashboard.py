@@ -868,7 +868,9 @@ def create_dashboard_app(
             # Pages are per-user dynamic shells (plan badge, gated content):
             # never let browsers heuristically cache them, otherwise users
             # keep seeing stale UI after deploys ("hala yok" class of bugs).
-            response.headers["Cache-Control"] = "no-cache"            # Pre-compressed asset fast-path: if client accepts gzip and a .gz
+            response.headers["Cache-Control"] = (
+                "no-cache"  # Pre-compressed asset fast-path: if client accepts gzip and a .gz
+            )
             # file was shipped alongside the asset, serve it directly without
             # re-compressing in Python.
             accept_enc = request.headers.get("Accept-Encoding", "").lower()

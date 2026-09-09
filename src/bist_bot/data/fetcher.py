@@ -879,7 +879,9 @@ class BISTDataFetcher:
                     continue
                 self._store_cache(ticker, period, interval, df)
                 results[ticker] = df
-            unresolved = [t for t in missing_tickers if t not in results and t not in anomaly_skipped]
+            unresolved = [
+                t for t in missing_tickers if t not in results and t not in anomaly_skipped
+            ]
 
         if unresolved:
             with ThreadPoolExecutor(
