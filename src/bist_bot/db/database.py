@@ -192,7 +192,7 @@ class ScanLogRecord(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     timestamp: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+        DateTime, nullable=False, index=True, default=lambda: datetime.now(UTC)
     )
     total_scanned: Mapped[int | None] = mapped_column(Integer, nullable=True)
     signals_generated: Mapped[int | None] = mapped_column(Integer, nullable=True)
