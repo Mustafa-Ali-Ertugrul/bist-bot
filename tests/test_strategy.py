@@ -32,6 +32,14 @@ class IdentityIndicators:
         return df.copy()
 
 
+@pytest.fixture(autouse=True)
+def _pin_conservative_profile():
+    """These tests were authored against conservative defaults; keep them
+    hermetic regardless of the ambient STRATEGY_PROFILE env."""
+    with settings.override(STRATEGY_PROFILE="conservative"):
+        yield
+
+
 class FakeRiskLevels:
     final_stop = 95.0
     final_target = 120.0
@@ -202,7 +210,7 @@ def bearish_frame() -> pd.DataFrame:
 
 
 def test_engine_thresholds_match_config():
-    engine = StrategyEngine()
+    engine = StrategyEngine(params=StrategyParams.conservative())
 
     assert engine.STRONG_BUY_THRESHOLD == settings.STRONG_BUY_THRESHOLD == 48
     assert engine.BUY_THRESHOLD == engine.params.buy_threshold
@@ -215,7 +223,7 @@ def test_engine_thresholds_match_config():
 
 def test_engine_uses_configured_sideways_and_momentum_thresholds():
     with settings.override(SIDEWAYS_EXTRA_THRESHOLD=9.0, MOMENTUM_CONFIRMATION_THRESHOLD=6.5):
-        engine = StrategyEngine()
+        engine = StrategyEngine(params=StrategyParams.conservative())
 
     assert engine.SIDEWAYS_EXTRA_THRESHOLD == 9.0
     assert engine.MOMENTUM_CONFIRMATION == 6.5
@@ -451,7 +459,7 @@ def test_engine_filters_when_adx_is_missing():
 
 
 def test_score_classification_full_range():
-    engine = StrategyEngine()
+    engine = StrategyEngine(params=StrategyParams.conservative())
     test_cases = [
         (50, "STRONG_BUY"),
         (48, "STRONG_BUY"),
@@ -522,7 +530,7 @@ def test_rsi_high_and_macd_bearish_returns_sell_signal(bearish_frame):
 
 
 def test_empty_dataframe_does_not_crash():
-    engine = StrategyEngine()
+    engine = StrategyEngine(params=StrategyParams.conservative())
 
     signal = engine.analyze("TEST.IS", pd.DataFrame())
 

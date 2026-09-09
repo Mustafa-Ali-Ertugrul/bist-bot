@@ -16,6 +16,10 @@ class StrategyParams:
         default_factory=lambda: float(settings.STRONG_BUY_THRESHOLD)
     )
     buy_threshold: float = 20.0
+    # Upper bound of the actionable buy band. Scores above this are
+    # overextended (backtest: 40+ scores drag WR down) and never actionable,
+    # regardless of label. Default 100.0 = effectively no cap.
+    max_actionable_score: float = 100.0
     weak_buy_threshold: float = field(default_factory=lambda: float(settings.WEAK_BUY_THRESHOLD))
     weak_sell_threshold: float = field(default_factory=lambda: float(settings.WEAK_SELL_THRESHOLD))
     sell_threshold: float = field(default_factory=lambda: float(settings.SELL_THRESHOLD))
@@ -121,8 +125,8 @@ class StrategyParams:
     # Trade-actionability contract (single source for all downstream layers)
     # ------------------------------------------------------------------
     def buy_actionable_score(self, score: float) -> bool:
-        """Return True when `score` crosses the buy-side trade threshold."""
-        return score >= self.buy_threshold
+        """Return True when `score` sits inside the actionable buy band."""
+        return self.buy_threshold <= score <= self.max_actionable_score
 
     def sell_actionable_score(self, score: float) -> bool:
         """Return True when `score` crosses the sell-side trade threshold."""
@@ -167,6 +171,21 @@ class StrategyParams:
         return params
 
     @classmethod
+    def champion_wr(cls) -> StrategyParams:
+        """Champion WR profile (challenge 2026-08-29: 76.4% backtest WR).
+
+        Replicates the winning configuration live: score band 28-33
+        (40+ overextended scores excluded), pv-confirmation gate on,
+        RR/floor handled via FALLBACK_TARGET_RR env. Sell side unchanged.
+        """
+        params = cls.conservative()
+        params.buy_threshold = 28.0
+        params.sell_threshold = -28.0
+        params.max_actionable_score = 33.0
+        params.pv_confirmation_required = True
+        return params
+
+    @classmethod
     def from_settings(cls) -> StrategyParams:
         """Return the right profile instance based on STRATEGY_PROFILE."""
         profile = getattr(settings, "STRATEGY_PROFILE", "conservative")
@@ -174,4 +193,6 @@ class StrategyParams:
             return cls.conservative()
         if profile == "research_v1":
             return cls.research_v1()
+        if profile == "champion":
+            return cls.champion_wr()
         return cls()

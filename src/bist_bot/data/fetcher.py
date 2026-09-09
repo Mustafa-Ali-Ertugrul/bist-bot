@@ -315,6 +315,37 @@ class BISTDataFetcher:
             return None
         return valid_df
 
+    def _is_split_anomaly(
+        self, ticker: str, df: pd.DataFrame, period: str, interval: str, source: str
+    ) -> bool:
+        """Detect split/adjustment artifacts (challenge 2026-08-29 finding #1).
+
+        BIST enforces ±10% daily circuit limits, so any single-bar move beyond
+        ±15% is a data artifact, never a real price. Returns True when the
+        symbol must be skipped for this cycle (nothing is cached).
+        """
+        try:
+            anomaly_limit = float(getattr(settings, "SPLIT_ANOMALY_MAX_PCT", 15.0) or 15.0) / 100.0
+            closes = pd.to_numeric(df["close"], errors="coerce").dropna()
+            if len(closes) < 2:
+                return False
+            max_move = float((closes / closes.shift(1) - 1.0).abs().max())
+            if max_move <= anomaly_limit:
+                return False
+            logger.warning(
+                "history_split_anomaly_skipped",
+                ticker=ticker,
+                max_daily_move_pct=round(max_move * 100.0, 1),
+                limit_pct=round(anomaly_limit * 100.0, 1),
+            )
+            self._record_history_fetch_meta(
+                ticker, period, interval, source=source, status="anomaly_skipped"
+            )
+            return True
+        except Exception:
+            logger.warning("history_anomaly_check_failed", ticker=ticker)
+            return False
+
     def _store_cache(self, ticker: str, period: str, interval: str, df: pd.DataFrame) -> None:
         """Store normalized price history in the in-memory cache.
 
@@ -575,6 +606,9 @@ class BISTDataFetcher:
             if df is None:
                 return None
 
+            if self._is_split_anomaly(normalized_ticker, df, period, interval, fetch_source):
+                return None
+
             self._store_cache(normalized_ticker, period, interval, df)
             self._record_history_fetch_meta(
                 normalized_ticker,
@@ -696,6 +730,9 @@ class BISTDataFetcher:
                         df = self._normalize_history(ticker, ticker_frame, validate=validate)
                         if df is None:
                             unresolved.append(ticker)
+                            continue
+                        if self._is_split_anomaly(ticker, df, period, interval, "batch_all"):
+                            outcomes[ticker] = "anomaly_skipped"
                             continue
 
                         self._store_cache(ticker, period, interval, df)
@@ -829,13 +866,20 @@ class BISTDataFetcher:
         unresolved = list(missing_tickers)
         if raw_batch:
             unresolved = []
+            anomaly_skipped: set[str] = set()
             for ticker in missing_tickers:
                 df = self._normalize_history(ticker, raw_batch.get(ticker), validate=validate)
                 if df is None:
                     unresolved.append(ticker)
                     continue
+                if self._is_split_anomaly(ticker, df, period, interval, "batch"):
+                    # Already flagged; retrying via fetch_single would only
+                    # re-download the same artifact.
+                    anomaly_skipped.add(ticker)
+                    continue
                 self._store_cache(ticker, period, interval, df)
                 results[ticker] = df
+            unresolved = [t for t in missing_tickers if t not in results and t not in anomaly_skipped]
 
         if unresolved:
             with ThreadPoolExecutor(

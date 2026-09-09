@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
+from pathlib import Path
+
 from bist_bot.config.settings import settings
 from bist_bot.strategy.engine import StrategyEngine
 from bist_bot.strategy.params import StrategyParams
@@ -23,19 +28,31 @@ def test_strategy_params_from_settings_returns_default_for_non_conservative() ->
     assert params.counter_trend_multiplier == 0.3
 
 
-def test_strategy_params_from_settings_defaults_to_conservative() -> None:
-    """STRATEGY_PROFILE not set → defaults to conservative."""
-    with settings.override(STRATEGY_PROFILE="conservative"):
-        pass  # verify settings accepts it
-    with settings.override():
-        params = StrategyParams.from_settings()
-    # The ContextVar is cleared after 'with settings.override():' block,
-    # but os.getenv returns None → from_settings() falls through to conservative.
-    # This works because STRATEGY_PROFILE env var is set to 'conservative'
-    # by docker-compose env_file but not in bare test env.
-    # We explicitly test the safe fallback: when env is absent, conservative wins.
-    params = StrategyParams.from_settings()
-    assert params.buy_threshold == 25.0
+def test_strategy_params_from_settings_defaults_to_conservative(tmp_path: Path) -> None:
+    """STRATEGY_PROFILE nowhere (clean env + no .env file) → conservative.
+
+    Runs in a subprocess because the setting is baked at import time via
+    dotenv; this keeps the test hermetic regardless of the developer's
+    local .env (e.g. STRATEGY_PROFILE=champion).
+    """
+    repo_root = Path(__file__).resolve().parents[1]
+    env = {k: v for k, v in os.environ.items() if k != "STRATEGY_PROFILE"}
+    env["PYTHONPATH"] = str(repo_root / "src") + os.pathsep + env.get("PYTHONPATH", "")
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from bist_bot.strategy.params import StrategyParams; "
+            "print(StrategyParams.from_settings().buy_threshold)",
+        ],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=180,
+    )
+    assert proc.returncode == 0, proc.stderr[-2000:]
+    assert proc.stdout.strip() == "25.0"
 
 
 def test_engine_uses_conservative_params_by_default() -> None:
