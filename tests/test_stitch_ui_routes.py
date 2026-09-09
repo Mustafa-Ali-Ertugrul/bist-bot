@@ -104,7 +104,8 @@ def test_login_sets_http_only_strict_cookie(app: Flask) -> None:
         )
         assert reg.status_code == 201
         login = client.post(
-            "/api/auth/login", json={"email": "cookie@bistbot.local", "password": "Str0ng-test-pass!"}
+            "/api/auth/login",
+            json={"email": "cookie@bistbot.local", "password": "Str0ng-test-pass!"},
         )
         assert login.status_code == 200
         set_cookies = login.headers.getlist("Set-Cookie")
@@ -133,9 +134,7 @@ def test_verify_endpoint_rejects_bogus_or_missing_token(app: Flask) -> None:
     with app.test_client() as client:
         assert client.get("/api/auth/verify").status_code == 401
         # Malformed tokens get Flask-JWT-Extended's default 422 (same as /api/*).
-        bad = client.get(
-            "/api/auth/verify", headers={"Authorization": "Bearer bogus-token"}
-        )
+        bad = client.get("/api/auth/verify", headers={"Authorization": "Bearer bogus-token"})
         assert bad.status_code == 422
 
 
@@ -156,9 +155,7 @@ def test_session_endpoint_mints_cookie_from_bearer(app: Flask) -> None:
 def test_session_endpoint_rejects_bogus_or_missing_token(app: Flask) -> None:
     with app.test_client() as client:
         assert client.post("/api/auth/session").status_code == 401
-        bad = client.post(
-            "/api/auth/session", headers={"Authorization": "Bearer bogus-token"}
-        )
+        bad = client.post("/api/auth/session", headers={"Authorization": "Bearer bogus-token"})
         assert bad.status_code == 422
 
 

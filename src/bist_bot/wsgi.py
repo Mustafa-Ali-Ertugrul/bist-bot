@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 # Hardening: Suppress Gunicorn server banner fingerprinting
 try:
     import gunicorn.http.wsgi  # type: ignore[import-not-found]
+
     gunicorn.http.wsgi.SERVER = "BistBot"
 except (ImportError, AttributeError):
     pass

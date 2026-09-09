@@ -569,6 +569,7 @@ def create_dashboard_app(
     def _release_scan_lock() -> None:
         with _scan_lock:
             _scan_started_at[0] = 0.0
+
     _benchmark_cache: dict[str, Any] = {
         "timestamp": 0.0,
         "data": {
@@ -587,6 +588,7 @@ def create_dashboard_app(
         def _worker():
             try:
                 import yfinance as yf
+
                 tickers = {"XU100": "XU100.IS", "XU030": "XU030.IS", "USDTRY": "USDTRY=X"}
                 res: dict[str, Any] = {}
                 for k, sym in tickers.items():
@@ -760,7 +762,7 @@ def create_dashboard_app(
             if "gzip" in accept_enc and not response.headers.get("Content-Encoding"):
                 static_folder = app.static_folder
                 if static_folder:
-                    rel_path = request.path[len("/static/"):].lstrip("/")
+                    rel_path = request.path[len("/static/") :].lstrip("/")
                     gz_path = os.path.join(static_folder, rel_path + ".gz")
                     if os.path.isfile(gz_path):
                         try:
@@ -787,10 +789,14 @@ def create_dashboard_app(
             and "Content-Encoding" not in response.headers
         ):
             c_type = response.headers.get("Content-Type", "").lower()
-            if any(ct in c_type for ct in ("text/", "application/json", "application/javascript", "image/svg+xml")):
+            if any(
+                ct in c_type
+                for ct in ("text/", "application/json", "application/javascript", "image/svg+xml")
+            ):
                 body_bytes = response.get_data()
                 if len(body_bytes) >= 512:
                     import gzip
+
                     compressed = gzip.compress(body_bytes, compresslevel=6)
                     response.set_data(compressed)
                     response.headers["Content-Encoding"] = "gzip"
@@ -807,24 +813,32 @@ def create_dashboard_app(
     @app.errorhandler(404)
     def _handle_not_found(_e: Any):
         if request.path.startswith("/api/"):
-            return jsonify({"status": "error", "message": "İstenen kaynak veya endpoint bulunamadı."}), 404
+            return jsonify(
+                {"status": "error", "message": "İstenen kaynak veya endpoint bulunamadı."}
+            ), 404
         return redirect("/ui/dashboard", code=302)
 
     @app.errorhandler(405)
     def _handle_method_not_allowed(e: Any):
         if request.path.startswith("/api/"):
-            return jsonify({"status": "error", "message": "Bu endpoint için HTTP metodu desteklenmiyor."}), 405
+            return jsonify(
+                {"status": "error", "message": "Bu endpoint için HTTP metodu desteklenmiyor."}
+            ), 405
         return e
 
     @app.errorhandler(429)
     def _handle_rate_limit(_e: Any):
-        return jsonify({"status": "error", "message": "Çok fazla istek gönderildi. Lütfen biraz bekleyin."}), 429
+        return jsonify(
+            {"status": "error", "message": "Çok fazla istek gönderildi. Lütfen biraz bekleyin."}
+        ), 429
 
     @app.errorhandler(500)
     def _handle_internal_error(e: Any):
         logger.exception("unhandled_internal_server_error", path=request.path)
         if request.path.startswith("/api/"):
-            return jsonify({"status": "error", "message": "Sunucu içi beklenmeyen bir hata oluştu."}), 500
+            return jsonify(
+                {"status": "error", "message": "Sunucu içi beklenmeyen bir hata oluştu."}
+            ), 500
         return e
 
     @app.route("/health")
@@ -1042,15 +1056,11 @@ def create_dashboard_app(
         payload = _safe_json_payload()
         email = str(payload.get("email", "")).strip().lower()
         password = str(payload.get("password", ""))
-        if (
-            not email
-            or not password
-            or len(email) > 128
-            or len(password) > 256
-            or "@" not in email
-        ):
+        if not email or not password or len(email) > 128 or len(password) > 256 or "@" not in email:
             logger.warning(
-                "api_login_failed", reason="invalid_format_or_length", email=_mask_email(email) or ""
+                "api_login_failed",
+                reason="invalid_format_or_length",
+                email=_mask_email(email) or "",
             )
             return jsonify(
                 {"status": "error", "message": get_message("api.invalid_credentials")}
@@ -1204,9 +1214,7 @@ def create_dashboard_app(
             executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
 
             def _run_scan() -> list[Any]:
-                return scan_service.scan_once(
-                    force_refresh=force_refresh, abort_event=abort_event
-                )
+                return scan_service.scan_once(force_refresh=force_refresh, abort_event=abort_event)
 
             scan_future = executor.submit(_run_scan)
             try:
@@ -1550,7 +1558,20 @@ def create_dashboard_app(
                 "haftalik": ("1y", "1wk"),
             }
             _ALLOWED_PERIODS = {"1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "max"}
-            _ALLOWED_INTERVALS = {"1m", "2m", "5m", "15m", "30m", "60m", "90m", "1h", "1d", "5d", "1wk", "1mo"}
+            _ALLOWED_INTERVALS = {
+                "1m",
+                "2m",
+                "5m",
+                "15m",
+                "30m",
+                "60m",
+                "90m",
+                "1h",
+                "1d",
+                "5d",
+                "1wk",
+                "1mo",
+            }
             if req_interval in tf_map:
                 target_period, target_interval = tf_map[req_interval]
             elif req_period in _ALLOWED_PERIODS and req_interval in _ALLOWED_INTERVALS:
@@ -1780,7 +1801,9 @@ def create_dashboard_app(
         for sig in recent_signals:
             st = str(sig.get("signal_type", "")).upper()
             ticker = str(sig.get("ticker", "")).replace(".IS", "")
-            if ("AL" in st or "SAT" in st or "BUY" in st or "SELL" in st) and ticker not in actionable_symbols:
+            if (
+                "AL" in st or "SAT" in st or "BUY" in st or "SELL" in st
+            ) and ticker not in actionable_symbols:
                 actionable_symbols.append(ticker)
             for cond in sig.get("conditions", []):
                 cond_str = str(cond)
@@ -1807,8 +1830,10 @@ def create_dashboard_app(
 
         vol_ratio = round(1.0 + (vol_up_count / max(1, len(recent_signals))), 2)
         actionable_summary = (
-            ", ".join(actionable_symbols[:3]) + (f" +{len(actionable_symbols)-3}" if len(actionable_symbols) > 3 else "")
-            if actionable_symbols else "Beklemede"
+            ", ".join(actionable_symbols[:3])
+            + (f" +{len(actionable_symbols) - 3}" if len(actionable_symbols) > 3 else "")
+            if actionable_symbols
+            else "Beklemede"
         )
 
         breadth = {

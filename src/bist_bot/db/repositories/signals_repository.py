@@ -418,6 +418,7 @@ class SignalsRepository:
     ) -> tuple[dict[str, Any], dict[str, Any] | None, list[dict[str, Any]]]:
         """Fetch performance stats, latest scan log, and recent signals in a single
         session/connection checkout to reduce latency and connection pool pressure."""
+
         def _read(session):
             stats_row = session.execute(
                 select(

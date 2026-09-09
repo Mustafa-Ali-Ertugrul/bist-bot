@@ -167,6 +167,7 @@ class OrderIntentsRepository:
 
     def count_unaccounted_open(self) -> int:
         """Number of ack_unaccounted intents that still hold their symbol lock."""
+
         def _read(session):
             return session.execute(
                 select(func.count())
