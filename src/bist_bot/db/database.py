@@ -222,10 +222,7 @@ class UserRecord(Base):
     # unique ix_users_email index enforced since migration 0002. The metadata
     # naming convention gives the inline constraint the same PostgreSQL name
     # so `alembic check` stays green.
-    __table_args__ = (
-        Index("ix_users_email", "email", unique=True),
-        Index("ix_users_google_id", "google_id", unique=True),
-    )
+    __table_args__ = (Index("ix_users_email", "email", unique=True),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     email: Mapped[str] = mapped_column(String, nullable=False, unique=True)
@@ -238,7 +235,6 @@ class UserRecord(Base):
     )
     plan_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     trial_ends_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    google_id: Mapped[str | None] = mapped_column(String, nullable=True, unique=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=lambda: datetime.now(UTC)
     )

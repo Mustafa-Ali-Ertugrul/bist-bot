@@ -38,9 +38,6 @@ def app(tmp_path) -> Flask:
         PRO_PRICE_TRY=500,
         PRO_PLUS_PRICE_TRY=700,
         SUBSCRIPTION_DAYS=30,
-        GOOGLE_CLIENT_ID="test-google-client-id",
-        GOOGLE_CLIENT_SECRET="test-google-client-secret",
-        GOOGLE_REDIRECT_URI="http://localhost:5000/api/auth/google/callback",
     ):
         manager = DatabaseManager(sqlite_path=db_path)
         db = DataAccess(manager)
@@ -353,19 +350,18 @@ def test_approve_pro_plus_without_telegram_config_still_approves(app: Flask):
 
 
 # ---------------------------------------------------------------------------
-# Google OAuth (mocked network)
+# Google OAuth permanently removed (no routes, no login button)
 # ---------------------------------------------------------------------------
 
 
-def _google_login_redirect(client: FlaskClient) -> str:
-    res = client.get("/api/auth/google/login")
-    assert res.status_code == 302
-    location = res.headers["Location"]
-    assert location.startswith("https://accounts.google.com/o/oauth2/v2/auth?")
-    assert "state=" in location
-    from urllib.parse import parse_qs, urlparse
+def test_google_routes_gone(client: FlaskClient):
+    assert client.get("/api/auth/google/login").status_code == 404
+    assert client.get("/api/auth/google/callback?code=x&state=y").status_code == 404
 
-    return parse_qs(urlparse(location).query)["state"][0]
+
+# ---------------------------------------------------------------------------
+# Telegram invite (mocked network)
+# ---------------------------------------------------------------------------
 
 
 class _FakeResp:
@@ -375,83 +371,6 @@ class _FakeResp:
 
     def json(self):
         return self._payload
-
-
-def test_google_callback_rejects_bad_state(client: FlaskClient):
-    res = client.get("/api/auth/google/callback?code=abc&state=nope")
-    assert res.status_code == 302
-    assert res.headers["Location"].startswith("/login")
-
-
-def test_google_full_flow_creates_trial_user(client: FlaskClient, monkeypatch):
-    state = _google_login_redirect(client)
-
-    def fake_post(url, data=None, timeout=None, **kwargs):
-        assert "oauth2.googleapis.com/token" in url
-        assert data["code"] == "valid-code"
-        return _FakeResp(200, {"access_token": "ya29.test"})
-
-    def fake_get(url, headers=None, timeout=None, **kwargs):
-        assert "userinfo" in url
-        return _FakeResp(
-            200, {"sub": "google-123", "email": "guser@example.com", "email_verified": True}
-        )
-
-    monkeypatch.setattr(requests, "post", fake_post)
-    monkeypatch.setattr(requests, "get", fake_get)
-    res = client.get(f"/api/auth/google/callback?code=valid-code&state={state}")
-    assert res.status_code == 302
-    assert res.headers["Location"].endswith("/ui/dashboard")
-    assert "access_token_cookie=" in res.headers.get("Set-Cookie", "")
-    # Reusing the same state must fail (single-use).
-    res2 = client.get(f"/api/auth/google/callback?code=valid-code&state={state}")
-    assert res2.status_code == 302
-    assert res2.headers["Location"].startswith("/login")
-
-
-def test_google_links_verified_email_account(client: FlaskClient, monkeypatch, app: Flask):
-    _register(client, "linkme@example.com")
-
-    def fake_post(url, data=None, timeout=None, **kwargs):
-        return _FakeResp(200, {"access_token": "ya29.test"})
-
-    def fake_get(url, headers=None, timeout=None, **kwargs):
-        return _FakeResp(
-            200, {"sub": "google-999", "email": "linkme@example.com", "email_verified": True}
-        )
-
-    monkeypatch.setattr(requests, "post", fake_post)
-    monkeypatch.setattr(requests, "get", fake_get)
-    state = _google_login_redirect(client)
-    res = client.get(f"/api/auth/google/callback?code=c2&state={state}")
-    assert res.status_code == 302
-    assert res.headers["Location"].endswith("/ui/dashboard")
-
-
-def test_google_unverified_email_does_not_link(client: FlaskClient, monkeypatch):
-    _register(client, "nolink@example.com")
-
-    def fake_post(url, data=None, timeout=None, **kwargs):
-        return _FakeResp(200, {"access_token": "ya29.test"})
-
-    def fake_get(url, headers=None, timeout=None, **kwargs):
-        return _FakeResp(
-            200, {"sub": "google-000", "email": "nolink@example.com", "email_verified": False}
-        )
-
-    monkeypatch.setattr(requests, "post", fake_post)
-    monkeypatch.setattr(requests, "get", fake_get)
-    state = _google_login_redirect(client)
-    # Unverified email must neither attach to the existing password account
-    # nor mint a duplicate-email identity: fail closed to login with error.
-    res = client.get(f"/api/auth/google/callback?code=c3&state={state}")
-    assert res.status_code == 302
-    assert res.headers["Location"].startswith("/login")
-
-
-# ---------------------------------------------------------------------------
-# Telegram invite (mocked network)
-# ---------------------------------------------------------------------------
 
 
 def test_telegram_invite_success_and_failure(monkeypatch):
@@ -503,6 +422,6 @@ def test_migration_0006_subscription_columns(tmp_path):
         insp = sa.inspect(conn)
         assert "payment_requests" in set(insp.get_table_names())
         user_cols = {c["name"] for c in insp.get_columns("users")}
-        assert {"plan", "plan_expires_at", "trial_ends_at", "google_id"} <= user_cols
+        assert {"plan", "plan_expires_at", "trial_ends_at"} <= user_cols
         pay_cols = {c["name"] for c in insp.get_columns("payment_requests")}
         assert {"user_id", "plan", "amount_try", "reference", "status", "decided_by"} <= pay_cols

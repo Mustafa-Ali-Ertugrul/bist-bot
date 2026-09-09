@@ -555,11 +555,6 @@ class BillingSettings:
     SUBSCRIPTION_DAYS: int = _get_int_env("SUBSCRIPTION_DAYS", 30)
     # Manual bank transfer destination shown on the billing page.
     BILLING_IBAN: str = _get_str_env("BILLING_IBAN")
-    # Where to return after Google OAuth code exchange (must match the
-    # redirect URI registered in Google Cloud Console exactly).
-    GOOGLE_CLIENT_ID: str = _get_str_env("GOOGLE_CLIENT_ID")
-    GOOGLE_CLIENT_SECRET: str = _get_str_env("GOOGLE_CLIENT_SECRET")
-    GOOGLE_REDIRECT_URI: str = _get_str_env("GOOGLE_REDIRECT_URI")
     # Pro+ private Telegram channel used for single-use invite links.
     TELEGRAM_PRO_CHANNEL_ID: str = _get_str_env("TELEGRAM_PRO_CHANNEL_ID")
     # Single-use invite link lifetime in hours.

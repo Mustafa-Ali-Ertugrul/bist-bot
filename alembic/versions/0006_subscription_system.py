@@ -28,7 +28,6 @@ def upgrade() -> None:
 
     if "users" in tables:
         columns = {c["name"] for c in insp.get_columns("users")}
-        indexes = {i["name"] for i in insp.get_indexes("users")}
         with op.batch_alter_table("users") as batch_op:
             if "plan" not in columns:
                 batch_op.add_column(
@@ -38,10 +37,6 @@ def upgrade() -> None:
                 batch_op.add_column(sa.Column("plan_expires_at", sa.DateTime(), nullable=True))
             if "trial_ends_at" not in columns:
                 batch_op.add_column(sa.Column("trial_ends_at", sa.DateTime(), nullable=True))
-            if "google_id" not in columns:
-                batch_op.add_column(sa.Column("google_id", sa.String(), nullable=True))
-            if "ix_users_google_id" not in indexes:
-                batch_op.create_index("ix_users_google_id", ["google_id"], unique=True)
 
         # Seed existing users with a fresh 24h trial from migration timestamp if not set
         op.execute(
@@ -81,11 +76,8 @@ def downgrade() -> None:
         op.drop_table("payment_requests")
 
     if "users" in tables:
-        indexes = {i["name"] for i in insp.get_indexes("users")}
         columns = {c["name"] for c in insp.get_columns("users")}
         with op.batch_alter_table("users") as batch_op:
-            if "ix_users_google_id" in indexes:
-                batch_op.drop_index("ix_users_google_id")
-            for col in ("google_id", "trial_ends_at", "plan_expires_at", "plan"):
+            for col in ("trial_ends_at", "plan_expires_at", "plan"):
                 if col in columns:
                     batch_op.drop_column(col)

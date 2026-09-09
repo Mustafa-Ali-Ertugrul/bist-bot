@@ -185,7 +185,6 @@ class Settings:
             "algolab_password",
             "algolab_api_key",
             "telegram_bot_token",
-            "google_client_secret",
             "midas_api_key",
             "database_url",
         }
