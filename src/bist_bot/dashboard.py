@@ -864,7 +864,11 @@ def create_dashboard_app(
 
         if request.path.startswith("/static/"):
             response.headers["Cache-Control"] = "public, max-age=86400, stale-while-revalidate=3600"
-            # Pre-compressed asset fast-path: if client accepts gzip and a .gz
+        elif response.content_type and "text/html" in response.content_type:
+            # Pages are per-user dynamic shells (plan badge, gated content):
+            # never let browsers heuristically cache them, otherwise users
+            # keep seeing stale UI after deploys ("hala yok" class of bugs).
+            response.headers["Cache-Control"] = "no-cache"            # Pre-compressed asset fast-path: if client accepts gzip and a .gz
             # file was shipped alongside the asset, serve it directly without
             # re-compressing in Python.
             accept_enc = request.headers.get("Accept-Encoding", "").lower()

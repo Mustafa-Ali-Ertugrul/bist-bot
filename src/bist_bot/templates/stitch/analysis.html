@@ -140,7 +140,7 @@
 <!-- Left: Interactive Technical Candlestick + RSI Desk (8 cols) -->
 <div class="xl:col-span-8 flex flex-col gap-space-md">
 <!-- Chart Shell -->
-<div class="bg-surface-container-low/80 backdrop-blur-xl p-space-md rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.4)] flex flex-col">
+<div class="bg-surface-container-low/80 backdrop-blur-xl p-space-md rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.4)] flex flex-col" id="analysis-chart-shell">
 <!-- Chart Controls Subheader -->
 <div class="flex flex-wrap items-center justify-between gap-space-sm pb-space-sm mb-space-sm bg-surface-container-lowest/50 p-space-xs rounded-lg">
 <div class="flex items-center gap-space-xs">
@@ -154,16 +154,16 @@
 <span class="font-label-code text-label-code text-on-surface-variant hidden md:inline">EMA(200): <span class="text-outline">284.90</span></span>
 </div>
 <div class="flex items-center gap-space-xs">
-<button class="px-space-xs py-1 rounded text-primary font-label-code text-label-code bg-surface-container-high flex items-center gap-1">
+<button class="px-space-xs py-1 rounded text-primary font-label-code text-label-code bg-surface-container-high flex items-center gap-1" id="chart-btn-candles">
 <span class="material-symbols-outlined text-[14px]">candlestick_chart</span> Mum Grafiği
             </button>
-<button class="px-space-xs py-1 rounded text-on-surface-variant hover:text-on-surface font-label-code text-label-code bg-surface-container flex items-center gap-1">
+<button class="px-space-xs py-1 rounded text-on-surface-variant hover:text-on-surface font-label-code text-label-code bg-surface-container flex items-center gap-1" id="chart-btn-ema">
 <span class="material-symbols-outlined text-[14px]">stacked_line_chart</span> EMA
             </button>
-<button class="px-space-xs py-1 rounded text-on-surface-variant hover:text-on-surface font-label-code text-label-code bg-surface-container flex items-center gap-1">
+<button class="px-space-xs py-1 rounded text-on-surface-variant hover:text-on-surface font-label-code text-label-code bg-surface-container flex items-center gap-1" id="chart-btn-bollinger">
 <span class="material-symbols-outlined text-[14px]">tune</span> Bollinger
             </button>
-<button class="p-1 rounded text-on-surface-variant hover:text-on-surface bg-surface-container" title="Tam Ekran">
+<button class="p-1 rounded text-on-surface-variant hover:text-on-surface bg-surface-container" id="chart-btn-fullscreen" title="Tam Ekran">
 <span class="material-symbols-outlined text-[16px]">fullscreen</span>
 </button>
 </div>
@@ -632,5 +632,5 @@
     }
   };
 </script>
-<script src="/static/app.js?nocache=100010"></script>
+<script src="/static/app.js?nocache=100011"></script>
 </body></html>

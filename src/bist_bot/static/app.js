@@ -61,7 +61,7 @@
       badge.classList.remove('hidden');
       if (data.status === 'active') {
         badge.textContent = `${label} • ${formatRemaining(data.remaining_seconds)}`;
-        const urgent = (data.remaining_seconds || 0) < 86400;
+        const urgent = (data.remaining_seconds || 0) < 21600;
         badge.classList.toggle('text-error', urgent);
       } else {
         badge.textContent = 'Süresi doldu';
@@ -688,6 +688,7 @@
       const signals = Array.isArray(data.signals) ? data.signals : [];
       if (!signals.length) return;
       container.innerHTML = signals.map(renderSignalCard).join('');
+      updateFilterCounts();
       // Attach click listeners to update precision view + live chart
       const cards = container.querySelectorAll('.signal-card');
       cards.forEach(card => {
@@ -935,6 +936,45 @@
   // -------------------------------------------------------------------------
   // Signals Page Interactivity
   // -------------------------------------------------------------------------
+  // Single source of truth for filter matching — used by both tab clicks
+  // and the live counts shown on the tabs. Kept at IIFE level so both
+  // hydrateSignalsStream() and initSignals() can reach it.
+  function signalCardMatches(card, filter) {
+    const score = parseInt(String(card.dataset.score || '0').replace('+', ''), 10) || 0;
+    const text = (card.innerText || '').toLocaleUpperCase('tr-TR');
+    if (filter === 'high-conviction') {
+      return score >= 30;
+    } else if (filter === 'momentum') {
+      return text.includes('MOMENTUM') || score >= 20;
+    } else if (filter === 'reversal') {
+      return text.includes('DÖNÜŞ') || text.includes('DIP') || text.includes('SAT') || score < 0;
+    } else if (filter === 'breakout') {
+      return text.includes('KIRILIM') || text.includes('BREAKOUT') || score >= 25;
+    }
+    return true;
+  }
+
+  function updateFilterCounts() {
+    const container = document.getElementById('signalsStreamContainer');
+    if (!container) return;
+    const cards = Array.from(container.querySelectorAll('.signal-card'));
+    const counts = { all: cards.length, 'high-conviction': 0, momentum: 0, reversal: 0, breakout: 0 };
+    cards.forEach(c => {
+      ['high-conviction', 'momentum', 'reversal', 'breakout'].forEach(f => {
+        if (signalCardMatches(c, f)) counts[f]++;
+      });
+    });
+    const setCount = (id, value) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = String(value);
+    };
+    setCount('filter-count-all', counts.all);
+    setCount('filter-count-high-conviction', counts['high-conviction']);
+    setCount('filter-count-momentum', counts.momentum);
+    setCount('filter-count-reversal', counts.reversal);
+    setCount('filter-count-breakout', counts.breakout);
+  }
+
   async function initSignals() {
     await hydrateSignalsStream();
 
@@ -954,22 +994,7 @@
         let matchCount = 0;
 
         cards.forEach(c => {
-          const score = parseInt(String(c.dataset.score || '0').replace('+', ''), 10) || 0;
-          const text = (c.innerText || '').toLocaleUpperCase('tr-TR');
-          let show = true;
-
-          if (filter === 'high-conviction') {
-            show = score >= 30;
-          } else if (filter === 'momentum') {
-            show = text.includes('MOMENTUM') || score >= 20;
-          } else if (filter === 'reversal') {
-            show = text.includes('DÖNÜŞ') || text.includes('DIP') || text.includes('SAT') || score < 0;
-          } else if (filter === 'breakout') {
-            show = text.includes('KIRILIM') || text.includes('BREAKOUT') || score >= 25;
-          } else {
-            show = true;
-          }
-
+          const show = signalCardMatches(c, filter);
           c.style.display = show ? 'block' : 'none';
           if (show) matchCount++;
         });
@@ -1077,18 +1102,48 @@
   // Dynamic Candlestick Chart Engine (Analysis Page)
   // Renders real OHLC candlesticks, EMA lines and grid levels via SVG
   // -------------------------------------------------------------------------
-  window.renderCandlestickChart = function(priceData) {
+  // Analysis chart display state (driven by the Mum/EMA/Bollinger toggles)
+  let chartShowCandles = true;
+  let chartShowEMA = true;
+  let chartShowBollinger = false;
+  let lastAnalysisBars = [];
+
+  // Bollinger Bands from close prices (period 20, ±2σ), aligned with `data`
+  function computeBollinger(closes, period, mult) {
+    const up = [];
+    const lo = [];
+    for (let i = 0; i < closes.length; i++) {
+      if (i + 1 < period || !closes.slice(i + 1 - period, i + 1).every(Number.isFinite)) {
+        up.push(null);
+        lo.push(null);
+        continue;
+      }
+      const win = closes.slice(i + 1 - period, i + 1);
+      const mean = win.reduce((a, b) => a + b, 0) / period;
+      const sd = Math.sqrt(win.reduce((a, b) => a + (b - mean) * (b - mean), 0) / period);
+      up.push(mean + mult * sd);
+      lo.push(mean - mult * sd);
+    }
+    return { up: up, lo: lo };
+  }
+
+  window.renderCandlestickChart = function(priceData, opts) {
     const svg = document.getElementById('candlestickSvg');
     if (!svg || !Array.isArray(priceData) || priceData.length < 5) return;
+    const show = Object.assign({ candles: true, ema: true, bollinger: false }, opts || {});
 
     // Take last 30 bars for a crisp, readable candlestick chart
     const data = priceData.slice(-30);
+    lastAnalysisBars = data;
+    const closes = data.map(d => Number(d.close));
+    const band = computeBollinger(closes, 20, 2);
     const highs = data.map(d => Number(d.high)).filter(Number.isFinite);
     const lows = data.map(d => Number(d.low)).filter(Number.isFinite);
+    const bandVals = band.up.concat(band.lo).filter(v => Number.isFinite(v));
     if (!highs.length || !lows.length) return;
 
-    const minPrice = Math.min(...lows);
-    const maxPrice = Math.max(...highs);
+    const minPrice = Math.min(Math.min(...lows), ...(bandVals.length ? [Math.min(...bandVals)] : [Infinity]));
+    const maxPrice = Math.max(Math.max(...highs), ...(bandVals.length ? [Math.max(...bandVals)] : [-Infinity]));
     const padding = (maxPrice - minPrice) * 0.08 || 1.0;
     const yMin = Math.max(0, minPrice - padding);
     const yMax = maxPrice + padding;
@@ -1117,6 +1172,8 @@
     let barsHtml = '';
     let emaFastPoints = [];
     let emaSlowPoints = [];
+    let bollUpPoints = [];
+    let bollLoPoints = [];
 
     data.forEach((d, idx) => {
       const cx = (idx + 0.5) * stepX;
@@ -1143,14 +1200,25 @@
       // EMA points
       if (Number.isFinite(d.sma_fast)) emaFastPoints.push(`${cx.toFixed(1)},${getY(d.sma_fast).toFixed(1)}`);
       if (Number.isFinite(d.sma_slow)) emaSlowPoints.push(`${cx.toFixed(1)},${getY(d.sma_slow).toFixed(1)}`);
+      // Bollinger points
+      if (Number.isFinite(band.up[idx])) bollUpPoints.push(`${cx.toFixed(1)},${getY(band.up[idx]).toFixed(1)}`);
+      if (Number.isFinite(band.lo[idx])) bollLoPoints.push(`${cx.toFixed(1)},${getY(band.lo[idx]).toFixed(1)}`);
     });
 
     let emaHtml = '';
-    if (emaFastPoints.length > 1) {
+    if (show.ema && emaFastPoints.length > 1) {
       emaHtml += `<polyline points="${emaFastPoints.join(' ')}" fill="none" stroke="#7bd0ff" stroke-width="2" stroke-linecap="round" />`;
     }
-    if (emaSlowPoints.length > 1) {
+    if (show.ema && emaSlowPoints.length > 1) {
       emaHtml += `<polyline points="${emaSlowPoints.join(' ')}" fill="none" stroke="#dcfdff" stroke-width="1.5" stroke-dasharray="4,4" stroke-linecap="round" />`;
+    }
+
+    let bollHtml = '';
+    if (show.bollinger && bollUpPoints.length > 1 && bollLoPoints.length > 1) {
+      const loReversed = bollLoPoints.slice().reverse();
+      bollHtml += `<polygon points="${bollUpPoints.join(' ')} ${loReversed.join(' ')}" fill="#dcfdff" opacity="0.08" />`;
+      bollHtml += `<polyline points="${bollUpPoints.join(' ')}" fill="none" stroke="#dcfdff" stroke-width="1.5" stroke-dasharray="3,3" />`;
+      bollHtml += `<polyline points="${bollLoPoints.join(' ')}" fill="none" stroke="#dcfdff" stroke-width="1.5" stroke-dasharray="3,3" />`;
     }
 
     svg.innerHTML = `
@@ -1160,10 +1228,21 @@
           <stop offset="100%" stop-color="#4edea3" stop-opacity="0.0" />
         </linearGradient>
       </defs>
+      ${bollHtml}
       ${emaHtml}
-      ${barsHtml}
+      ${show.candles ? barsHtml : ''}
     `;
   };
+
+  function currentChartOpts() {
+    return { candles: chartShowCandles, ema: chartShowEMA, bollinger: chartShowBollinger };
+  }
+
+  function rerenderAnalysisChart() {
+    if (lastAnalysisBars.length >= 5) {
+      window.renderCandlestickChart(lastAnalysisBars, currentChartOpts());
+    }
+  }
 
   let currentActiveAnalysisTicker = 'THYAO';
   let currentActiveAnalysisTimeframe = '4s';
@@ -1243,7 +1322,7 @@
         }
 
         // Render Real Candlestick Chart!
-        window.renderCandlestickChart(priceData);
+        window.renderCandlestickChart(priceData, currentChartOpts());
 
         showToast(`${cleanTicker} analiz verileri ve mum grafiği başarıyla güncellendi.`, 'success', 3000);
       } else {
@@ -1316,18 +1395,84 @@
       };
     });
 
-    // Indicator chart toggles: Mum Grafiği, EMA, Bollinger
-    const chartToggles = document.querySelectorAll('button');
-    chartToggles.forEach(b => {
-      const t = b.textContent.trim();
-      if (t.includes('Mum Grafiği') || t.includes('EMA') || t.includes('Bollinger')) {
-        b.onclick = function () {
-          this.classList.toggle('bg-primary/20');
-          this.classList.toggle('text-primary');
-          showToast(`${t.split('\n')[0]} göstergesi açıldı/kapatıldı.`, 'info', 1500);
-        };
-      }
-    });
+    // Indicator chart toggles: Mum Grafiği, EMA, Bollinger (real re-render)
+    const BTN_ON = 'px-space-xs py-1 rounded text-primary font-label-code text-label-code bg-surface-container-high flex items-center gap-1 cursor-pointer';
+    const BTN_OFF = 'px-space-xs py-1 rounded text-on-surface-variant hover:text-on-surface font-label-code text-label-code bg-surface-container flex items-center gap-1 cursor-pointer';
+
+    function syncChartToggleButtons() {
+      const pairs = [
+        ['chart-btn-candles', chartShowCandles],
+        ['chart-btn-ema', chartShowEMA],
+        ['chart-btn-bollinger', chartShowBollinger]
+      ];
+      pairs.forEach(([id, on]) => {
+        const b = document.getElementById(id);
+        if (b) b.className = on ? BTN_ON : BTN_OFF;
+      });
+    }
+
+    function wireChartToggle(id, get, set, label) {
+      const b = document.getElementById(id);
+      if (!b) return;
+      b.onclick = function () {
+        set(!get());
+        syncChartToggleButtons();
+        rerenderAnalysisChart();
+        showToast(`${label} ${get() ? 'açıldı' : 'kapatıldı'}.`, 'info', 1200);
+      };
+    }
+
+    wireChartToggle('chart-btn-candles', () => chartShowCandles, v => { chartShowCandles = v; }, 'Mum grafiği');
+    wireChartToggle('chart-btn-ema', () => chartShowEMA, v => { chartShowEMA = v; }, 'EMA çizgileri');
+    wireChartToggle('chart-btn-bollinger', () => chartShowBollinger, v => { chartShowBollinger = v; }, 'Bollinger bandı');
+    syncChartToggleButtons();
+
+    // Fullscreen: native API with fixed-overlay fallback
+    const fsBtn = document.getElementById('chart-btn-fullscreen');
+    const chartShell = document.getElementById('analysis-chart-shell');
+    let fsFallbackOn = false;
+    function setFsFallback(on) {
+      fsFallbackOn = on;
+      if (!chartShell) return;
+      chartShell.style.position = on ? 'fixed' : '';
+      chartShell.style.inset = on ? '0' : '';
+      chartShell.style.zIndex = on ? '9990' : '';
+      chartShell.style.overflow = on ? 'auto' : '';
+      chartShell.style.borderRadius = on ? '0' : '';
+      const icon = fsBtn ? fsBtn.querySelector('.material-symbols-outlined') : null;
+      const active = on || !!document.fullscreenElement;
+      if (icon) icon.textContent = active ? 'fullscreen_exit' : 'fullscreen';
+      if (fsBtn) fsBtn.classList.toggle('text-primary', active);
+    }
+    if (fsBtn && chartShell) {
+      fsBtn.onclick = async function () {
+        // Already fullscreen (native or fallback) -> exit first.
+        if (document.fullscreenElement) {
+          try { await document.exitFullscreen(); } catch (e) { /* ignore */ }
+          setFsFallback(false);
+          return;
+        }
+        if (fsFallbackOn) {
+          setFsFallback(false);
+          return;
+        }
+        // Try native fullscreen; fall back to a fixed overlay.
+        try {
+          if (chartShell.requestFullscreen) {
+            await chartShell.requestFullscreen();
+          } else {
+            setFsFallback(true);
+          }
+        } catch (e) {
+          setFsFallback(true);
+        }
+      };
+      document.addEventListener('fullscreenchange', () => {
+        if (!document.fullscreenElement) setFsFallback(false);
+        const icon = fsBtn.querySelector('.material-symbols-outlined');
+        if (icon) icon.textContent = document.fullscreenElement ? 'fullscreen_exit' : 'fullscreen';
+      });
+    }
 
     // Add to Watchlist & Alarm button
     const addWatchBtn = Array.from(document.querySelectorAll('button')).find(b => b.textContent.includes('İzleme Listeme'));
