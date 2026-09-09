@@ -88,6 +88,7 @@ class SignalRecord(Base):
     __table_args__ = (
         Index("idx_signals_created_at", "created_at"),
         Index("idx_signals_ticker_created_at", "ticker", "created_at"),
+        Index("ix_signals_timestamp_id", "timestamp", "id"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
