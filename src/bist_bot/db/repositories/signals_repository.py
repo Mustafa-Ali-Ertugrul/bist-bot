@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta, tzinfo
 from typing import Any, cast
-from zoneinfo import ZoneInfo
 
 from sqlalchemy import case, func, select
 
 from bist_bot.db.database import DatabaseManager, ScanLogRecord, SignalRecord
+from bist_bot.market_calendar import TR
 from bist_bot.strategy.signal_models import Signal, SignalType
 
 
@@ -156,7 +156,7 @@ class SignalsRepository:
     def get_signals_for_day(
         self,
         day: date,
-        tz: ZoneInfo = ZoneInfo("Europe/Istanbul"),
+        tz: tzinfo = TR,
     ) -> list[dict[str, Any]]:
         """Return signals generated on the given local day (half-open interval [start, end) in UTC)."""
         start_local = datetime.combine(day, time.min, tzinfo=tz)
@@ -182,7 +182,7 @@ class SignalsRepository:
         self,
         signal_types: list[str],
         day: date,
-        tz: ZoneInfo = ZoneInfo("Europe/Istanbul"),
+        tz: tzinfo = TR,
     ) -> set[str]:
         """Return the set of unique tickers that already produced a signal of any
         listed ``signal_types`` on the given local day. Used for per-ticker dedup
@@ -430,7 +430,7 @@ class SignalsRepository:
     def get_scan_logs_for_day(
         self,
         day: date,
-        tz: ZoneInfo = ZoneInfo("Europe/Istanbul"),
+        tz: tzinfo = TR,
     ) -> list[dict[str, Any]]:
         """Return scan logs recorded on the given local day (half-open interval [start, end) in UTC)."""
         start_local = datetime.combine(day, time.min, tzinfo=tz)
