@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import concurrent.futures
 import json
+import os
 import re
 import secrets
 import threading
@@ -752,6 +753,30 @@ def create_dashboard_app(
 
         if request.path.startswith("/static/"):
             response.headers["Cache-Control"] = "public, max-age=86400, stale-while-revalidate=3600"
+            # Pre-compressed asset fast-path: if client accepts gzip and a .gz
+            # file was shipped alongside the asset, serve it directly without
+            # re-compressing in Python.
+            accept_enc = request.headers.get("Accept-Encoding", "").lower()
+            if "gzip" in accept_enc and not response.headers.get("Content-Encoding"):
+                static_folder = app.static_folder
+                if static_folder:
+                    rel_path = request.path[len("/static/"):].lstrip("/")
+                    gz_path = os.path.join(static_folder, rel_path + ".gz")
+                    if os.path.isfile(gz_path):
+                        try:
+                            with open(gz_path, "rb") as f:
+                                gz_bytes = f.read()
+                            orig_type = response.headers.get("Content-Type")
+                            response.set_data(gz_bytes)
+                            response.direct_passthrough = False
+                            response.headers["Content-Encoding"] = "gzip"
+                            response.headers["Content-Length"] = str(len(gz_bytes))
+                            if orig_type:
+                                response.headers["Content-Type"] = orig_type
+                            response.headers["Vary"] = "Accept-Encoding"
+                            return response
+                        except OSError:
+                            pass
 
         # Transparent Gzip compression for dynamic API JSON and template responses >= 512B
         accept_enc = request.headers.get("Accept-Encoding", "").lower()
