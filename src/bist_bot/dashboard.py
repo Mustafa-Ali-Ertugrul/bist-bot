@@ -1735,8 +1735,15 @@ def create_dashboard_app(
     @app.route("/api/stats")
     @jwt_required()
     def api_stats():
-        stats = get_db().get_performance_stats()
-        latest_scan_record = get_db().get_latest_scan_log()
+        db = get_db()
+        bundle_fn = getattr(db, "get_dashboard_stats_bundle", None)
+        if callable(bundle_fn):
+            stats, latest_scan_record, recent_signals = bundle_fn(recent_limit=40)
+        else:
+            stats = db.get_performance_stats()
+            latest_scan_record = db.get_latest_scan_log()
+            recent_signals = db.get_recent_signals(limit=40)
+
         if latest_scan_record is None:
             latest_scan = {
                 "total_scanned": 0,
@@ -1766,7 +1773,6 @@ def create_dashboard_app(
         stats["rejection_breakdown"] = latest_scan["rejection_breakdown"]
 
         # Market breadth calculation from recent signals
-        recent_signals = get_db().get_recent_signals(limit=40)
         rsi_vals: list[float] = []
         actionable_symbols: list[str] = []
         vol_up_count = 0

@@ -369,6 +369,45 @@ class SignalsRepository:
             "avg_profit_pct": round(float(avg_profit), 2) if avg_profit is not None else 0,
         }
 
+    def get_dashboard_stats_bundle(
+        self, recent_limit: int = 40
+    ) -> tuple[dict[str, Any], dict[str, Any] | None, list[dict[str, Any]]]:
+        """Fetch performance stats, latest scan log, and recent signals in a single
+        session/connection checkout to reduce latency and connection pool pressure."""
+        def _read(session):
+            stats_row = session.execute(
+                select(
+                    func.count(),
+                    func.sum(case((SignalRecord.outcome != "PENDING", 1), else_=0)),
+                    func.sum(case((SignalRecord.profit_pct > 0, 1), else_=0)),
+                    func.avg(SignalRecord.profit_pct),
+                ).select_from(SignalRecord)
+            ).one()
+            scan_row = session.scalar(
+                select(ScanLogRecord).order_by(ScanLogRecord.timestamp.desc()).limit(1)
+            )
+            sig_rows = session.scalars(
+                select(SignalRecord)
+                .order_by(SignalRecord.timestamp.desc(), SignalRecord.id.desc())
+                .limit(recent_limit)
+            ).all()
+            return stats_row, scan_row, sig_rows
+
+        stats_row, scan_row, sig_rows = self.manager.run_session(_read, read_only=True)
+        total, completed, profitable, avg_profit = stats_row
+        completed = int(completed or 0)
+        profitable = int(profitable or 0)
+        perf_stats = {
+            "total_signals": int(total or 0),
+            "completed": completed,
+            "profitable": profitable,
+            "win_rate": round(profitable / completed * 100, 1) if completed > 0 else 0,
+            "avg_profit_pct": round(float(avg_profit), 2) if avg_profit is not None else 0,
+        }
+        latest_scan = self._scan_log_to_dict(scan_row) if scan_row else None
+        recent_signals = [self._signal_to_dict(r) for r in sig_rows]
+        return perf_stats, latest_scan, recent_signals
+
     def get_latest_scan_log(self) -> dict[str, Any] | None:
         row = self.manager.run_session(
             lambda session: session.scalar(
