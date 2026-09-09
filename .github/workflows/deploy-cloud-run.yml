@@ -10,7 +10,6 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   IMAGE_NAME: bist-bot
   API_SERVICE_NAME: bist-bot-api
-  UI_SERVICE_NAME: bist-bot-ui
 
 jobs:
   deploy:
@@ -78,20 +77,17 @@ jobs:
           API_URL="$(gcloud run services describe "$API_SERVICE_NAME" --project "$GCP_PROJECT_ID" --region "$GCP_REGION" --format 'value(status.url)')"
           echo "API_URL=$API_URL" >> "$GITHUB_ENV"
 
-      - name: Deploy UI service
+      # NOTE: The API service serves both /api/* and the native Stitch UI
+      # (/ui/*) from the same gunicorn process — no separate UI service
+      # since Streamlit was retired. UI_URL == API_URL (same-origin, no CORS).
+      - name: Set UI URL to API URL
         run: |
-          gcloud run deploy "$UI_SERVICE_NAME" --project "$GCP_PROJECT_ID" --region "$GCP_REGION" --image "$IMAGE_URI" --allow-unauthenticated --set-env-vars PYTHONPATH=/app/src,DB_PATH=/tmp/bist_signals.db,API_BASE_URL="$API_URL",STREAMLIT_BACKGROUND_SCAN_TIMEOUT_SECONDS=180,API_REQUEST_TIMEOUT_SECONDS=45 --timeout=300 --no-cpu-throttling --session-affinity
-          UI_URL="$(gcloud run services describe "$UI_SERVICE_NAME" --project "$GCP_PROJECT_ID" --region "$GCP_REGION" --format 'value(status.url)')"
-          echo "UI_URL=$UI_URL" >> "$GITHUB_ENV"
-
-      - name: Update API CORS origin
-        run: |
-          gcloud run services update "$API_SERVICE_NAME" --project "$GCP_PROJECT_ID" --region "$GCP_REGION" --update-env-vars CORS_ORIGINS="$UI_URL"
+          echo "UI_URL=$API_URL" >> "$GITHUB_ENV"
 
       - name: Report deployed URLs
         run: |
           echo "API_URL=$API_URL"
-          echo "UI_URL=$UI_URL"
+          echo "UI_URL=$API_URL (same service: /ui/* + /api/*)"
 
       - name: Post-deploy smoke test checklist
         run: |
@@ -107,7 +103,7 @@ jobs:
           | 5 | Sayfa geçişleri + refresh sonrasi sayaçlar stabil mi? | Manuel |
           | 6 | 0-signal scan: dashboard hala scan count gösteriyor mu? | Manuel |
           | 7 | Karma outcome test: hepsi bir bucket’a düştü mü? | Manuel |
-          | 8 | Analysis sayfasi açiliyor, Plotly render oluyor, `yaxis` hatasi yok mu? | Manuel |
+          | 8 | Analysis sayfasi açiliyor, native mum grafik render oluyor mu? | Manuel |
           | 9 | Son Akis / kayitli sinyal alani doğru / net empty state mi? | Manuel |
           | 10 | UX: gereksiz Logout başligi, nav tekrari, çelişen kartlar yok mu? | Manuel |
 
@@ -191,11 +187,11 @@ jobs:
             - Bazilari insufficient data
           - [ ] **Beklenen:** hepsi bir outcome bucket'ina düşmeli, toplam sayilar kapanmali
 
-          ## 8) Analysis sayfasi regresyon testi
-          - [ ] Analysis sayfasina girildi
-          - [ ] Sayfa açilmali
-          - [ ] Plotly grafikler render olmali
-          - [ ] Eski \`yaxis\` hatasi görünmemeli
+           ## 8) Analysis sayfasi regresyon testi
+           - [ ] Analysis sayfasina girildi
+           - [ ] Sayfa açilmali
+           - [ ] Native mum grafikler render olmali
+           - [ ] Periyot butonlari (15D/1S/4S/1G/1H) grafigi degistirmeli
 
           ## 9) Son akis / son sinyaller bölümü
           - [ ] Dashboard'daki \`Son Akis\` veya kayitli sinyal alani kontrol edildi
