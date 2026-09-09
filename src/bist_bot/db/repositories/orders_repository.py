@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 from typing import Any, cast
 
-from sqlalchemy import select
+from sqlalchemy import case, func, select
 
 from bist_bot.db.database import DatabaseManager, OrderRecord
 
@@ -113,24 +113,29 @@ class OrdersRepository:
         return self._to_dict(row) if row is not None else None
 
     def get_open_live_position_tickers(self) -> list[str]:
-        rows = self.manager.run_session(
-            lambda session: session.scalars(
-                select(OrderRecord).where(OrderRecord.state.in_(["FILLED", "PARTIAL"]))
-            ).all(),
-            read_only=True,
+        qty_expr = case(
+            (func.coalesce(OrderRecord.filled_qty, 0.0) > 0.0, OrderRecord.filled_qty),
+            (OrderRecord.state == "FILLED", OrderRecord.qty),
+            else_=0.0,
         )
-
-        net_positions: dict[str, float] = {}
-        for row in rows:
-            executed_qty = float(row.filled_qty or 0.0)
-            if executed_qty <= 0 and row.state == "FILLED":
-                executed_qty = float(row.qty)
-            if executed_qty <= 0:
-                continue
-            signed_qty = executed_qty if row.side == "BUY" else -executed_qty
-            net_positions[row.ticker] = net_positions.get(row.ticker, 0.0) + signed_qty
-
-        return sorted(ticker for ticker, quantity in net_positions.items() if quantity > 0)
+        signed_expr = case(
+            (OrderRecord.side == "BUY", qty_expr),
+            else_=-qty_expr,
+        )
+        statement = (
+            select(OrderRecord.ticker)
+            .where(OrderRecord.state.in_(["FILLED", "PARTIAL"]))
+            .group_by(OrderRecord.ticker)
+            .having(func.sum(signed_expr) > 0)
+            .order_by(OrderRecord.ticker)
+        )
+        return cast(
+            list[str],
+            self.manager.run_session(
+                lambda session: list(session.scalars(statement).all()),
+                read_only=True,
+            ),
+        )
 
     def _to_dict(self, row: OrderRecord) -> dict[str, Any]:
         return {
