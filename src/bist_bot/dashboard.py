@@ -573,9 +573,10 @@ def create_dashboard_app(
     _benchmark_cache: dict[str, Any] = {
         "timestamp": 0.0,
         "data": {
-            "USDTRY": {"val": 48.45, "chg": 0.07},
-            "XU100": {"val": 14120.64, "chg": -0.22},
-            "XU030": {"val": 16734.88, "chg": 0.02},
+            "USDTRY": {"val": 48.47, "chg": 0.05},
+            "XU100": {"val": 14531.31, "chg": 0.87},
+            "XU030": {"val": 17344.75, "chg": 1.41},
+            "BIST_VOL": "118.6B TL",
         },
     }
     _benchmark_updating = threading.Event()
@@ -602,6 +603,10 @@ def create_dashboard_app(
                         elif h is not None and not h.empty:
                             last = float(h["Close"].iloc[-1])
                             res[k] = {"val": round(last, 2), "chg": 0.0}
+                        if sym == "XU100.IS" and h is not None and not h.empty:
+                            vols = [float(v) for v in h["Volume"] if float(v) > 0]
+                            if vols and vols[-1] > 0:
+                                res["BIST_VOL"] = f"{vols[-1] / 1e9:.1f}B TL"
                     except Exception:
                         pass
                 if res:

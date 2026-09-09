@@ -178,6 +178,53 @@
     return h;
   }
 
+  function hydrateAllBenchmarkDisplays(benchmarks) {
+    if (!benchmarks) return;
+    const updatePair = (baseKey, item) => {
+      if (!item) return;
+      ['benchmark-', 'header-'].forEach(prefix => {
+        const vEl = document.getElementById(`${prefix}${baseKey}-val`);
+        const cEl = document.getElementById(`${prefix}${baseKey}-chg`);
+        if (vEl && Number.isFinite(Number(item.val))) {
+          vEl.textContent = baseKey.includes('usd')
+            ? Number(item.val).toFixed(2)
+            : Number(item.val).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+        if (cEl && item.chg !== undefined && item.chg !== null) {
+          const chg = Number(item.chg);
+          const pos = chg >= 0;
+          const color = pos ? 'text-primary' : 'text-error';
+          const icon = pos ? 'arrow_drop_up' : 'arrow_drop_down';
+          if (prefix === 'header-') {
+            cEl.className = `font-label-code text-label-code ${color} flex items-center`;
+            cEl.innerHTML = `<span class="material-symbols-outlined text-[14px]">${icon}</span>${pos ? '+' : ''}${chg.toFixed(2)}%`;
+          } else {
+            cEl.className = `font-metric-value text-metric-value ${color} flex items-center justify-end`;
+            cEl.innerHTML = `<span class="material-symbols-outlined text-[16px]">${icon}</span> ${pos ? '+' : ''}${chg.toFixed(2)}%`;
+          }
+        }
+      });
+    };
+    updatePair('xu100', benchmarks.XU100);
+    updatePair('xu030', benchmarks.XU030);
+    updatePair('usdtry', benchmarks.USDTRY);
+
+    const volEl = document.getElementById('header-bist-vol');
+    if (volEl && benchmarks.BIST_VOL) {
+      volEl.textContent = benchmarks.BIST_VOL;
+    }
+  }
+
+  async function fetchGlobalHeaderBenchmarks() {
+    try {
+      const res = await fetch('/api/stats', { headers: getAuthHeaders() });
+      if (res.ok) {
+        const d = await res.json();
+        if (d && d.benchmarks) hydrateAllBenchmarkDisplays(d.benchmarks);
+      }
+    } catch (_) {}
+  }
+
   // -------------------------------------------------------------------------
   // Dashboard Counters: hydrate from /api/stats, static HTML stays as fallback
   // -------------------------------------------------------------------------
@@ -249,29 +296,9 @@
       if (breadth.vol_ratio) setText('macro-vol-ratio', String(breadth.vol_ratio));
       if (breadth.actionable_summary) setText('stat-actionable-tickers', String(breadth.actionable_summary));
 
-      // Hydrate Live Benchmarks (XU100, XU030, USD/TRY)
+      // Hydrate Live Benchmarks (XU100, XU030, USD/TRY, BIST_VOL)
       const benchmarks = (data && data.benchmarks) || {};
-      const setBench = (valId, chgId, item) => {
-        if (!item) return;
-        const valEl = document.getElementById(valId);
-        const chgEl = document.getElementById(chgId);
-        if (valEl && Number.isFinite(Number(item.val))) {
-          valEl.textContent = valId.includes('usd')
-            ? Number(item.val).toFixed(2)
-            : Number(item.val).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-        }
-        if (chgEl && item.chg !== undefined && item.chg !== null) {
-          const chg = Number(item.chg);
-          const pos = chg >= 0;
-          const color = pos ? 'text-primary' : 'text-error';
-          const icon = pos ? 'arrow_drop_up' : 'arrow_drop_down';
-          chgEl.className = `font-metric-value text-metric-value ${color} flex items-center justify-end`;
-          chgEl.innerHTML = `<span class="material-symbols-outlined text-[16px]">${icon}</span> ${pos ? '+' : ''}${chg.toFixed(2)}%`;
-        }
-      };
-      setBench('benchmark-xu100-val', 'benchmark-xu100-chg', benchmarks.XU100);
-      setBench('benchmark-xu030-val', 'benchmark-xu030-chg', benchmarks.XU030);
-      setBench('benchmark-usdtry-val', 'benchmark-usdtry-chg', benchmarks.USDTRY);
+      hydrateAllBenchmarkDisplays(benchmarks);
 
       // Embedded top-10 signals piggy-backed on stats: render table + radar
       // immediately so hydrateSignalTable can skip its own round trip.
@@ -1353,10 +1380,13 @@
       if (path.includes('dashboard')) {
         await initDashboard();
       } else if (path.includes('signals')) {
+        fetchGlobalHeaderBenchmarks();
         await initSignals();
       } else if (path.includes('analysis')) {
+        fetchGlobalHeaderBenchmarks();
         initAnalysis();
       } else if (path.includes('settings')) {
+        fetchGlobalHeaderBenchmarks();
         initSettings();
       }
     } catch (routeErr) {
