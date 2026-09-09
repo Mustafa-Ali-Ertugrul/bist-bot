@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, NamedTuple
 
 from sqlalchemy import case, func, select
@@ -190,9 +190,7 @@ class PortfolioRepository:
 
     def get_recent_closed_trades(self, ticker: str, days: int = 5) -> list[PaperTrade]:
         """Return closed trades for a ticker within the last N days."""
-        from datetime import timedelta as _td
-
-        cutoff = datetime.now(UTC) - _td(days=days)
+        cutoff = datetime.now(UTC) - timedelta(days=days)
 
         def _read(session):
             return session.scalars(
