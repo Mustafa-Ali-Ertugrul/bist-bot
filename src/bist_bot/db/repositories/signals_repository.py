@@ -266,14 +266,12 @@ class SignalsRepository:
         timestamp: str | None = None,
     ) -> bool:
         def _read(session) -> bool:
-            statement = (
-                select(func.count()).select_from(SignalRecord).where(SignalRecord.ticker == ticker)
-            )
+            inner = select(1).select_from(SignalRecord).where(SignalRecord.ticker == ticker)
             if signal_type:
-                statement = statement.where(SignalRecord.signal_type == signal_type)
+                inner = inner.where(SignalRecord.signal_type == signal_type)
             if timestamp:
-                statement = statement.where(SignalRecord.timestamp == timestamp)
-            return bool(session.scalar(statement))
+                inner = inner.where(SignalRecord.timestamp == timestamp)
+            return bool(session.scalar(select(inner.exists())))
 
         return cast(bool, self.manager.run_session(_read, read_only=True))
 
