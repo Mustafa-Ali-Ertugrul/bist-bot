@@ -14,6 +14,7 @@ from typing import TypeVar
 from sqlalchemy import (
     DateTime,
     Float,
+    ForeignKey,
     Index,
     Integer,
     MetaData,
@@ -221,18 +222,60 @@ class UserRecord(Base):
     # unique ix_users_email index enforced since migration 0002. The metadata
     # naming convention gives the inline constraint the same PostgreSQL name
     # so `alembic check` stays green.
-    __table_args__ = (Index("ix_users_email", "email", unique=True),)
+    __table_args__ = (
+        Index("ix_users_email", "email", unique=True),
+        Index("ix_users_google_id", "google_id", unique=True),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     email: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     password_hash: Mapped[str] = mapped_column(Text, nullable=False)
     role: Mapped[str] = mapped_column(String, nullable=False, default="user", server_default="user")
+    # Subscription (plan authority is users.plan + users.plan_expires_at;
+    # role stays purely RBAC and is never mutated by billing flows).
+    plan: Mapped[str] = mapped_column(
+        String, nullable=False, default="trial", server_default="trial"
+    )
+    plan_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    trial_ends_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    google_id: Mapped[str | None] = mapped_column(String, nullable=True, unique=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=lambda: datetime.now(UTC)
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=lambda: datetime.now(UTC)
     )
+
+
+class PaymentRequestRecord(Base):
+    """Manual EFT/havale payment notification awaiting admin decision.
+
+    status is one of: pending | approved | rejected. Only one transition
+    out of pending is possible; approve/reject use an atomic conditional
+    UPDATE so double-approval can never credit +30 days twice.
+    """
+
+    __tablename__ = "payment_requests"
+    __table_args__ = (
+        Index("ix_payment_requests_user_id", "user_id"),
+        Index("ix_payment_requests_status", "status"),
+        Index("ix_payment_requests_reference", "reference"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    plan: Mapped[str] = mapped_column(String, nullable=False)
+    amount_try: Mapped[int] = mapped_column(Integer, nullable=False)
+    reference: Mapped[str] = mapped_column(String, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String, nullable=False, default="pending", server_default="pending"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+    )
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    decided_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+    detail: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class OrderRecord(Base):

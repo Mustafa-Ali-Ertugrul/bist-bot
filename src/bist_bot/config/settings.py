@@ -43,6 +43,7 @@ from bist_bot.config.subsettings import (  # noqa: E402
     AgentSettings,
     AuthSettings,
     BacktestSettings,
+    BillingSettings,
     BrokerSettings,
     DatabaseSettings,
     DataSettings,
@@ -109,6 +110,7 @@ _SUB_SETTINGS_GROUPS = (
     "ml",
     "notification",
     "agent",
+    "billing",
 )
 
 
@@ -134,6 +136,7 @@ class Settings:
     backtest: BacktestSettings = field(default_factory=BacktestSettings)
     ml: MLSettings = field(default_factory=MLSettings)
     notification: NotificationSettings = field(default_factory=NotificationSettings)
+    billing: BillingSettings = field(default_factory=BillingSettings)
 
     def __getattribute__(self, name: str) -> Any:
         if not name.startswith("_"):
@@ -182,6 +185,7 @@ class Settings:
             "algolab_password",
             "algolab_api_key",
             "telegram_bot_token",
+            "google_client_secret",
             "midas_api_key",
             "database_url",
         }

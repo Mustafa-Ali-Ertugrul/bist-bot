@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="tr"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+
+
+<link rel="stylesheet" href="/static/tailwind.css"/>
+<style>
+.material-symbols-outlined {
+  font-family: 'Material Symbols Outlined' !important;
+  font-weight: normal;
+  font-style: normal;
+  font-size: 20px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+}
+</style>
+</head>
+<body class="bg-background font-body-md text-body-md text-on-surface antialiased"><header class="fixed top-0 left-0 w-full z-50 bg-surface-container-lowest/90 backdrop-blur-xl shadow-[0_4px_20px_rgba(0,0,0,0.4)]"><div class="h-24 w-full px-terminal-margin flex flex-col justify-between pt-space-xs pb-space-2xs"><div class="flex items-center justify-between w-full"><div class="flex items-center gap-space-lg"><div class="flex items-center gap-space-xs"><div class="relative flex items-center justify-center"><span class="w-2.5 h-2.5 rounded-full bg-primary animate-ping absolute opacity-75"></span><span class="w-2.5 h-2.5 rounded-full bg-primary relative"></span></div><span class="font-headline-md text-headline-md tracking-tight text-on-surface font-extrabold">Bist<span class="text-primary">-Bot</span></span><span class="bg-surface-container-high px-space-xs py-space-3xs rounded text-secondary font-label-caps text-label-caps uppercase tracking-wider">v2.4 Algo</span></div><div class="hidden xl:flex items-center gap-space-2xs bg-surface-container px-space-xs py-space-3xs rounded-full shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"><span class="w-1.5 h-1.5 rounded-full bg-primary"></span><span class="font-label-caps text-label-caps text-primary uppercase">BIST 100 CANLI</span></div><nav class="hidden lg:flex items-center gap-space-2xs bg-surface-container-low p-space-3xs rounded-lg" data-active-classes="bg-surface-container-high text-primary font-bold"><a aria-current="page" class="px-space-sm py-space-2xs rounded transition-all bg-surface-container-high text-primary font-bold" data-path="dashboard" href="/ui/dashboard">Dashboard</a><a class="px-space-sm py-space-2xs rounded text-on-surface-variant hover:bg-surface-container hover:text-on-surface font-body-md text-body-md transition-all" data-path="canli-sinyaller" href="/ui/signals">Canlı Sinyaller</a><a class="px-space-sm py-space-2xs rounded text-on-surface-variant hover:bg-surface-container hover:text-on-surface font-body-md text-body-md transition-all" data-path="varlik-analiz" href="/ui/analysis">Varlık Analiz</a><a class="px-space-sm py-space-2xs rounded text-on-surface-variant hover:bg-surface-container hover:text-on-surface font-body-md text-body-md transition-all" data-path="terminal-ayarlari" href="/ui/settings">Terminal Ayarları</a></nav></div><div class="flex items-center gap-space-md"><div class="hidden md:flex items-center gap-space-xs bg-surface-container px-space-sm py-space-2xs rounded-full shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"><span class="w-2 h-2 rounded-full bg-primary"></span><span class="font-label-code text-label-code text-on-surface-variant">Sistem Aktif <span class="text-outline">•</span> <span class="text-primary">100 Varlık Taranıyor</span></span></div><div class="flex items-center gap-space-xs pl-space-xs bg-surface-container-low p-space-3xs rounded-full"><span class="hidden sm:inline-block font-label-code text-label-code text-on-surface-variant px-space-xs">admin@bistbot.com</span><span id="sub-countdown-badge" class="hidden font-label-code text-label-code px-space-xs py-space-3xs rounded-full bg-surface-container-high text-on-surface-variant"></span><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center shadow-[0_0_12px_rgba(78,222,163,0.35)]"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div><div class="flex items-center gap-space-3xs"><button class="w-8 h-8 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors" title="Yenile" type="button"><span class="material-symbols-outlined text-[18px]">refresh</span></button><button class="relative w-8 h-8 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors" title="Bildirimler" type="button"><span class="material-symbols-outlined text-[18px]">notifications</span><span class="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-primary"></span></button><button class="w-8 h-8 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-error flex items-center justify-center transition-colors" title="Çıkış" type="button"><span class="material-symbols-outlined text-[18px]">logout</span></button></div></div></div><div class="w-full overflow-x-auto flex items-center gap-space-lg py-space-3xs bg-surface-container-low/70 px-space-sm rounded shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"><div class="flex items-center gap-space-2xs shrink-0"><span class="font-label-caps text-label-caps text-outline">BIST ENDEKSLER:</span></div><div class="flex items-center gap-space-xs shrink-0"><span class="font-label-code text-label-code text-on-surface font-semibold">XU100</span><span class="font-metric-value text-metric-value text-on-surface" id="header-xu100-val">14,531.31</span><span class="font-label-code text-label-code text-primary flex items-center" id="header-xu100-chg"><span class="material-symbols-outlined text-[14px]">arrow_drop_up</span>+0.87%</span></div><span class="text-outline text-[10px] shrink-0">|</span><div class="flex items-center gap-space-xs shrink-0"><span class="font-label-code text-label-code text-on-surface font-semibold">XU030</span><span class="font-metric-value text-metric-value text-on-surface" id="header-xu030-val">17,344.75</span><span class="font-label-code text-label-code text-primary flex items-center" id="header-xu030-chg"><span class="material-symbols-outlined text-[14px]">arrow_drop_up</span>+1.41%</span></div><span class="text-outline text-[10px] shrink-0">|</span><div class="flex items-center gap-space-xs shrink-0"><span class="font-label-code text-label-code text-on-surface font-semibold">USD/TRY</span><span class="font-metric-value text-metric-value text-on-surface" id="header-usdtry-val">48.47</span><span class="font-label-code text-label-code text-primary flex items-center" id="header-usdtry-chg"><span class="material-symbols-outlined text-[14px]">arrow_drop_up</span>+0.05%</span></div><span class="text-outline text-[10px] shrink-0">|</span><div class="flex items-center gap-space-xs shrink-0"><span class="font-label-code text-label-code text-outline">BIST HACİM</span><span class="font-metric-value text-metric-value text-tertiary" id="header-bist-vol">118.6B TL</span></div></div></div></header>
+<main class="w-full pt-24 bg-background min-h-screen"><div class="flex flex-col w-full max-w-6xl mx-auto px-terminal-margin py-space-xl gap-space-lg">
+<div>
+<h1 class="font-headline-lg text-headline-lg text-on-surface tracking-tight">Admin Paneli</h1>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-space-3xs">Kullanıcı planları ve bekleyen EFT bildirimleri.</p>
+</div>
+<div class="bg-surface-container-low/90 rounded-xl p-space-lg shadow-lg">
+<div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-space-sm mb-space-md">
+<div class="font-headline-md text-headline-md text-on-surface font-bold">Bekleyen Ödemeler</div>
+<button class="px-space-sm py-space-2xs rounded-lg bg-surface-container-high text-on-surface font-label-code text-label-code" onclick="loadAdminRequests()">Yenile</button>
+</div>
+<div class="overflow-x-auto"><table class="w-full font-body-sm text-body-sm">
+<thead><tr class="text-left font-label-caps text-label-caps text-outline uppercase">
+<th class="py-space-2xs pr-space-sm">ID</th><th class="py-space-2xs pr-space-sm">E-posta</th><th class="py-space-2xs pr-space-sm">Plan</th><th class="py-space-2xs pr-space-sm">Tutar</th><th class="py-space-2xs pr-space-sm">Referans</th><th class="py-space-2xs pr-space-sm">Tarih</th><th class="py-space-2xs">İşlem</th>
+</tr></thead>
+<tbody id="admin-requests-body"><tr><td colspan="7" class="py-space-md text-center text-outline">Yükleniyor...</td></tr></tbody>
+</table></div>
+<div id="admin-invite-box" class="hidden mt-space-sm bg-surface-container-lowest px-space-sm py-space-xs rounded-lg font-label-code text-label-code text-primary"></div>
+</div>
+<div class="bg-surface-container-low/90 rounded-xl p-space-lg shadow-lg">
+<div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-space-sm mb-space-md">
+<div class="font-headline-md text-headline-md text-on-surface font-bold">Kullanıcılar</div>
+<div class="flex gap-space-xs">
+<input id="admin-user-search" class="bg-surface-container-high/70 text-on-surface font-body-sm text-body-sm px-space-sm py-space-2xs rounded-lg focus:outline-none" placeholder="E-posta ara..."/>
+<button class="px-space-sm py-space-2xs rounded-lg bg-surface-container-high text-on-surface font-label-code text-label-code" onclick="loadAdminUsers()">Ara</button>
+</div>
+</div>
+<div class="overflow-x-auto"><table class="w-full font-body-sm text-body-sm">
+<thead><tr class="text-left font-label-caps text-label-caps text-outline uppercase">
+<th class="py-space-2xs pr-space-sm">ID</th><th class="py-space-2xs pr-space-sm">E-posta</th><th class="py-space-2xs pr-space-sm">Rol</th><th class="py-space-2xs pr-space-sm">Plan</th><th class="py-space-2xs pr-space-sm">Bitiş</th><th class="py-space-2xs">Yükselt</th>
+</tr></thead>
+<tbody id="admin-users-body"><tr><td colspan="6" class="py-space-md text-center text-outline">Yükleniyor...</td></tr></tbody>
+</table></div>
+</div>
+</div></main>
+<footer class="w-full bg-surface-container-lowest py-space-sm shadow-[0_-1px_12px_rgba(0,0,0,0.5)] pb-20 sm:pb-space-sm"><div class="w-full px-terminal-margin flex flex-col sm:flex-row items-center justify-between gap-space-xs"><div class="flex items-center gap-space-md font-label-code text-label-code"><div class="flex items-center gap-space-2xs"><span class="w-2 h-2 rounded-full bg-primary"></span><span class="text-on-surface-variant">API: <span class="text-primary font-semibold">ONLINE</span></span></div><span class="text-outline">•</span><div class="flex items-center gap-space-2xs"><span class="material-symbols-outlined text-[14px] text-tertiary">wifi_tethering</span><span class="text-on-surface-variant">WS Latency: <span class="text-tertiary font-metric-value text-metric-value">18ms</span></span></div><span class="text-outline">•</span><span class="text-on-surface-variant hidden md:inline">Sunucu: <span class="text-on-surface">ist-eqx-algo-01</span></span></div><div class="font-body-sm text-body-sm text-outline text-center sm:text-right"><p>Yasal Uyarı: Burada yer alan algoritmik veriler yatırım danışmanlığı kapsamında değildir. Gecikmesiz BIST veri akışı.</p></div></div></footer><script>
+(function () {
+  'use strict';
+
+  function authHeaders() {
+    const t = localStorage.getItem('bistbot_token');
+    return t ? { 'Authorization': 'Bearer ' + t, 'Content-Type': 'application/json' } : {};
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  window.loadAdminUsers = async function () {
+    const body = document.getElementById('admin-users-body');
+    const q = (document.getElementById('admin-user-search') || {}).value || '';
+    try {
+      const res = await fetch('/api/admin/users?q=' + encodeURIComponent(q), { headers: authHeaders() });
+      if (res.status === 403) {
+        if (body) body.innerHTML = '<tr><td colspan="6" class="py-space-md text-center text-error">Yetkisiz erişim.</td></tr>';
+        return;
+      }
+      const data = await res.json();
+      if (!res.ok || !Array.isArray(data.users) || !data.users.length) {
+        if (body) body.innerHTML = '<tr><td colspan="6" class="py-space-md text-center text-outline">Kullanıcı bulunamadı.</td></tr>';
+        return;
+      }
+      body.innerHTML = data.users.map(u => (
+        '<tr class="border-t border-surface-container-highest/40">' +
+        '<td class="py-space-2xs pr-space-sm font-label-code text-label-code">' + esc(u.id) + '</td>' +
+        '<td class="py-space-2xs pr-space-sm">' + esc(u.email) + '</td>' +
+        '<td class="py-space-2xs pr-space-sm">' + esc(u.role) + '</td>' +
+        '<td class="py-space-2xs pr-space-sm text-primary font-bold">' + esc(u.plan) + (u.active ? '' : ' (pasif)') + '</td>' +
+        '<td class="py-space-2xs pr-space-sm font-label-code text-label-code">' + esc(u.plan_expires_at || '—') + '</td>' +
+        '<td class="py-space-2xs"><div class="flex gap-space-2xs">' +
+        '<button class="px-space-xs py-space-3xs rounded bg-surface-container-high font-label-code text-label-code" onclick="setUserPlan(' + u.id + ',\'pro\')">Pro</button>' +
+        '<button class="px-space-xs py-space-3xs rounded bg-surface-container-high font-label-code text-label-code" onclick="setUserPlan(' + u.id + ',\'pro_plus\')">Pro+</button>' +
+        '</div></td></tr>'
+      )).join('');
+    } catch (e) {
+      if (body) body.innerHTML = '<tr><td colspan="6" class="py-space-md text-center text-error">Bağlantı hatası.</td></tr>';
+    }
+  };
+
+  window.setUserPlan = async function (userId, plan) {
+    try {
+      const res = await fetch('/api/admin/users/' + userId + '/plan', {
+        method: 'POST', headers: authHeaders(), body: JSON.stringify({ plan: plan })
+      });
+      const data = await res.json();
+      alert(res.ok ? ('Plan güncellendi: ' + data.plan + ' (bitiş: ' + data.plan_expires_at + ')') : ('Hata: ' + (data.message || res.status)));
+      if (res.ok) loadAdminUsers();
+    } catch (e) { alert('Bağlantı hatası.'); }
+  };
+
+  window.loadAdminRequests = async function () {
+    const body = document.getElementById('admin-requests-body');
+    try {
+      const res = await fetch('/api/admin/requests?status=pending', { headers: authHeaders() });
+      if (res.status === 403) {
+        if (body) body.innerHTML = '<tr><td colspan="7" class="py-space-md text-center text-error">Yetkisiz erişim.</td></tr>';
+        return;
+      }
+      const data = await res.json();
+      if (!res.ok || !Array.isArray(data.requests) || !data.requests.length) {
+        if (body) body.innerHTML = '<tr><td colspan="7" class="py-space-md text-center text-outline">Bekleyen ödeme yok.</td></tr>';
+        return;
+      }
+      body.innerHTML = data.requests.map(r => (
+        '<tr class="border-t border-surface-container-highest/40">' +
+        '<td class="py-space-2xs pr-space-sm font-label-code text-label-code">' + esc(r.id) + '</td>' +
+        '<td class="py-space-2xs pr-space-sm">' + esc(r.email) + '</td>' +
+        '<td class="py-space-2xs pr-space-sm text-primary font-bold">' + esc(r.plan) + '</td>' +
+        '<td class="py-space-2xs pr-space-sm">' + esc(r.amount_try) + ' TL</td>' +
+        '<td class="py-space-2xs pr-space-sm font-label-code text-label-code">' + esc(r.reference) + '</td>' +
+        '<td class="py-space-2xs pr-space-sm font-label-code text-label-code">' + esc(r.created_at) + '</td>' +
+        '<td class="py-space-2xs"><div class="flex gap-space-2xs">' +
+        '<button class="px-space-xs py-space-3xs rounded bg-primary text-on-primary font-label-code text-label-code" onclick="decideRequest(' + r.id + ',true)">Onayla</button>' +
+        '<button class="px-space-xs py-space-3xs rounded bg-surface-container-high font-label-code text-label-code" onclick="decideRequest(' + r.id + ',false)">Reddet</button>' +
+        '</div></td></tr>'
+      )).join('');
+    } catch (e) {
+      if (body) body.innerHTML = '<tr><td colspan="7" class="py-space-md text-center text-error">Bağlantı hatası.</td></tr>';
+    }
+  };
+
+  window.decideRequest = async function (requestId, approve) {
+    const box = document.getElementById('admin-invite-box');
+    try {
+      const res = await fetch('/api/admin/requests/' + requestId + (approve ? '/approve' : '/reject'), {
+        method: 'POST', headers: authHeaders()
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert('Hata: ' + (data.message || res.status));
+        return;
+      }
+      if (approve && data.invite_link && box) {
+        box.classList.remove('hidden');
+        box.textContent = 'Pro+ davet linki (tek kullanımlık, 48s): ' + data.invite_link;
+      }
+      loadAdminRequests();
+      loadAdminUsers();
+    } catch (e) { alert('Bağlantı hatası.'); }
+  };
+
+  document.addEventListener('DOMContentLoaded', () => { loadAdminRequests(); loadAdminUsers(); });
+})();
+</script>
+<script src="/static/app.js?nocache=100010"></script>
+</body></html>

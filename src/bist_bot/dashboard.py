@@ -13,7 +13,9 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta, timezone
 from functools import wraps
 from typing import Any, cast
+from urllib.parse import urlencode
 
+import requests
 from flask import Flask, g, has_request_context, jsonify, redirect, render_template, request
 from flask_cors import CORS
 from flask_jwt_extended import (
@@ -46,6 +48,15 @@ from bist_bot.indicators import TechnicalIndicators
 from bist_bot.locales import get_message
 from bist_bot.risk.circuit_breaker import CircuitBreaker
 from bist_bot.scanner import ScanService
+from bist_bot.subscription import (
+    PAID_PLANS,
+    VALID_PLANS,
+    is_subscription_active,
+    normalize_plan,
+    plan_price_try,
+    subscription_status,
+    utcnow,
+)
 
 TR = timezone(timedelta(hours=3))
 logger = get_logger(__name__, component="dashboard")
@@ -536,6 +547,97 @@ def create_dashboard_app(
 
         return decorator
 
+    def _get_request_user() -> dict[str, Any] | None:
+        """Load id/role/plan columns for the current JWT identity (or None)."""
+        identity = str(get_jwt_identity() or "")
+        manager = getattr(get_db(), "manager", None)
+        if not identity or manager is None:
+            return None
+        try:
+            user_id = int(identity)
+        except (TypeError, ValueError):
+            return None
+        try:
+            with manager.engine.connect() as conn:
+                row = (
+                    conn.execute(
+                        text(
+                            "SELECT id, email, role, plan, plan_expires_at "
+                            "FROM users WHERE id = :id LIMIT 1"
+                        ),
+                        {"id": user_id},
+                    )
+                    .mappings()
+                    .first()
+                )
+        except SQLAlchemyError:
+            logger.exception("subscription_user_lookup_failed", user_id=user_id)
+            return None
+        return dict(row) if row is not None else None
+
+    def require_active_subscription():
+        """API gate factory: 401 when identity unknown, 402 + sub_expired when lapsed.
+
+        Must sit *inside* @jwt_required() so unauthenticated callers still
+        get 401 (login problem) instead of 402 (subscription problem).
+        """
+
+        def decorator(view):
+            @wraps(view)
+            def wrapped(*args, **kwargs):
+                user = _get_request_user()
+                if user is None:
+                    return jsonify({"status": "error", "message": "Authentication required"}), 401
+                if not is_subscription_active(user):
+                    logger.info("subscription_gate_blocked_api", route=request.path)
+                    return jsonify(
+                        {
+                            "status": "error",
+                            "code": "sub_expired",
+                            "message": "Aktif aboneliğiniz bulunmuyor.",
+                        }
+                    ), 402
+                g.subscription_user = user
+                return view(*args, **kwargs)
+
+            return wrapped
+
+        return decorator
+
+    def _subscription_required_ui(view):
+        """Page gate: expired subscriptions bounce to /ui/billing (302)."""
+
+        @wraps(view)
+        def wrapped(*args, **kwargs):
+            user = _get_request_user()
+            if user is None:
+                resp = redirect("/login", code=302)
+                resp.delete_cookie("access_token_cookie", path="/")
+                return resp
+            if not is_subscription_active(user):
+                logger.info("subscription_gate_blocked_ui", route=request.path)
+                return redirect("/ui/billing", code=302)
+            return view(*args, **kwargs)
+
+        return wrapped
+
+    def _admin_required_ui(view):
+        """Admin-only page gate: non-admins bounce to /ui/dashboard (302)."""
+
+        @wraps(view)
+        def wrapped(*args, **kwargs):
+            user = _get_request_user()
+            if user is None:
+                resp = redirect("/login", code=302)
+                resp.delete_cookie("access_token_cookie", path="/")
+                return resp
+            if str(user.get("role") or "").lower() != "admin":
+                logger.warning("admin_ui_forbidden", route=request.path)
+                return redirect("/ui/dashboard", code=302)
+            return view(*args, **kwargs)
+
+        return wrapped
+
     def get_scan_service() -> ScanService:
         factory = app.config.get("scan_service_factory")
         if callable(factory):
@@ -715,18 +817,22 @@ def create_dashboard_app(
             return False, get_message("api.password_too_short"), None
 
         timestamp = datetime.now(TR)
+        trial_hours = max(1, int(getattr(settings, "TRIAL_HOURS", 24) or 24))
+        trial_ends_at = datetime.now(UTC) + timedelta(hours=trial_hours)
         try:
             with manager.engine.begin() as conn:
                 conn.execute(
                     text(
                         """
-                        INSERT INTO users (email, password_hash, role, created_at, updated_at)
-                        VALUES (:email, :password_hash, 'user', :created_at, :updated_at)
+                        INSERT INTO users (email, password_hash, role, plan, plan_expires_at, trial_ends_at, created_at, updated_at)
+                        VALUES (:email, :password_hash, 'user', 'trial', :plan_expires_at, :trial_ends_at, :created_at, :updated_at)
                         """
                     ),
                     {
                         "email": email,
                         "password_hash": hash_password(password),
+                        "plan_expires_at": trial_ends_at,
+                        "trial_ends_at": trial_ends_at,
                         "created_at": timestamp,
                         "updated_at": timestamp,
                     },
@@ -1191,6 +1297,563 @@ def create_dashboard_app(
         response.delete_cookie("access_token_cookie", path="/")
         return response, 200
 
+    @app.route("/api/me/subscription", methods=["GET"])
+    @jwt_required()
+    def api_me_subscription():
+        """Public-to-member snapshot of the caller's plan (never gated).
+
+        Billing page and header badge rely on this even for expired users.
+        """
+        user = _get_request_user()
+        if user is None:
+            return jsonify({"status": "error", "message": "Authentication required"}), 401
+        return jsonify(subscription_status(user)), 200
+
+    @app.route("/api/billing/info", methods=["GET"])
+    @jwt_required()
+    def api_billing_info():
+        """Public pricing/IBAN config for the billing page (no amounts trusted)."""
+        return jsonify(
+            {
+                "status": "ok",
+                "pro_price_try": int(getattr(settings, "PRO_PRICE_TRY", 500) or 500),
+                "pro_plus_price_try": int(getattr(settings, "PRO_PLUS_PRICE_TRY", 700) or 700),
+                "days": int(getattr(settings, "SUBSCRIPTION_DAYS", 30) or 30),
+                "iban": str(getattr(settings, "BILLING_IBAN", "") or ""),
+                "trial_hours": max(1, int(getattr(settings, "TRIAL_HOURS", 24) or 24)),
+            }
+        ), 200
+
+    @app.route("/api/billing/mine", methods=["GET"])
+    @jwt_required()
+    def api_billing_mine():
+        """Latest payment requests of the caller (for the billing page)."""
+        user = _get_request_user()
+        if user is None:
+            return jsonify({"status": "error", "message": "Authentication required"}), 401
+        manager = getattr(get_db(), "manager", None)
+        if manager is None:
+            return jsonify({"status": "error", "message": "Identity store unavailable"}), 503
+        try:
+            with manager.engine.connect() as conn:
+                rows = (
+                    conn.execute(
+                        text(
+                            "SELECT id, plan, amount_try, reference, status, created_at, decided_at "
+                            "FROM payment_requests WHERE user_id = :uid "
+                            "ORDER BY id DESC LIMIT 5"
+                        ),
+                        {"uid": int(user["id"])},
+                    )
+                    .mappings()
+                    .all()
+                )
+        except SQLAlchemyError:
+            logger.exception("billing_mine_lookup_failed")
+            return jsonify({"status": "error", "message": "Identity store unavailable"}), 503
+        return jsonify({"status": "ok", "requests": [dict(r) for r in rows]}), 200
+
+    @app.route("/api/billing/claim", methods=["POST"])
+    @jwt_required()
+    @limiter.limit("10 per minute")
+    def api_billing_claim():
+        """Register a manual EFT/havale notification (creates a pending request).
+
+        Price is always backend-authoritative; the client only names the plan.
+        """
+        user = _get_request_user()
+        if user is None:
+            return jsonify({"status": "error", "message": "Authentication required"}), 401
+        payload = _safe_json_payload()
+        plan = normalize_plan(payload.get("plan"))
+        if plan not in PAID_PLANS:
+            return jsonify({"status": "error", "message": "Geçersiz plan."}), 400
+        amount = plan_price_try(
+            plan,
+            int(getattr(settings, "PRO_PRICE_TRY", 500) or 500),
+            int(getattr(settings, "PRO_PLUS_PRICE_TRY", 700) or 700),
+        )
+        assert amount is not None
+        manager = getattr(get_db(), "manager", None)
+        if manager is None:
+            return jsonify({"status": "error", "message": "Identity store unavailable"}), 503
+        try:
+            with manager.engine.begin() as conn:
+                existing = (
+                    conn.execute(
+                        text(
+                            "SELECT id, plan, amount_try, reference, status, created_at "
+                            "FROM payment_requests "
+                            "WHERE user_id = :uid AND plan = :plan AND status = 'pending' "
+                            "ORDER BY id DESC LIMIT 1"
+                        ),
+                        {"uid": int(user["id"]), "plan": plan},
+                    )
+                    .mappings()
+                    .first()
+                )
+                if existing is not None:
+                    return jsonify(
+                        {"status": "ok", "request": dict(existing), "duplicate": True}
+                    ), 200
+                reference = f"BIST-{int(user['id'])}-{secrets.token_hex(3).upper()}"
+                timestamp = datetime.now(UTC)
+                conn.execute(
+                    text(
+                        "INSERT INTO payment_requests "
+                        "(user_id, plan, amount_try, reference, status, created_at) "
+                        "VALUES (:uid, :plan, :amount, :ref, 'pending', :now)"
+                    ),
+                    {
+                        "uid": int(user["id"]),
+                        "plan": plan,
+                        "amount": amount,
+                        "ref": reference,
+                        "now": timestamp,
+                    },
+                )
+                created = (
+                    conn.execute(
+                        text(
+                            "SELECT id, plan, amount_try, reference, status, created_at "
+                            "FROM payment_requests WHERE reference = :ref LIMIT 1"
+                        ),
+                        {"ref": reference},
+                    )
+                    .mappings()
+                    .first()
+                )
+        except SQLAlchemyError:
+            logger.exception("billing_claim_failed")
+            return jsonify({"status": "error", "message": "Ödeme bildirimi alınamadı."}), 503
+        logger.info("billing_claim_created", plan=plan, amount_try=amount)
+        return jsonify({"status": "ok", "request": dict(created), "duplicate": False}), 201
+
+    _OAUTH_STATE_TTL_SECONDS = 600
+    _oauth_states: dict[str, float] = {}
+    _oauth_states_lock = threading.Lock()
+
+    def _oauth_state_new() -> str:
+        state = secrets.token_urlsafe(32)
+        now = time.time()
+        with _oauth_states_lock:
+            for key, _exp in [item for item in _oauth_states.items() if item[1] <= now]:
+                _oauth_states.pop(key, None)
+            _oauth_states[state] = now + _OAUTH_STATE_TTL_SECONDS
+        return state
+
+    def _oauth_state_consume(state: str) -> bool:
+        if not state or len(state) > 128:
+            return False
+        with _oauth_states_lock:
+            exp = _oauth_states.pop(state, None)
+        return exp is not None and exp > time.time()
+
+    def _google_oauth_configured() -> bool:
+        return bool(
+            getattr(settings, "GOOGLE_CLIENT_ID", "")
+            and getattr(settings, "GOOGLE_CLIENT_SECRET", "")
+            and getattr(settings, "GOOGLE_REDIRECT_URI", "")
+        )
+
+    def _find_or_create_google_user(
+        google_id: str, email: str, email_verified: bool
+    ) -> dict[str, Any] | None:
+        manager = getattr(get_db(), "manager", None)
+        if manager is None:
+            return None
+        trial_hours = max(1, int(getattr(settings, "TRIAL_HOURS", 24) or 24))
+        trial_ends_at = datetime.now(UTC) + timedelta(hours=trial_hours)
+        timestamp = datetime.now(TR)
+        try:
+            with manager.engine.begin() as conn:
+                row = (
+                    conn.execute(
+                        text(
+                            "SELECT id, email, role, plan, plan_expires_at "
+                            "FROM users WHERE google_id = :google_id LIMIT 1"
+                        ),
+                        {"google_id": google_id},
+                    )
+                    .mappings()
+                    .first()
+                )
+                if row is None and email_verified and email:
+                    existing = (
+                        conn.execute(
+                            text(
+                                "SELECT id, email, role, plan, plan_expires_at FROM users WHERE email = :email LIMIT 1"
+                            ),
+                            {"email": email},
+                        )
+                        .mappings()
+                        .first()
+                    )
+                    if existing is not None:
+                        conn.execute(
+                            text(
+                                "UPDATE users SET google_id = :google_id, updated_at = :updated_at WHERE id = :id"
+                            ),
+                            {
+                                "google_id": google_id,
+                                "updated_at": timestamp,
+                                "id": int(existing["id"]),
+                            },
+                        )
+                        row = existing
+                if row is None:
+                    unusable = "!" + secrets.token_urlsafe(32)
+                    conn.execute(
+                        text(
+                            """
+                            INSERT INTO users (email, password_hash, role, plan, plan_expires_at, trial_ends_at, google_id, created_at, updated_at)
+                            VALUES (:email, :password_hash, 'user', 'trial', :plan_expires_at, :trial_ends_at, :google_id, :created_at, :updated_at)
+                            """
+                        ),
+                        {
+                            "email": email,
+                            "password_hash": unusable,
+                            "plan_expires_at": trial_ends_at,
+                            "trial_ends_at": trial_ends_at,
+                            "google_id": google_id,
+                            "created_at": timestamp,
+                            "updated_at": timestamp,
+                        },
+                    )
+                    row = (
+                        conn.execute(
+                            text(
+                                "SELECT id, email, role, plan, plan_expires_at FROM users WHERE google_id = :google_id LIMIT 1"
+                            ),
+                            {"google_id": google_id},
+                        )
+                        .mappings()
+                        .first()
+                    )
+        except IntegrityError:
+            logger.warning("google_user_race_retry", email=_mask_email(email))
+            return None
+        except SQLAlchemyError as exc:
+            logger.error("google_user_lookup_failed", error=str(exc))
+            return None
+        if row is None:
+            return None
+        return {
+            "id": int(row["id"]),
+            "email": str(row["email"]),
+            "role": str(row["role"] or "user").lower(),
+        }
+
+    @app.route("/api/auth/google/login", methods=["GET"])
+    @limiter.limit("10 per minute")
+    def api_auth_google_login():
+        if not _google_oauth_configured():
+            logger.warning("google_oauth_not_configured")
+            return jsonify({"status": "error", "message": "Google ile giriş şu anda kapalı."}), 503
+        params = {
+            "client_id": settings.GOOGLE_CLIENT_ID,
+            "redirect_uri": settings.GOOGLE_REDIRECT_URI,
+            "response_type": "code",
+            "scope": "openid email profile",
+            "access_type": "online",
+            "prompt": "select_account",
+            "state": _oauth_state_new(),
+        }
+        return redirect(
+            "https://accounts.google.com/o/oauth2/v2/auth?" + urlencode(params), code=302
+        )
+
+    @app.route("/api/auth/google/callback", methods=["GET"])
+    @limiter.limit("10 per minute")
+    def api_auth_google_callback():
+        if not _google_oauth_configured():
+            return redirect("/login?error=oauth", code=302)
+        state = str(request.args.get("state", "") or "")
+        code = str(request.args.get("code", "") or "")
+        if not _oauth_state_consume(state) or not code or len(code) > 512:
+            logger.warning("google_oauth_bad_state")
+            return redirect("/login?error=oauth", code=302)
+        try:
+            token_resp = requests.post(
+                "https://oauth2.googleapis.com/token",
+                data={
+                    "client_id": settings.GOOGLE_CLIENT_ID,
+                    "client_secret": settings.GOOGLE_CLIENT_SECRET,
+                    "code": code,
+                    "grant_type": "authorization_code",
+                    "redirect_uri": settings.GOOGLE_REDIRECT_URI,
+                },
+                timeout=10,
+            )
+            token_data = token_resp.json()
+            access_token = str(token_data.get("access_token") or "")
+            if token_resp.status_code != 200 or not access_token:
+                logger.warning("google_oauth_token_exchange_failed", status=token_resp.status_code)
+                return redirect("/login?error=oauth", code=302)
+            userinfo_resp = requests.get(
+                "https://openidconnect.googleapis.com/v1/userinfo",
+                headers={"Authorization": "Bearer " + access_token},
+                timeout=10,
+            )
+            if userinfo_resp.status_code != 200:
+                logger.warning("google_oauth_userinfo_failed", status=userinfo_resp.status_code)
+                return redirect("/login?error=oauth", code=302)
+            info = userinfo_resp.json()
+        except Exception as exc:
+            logger.warning("google_oauth_network_error", error=str(exc)[:120])
+            return redirect("/login?error=oauth", code=302)
+        google_id = str(info.get("sub") or "")
+        email = str(info.get("email") or "").strip().lower()
+        email_verified = bool(info.get("email_verified"))
+        if not google_id or not email or not email_verified or "@" not in email or len(email) > 128:
+            logger.warning("google_oauth_bad_profile")
+            return redirect("/login?error=oauth", code=302)
+        user = _find_or_create_google_user(google_id, email, email_verified)
+        if user is None:
+            logger.warning("google_oauth_user_provision_failed", email=_mask_email(email))
+            return redirect("/login?error=oauth", code=302)
+        logger.info("google_oauth_login_succeeded", email=_mask_email(email))
+        token = create_access_token(
+            identity=str(user["id"]),
+            additional_claims={"role": user["role"], "email": user["email"]},
+        )
+        response = redirect("/ui/dashboard", code=302)
+        set_access_cookies(response, token)
+        return response
+
+    @app.route("/api/admin/users", methods=["GET"])
+    @jwt_required()
+    @require_roles("admin")
+    def api_admin_users():
+        query = str(request.args.get("q", "") or "").strip().lower()[:128]
+        limit = max(1, min(request.args.get("limit", 50, type=int) or 50, 200))
+        manager = getattr(get_db(), "manager", None)
+        if manager is None:
+            return jsonify({"status": "error", "message": "Identity store unavailable"}), 503
+        try:
+            with manager.engine.connect() as conn:
+                sql = (
+                    "SELECT id, email, role, plan, plan_expires_at, trial_ends_at, created_at "
+                    "FROM users "
+                )
+                params: dict[str, Any] = {}
+                if query:
+                    sql += "WHERE LOWER(email) LIKE :q "
+                    params["q"] = f"%{query}%"
+                sql += "ORDER BY id DESC LIMIT :limit"
+                params["limit"] = limit
+                rows = conn.execute(text(sql), params).mappings().all()
+        except SQLAlchemyError:
+            logger.exception("admin_users_lookup_failed")
+            return jsonify({"status": "error", "message": "Identity store unavailable"}), 503
+        users = []
+        for row in rows:
+            item = dict(row)
+            item["active"] = is_subscription_active(item)
+            users.append(item)
+        return jsonify({"status": "ok", "users": users}), 200
+
+    @app.route("/api/admin/users/<int:user_id>/plan", methods=["POST"])
+    @jwt_required()
+    @require_roles("admin")
+    def api_admin_set_plan(user_id: int):
+        from bist_bot.subscription import _as_utc
+
+        payload = _safe_json_payload()
+        plan = normalize_plan(payload.get("plan"))
+        if plan not in VALID_PLANS:
+            return jsonify({"status": "error", "message": "Geçersiz plan."}), 400
+        days = payload.get("days", None)
+        try:
+            days = (
+                int(days)
+                if days is not None
+                else int(getattr(settings, "SUBSCRIPTION_DAYS", 30) or 30)
+            )
+        except (TypeError, ValueError):
+            return jsonify({"status": "error", "message": "Geçersiz süre."}), 400
+        days = max(1, min(days, 365))
+        manager = getattr(get_db(), "manager", None)
+        if manager is None:
+            return jsonify({"status": "error", "message": "Identity store unavailable"}), 503
+        now = utcnow()
+        try:
+            with manager.engine.begin() as conn:
+                row = (
+                    conn.execute(
+                        text("SELECT id, plan, plan_expires_at FROM users WHERE id = :id LIMIT 1"),
+                        {"id": user_id},
+                    )
+                    .mappings()
+                    .first()
+                )
+                if row is None:
+                    return jsonify({"status": "error", "message": "Kullanıcı bulunamadı."}), 404
+                current_exp = _as_utc(row.get("plan_expires_at"))
+                base = current_exp if current_exp is not None and current_exp > now else now
+                new_exp = base + timedelta(days=days)
+                conn.execute(
+                    text(
+                        "UPDATE users SET plan = :plan, plan_expires_at = :exp, updated_at = :now "
+                        "WHERE id = :id"
+                    ),
+                    {"plan": plan, "exp": new_exp, "now": now, "id": user_id},
+                )
+        except SQLAlchemyError:
+            logger.exception("admin_set_plan_failed")
+            return jsonify({"status": "error", "message": "Plan güncellenemedi."}), 503
+        logger.warning("admin_set_plan", target_user_id=user_id, plan=plan, days=days)
+        return jsonify({"status": "ok", "plan": plan, "plan_expires_at": new_exp.isoformat()}), 200
+
+    @app.route("/api/admin/requests", methods=["GET"])
+    @jwt_required()
+    @require_roles("admin")
+    def api_admin_requests():
+        status_filter = str(request.args.get("status", "pending") or "pending").strip().lower()
+        if status_filter not in {"pending", "approved", "rejected", "all"}:
+            status_filter = "pending"
+        limit = max(1, min(request.args.get("limit", 50, type=int) or 50, 200))
+        manager = getattr(get_db(), "manager", None)
+        if manager is None:
+            return jsonify({"status": "error", "message": "Identity store unavailable"}), 503
+        try:
+            with manager.engine.connect() as conn:
+                sql = (
+                    "SELECT r.id, r.user_id, u.email, r.plan, r.amount_try, r.reference, "
+                    "r.status, r.created_at, r.decided_at, r.decided_by "
+                    "FROM payment_requests r JOIN users u ON u.id = r.user_id "
+                )
+                params: dict[str, Any] = {"limit": limit}
+                if status_filter != "all":
+                    sql += "WHERE r.status = :status "
+                    params["status"] = status_filter
+                sql += "ORDER BY r.id DESC LIMIT :limit"
+                rows = conn.execute(text(sql), params).mappings().all()
+        except SQLAlchemyError:
+            logger.exception("admin_requests_lookup_failed")
+            return jsonify({"status": "error", "message": "Identity store unavailable"}), 503
+        return jsonify({"status": "ok", "requests": [dict(r) for r in rows]}), 200
+
+    def _decide_request(
+        request_id: int, approve: bool, admin_id: int
+    ) -> tuple[dict[str, Any] | None, str | None]:
+        """Atomically transition pending -> approved/rejected (single success wins)."""
+        from bist_bot.subscription import _as_utc
+
+        manager = getattr(get_db(), "manager", None)
+        if manager is None:
+            return None, "unavailable"
+        now = utcnow()
+        new_status = "approved" if approve else "rejected"
+        try:
+            with manager.engine.begin() as conn:
+                updated = conn.execute(
+                    text(
+                        "UPDATE payment_requests SET status = :new, decided_at = :now, decided_by = :admin "
+                        "WHERE id = :id AND status = 'pending'"
+                    ),
+                    {"new": new_status, "now": now, "admin": admin_id, "id": request_id},
+                )
+                if updated.rowcount != 1:
+                    return None, "already_decided"
+                req = (
+                    conn.execute(
+                        text(
+                            "SELECT id, user_id, plan FROM payment_requests WHERE id = :id LIMIT 1"
+                        ),
+                        {"id": request_id},
+                    )
+                    .mappings()
+                    .first()
+                )
+                if req is None:
+                    return None, "not_found"
+                result: dict[str, Any] = {"request": dict(req), "decision": new_status}
+                if approve:
+                    days = int(getattr(settings, "SUBSCRIPTION_DAYS", 30) or 30)
+                    user_row = (
+                        conn.execute(
+                            text("SELECT plan_expires_at FROM users WHERE id = :id LIMIT 1"),
+                            {"id": int(req["user_id"])},
+                        )
+                        .mappings()
+                        .first()
+                    )
+                    current_exp = _as_utc((user_row or {}).get("plan_expires_at"))
+                    base = current_exp if current_exp is not None and current_exp > now else now
+                    new_exp = base + timedelta(days=max(1, min(days, 365)))
+                    conn.execute(
+                        text(
+                            "UPDATE users SET plan = :plan, plan_expires_at = :exp, updated_at = :now "
+                            "WHERE id = :id"
+                        ),
+                        {
+                            "plan": str(req["plan"]),
+                            "exp": new_exp,
+                            "now": now,
+                            "id": int(req["user_id"]),
+                        },
+                    )
+                    result["plan"] = str(req["plan"])
+                    result["plan_expires_at"] = new_exp.isoformat()
+        except SQLAlchemyError:
+            logger.exception("admin_decide_request_failed")
+            return None, "unavailable"
+        return result, None
+
+    @app.route("/api/admin/requests/<int:request_id>/approve", methods=["POST"])
+    @jwt_required()
+    @require_roles("admin")
+    def api_admin_approve(request_id: int):
+        admin_identity = str(get_jwt_identity() or "")
+        try:
+            admin_id = int(admin_identity)
+        except (TypeError, ValueError):
+            return jsonify({"status": "error", "message": "Authentication required"}), 401
+        result, error = _decide_request(request_id, True, admin_id)
+        if error == "already_decided":
+            return jsonify({"status": "error", "message": "Bu talep zaten karara bağlanmış."}), 409
+        if error is not None or result is None:
+            return jsonify({"status": "error", "message": "Onay tamamlanamadı."}), 503
+        invite_link: str | None = None
+        if result.get("plan") == "pro_plus":
+            try:
+                from bist_bot.telegram_invite import create_pro_invite_link
+
+                invite_link = create_pro_invite_link()
+                if invite_link:
+                    manager = getattr(get_db(), "manager", None)
+                    if manager is not None:
+                        with manager.engine.begin() as conn:
+                            conn.execute(
+                                text("UPDATE payment_requests SET detail = :detail WHERE id = :id"),
+                                {"detail": f"invite:{invite_link}", "id": request_id},
+                            )
+            except Exception as exc:
+                logger.warning("pro_invite_failed", error=str(exc)[:160])
+        logger.warning("admin_request_approved", request_id=request_id, plan=result.get("plan"))
+        response: dict[str, Any] = {"status": "ok", **result}
+        if invite_link:
+            response["invite_link"] = invite_link
+        return jsonify(response), 200
+
+    @app.route("/api/admin/requests/<int:request_id>/reject", methods=["POST"])
+    @jwt_required()
+    @require_roles("admin")
+    def api_admin_reject(request_id: int):
+        admin_identity = str(get_jwt_identity() or "")
+        try:
+            admin_id = int(admin_identity)
+        except (TypeError, ValueError):
+            return jsonify({"status": "error", "message": "Authentication required"}), 401
+        result, error = _decide_request(request_id, False, admin_id)
+        if error == "already_decided":
+            return jsonify({"status": "error", "message": "Bu talep zaten karara bağlanmış."}), 409
+        if error is not None or result is None:
+            return jsonify({"status": "error", "message": "Ret tamamlanamadı."}), 503
+        logger.warning("admin_request_rejected", request_id=request_id)
+        return jsonify({"status": "ok", **result}), 200
+
     @app.route("/api/scan", methods=["POST"])
     @jwt_required()
     @require_roles("admin", "trader")
@@ -1515,6 +2178,7 @@ def create_dashboard_app(
 
     @app.route("/api/analyze/<ticker>")
     @jwt_required()
+    @require_active_subscription()
     @limiter.limit("30 per minute")
     def api_analyze(ticker: str):
         start_time = time.time()
@@ -1736,6 +2400,7 @@ def create_dashboard_app(
 
     @app.route("/api/signals/history")
     @jwt_required()
+    @require_active_subscription()
     @limiter.limit("60 per minute")
     def api_signal_history():
         raw_limit = request.args.get("limit", 50, type=int)
@@ -1760,6 +2425,7 @@ def create_dashboard_app(
 
     @app.route("/api/stats")
     @jwt_required()
+    @require_active_subscription()
     def api_stats():
         db = get_db()
         bundle_fn = getattr(db, "get_dashboard_stats_bundle", None)
@@ -1918,23 +2584,38 @@ def create_dashboard_app(
     @app.route("/ui")
     @app.route("/ui/dashboard")
     @_ui_auth_required
+    @_subscription_required_ui
     def ui_dashboard():
         return render_template("stitch/dashboard.html")
 
     @app.route("/ui/signals")
     @_ui_auth_required
+    @_subscription_required_ui
     def ui_signals():
         return render_template("stitch/signals.html")
 
     @app.route("/ui/analysis")
     @_ui_auth_required
+    @_subscription_required_ui
     def ui_analysis():
         return render_template("stitch/analysis.html")
 
     @app.route("/ui/settings")
     @_ui_auth_required
+    @_subscription_required_ui
     def ui_settings():
         return render_template("stitch/settings.html")
+
+    @app.route("/ui/billing")
+    @_ui_auth_required
+    def ui_billing():
+        return render_template("stitch/billing.html")
+
+    @app.route("/ui/admin")
+    @_ui_auth_required
+    @_admin_required_ui
+    def ui_admin():
+        return render_template("stitch/admin.html")
 
     return app
 

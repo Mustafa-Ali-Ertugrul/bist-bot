@@ -7,6 +7,70 @@
   'use strict';
 
   // -------------------------------------------------------------------------
+  // Global API guard: expired subscriptions bounce to /ui/billing.
+  // Server is authoritative (402 + sub_expired); this is UX only.
+  // -------------------------------------------------------------------------
+  const _nativeFetch = window.fetch.bind(window);
+  const _SUB_SAFE_PREFIXES = ['/api/me/subscription', '/api/billing/', '/api/auth/'];
+  window.fetch = async function (input, init) {
+    const response = await _nativeFetch(input, init);
+    try {
+      const url = typeof input === 'string' ? input : (input && input.url) || '';
+      const onBillingPage = window.location.pathname === '/ui/billing';
+      if (
+        response.status === 402 &&
+        typeof url === 'string' && url.indexOf('/api/') !== -1 &&
+        !_SUB_SAFE_PREFIXES.some(p => url.indexOf(p) !== -1) &&
+        !onBillingPage
+      ) {
+        const data = await response.clone().json().catch(() => null);
+        if (data && data.code === 'sub_expired') {
+          window.location.replace('/ui/billing');
+        }
+      }
+    } catch (e) { /* never break the original call */ }
+    return response;
+  };
+
+  // -------------------------------------------------------------------------
+  // Subscription countdown badge (visual only — server gate is authoritative)
+  // -------------------------------------------------------------------------
+  function formatRemaining(totalSeconds) {
+    const s = Math.max(0, Math.floor(totalSeconds || 0));
+    const days = Math.floor(s / 86400);
+    const hours = Math.floor((s % 86400) / 3600);
+    const mins = Math.floor((s % 3600) / 60);
+    if (days > 0) return hours > 0 ? `${days}g ${hours}s` : `${days}g`;
+    if (hours > 0) return `${hours}s ${mins}d`;
+    return `${mins}d`;
+  }
+
+  async function updateSubscriptionBadge() {
+    const badge = document.getElementById('sub-countdown-badge');
+    if (!badge) return;
+    try {
+      const token = localStorage.getItem('bistbot_token');
+      if (!token) return;
+      const res = await _nativeFetch('/api/me/subscription', {
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const labels = { trial: 'Deneme', pro: 'Pro', pro_plus: 'Pro+' };
+      const label = labels[data.plan] || 'Deneme';
+      badge.classList.remove('hidden');
+      if (data.status === 'active') {
+        badge.textContent = `${label} • ${formatRemaining(data.remaining_seconds)}`;
+        const urgent = (data.remaining_seconds || 0) < 86400;
+        badge.classList.toggle('text-error', urgent);
+      } else {
+        badge.textContent = 'Süresi doldu';
+        badge.classList.add('text-error');
+      }
+    } catch (e) { /* badge stays hidden on failure */ }
+  }
+
+  // -------------------------------------------------------------------------
   // Global Toast Notifications
   // -------------------------------------------------------------------------
   function showToast(message, type = 'info', duration = 3500) {
@@ -1374,6 +1438,7 @@
     if (!(await enforceAuth())) return;
     initTopbar();
     fixBottomNav();
+    updateSubscriptionBadge();
 
     const path = window.location.pathname;
     try {
