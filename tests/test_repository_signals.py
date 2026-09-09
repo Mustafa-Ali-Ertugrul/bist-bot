@@ -377,6 +377,28 @@ def test_get_performance_stats(signals_repo):
     assert stats["avg_profit_pct"] == 10.0
 
 
+def test_not_tracked_excluded_from_win_rate(signals_repo):
+    """NOT_TRACKED signals are non-actionable: neither wins nor losses."""
+    from sqlalchemy import text
+
+    with signals_repo.manager.engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO signals (ticker, signal_type, score, price, stop_loss, target_price, "
+                "timestamp, created_at, outcome, profit_pct, conditions) VALUES "
+                "('AAA.IS', 'AL', 40, 100, 95, 110, '2025-02-01 10:00:00', '2025-02-01 10:00:00', 'TARGET_HIT', 5.0, '[]'),"
+                "('BBB.IS', 'AL', 40, 100, 95, 110, '2025-02-02 10:00:00', '2025-02-02 10:00:00', 'STOP_HIT', -3.0, '[]'),"
+                "('CCC.IS', 'IZLE', 10, 100, 95, 110, '2025-02-03 10:00:00', '2025-02-03 10:00:00', 'NOT_TRACKED', NULL, '[]'),"
+                "('DDD.IS', 'AL', 40, 100, 95, 110, '2025-02-04 10:00:00', '2025-02-04 10:00:00', 'PENDING', NULL, '[]')"
+            )
+        )
+    stats = signals_repo.get_performance_stats()
+    assert stats["total_signals"] == 4
+    assert stats["completed"] == 2  # TARGET_HIT + STOP_HIT only
+    assert stats["profitable"] == 1
+    assert stats["win_rate"] == 50.0
+
+
 def test_signal_to_dict_conversion():
     """Test internal _signal_to_dict conversion method."""
     # This is harder to test without access to the private method and a SignalRecord

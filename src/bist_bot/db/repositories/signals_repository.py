@@ -5,7 +5,7 @@ from collections.abc import Sequence
 from datetime import UTC, date, datetime, time, timedelta, tzinfo
 from typing import Any, cast
 
-from sqlalchemy import case, func, select
+from sqlalchemy import and_, case, func, select
 
 from bist_bot.db.database import DatabaseManager, ScanLogRecord, SignalRecord
 from bist_bot.market_calendar import TR
@@ -393,11 +393,15 @@ class SignalsRepository:
         def _read(session):
             # Single conditional-aggregation query instead of 4 full-table
             # scans (total / completed / profitable / avg in one round-trip).
+            # NOT_TRACKED rows are deliberately excluded from the win-rate
+            # denominator: they are non-actionable signals that were never
+            # tracked, so by definition they are neither wins nor losses.
+            evaluated = SignalRecord.outcome.notin_(["PENDING", "NOT_TRACKED"])
             return session.execute(
                 select(
                     func.count(),
-                    func.sum(case((SignalRecord.outcome != "PENDING", 1), else_=0)),
-                    func.sum(case((SignalRecord.profit_pct > 0, 1), else_=0)),
+                    func.sum(case((evaluated, 1), else_=0)),
+                    func.sum(case((and_(evaluated, SignalRecord.profit_pct > 0), 1), else_=0)),
                     func.avg(SignalRecord.profit_pct),
                 ).select_from(SignalRecord)
             ).one()
@@ -420,11 +424,12 @@ class SignalsRepository:
         session/connection checkout to reduce latency and connection pool pressure."""
 
         def _read(session):
+            evaluated = SignalRecord.outcome.notin_(["PENDING", "NOT_TRACKED"])
             stats_row = session.execute(
                 select(
                     func.count(),
-                    func.sum(case((SignalRecord.outcome != "PENDING", 1), else_=0)),
-                    func.sum(case((SignalRecord.profit_pct > 0, 1), else_=0)),
+                    func.sum(case((evaluated, 1), else_=0)),
+                    func.sum(case((and_(evaluated, SignalRecord.profit_pct > 0), 1), else_=0)),
                     func.avg(SignalRecord.profit_pct),
                 ).select_from(SignalRecord)
             ).one()
