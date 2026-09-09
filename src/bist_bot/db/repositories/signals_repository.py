@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from datetime import UTC, date, datetime, time, timedelta, tzinfo
 from typing import Any, cast
 
@@ -137,6 +138,51 @@ class SignalsRepository:
             session.flush()
             signal.record_id = int(rec.id)
             return int(rec.id)
+
+        self.manager.run_session(_write)
+
+    def save_signals(self, signals: Sequence[Signal]) -> None:
+        """Batch-insert multiple signals in a single database transaction/checkout."""
+        if not signals:
+            return
+
+        def _write(session):
+            for signal in signals:
+                created_at = signal.timestamp
+                existing = session.scalar(
+                    select(SignalRecord)
+                    .where(
+                        SignalRecord.ticker == signal.ticker,
+                        SignalRecord.signal_type == signal.signal_type.value,
+                        SignalRecord.timestamp == created_at,
+                    )
+                    .limit(1)
+                )
+                if existing is not None:
+                    signal.record_id = int(existing.id)
+                    continue
+                rec = SignalRecord(
+                    timestamp=created_at,
+                    created_at=created_at,
+                    ticker=signal.ticker,
+                    signal_type=signal.signal_type.value,
+                    score=float(signal.score),
+                    price=float(signal.price),
+                    stop_loss=float(signal.stop_loss),
+                    target_price=float(signal.target_price),
+                    position_size=int(signal.position_size)
+                    if signal.position_size is not None
+                    else None,
+                    confidence=signal.confidence,
+                    reasons=" | ".join(signal.reasons),
+                    conditions=_serialize_reasons(signal.reasons),
+                    expires_at=signal.expires_at,
+                    score_breakdown=_serialize_breakdown(signal.score_breakdown),
+                )
+                session.add(rec)
+                session.flush()
+                signal.record_id = int(rec.id)
+            return None
 
         self.manager.run_session(_write)
 

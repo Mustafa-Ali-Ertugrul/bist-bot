@@ -33,8 +33,7 @@ class AppRepository:
         return self.signals.save_signal(signal)
 
     def save_signals(self, signals: Sequence[Signal]) -> None:
-        for signal in signals:
-            self.save_signal(signal)
+        return self.signals.save_signals(signals)
 
     def get_signals(self, limit: int = 50, ticker: str | None = None):
         return self.signals.get_signals(limit=limit, ticker=ticker)
