@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from bist_bot.db.database import DatabaseManager, OrderIntentRecord
 
@@ -167,8 +167,6 @@ class OrderIntentsRepository:
 
     def count_unaccounted_open(self) -> int:
         """Number of ack_unaccounted intents that still hold their symbol lock."""
-        from sqlalchemy import func
-
         def _read(session):
             return session.execute(
                 select(func.count())
