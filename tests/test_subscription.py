@@ -359,6 +359,15 @@ def test_google_routes_gone(client: FlaskClient):
     assert client.get("/api/auth/google/callback?code=x&state=y").status_code == 404
 
 
+def test_login_page_has_register_form(client: FlaskClient):
+    html = client.get("/login").get_data(as_text=True)
+    assert 'id="auth-form-register"' in html
+    assert 'id="tab-register"' in html
+    assert 'id="register-email"' in html
+    assert 'id="register-password-confirm"' in html
+    assert "handleRegister" in html
+
+
 # ---------------------------------------------------------------------------
 # Telegram invite (mocked network)
 # ---------------------------------------------------------------------------
