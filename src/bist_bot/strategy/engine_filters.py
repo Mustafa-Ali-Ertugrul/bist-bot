@@ -112,7 +112,7 @@ def is_trade_actionable(signal: Signal, params: StrategyParams) -> bool:
     and notification layers. The decision is explicitly directional so the
     buy/sell asymmetry can never be confused:
 
-    - buy side: ``score >= params.buy_threshold``
+    - buy side: ``params.buy_threshold <= score <= params.max_actionable_score``
     - sell side: ``score <= params.sell_threshold``
     - HOLD / RADAR / any other type: never actionable
     """

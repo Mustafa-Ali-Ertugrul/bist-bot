@@ -111,9 +111,18 @@
             Konsol Yetkilendirmesi
             <span class="material-symbols-outlined text-primary text-[20px]">verified</span>
 </h1>
-<p class="font-body-sm text-body-sm text-on-surface-variant mt-space-3xs">
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-space-3xs" id="auth-context-desc">
             Tanımlı lisanslı operatör bilgilerinizle giriş yapın ve piyasa botlarını yönetin.
           </p>
+</div>
+<!-- Auth Mode Tabs -->
+<div class="flex items-center p-space-3xs rounded-full bg-surface-container-highest/60 backdrop-blur-md mb-space-md w-fit">
+<button class="px-space-sm py-space-2xs rounded-full font-label-code text-label-code transition-all text-on-primary bg-primary-container font-semibold shadow-[0_0_12px_rgba(16,185,129,0.3)]" id="tab-login" onclick="switchAuthMode('login')" type="button">
+              Giriş Yap
+            </button>
+<button class="px-space-sm py-space-2xs rounded-full font-label-code text-label-code transition-all text-on-surface-variant hover:text-on-surface" id="tab-register" onclick="switchAuthMode('register')" type="button">
+              Kayıt Ol
+            </button>
 </div>
 <!-- Standard Credentials Form Panel -->
 <form class="flex flex-col gap-space-md" id="auth-form-standard" onsubmit="handleLogin(event)">
@@ -169,6 +178,60 @@
 <div class="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
 </button>
 </form>
+<!-- Registration Form Panel (Hidden by default) -->
+<form class="hidden flex-col gap-space-md" id="auth-form-register" onsubmit="handleRegister(event)">
+<div class="flex items-center gap-space-xs bg-primary/10 border border-primary/30 rounded-lg px-space-sm py-space-xs">
+<span class="material-symbols-outlined text-primary text-[18px]">celebration</span>
+<span class="font-body-sm text-body-sm text-on-surface">Yeni hesaplar <strong class="text-primary">24 saat ücretsiz deneme</strong> ile başlar.</span>
+</div>
+<!-- Email Input -->
+<div class="flex flex-col gap-space-3xs">
+<label class="font-label-caps text-label-caps uppercase text-on-surface-variant tracking-wider" for="register-email">
+              E-Posta
+            </label>
+<div class="relative flex items-center">
+<span class="material-symbols-outlined absolute left-space-sm text-on-surface-variant text-[18px] pointer-events-none">
+                alternate_email
+              </span>
+<input class="w-full bg-surface-container-high/70 text-on-surface placeholder:text-on-surface-variant/40 font-metric-value text-metric-value pl-10 pr-space-md py-space-sm rounded-lg focus:outline-none focus:bg-surface-container-highest/90 transition-all shadow-inner" id="register-email" placeholder="ornek@e-posta.com" required="" type="email"/>
+</div>
+</div>
+<!-- Password Input -->
+<div class="flex flex-col gap-space-3xs">
+<label class="font-label-caps text-label-caps uppercase text-on-surface-variant tracking-wider" for="register-password">
+                Şifre (en az 12 karakter)
+              </label>
+<div class="relative flex items-center">
+<span class="material-symbols-outlined absolute left-space-sm text-on-surface-variant text-[18px] pointer-events-none">
+                lock
+              </span>
+<input class="w-full bg-surface-container-high/70 text-on-surface placeholder:text-on-surface-variant/40 font-metric-value text-metric-value pl-10 pr-10 py-space-sm rounded-lg focus:outline-none focus:bg-surface-container-highest/90 transition-all shadow-inner" id="register-password" minlength="12" placeholder="••••••••••••" required="" type="password"/>
+<button class="absolute right-space-sm text-on-surface-variant hover:text-on-surface transition-colors p-space-3xs flex items-center justify-center" id="toggle-reg-pass-btn" onclick="toggleRegPasswordVisibility()" type="button">
+<span class="material-symbols-outlined text-[18px]" id="reg-pass-icon">visibility</span>
+</button>
+</div>
+</div>
+<!-- Password Confirm Input -->
+<div class="flex flex-col gap-space-3xs">
+<label class="font-label-caps text-label-caps uppercase text-on-surface-variant tracking-wider" for="register-password-confirm">
+                Şifre (Tekrar)
+              </label>
+<div class="relative flex items-center">
+<span class="material-symbols-outlined absolute left-space-sm text-on-surface-variant text-[18px] pointer-events-none">
+                lock_reset
+              </span>
+<input class="w-full bg-surface-container-high/70 text-on-surface placeholder:text-on-surface-variant/40 font-metric-value text-metric-value pl-10 pr-space-md py-space-sm rounded-lg focus:outline-none focus:bg-surface-container-highest/90 transition-all shadow-inner" id="register-password-confirm" minlength="12" placeholder="••••••••••••" required="" type="password"/>
+</div>
+</div>
+<!-- Submit CTA Button -->
+<button class="group relative w-full flex items-center justify-center gap-space-xs py-space-sm px-space-md rounded-lg bg-gradient-to-r from-primary-container to-surface-tint text-on-primary font-headline-md text-headline-md tracking-tight hover:opacity-95 shadow-[0_4px_20px_rgba(16,185,129,0.35)] transition-all active:scale-[0.99] overflow-hidden" id="register-btn" type="submit">
+<span class="material-symbols-outlined text-[20px] transition-transform group-hover:scale-110">
+              person_add
+            </span>
+<span>Hesap Oluştur</span>
+<div class="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
+</button>
+</form>
 <!-- Hardware & Security Status Integrated Strip -->
 <div class="mt-space-lg pt-space-sm border-t border-surface-container-highest/40 flex flex-col sm:flex-row items-center justify-between gap-space-xs text-on-surface-variant">
 <div class="flex items-center gap-space-xs font-label-code text-label-code">
@@ -190,10 +253,10 @@
         </span>
 <div class="flex flex-col">
 <span class="font-body-sm text-body-sm text-on-surface font-semibold">
-            Yetkilendirilmiş Operatör Kısıtlaması
+            Ücretsiz Deneme
           </span>
 <span class="font-body-sm text-body-sm text-on-surface-variant">
-            Yalnızca tanımlı piyasa yapıcı ve bot operatörleri erişebilir. Yeni kayıtlar yönetici denetimine tabidir ve halka açık değildir.
+            Yeni hesaplar 24 saat ücretsiz deneme ile başlar. Süre bitiminde Pro veya Pro+ planlarından birini seçerek devam edebilirsiniz.
           </span>
 </div>
 </div>
@@ -216,6 +279,47 @@
 </div>
 </div>
 <script>
+  function switchAuthMode(mode) {
+    const loginForm = document.getElementById('auth-form-standard');
+    const registerForm = document.getElementById('auth-form-register');
+    const tabLogin = document.getElementById('tab-login');
+    const tabRegister = document.getElementById('tab-register');
+    const desc = document.getElementById('auth-context-desc');
+    const activeCls = ['text-on-primary', 'bg-primary-container', 'font-semibold', 'shadow-[0_0_12px_rgba(16,185,129,0.3)]'];
+    const idleCls = ['text-on-surface-variant'];
+    if (mode === 'register') {
+      loginForm.classList.add('hidden');
+      registerForm.classList.remove('hidden');
+      registerForm.classList.add('flex');
+      tabLogin.classList.remove(...activeCls);
+      tabLogin.classList.add(...idleCls);
+      tabRegister.classList.add(...activeCls);
+      tabRegister.classList.remove(...idleCls);
+      if (desc) desc.textContent = 'E-postanızla kaydolun, 24 saat ücretsiz deneme hemen başlasın.';
+    } else {
+      registerForm.classList.add('hidden');
+      registerForm.classList.remove('flex');
+      loginForm.classList.remove('hidden');
+      tabRegister.classList.remove(...activeCls);
+      tabRegister.classList.add(...idleCls);
+      tabLogin.classList.add(...activeCls);
+      tabLogin.classList.remove(...idleCls);
+      if (desc) desc.textContent = 'Tanımlı lisanslı operatör bilgilerinizle giriş yapın ve piyasa botlarını yönetin.';
+    }
+  }
+
+  function toggleRegPasswordVisibility() {
+    const passInput = document.getElementById('register-password');
+    const passIcon = document.getElementById('reg-pass-icon');
+    if (passInput.type === 'password') {
+      passInput.type = 'text';
+      passIcon.innerText = 'visibility_off';
+    } else {
+      passInput.type = 'password';
+      passIcon.innerText = 'visibility';
+    }
+  }
+
   function togglePasswordVisibility() {
     const passInput = document.getElementById('operator-password');
     const passIcon = document.getElementById('pass-icon');
@@ -282,17 +386,66 @@
     }
   }
 
-  function showLoginError(msg) {
-    const form = document.getElementById('auth-form-standard');
-    let err = document.getElementById('login-error-msg');
+  function showLoginError(msg, formId) {
+    const form = document.getElementById(formId || 'auth-form-standard');
+    let err = form.querySelector('#login-error-msg, #register-error-msg');
     if (!err) {
       err = document.createElement('div');
-      err.id = 'login-error-msg';
+      err.id = formId === 'auth-form-register' ? 'register-error-msg' : 'login-error-msg';
       err.className = 'p-space-xs rounded-lg bg-error-container/30 border border-error/40 text-error font-body-sm text-body-sm flex items-center gap-space-xs';
-      form.insertBefore(err, form.querySelector('#submit-btn'));
+      form.insertBefore(err, form.querySelector('button[type="submit"]'));
     }
     err.innerHTML = '<span class="material-symbols-outlined text-[18px]">error</span><span>' + msg + '</span>';
   }
 
-</script></main><footer class="relative z-10 w-full px-terminal-margin py-space-md bg-surface-container-lowest/60 backdrop-blur-lg"><div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-space-sm text-on-surface-variant"><div class="flex items-center gap-space-md flex-wrap justify-center"><div class="flex items-center gap-space-2xs"><span class="material-symbols-outlined text-primary text-[14px]">verified_user</span><span class="font-label-code text-label-code text-on-surface-variant">256-Bit SSL Şifreleme</span></div><div class="flex items-center gap-space-2xs"><span class="material-symbols-outlined text-secondary-container text-[14px]">bolt</span><span class="font-label-code text-label-code text-on-surface-variant">API Statüsü:</span><span class="font-label-code text-label-code text-primary uppercase font-bold">Online (1.2ms)</span></div><div class="flex items-center gap-space-2xs"><span class="material-symbols-outlined text-on-surface-variant text-[14px]">shield</span><span class="font-label-code text-label-code text-on-surface-variant">SPK Uyumlu Altyapı</span></div></div><div class="flex items-center gap-space-xs"><span class="font-label-code text-label-code text-on-surface-variant">© 2024 Bist-Bot Quantitative Systems. Tüm Hakları Saklıdır.</span></div></div></footer><script src="/static/app.js?nocache=100010"></script>
+  async function handleRegister(e) {
+    e.preventDefault();
+    const btn = document.getElementById('register-btn');
+    const email = document.getElementById('register-email').value.trim();
+    const password = document.getElementById('register-password').value;
+    const confirm = document.getElementById('register-password-confirm').value;
+    const oldErr = document.getElementById('register-error-msg');
+    if (oldErr) oldErr.remove();
+
+    if (password !== confirm) {
+      showLoginError('Şifreler eşleşmiyor.', 'auth-form-register');
+      return;
+    }
+    if (password.length < 12) {
+      showLoginError('Şifre en az 12 karakter olmalı.', 'auth-form-register');
+      return;
+    }
+
+    const originalContent = btn.innerHTML;
+    btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[20px]">sync</span><span>Hesap Oluşturuluyor...</span>';
+    btn.disabled = true;
+
+    try {
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email, password: password })
+      });
+      const data = await res.json();
+      if (res.ok && data.status === 'ok') {
+        localStorage.setItem('bistbot_token', data.access_token);
+        localStorage.setItem('bistbot_email', email);
+        btn.innerHTML = '<span class="material-symbols-outlined text-[20px]">check_circle</span><span>Deneme Başlatıldı</span>';
+        await establishSession(data.access_token);
+        setTimeout(() => {
+          window.location.href = '/ui/dashboard';
+        }, 300);
+      } else {
+        btn.innerHTML = originalContent;
+        btn.disabled = false;
+        showLoginError(data.message || 'Kayıt oluşturulamadı.', 'auth-form-register');
+      }
+    } catch (err) {
+      btn.innerHTML = originalContent;
+      btn.disabled = false;
+      showLoginError('API sunucusuna erişilemedi: ' + err.message, 'auth-form-register');
+    }
+  }
+
+</script></main><footer class="relative z-10 w-full px-terminal-margin py-space-md bg-surface-container-lowest/60 backdrop-blur-lg"><div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-space-sm text-on-surface-variant"><div class="flex items-center gap-space-md flex-wrap justify-center"><div class="flex items-center gap-space-2xs"><span class="material-symbols-outlined text-primary text-[14px]">verified_user</span><span class="font-label-code text-label-code text-on-surface-variant">256-Bit SSL Şifreleme</span></div><div class="flex items-center gap-space-2xs"><span class="material-symbols-outlined text-secondary-container text-[14px]">bolt</span><span class="font-label-code text-label-code text-on-surface-variant">API Statüsü:</span><span class="font-label-code text-label-code text-primary uppercase font-bold">Online (1.2ms)</span></div><div class="flex items-center gap-space-2xs"><span class="material-symbols-outlined text-on-surface-variant text-[14px]">shield</span><span class="font-label-code text-label-code text-on-surface-variant">SPK Uyumlu Altyapı</span></div></div><div class="flex items-center gap-space-xs"><span class="font-label-code text-label-code text-on-surface-variant">© 2024 Bist-Bot Quantitative Systems. Tüm Hakları Saklıdır.</span></div></div></footer><script src="/static/app.js?nocache=100011"></script>
 </body></html>

@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="tr"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+
+
+<link rel="stylesheet" href="/static/tailwind.css"/>
+<style>
+.material-symbols-outlined {
+  font-family: 'Material Symbols Outlined' !important;
+  font-weight: normal;
+  font-style: normal;
+  font-size: 20px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+}
+</style>
+</head>
+<body class="bg-background font-body-md text-body-md text-on-surface antialiased"><header class="fixed top-0 left-0 w-full z-50 bg-surface-container-lowest/90 backdrop-blur-xl shadow-[0_4px_20px_rgba(0,0,0,0.4)]"><div class="h-24 w-full px-terminal-margin flex flex-col justify-between pt-space-xs pb-space-2xs"><div class="flex items-center justify-between w-full"><div class="flex items-center gap-space-lg"><div class="flex items-center gap-space-xs"><div class="relative flex items-center justify-center"><span class="w-2.5 h-2.5 rounded-full bg-primary animate-ping absolute opacity-75"></span><span class="w-2.5 h-2.5 rounded-full bg-primary relative"></span></div><span class="font-headline-md text-headline-md tracking-tight text-on-surface font-extrabold">Bist<span class="text-primary">-Bot</span></span><span class="bg-surface-container-high px-space-xs py-space-3xs rounded text-secondary font-label-caps text-label-caps uppercase tracking-wider">v2.4 Algo</span></div><div class="hidden xl:flex items-center gap-space-2xs bg-surface-container px-space-xs py-space-3xs rounded-full shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"><span class="w-1.5 h-1.5 rounded-full bg-primary"></span><span class="font-label-caps text-label-caps text-primary uppercase">BIST 100 CANLI</span></div><nav class="hidden lg:flex items-center gap-space-2xs bg-surface-container-low p-space-3xs rounded-lg" data-active-classes="bg-surface-container-high text-primary font-bold"><a aria-current="page" class="px-space-sm py-space-2xs rounded transition-all bg-surface-container-high text-primary font-bold" data-path="dashboard" href="/ui/dashboard">Dashboard</a><a class="px-space-sm py-space-2xs rounded text-on-surface-variant hover:bg-surface-container hover:text-on-surface font-body-md text-body-md transition-all" data-path="canli-sinyaller" href="/ui/signals">Canlı Sinyaller</a><a class="px-space-sm py-space-2xs rounded text-on-surface-variant hover:bg-surface-container hover:text-on-surface font-body-md text-body-md transition-all" data-path="varlik-analiz" href="/ui/analysis">Varlık Analiz</a><a class="px-space-sm py-space-2xs rounded text-on-surface-variant hover:bg-surface-container hover:text-on-surface font-body-md text-body-md transition-all" data-path="terminal-ayarlari" href="/ui/settings">Terminal Ayarları</a></nav></div><div class="flex items-center gap-space-md"><div class="hidden md:flex items-center gap-space-xs bg-surface-container px-space-sm py-space-2xs rounded-full shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"><span class="w-2 h-2 rounded-full bg-primary"></span><span class="font-label-code text-label-code text-on-surface-variant">Sistem Aktif <span class="text-outline">•</span> <span class="text-primary">100 Varlık Taranıyor</span></span></div><div class="flex items-center gap-space-xs pl-space-xs bg-surface-container-low p-space-3xs rounded-full"><span class="hidden sm:inline-block font-label-code text-label-code text-on-surface-variant px-space-xs">admin@bistbot.com</span><span id="sub-countdown-badge" class="hidden font-label-code text-label-code px-space-xs py-space-3xs rounded-full bg-surface-container-high text-on-surface-variant"></span><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center shadow-[0_0_12px_rgba(78,222,163,0.35)]"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div><div class="flex items-center gap-space-3xs"><button class="w-8 h-8 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors" title="Yenile" type="button"><span class="material-symbols-outlined text-[18px]">refresh</span></button><button class="relative w-8 h-8 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors" title="Bildirimler" type="button"><span class="material-symbols-outlined text-[18px]">notifications</span><span class="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-primary"></span></button><button class="w-8 h-8 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-error flex items-center justify-center transition-colors" title="Çıkış" type="button"><span class="material-symbols-outlined text-[18px]">logout</span></button></div></div></div><div class="w-full overflow-x-auto flex items-center gap-space-lg py-space-3xs bg-surface-container-low/70 px-space-sm rounded shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"><div class="flex items-center gap-space-2xs shrink-0"><span class="font-label-caps text-label-caps text-outline">BIST ENDEKSLER:</span></div><div class="flex items-center gap-space-xs shrink-0"><span class="font-label-code text-label-code text-on-surface font-semibold">XU100</span><span class="font-metric-value text-metric-value text-on-surface" id="header-xu100-val">14,531.31</span><span class="font-label-code text-label-code text-primary flex items-center" id="header-xu100-chg"><span class="material-symbols-outlined text-[14px]">arrow_drop_up</span>+0.87%</span></div><span class="text-outline text-[10px] shrink-0">|</span><div class="flex items-center gap-space-xs shrink-0"><span class="font-label-code text-label-code text-on-surface font-semibold">XU030</span><span class="font-metric-value text-metric-value text-on-surface" id="header-xu030-val">17,344.75</span><span class="font-label-code text-label-code text-primary flex items-center" id="header-xu030-chg"><span class="material-symbols-outlined text-[14px]">arrow_drop_up</span>+1.41%</span></div><span class="text-outline text-[10px] shrink-0">|</span><div class="flex items-center gap-space-xs shrink-0"><span class="font-label-code text-label-code text-on-surface font-semibold">USD/TRY</span><span class="font-metric-value text-metric-value text-on-surface" id="header-usdtry-val">48.47</span><span class="font-label-code text-label-code text-primary flex items-center" id="header-usdtry-chg"><span class="material-symbols-outlined text-[14px]">arrow_drop_up</span>+0.05%</span></div><span class="text-outline text-[10px] shrink-0">|</span><div class="flex items-center gap-space-xs shrink-0"><span class="font-label-code text-label-code text-outline">BIST HACİM</span><span class="font-metric-value text-metric-value text-tertiary" id="header-bist-vol">118.6B TL</span></div></div></div></header>
+<main class="w-full pt-24 bg-background min-h-screen"><div class="flex flex-col w-full max-w-5xl mx-auto px-terminal-margin py-space-xl gap-space-lg">
+<div>
+<h1 class="font-headline-lg text-headline-lg text-on-surface tracking-tight">Abonelik ve Ödeme</h1>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-space-3xs">Deneme süreniz bitince sinyallere erişim durur. Ödeme EFT/havale ile yapılır, admin onayıyla planınız aktiflenir.</p>
+</div>
+<div id="billing-current" class="bg-surface-container-low/90 rounded-xl p-space-lg shadow-lg">
+<div class="font-label-caps text-label-caps text-outline uppercase">Mevcut Planınız</div>
+<div class="font-headline-md text-headline-md text-on-surface font-bold mt-space-3xs" id="billing-plan-name">Yükleniyor...</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant" id="billing-plan-detail"></div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-space-lg">
+<div class="bg-surface-container-low/90 rounded-xl p-space-lg shadow-lg border border-transparent" id="card-pro">
+<div class="font-headline-md text-headline-md text-on-surface font-bold">Pro</div>
+<div class="font-metric-display text-metric-display text-primary mt-space-3xs"><span id="price-pro">500</span> TL <span class="font-body-sm text-body-sm text-outline">/ 30 gün</span></div>
+<ul class="font-body-sm text-body-sm text-on-surface-variant mt-space-sm flex flex-col gap-space-3xs">
+<li>• Web terminali tam erişim</li>
+<li>• Mobil uygulama erişimi</li>
+<li>• Canlı sinyal akışı</li>
+</ul>
+<button class="mt-space-md w-full py-space-sm rounded-lg bg-surface-container-high text-on-surface font-body-md text-body-md hover:bg-primary hover:text-on-primary transition-all" data-plan="pro" onclick="selectBillingPlan('pro')">Pro'yu Seç</button>
+</div>
+<div class="bg-surface-container-low/90 rounded-xl p-space-lg shadow-lg border border-transparent" id="card-pro-plus">
+<div class="font-headline-md text-headline-md text-on-surface font-bold">Pro+ <span class="font-label-caps text-label-caps text-primary">ÖNERİLEN</span></div>
+<div class="font-metric-display text-metric-display text-primary mt-space-3xs"><span id="price-pro-plus">700</span> TL <span class="font-body-sm text-body-sm text-outline">/ 30 gün</span></div>
+<ul class="font-body-sm text-body-sm text-on-surface-variant mt-space-sm flex flex-col gap-space-3xs">
+<li>• Pro'nun tüm özellikleri</li>
+<li>• Özel Telegram sinyal kanalı</li>
+<li>• Öncelikli destek</li>
+</ul>
+<button class="mt-space-md w-full py-space-sm rounded-lg bg-surface-container-high text-on-surface font-body-md text-body-md hover:bg-primary hover:text-on-primary transition-all" data-plan="pro_plus" onclick="selectBillingPlan('pro_plus')">Pro+'ı Seç</button>
+</div>
+</div>
+<div class="bg-surface-container-low/90 rounded-xl p-space-lg shadow-lg">
+<div class="font-label-caps text-label-caps text-outline uppercase">EFT / Havale Bilgileri</div>
+<div class="mt-space-sm flex flex-col gap-space-xs">
+<div class="flex items-center justify-between bg-surface-container-lowest px-space-sm py-space-xs rounded-lg">
+<span class="font-label-code text-label-code text-on-surface-variant">IBAN</span>
+<span class="font-metric-value text-metric-value text-on-surface" id="billing-iban">—</span>
+</div>
+<div class="flex items-center justify-between bg-surface-container-lowest px-space-sm py-space-xs rounded-lg">
+<span class="font-label-code text-label-code text-on-surface-variant">Açıklama / Referans</span>
+<span class="font-metric-value text-metric-value text-primary" id="billing-ref">Önce plan seçin</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Açıklama kısmına yukarıdaki referans kodunu yazmayı unutmayın. Ödemeyi yaptıktan sonra aşağıdaki butona basın.</p>
+<button id="billing-claim-btn" class="w-full sm:w-auto px-space-lg py-space-sm rounded-lg bg-primary text-on-primary font-body-md text-body-md font-bold hover:opacity-95 transition-all" onclick="submitBillingClaim()">Ödemeyi Yaptım</button>
+<div id="billing-status" class="font-body-sm text-body-sm text-on-surface-variant"></div>
+</div>
+</div>
+</div></main>
+<footer class="w-full bg-surface-container-lowest py-space-sm shadow-[0_-1px_12px_rgba(0,0,0,0.5)] pb-20 sm:pb-space-sm"><div class="w-full px-terminal-margin flex flex-col sm:flex-row items-center justify-between gap-space-xs"><div class="flex items-center gap-space-md font-label-code text-label-code"><div class="flex items-center gap-space-2xs"><span class="w-2 h-2 rounded-full bg-primary"></span><span class="text-on-surface-variant">API: <span class="text-primary font-semibold">ONLINE</span></span></div><span class="text-outline">•</span><div class="flex items-center gap-space-2xs"><span class="material-symbols-outlined text-[14px] text-tertiary">wifi_tethering</span><span class="text-on-surface-variant">WS Latency: <span class="text-tertiary font-metric-value text-metric-value">18ms</span></span></div><span class="text-outline">•</span><span class="text-on-surface-variant hidden md:inline">Sunucu: <span class="text-on-surface">ist-eqx-algo-01</span></span></div><div class="font-body-sm text-body-sm text-outline text-center sm:text-right"><p>Yasal Uyarı: Burada yer alan algoritmik veriler yatırım danışmanlığı kapsamında değildir. Gecikmesiz BIST veri akışı.</p></div></div></footer><script>
+(function () {
+  'use strict';
+  let selectedPlan = null;
+  let billingInfo = null;
+
+  function authHeaders() {
+    const t = localStorage.getItem('bistbot_token');
+    return t ? { 'Authorization': 'Bearer ' + t, 'Content-Type': 'application/json' } : {};
+  }
+
+  window.selectBillingPlan = function (plan) {
+    selectedPlan = plan;
+    ['pro', 'pro_plus'].forEach(p => {
+      const card = document.getElementById(p === 'pro' ? 'card-pro' : 'card-pro-plus');
+      if (card) card.classList.toggle('border-primary', p === plan);
+    });
+    const st = document.getElementById('billing-status');
+    if (st) st.textContent = plan === 'pro_plus'
+      ? 'Pro+ seçildi: ödeme sonrası özel Telegram kanalı davet linki oluşturulur.'
+      : 'Pro seçildi.';
+  };
+
+  window.submitBillingClaim = async function () {
+    const st = document.getElementById('billing-status');
+    if (!selectedPlan) {
+      if (st) st.textContent = 'Lütfen önce bir plan seçin.';
+      return;
+    }
+    if (st) st.textContent = 'Bildirim gönderiliyor...';
+    try {
+      const res = await fetch('/api/billing/claim', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ plan: selectedPlan })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (st) st.textContent = data.message || 'Bildirim alınamadı.';
+        return;
+      }
+      const req = data.request || {};
+      const ref = document.getElementById('billing-ref');
+      if (ref) ref.textContent = req.reference || '—';
+      if (st) st.textContent = data.duplicate
+        ? 'Bu plan için zaten bekleyen bir bildiriminiz var. Onay sonrası planınız aktiflenir.'
+        : 'Ödeme bildiriminiz alındı! Açıklamaya referans kodunu yazdığınızdan emin olun. Onay sonrası planınız aktiflenir.';
+    } catch (e) {
+      if (st) st.textContent = 'Bağlantı hatası, lütfen tekrar deneyin.';
+    }
+  };
+
+  async function loadBilling() {
+    try {
+      const infoRes = await fetch('/api/billing/info', { headers: authHeaders() });
+      if (infoRes.ok) {
+        billingInfo = await infoRes.json();
+        const iban = document.getElementById('billing-iban');
+        if (iban && billingInfo.iban) iban.textContent = billingInfo.iban;
+        const pp = document.getElementById('price-pro');
+        if (pp && billingInfo.pro_price_try) pp.textContent = billingInfo.pro_price_try;
+        const ppp = document.getElementById('price-pro-plus');
+        if (ppp && billingInfo.pro_plus_price_try) ppp.textContent = billingInfo.pro_plus_price_try;
+      }
+      const subRes = await fetch('/api/me/subscription', { headers: authHeaders() });
+      if (subRes.ok) {
+        const sub = await subRes.json();
+        const labels = { trial: 'Deneme', pro: 'Pro', pro_plus: 'Pro+' };
+        const name = document.getElementById('billing-plan-name');
+        const detail = document.getElementById('billing-plan-detail');
+        if (name) name.textContent = labels[sub.plan] || sub.plan;
+        if (detail) {
+          detail.textContent = sub.status === 'active'
+            ? 'Planınız aktif. Kalan süre dolmadan yenileyebilirsiniz.'
+            : 'Planınızın süresi dolmuş. Devam etmek için yukarıdan bir plan seçip ödemenizi bildirin.';
+        }
+      }
+      const mineRes = await fetch('/api/billing/mine', { headers: authHeaders() });
+      if (mineRes.ok) {
+        const mine = await mineRes.json();
+        const pending = (mine.requests || []).find(r => r.status === 'pending');
+        const st = document.getElementById('billing-status');
+        if (pending) {
+          const ref = document.getElementById('billing-ref');
+          if (ref) ref.textContent = pending.reference;
+          if (st) st.textContent = 'Bekleyen ödemeniz admin onayında. Referans: ' + pending.reference;
+        }
+      }
+    } catch (e) { /* static fallbacks stay visible */ }
+  }
+
+  document.addEventListener('DOMContentLoaded', loadBilling);
+})();
+</script>
+<script src="/static/app.js?nocache=100011"></script>
+</body></html>

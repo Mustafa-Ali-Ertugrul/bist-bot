@@ -540,3 +540,22 @@ class NotificationSettings:
     # new AL signal (notifications/tracking still see the full list).
     # 0 disables the cooldown (legacy behaviour).
     AL_SIGNAL_COOLDOWN_MINUTES: int = max(0, _get_int_env("AL_SIGNAL_COOLDOWN_MINUTES", 60))
+
+
+@dataclass(frozen=True)
+class BillingSettings:
+    """Membership subscription + manual EFT/havale billing configuration."""
+
+    # Trial granted on registration (and to pre-existing users at migration).
+    TRIAL_HOURS: int = _get_int_env("TRIAL_HOURS", 24)
+    # Paid plan prices (integer TL, backend-authoritative — never trusted from
+    # the client) and subscription duration in days.
+    PRO_PRICE_TRY: int = _get_int_env("PRO_PRICE_TRY", 500)
+    PRO_PLUS_PRICE_TRY: int = _get_int_env("PRO_PLUS_PRICE_TRY", 700)
+    SUBSCRIPTION_DAYS: int = _get_int_env("SUBSCRIPTION_DAYS", 30)
+    # Manual bank transfer destination shown on the billing page.
+    BILLING_IBAN: str = _get_str_env("BILLING_IBAN")
+    # Pro+ private Telegram channel used for single-use invite links.
+    TELEGRAM_PRO_CHANNEL_ID: str = _get_str_env("TELEGRAM_PRO_CHANNEL_ID")
+    # Single-use invite link lifetime in hours.
+    TELEGRAM_INVITE_HOURS: int = _get_int_env("TELEGRAM_INVITE_HOURS", 48)
