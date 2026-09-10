@@ -408,6 +408,27 @@ class Settings:
         if not (0 < int(self.ADX_THRESHOLD) <= 100):
             errors.append("ADX_THRESHOLD must be in (0, 100]")
 
+        # --- Aşama 1: tunable strateji/indikatör/rejim sabitleri ---
+        # Kurallar StrategyParams.validate ile paylaşılır; burada settings
+        # üzerinden kurulan bir instance doğrulanır (env override'lar
+        # default_factory zinciriyle instance'a akar). İndikatör hesaplama
+        # pencereleri params alanı değildir; ayrıca aşağıda kontrol edilir.
+        from bist_bot.strategy.params import StrategyParams, validate_strategy_params
+
+        errors.extend(validate_strategy_params(StrategyParams()))
+        for period_name in (
+            "STOCH_K_PERIOD",
+            "STOCH_D_PERIOD",
+            "ADX_PERIOD",
+            "ATR_PERIOD",
+            "OBV_SMA_PERIOD",
+            "BB_SQUEEZE_PERIOD",
+        ):
+            if int(getattr(self, period_name)) < 1:
+                errors.append(f"{period_name} must be >= 1")
+        if float(self.MAX_SIGNAL_SCORE) < 0:
+            errors.append("MAX_SIGNAL_SCORE negatif olamaz")
+
         # --- Timeout / retry budgets vs Streamlit absolute budget ---
         streamlit_timeout = int(self.STREAMLIT_BACKGROUND_SCAN_TIMEOUT_SECONDS)
         if streamlit_timeout < 1:

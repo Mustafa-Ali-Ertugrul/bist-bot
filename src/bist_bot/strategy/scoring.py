@@ -9,11 +9,23 @@ from bist_bot.config.settings import settings
 # ----------------------------------------------------------------------
 # Per-component theoretical maxima (single source of truth for clamps
 # and for the normalized research profile).
+#
+# Aşama 1: kanonik değerler StrategyParams alan default'larıdır
+# (env'den overridelenebilir); buradaki sabitler yalnızca params
+# taşımayan eski çağrılar için getattr fallback'idir.
 # ----------------------------------------------------------------------
 MOMENTUM_SCORE_CAP: float = 45.0
 TREND_SCORE_CAP: float = 70.0
 VOLUME_SCORE_CAP: float = 26.0
 STRUCTURE_SCORE_CAP: float = 50.0
+
+
+def _cap(params, name: str, fallback: float) -> float:
+    """Read a score-cap from params, tolerating duck-typed carriers."""
+    try:
+        return float(getattr(params, name, fallback))
+    except (TypeError, ValueError):
+        return fallback
 
 
 def _oversold_trend_confirmed(params, last) -> bool:
@@ -91,17 +103,17 @@ def score_momentum(params, last, _prev) -> tuple[float, list[str]]:
             score -= params.score_stoch_cross
             reasons.append(f"Stochastic Bearish Cross (K:{stoch_k:.0f}, D:{stoch_d:.0f})")
 
-        if stoch_k < 20 and stoch_d < 20:
+        if stoch_k < params.stoch_oversold and stoch_d < params.stoch_oversold:
             score += params.score_stoch_extreme
             reasons.append(f"Stochastic aşırı satım bölgesi (K:{stoch_k:.0f})")
-        elif stoch_k > 80 and stoch_d > 80:
+        elif stoch_k > params.stoch_overbought and stoch_d > params.stoch_overbought:
             score -= params.score_stoch_extreme
             reasons.append(f"Stochastic aşırı alım bölgesi (K:{stoch_k:.0f})")
 
-        if stoch_k > stoch_d and stoch_k < 50:
+        if stoch_k > stoch_d and stoch_k < params.stoch_trend_mid:
             score += params.score_stoch_trend
             reasons.append("Stochastic yükseliş eğilimi")
-        elif stoch_k < stoch_d and stoch_k > 50:
+        elif stoch_k < stoch_d and stoch_k > params.stoch_trend_mid:
             score -= params.score_stoch_trend
             reasons.append("Stochastic düşüş eğilimi")
 
@@ -113,18 +125,19 @@ def score_momentum(params, last, _prev) -> tuple[float, list[str]]:
             )
             score += points
             reasons.append(reason)
-        elif cci < -50:
+        elif cci < params.cci_min:
             score += params.score_cci_normal
             reasons.append(f"CCI düşük ({cci:.0f})")
         elif cci > 100:
             score -= params.score_cci_extreme
             reasons.append(f"CCI aşırı alım ({cci:.0f})")
-        elif cci > 50:
+        elif cci > params.cci_max:
             score -= params.score_cci_normal
             reasons.append(f"CCI yüksek ({cci:.0f})")
 
     # Theorik max: rsi_extreme(18) + stoch_cross(8) + stoch_extreme(6) + stoch_trend(3) + cci_extreme(8) = 43
-    score = max(-MOMENTUM_SCORE_CAP, min(MOMENTUM_SCORE_CAP, score))
+    cap = _cap(params, "momentum_score_cap", MOMENTUM_SCORE_CAP)
+    score = max(-cap, min(cap, score))
     return score, reasons
 
 
@@ -244,7 +257,7 @@ def score_trend(params, last, prev, df=None) -> tuple[float, list[str]]:
     plus_di = last.get("plus_di")
     minus_di = last.get("minus_di")
     if pd.notna(adx) and pd.notna(plus_di) and pd.notna(minus_di):
-        if adx > 25:
+        if adx > params.adx_strong_edge:
             if plus_di > minus_di:
                 score += params.score_adx_strong
                 reasons.append(f"Güçlü yükseliş trendi (ADX:{adx:.0f}, +DI>{minus_di:.0f})")
@@ -268,7 +281,8 @@ def score_trend(params, last, prev, df=None) -> tuple[float, list[str]]:
         reasons.append("+DI/-DI Bearish Cross")
 
     # Theorik max: ema_cross(10) + ema_initial_cross(10) + sma_golden(12) + macd_cross(12) + macd_hist_strong(5) + adx_strong(8) + di_cross(6) = 63
-    score = max(-TREND_SCORE_CAP, min(TREND_SCORE_CAP, score))
+    cap = _cap(params, "trend_score_cap", TREND_SCORE_CAP)
+    score = max(-cap, min(cap, score))
     return score, reasons
 
 
@@ -330,7 +344,8 @@ def score_volume(params, last, prev) -> tuple[float, list[str]]:
         reasons.append("OBV düşüş trendi → Çıkış var")
 
     # Theorik max: vol_confirm(8) + vol_spike(8) + pv_confirm(2) + vol_trend(2) + obv_trend(4) = 24
-    score = max(-VOLUME_SCORE_CAP, min(VOLUME_SCORE_CAP, score))
+    cap = _cap(params, "volume_score_cap", VOLUME_SCORE_CAP)
+    score = max(-cap, min(cap, score))
     return score, reasons
 
 
@@ -355,10 +370,10 @@ def score_structure(params, last) -> tuple[float, list[str]]:
         score -= params.score_bollinger_extreme
         reasons.append("Fiyat Bollinger üst bandının üstünde → Aşırı uzamış")
     elif pd.notna(bb_pct):
-        if bb_pct < 0.2:
+        if bb_pct < params.bb_pct_low:
             score += params.score_bollinger_percent
             reasons.append(f"Bollinger %B düşük ({bb_pct:.2f})")
-        elif bb_pct > 0.8:
+        elif bb_pct > params.bb_pct_high:
             score -= params.score_bollinger_percent
             reasons.append(f"Bollinger %B yüksek ({bb_pct:.2f})")
 
@@ -368,10 +383,10 @@ def score_structure(params, last) -> tuple[float, list[str]]:
     dist_support = last.get("dist_to_support_pct", 50)
     dist_resist = last.get("dist_to_resistance_pct", 50)
 
-    if pd.notna(dist_support) and dist_support < 2:
+    if pd.notna(dist_support) and dist_support < params.sr_distance_pct:
         score += params.score_sr_distance
         reasons.append(f"Fiyat desteğe yakın (%{dist_support:.1f})")
-    elif pd.notna(dist_resist) and dist_resist < 2:
+    elif pd.notna(dist_resist) and dist_resist < params.sr_distance_pct:
         score -= params.score_sr_distance
         reasons.append(f"Fiyat dirence yakın (%{dist_resist:.1f})")
 
@@ -392,19 +407,16 @@ def score_structure(params, last) -> tuple[float, list[str]]:
         reasons.append("🔥 MACD Bearish Divergence → Güçlü dönüş sinyali")
 
     # Theorik max: bb_extreme(10) + bb_percent(5) + sr_distance(6) + rsi_divergence(15) + macd_divergence(12) = 48
-    score = max(-STRUCTURE_SCORE_CAP, min(STRUCTURE_SCORE_CAP, score))
+    cap = _cap(params, "structure_score_cap", STRUCTURE_SCORE_CAP)
+    score = max(-cap, min(cap, score))
     return score, reasons
 
 
 # ----------------------------------------------------------------------
-# Component combination helper (legacy + research/normalized modes)
+# Component combination helper (legacy + research/normalized modes).
+# NOTE: _COMPONENT_CAPS sözlüğü Aşama 1'de kaldırıldı; normalize mod
+# paydaları artık doğrudan params cap'lerinden okunur (aşağıda `caps`).
 # ----------------------------------------------------------------------
-_COMPONENT_CAPS: dict[str, float] = {
-    "momentum": MOMENTUM_SCORE_CAP,
-    "trend": TREND_SCORE_CAP,
-    "volume": VOLUME_SCORE_CAP,
-    "structure": STRUCTURE_SCORE_CAP,
-}
 
 
 def combine_component_scores(
@@ -463,8 +475,14 @@ def combine_component_scores(
 
     contributions: dict[str, float] = {}
     total = 0.0
+    caps = {
+        "momentum": _cap(params, "momentum_score_cap", MOMENTUM_SCORE_CAP),
+        "trend": _cap(params, "trend_score_cap", TREND_SCORE_CAP),
+        "volume": _cap(params, "volume_score_cap", VOLUME_SCORE_CAP),
+        "structure": _cap(params, "structure_score_cap", STRUCTURE_SCORE_CAP),
+    }
     for name, raw in components.items():
-        cap = _COMPONENT_CAPS[name]
+        cap = caps[name]
         ratio = max(-1.0, min(1.0, raw / cap)) if cap > 0 else 0.0
         weight = usable.get(name, 0.0) / total_weight
         contribution = ratio * weight * 100.0

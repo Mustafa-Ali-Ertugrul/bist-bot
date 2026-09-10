@@ -231,7 +231,7 @@ class StrategyEngine:
         return extract_timeframes(market_data)
 
     def _get_trend_bias(self, df: pd.DataFrame) -> TrendBias:
-        return get_trend_bias(self.indicators, df)
+        return get_trend_bias(self.indicators, df, self.params)
 
     def _apply_confluence(
         self, signal_type: SignalType, trend_bias: TrendBias, reasons: list[str]
@@ -299,6 +299,7 @@ class StrategyEngine:
             trigger_df,
             trend_df=trend_df,
             multi_timeframe=multi_timeframe,
+            params=self.params,
         )
 
     def _passes_adx_filter(self, ticker: str, last: pd.Series) -> bool:

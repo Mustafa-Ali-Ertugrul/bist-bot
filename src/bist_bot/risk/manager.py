@@ -64,6 +64,8 @@ class RiskManager:
         self.correlation_risk_step = float(getattr(settings, "CORRELATION_RISK_STEP", 0.35))
         self.correlation_min_scale = float(getattr(settings, "CORRELATION_MIN_SCALE", 0.25))
         self.correlation_max_cluster = int(getattr(settings, "CORRELATION_MAX_CLUSTER", 2))
+        # Aşama 1: pairwise fallback minimum örtüşen bar (env CORR_FALLBACK_MIN_BARS).
+        self.corr_fallback_min_bars = int(getattr(settings, "CORR_FALLBACK_MIN_BARS", 10))
         self.atr_baseline_pct = float(getattr(settings, "ATR_BASELINE_PCT", 0.025))
         self.atr_min_risk_scale = float(getattr(settings, "ATR_MIN_RISK_SCALE", 0.35))
         self.max_position_cap_pct = float(getattr(settings, "MAX_POSITION_CAP_PCT", 5.0))
@@ -195,6 +197,7 @@ class RiskManager:
             correlation_risk_step=self.correlation_risk_step,
             capital=self.capital,
             max_risk_pct=self.max_risk_pct,
+            min_bars=self.corr_fallback_min_bars,
         )
 
     def calculate(self, df: pd.DataFrame, direction: str = "LONG") -> RiskLevels:
@@ -300,4 +303,5 @@ class RiskManager:
             self._portfolio_history,
             self._global_corr_cache,
             self.correlation_threshold,
+            self.corr_fallback_min_bars,
         )

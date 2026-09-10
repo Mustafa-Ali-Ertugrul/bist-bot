@@ -135,8 +135,24 @@ class TechnicalIndicators:
 
     @staticmethod
     def add_stochastic(
-        df: pd.DataFrame, k_period: int = 14, d_period: int = 3, *, in_place: bool = False
+        df: pd.DataFrame,
+        k_period: int | None = None,
+        d_period: int | None = None,
+        oversold: float | None = None,
+        overbought: float | None = None,
+        *,
+        in_place: bool = False,
     ) -> pd.DataFrame:
+        # Aşama 1: hesaplama pencereleri + bölge eşikleri settings'ten
+        # (STOCH_*). None = mevcut default'lar (14/3/20/80), davranış korunur.
+        if k_period is None:
+            k_period = int(getattr(settings, "STOCH_K_PERIOD", 14))
+        if d_period is None:
+            d_period = int(getattr(settings, "STOCH_D_PERIOD", 3))
+        if oversold is None:
+            oversold = float(getattr(settings, "STOCH_OVERSOLD", 20.0))
+        if overbought is None:
+            overbought = float(getattr(settings, "STOCH_OVERBOUGHT", 80.0))
         if not in_place:
             df = df.copy()
 
@@ -162,13 +178,18 @@ class TechnicalIndicators:
         df.loc[bullish, "stoch_cross"] = "BULLISH"
         df.loc[bearish, "stoch_cross"] = "BEARISH"
 
-        df["stoch_oversold"] = (df["stoch_k"] < 20) & (df["stoch_d"] < 20)
-        df["stoch_overbought"] = (df["stoch_k"] > 80) & (df["stoch_d"] > 80)
+        df["stoch_oversold"] = (df["stoch_k"] < oversold) & (df["stoch_d"] < oversold)
+        df["stoch_overbought"] = (df["stoch_k"] > overbought) & (df["stoch_d"] > overbought)
 
         return df
 
     @staticmethod
-    def add_adx(df: pd.DataFrame, period: int = 14, *, in_place: bool = False) -> pd.DataFrame:
+    def add_adx(
+        df: pd.DataFrame, period: int | None = None, *, in_place: bool = False
+    ) -> pd.DataFrame:
+        # Aşama 1: None = settings.ADX_PERIOD (default 14), davranış korunur.
+        if period is None:
+            period = int(getattr(settings, "ADX_PERIOD", 14))
         if not in_place:
             df = df.copy()
         if "atr" not in df.columns:
@@ -218,7 +239,13 @@ class TechnicalIndicators:
         return df
 
     @staticmethod
-    def add_obv(df: pd.DataFrame, *, in_place: bool = False) -> pd.DataFrame:
+    def add_obv(
+        df: pd.DataFrame, sma_window: int | None = None, *, in_place: bool = False
+    ) -> pd.DataFrame:
+        # Aşama 1: None = settings.OBV_SMA_PERIOD (default 20). Kolon adı
+        # `obv_sma` değişmez (çıktı şeması donduruldu).
+        if sma_window is None:
+            sma_window = int(getattr(settings, "OBV_SMA_PERIOD", 20))
         if not in_place:
             df = df.copy()
         close = df["close"].to_numpy()
@@ -227,7 +254,7 @@ class TechnicalIndicators:
         signed_volume = direction * volume
         signed_volume[0] = 0
         df["obv"] = np.cumsum(signed_volume)
-        df["obv_sma"] = df["obv"].rolling(window=20).mean()
+        df["obv_sma"] = df["obv"].rolling(window=sma_window).mean()
         df["obv_trend"] = "FLAT"
         df.loc[df["obv"] > df["obv_sma"], "obv_trend"] = "UP"
         df.loc[df["obv"] < df["obv_sma"], "obv_trend"] = "DOWN"
@@ -378,11 +405,18 @@ class TechnicalIndicators:
         df: pd.DataFrame,
         period: int | None = None,
         std: float | None = None,
+        squeeze_window: int | None = None,
+        squeeze_ratio: float | None = None,
         *,
         in_place: bool = False,
     ) -> pd.DataFrame:
         period = period or settings.BOLLINGER_PERIOD
         std = std or settings.BOLLINGER_STD
+        # Aşama 1: squeeze penceresi/oranı settings'ten (default 20/0.7).
+        if squeeze_window is None:
+            squeeze_window = int(getattr(settings, "BB_SQUEEZE_PERIOD", 20))
+        if squeeze_ratio is None:
+            squeeze_ratio = float(getattr(settings, "BB_SQUEEZE_RATIO", 0.7))
         if not in_place:
             df = df.copy()
 
@@ -410,7 +444,10 @@ class TechnicalIndicators:
         df.loc[df["close"] <= df["bb_lower"], "bb_position"] = "BELOW_LOWER"
         df.loc[df["close"] >= df["bb_upper"], "bb_position"] = "ABOVE_UPPER"
 
-        df["bb_squeeze"] = df["bb_bandwidth"] < df["bb_bandwidth"].rolling(window=20).mean() * 0.7
+        df["bb_squeeze"] = (
+            df["bb_bandwidth"]
+            < df["bb_bandwidth"].rolling(window=squeeze_window).mean() * squeeze_ratio
+        )
 
         return df
 
@@ -469,7 +506,12 @@ class TechnicalIndicators:
         return bool(vol_ratio >= threshold)
 
     @staticmethod
-    def add_atr(df: pd.DataFrame, period: int = 14, *, in_place: bool = False) -> pd.DataFrame:
+    def add_atr(
+        df: pd.DataFrame, period: int | None = None, *, in_place: bool = False
+    ) -> pd.DataFrame:
+        # Aşama 1: None = settings.ATR_PERIOD (default 14), davranış korunur.
+        if period is None:
+            period = int(getattr(settings, "ATR_PERIOD", 14))
         if not in_place:
             df = df.copy()
 

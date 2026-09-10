@@ -28,6 +28,7 @@ def prepare_analysis_frame(
     *,
     trend_df: pd.DataFrame,
     multi_timeframe: bool,
+    params=None,
 ) -> tuple[pd.DataFrame, TrendBias, pd.Series, pd.Series]:
     """Enrich trigger data and extract current/previous scoring rows."""
     if trigger_df.empty or len(trigger_df) < 2:
@@ -36,7 +37,7 @@ def prepare_analysis_frame(
     if analysis_df.empty or len(analysis_df) < 2:
         raise ValueError("Indikator hesaplamasi sonrasi yeterli veri kalmadi")
     trend_bias = (
-        get_trend_bias(indicators, trend_df)
+        get_trend_bias(indicators, trend_df, params)
         if multi_timeframe and getattr(settings, "MTF_ENABLED", True)
         else TrendBias.NEUTRAL
     )
