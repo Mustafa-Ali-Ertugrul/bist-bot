@@ -487,6 +487,9 @@ class BacktestSettings:
         "BACKTEST_COMMISSION_SELL_PCT", _get_float_env("BACKTEST_COMMISSION_PCT", 0.001)
     )
     BACKTEST_SLIPPAGE_PCT: float = _get_float_env("BACKTEST_SLIPPAGE_PCT", 0.0005)
+    # Aşama 3: True iken vektör yol zorla kapatılır (debug/test).
+    # Default False -> mevcut yol seçimi korunur.
+    BACKTEST_FORCE_ITERATIVE: bool = _get_bool_env("BACKTEST_FORCE_ITERATIVE", False)
 
 
 @dataclass(frozen=True)
