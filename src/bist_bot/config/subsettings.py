@@ -368,6 +368,10 @@ class DatabaseSettings:
 @dataclass(frozen=True)
 class AuthSettings:
     JWT_SECRET_KEY: str = _get_str_env("JWT_SECRET_KEY")
+    # AppSec (Round 10): Flask session signing key, separated from the JWT key.
+    # Empty default preserves legacy behavior (falls back to JWT_SECRET_KEY);
+    # set SECRET_KEY in production for signing-domain separation.
+    SECRET_KEY: str = _get_str_env("SECRET_KEY")
     JWT_ACCESS_TOKEN_MINUTES: int = _get_int_env("JWT_ACCESS_TOKEN_MINUTES", 15)
     RBAC_MODE: str = _get_str_env("RBAC_MODE", "warn").lower()
     ADMIN_BOOTSTRAP_EMAIL: str = _get_str_env("ADMIN_BOOTSTRAP_EMAIL")

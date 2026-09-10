@@ -120,6 +120,14 @@ class MarketScheduler:
                 error=str(exc),
                 attempt=self._eod_fail_count,
             )
+            # Hangi alt-pass'in patladigi (paper_close/outcome_close + hata)
+            # Telegram'a da tasinir: operator log'a bakmadan ayirt edebilmeli
+            # (09.09.2026 vakasi: outcome_close EROFS iken mesaj "paper acik"
+            # diyordu). Detay sanitize edilir: DB hatalari baglanti URL'si
+            # tasıyabilir, sohbetin dışına çıkmamalı.
+            from bist_bot.notifier import sanitize_outbound_text
+
+            detail = sanitize_outbound_text(f"{type(exc).__name__}: {str(exc)[:140]}".strip())
             if self._eod_fail_count >= max_attempts:
                 # FAILED_FINAL: the day is NOT marked done — pozisyonlar açık
                 # kalabilir, bu sessiz kalamaz.
@@ -127,13 +135,14 @@ class MarketScheduler:
                 self._eod_next_retry_at = None
                 self._notify(
                     f"🚨 EOD kapanış pass'i {max_attempts} denemede başarısız "
-                    f"({now.date().isoformat()}). Paper pozisyonlar açık kaldı — kontrol et!"
+                    f"({now.date().isoformat()}): {detail}. "
+                    f"Kapanış tamamlanamadı — pozisyonları kontrol et!"
                 )
             else:
                 self._eod_next_retry_at = now + timedelta(minutes=retry_minutes)
                 self._notify(
-                    f"⚠️ EOD kapanış pass'i hata verdi (deneme {self._eod_fail_count}/{max_attempts}), "
-                    f"{retry_minutes} dk sonra tekrar denenecek."
+                    f"⚠️ EOD kapanış pass'i hata verdi (deneme {self._eod_fail_count}/{max_attempts}): "
+                    f"{detail} — {retry_minutes} dk sonra tekrar denenecek."
                 )
             return
         self._eod_close_done_date = now.date()

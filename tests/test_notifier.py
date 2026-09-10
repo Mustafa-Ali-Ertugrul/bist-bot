@@ -20,6 +20,7 @@ from bist_bot.notifier import (  # noqa: E402
     TelegramNotifier,
     _backoff_delay,
     _retry_after_seconds,
+    sanitize_outbound_text,
     send_telegram_with_retry,
 )
 from bist_bot.strategy.signal_models import Signal, SignalType  # noqa: E402
@@ -247,3 +248,50 @@ def test_scan_summary_marks_actionable_sell():
     actionable_sell = _signal(SignalType.SELL, -30.0, is_actionable=True)
     notifier.send_scan_summary([actionable_sell], total_scanned=1)
     assert "— SAT (actionable)" in captured[0]
+
+
+# ============================================================================
+# AppSec: giden mesaj sanitizasyonu (secret sızıntısı choke-point)
+# ============================================================================
+
+
+def test_sanitize_strips_db_credentials_from_error_urls():
+    raw = "OperationalError: connection to server at postgresql://bist:s3cr3t_pw@db:5432 failed"
+    cleaned = sanitize_outbound_text(raw)
+    assert "s3cr3t_pw" not in cleaned
+    assert "postgresql://[REDACTED]@db:5432" in cleaned
+
+
+def test_sanitize_strips_bot_token_from_url():
+    raw = "HTTPSConnectionPool(host='api.telegram.org', url=/bot1234567890:AAbbcc_dEf-xyz/sendMessage)"
+    cleaned = sanitize_outbound_text(raw)
+    assert "AAbbcc_dEf-xyz" not in cleaned
+    assert "bot[REDACTED]" in cleaned
+
+
+def test_sanitize_strips_bcrypt_hash():
+    raw = "auth failed for $2b$12$KIXQx9mWJ6lq8uJv0Yq3eNOGzZtHhQ9mWpLxR7nOj3uKrVvBqX1yO"
+    cleaned = sanitize_outbound_text(raw)
+    assert "KIXQx9mWJ6" not in cleaned
+    assert "[REDACTED_HASH]" in cleaned
+
+
+def test_sanitize_preserves_normal_operational_text():
+    raw = "🚨 EOD kapanış pass'i 2 denemede başarısız: RuntimeError: EOD pass kismi basarisiz: outcome_close"
+    assert sanitize_outbound_text(raw) == raw
+
+
+def test_notifier_send_sanitizes_all_outbound_messages():
+    """_send choke-point: her giden mesaj sanitizasyondan geçer."""
+    captured: list[str] = []
+
+    def _capture(base_url, chat_id, text, **kw):
+        captured.append(text)
+        return True
+
+    notifier = TelegramNotifier(token="t", chat_id="c", sender=_capture)
+    notifier.send_message(
+        "⚠️ DB hatası: postgresql://bist:hunter2@db-host:5432/bist_bot bağlanamadı"
+    )
+    assert "hunter2" not in captured[0]
+    assert "[REDACTED]" in captured[0]

@@ -37,15 +37,23 @@ _SENSITIVE_KEYS = {
 
 _JWT_PATTERN_RE = re.compile(r"^[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}$")
 
+# Telegram bot tokens embedded in URLs/errors: bot123456:ABC-DEF...
+# requests' hata metinleri tam URL'i taşır (örn. Max retries exceeded with url:
+# /bot<token>/createChatInviteLink) — "error" gibi hassas-sayılmayan anahtarlar
+# da bu deseni loga taşıyabilir; değer düzeyinde redakte edilir.
+_TG_TOKEN_RE = re.compile(r"bot\d{5,}:[A-Za-z0-9_-]+")
+
 
 def _redact_value(key: str, val: Any) -> Any:
     key_lower = str(key).lower()
     if any(s in key_lower for s in _SENSITIVE_KEYS):
         return "[REDACTED]"
     if isinstance(val, str):
+        val = _TG_TOKEN_RE.sub("bot[REDACTED]", val)
         val_trimmed = val.strip()
         if val_trimmed.startswith("Bearer eyJ") or _JWT_PATTERN_RE.match(val_trimmed):
             return "[REDACTED_TOKEN]"
+        return val
     if isinstance(val, dict):
         return {k: _redact_value(k, v) for k, v in val.items()}
     if isinstance(val, list):
@@ -82,8 +90,20 @@ def _json_enabled() -> bool:
     return str(getattr(settings, "LOG_FORMAT", "console")).strip().lower() == "json"
 
 
+_CONTROL_CHAR_RE = re.compile(r"[\x00-\x1f\x7f]")
+
+
+def _strip_control_chars(val: Any) -> Any:
+    """Strip control characters that could forge log lines in console mode."""
+    if isinstance(val, str):
+        return _CONTROL_CHAR_RE.sub("", val)
+    return val
+
+
 def _serialize_event(payload: dict[str, Any]) -> str:
     sanitized = redact_sensitive_data(payload)
+    # Strip control chars to prevent log injection via \n / \r in field values.
+    sanitized = {k: _strip_control_chars(v) for k, v in sanitized.items()}
     if _json_enabled():
         return json.dumps(sanitized, ensure_ascii=False, default=str)
     ordered = [f"event={sanitized.get('event', 'log')}"]

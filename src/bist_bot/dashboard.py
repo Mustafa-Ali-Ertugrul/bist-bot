@@ -30,6 +30,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from werkzeug.utils import safe_join
 
 from bist_bot.app_logging import configure_logging, get_logger
 from bist_bot.app_metrics import render_metrics
@@ -280,6 +281,16 @@ def _apply_bars_limit(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def _auth_rate_limit_key() -> str:
+    """Per-account + per-IP rate-limit bucket for login/register.
+
+    AppSec (Round 17): the email component is the REAL login throttle.
+    Verified against the installed gunicorn (26.x) source: REMOTE_ADDR is
+    the TCP peer only — X-Forwarded-For never rewrites it (no ProxyFix in
+    this app), so XFF spoofing cannot move a request to a fresh bucket.
+    Conversely, behind Cloud Run all clients share the frontend peer IP,
+    so the IP component collapses: per-email binding is what keeps one
+    account capped at 5/min regardless. Never drop the email part.
+    """
     payload = _safe_json_payload()
     email = str(payload.get("email", "")).strip().lower()
     remote_addr = get_remote_address()
@@ -311,7 +322,7 @@ def create_dashboard_app(
     app.config["db"] = db
     app.config["broker"] = broker
     app.config["circuit_breaker"] = circuit_breaker
-    app.config["SECRET_KEY"] = settings.JWT_SECRET_KEY
+    app.config["SECRET_KEY"] = settings.SECRET_KEY or settings.JWT_SECRET_KEY
     app.config["SESSION_COOKIE_HTTPONLY"] = True
     app.config["SESSION_COOKIE_SAMESITE"] = "Strict"
     app.config["SESSION_COOKIE_SECURE"] = settings.JWT_COOKIE_SECURE
@@ -321,8 +332,11 @@ def create_dashboard_app(
     access_token_minutes = max(1, min(int(settings.JWT_ACCESS_TOKEN_MINUTES), 15))
     app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(minutes=access_token_minutes)
     # HttpOnly UI cookie is the server-side authority for /ui/* page renders.
-    # /api/* keeps using the Authorization header; cookie CSRF stays at the
-    # Flask-JWT-Extended default (enforced only for unsafe methods).
+    # /api/* keeps using the Authorization header. NOTE (Round 11): there is
+    # currently NO cookie-authenticated unsafe (POST/PUT/PATCH/DELETE) route,
+    # so Flask-JWT-Extended's cookie CSRF check never fires. INVARIANT: if a
+    # cookie-authenticated unsafe route is ever added, it MUST require the
+    # X-CSRF-TOKEN double-submit header or it will ship without CSRF defense.
     app.config["JWT_COOKIE_HTTPONLY"] = True
     app.config["JWT_COOKIE_SAMESITE"] = "Strict"
     app.config["JWT_COOKIE_SECURE"] = settings.JWT_COOKIE_SECURE
@@ -332,6 +346,11 @@ def create_dashboard_app(
     app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024  # 1MB payload cap to mitigate DoS
 
     jwt = JWTManager(app)
+    # Revoked-JTI blocklist. AppSec (Round 17) bounds: in-memory, so a
+    # restart clears it — acceptable because access tokens live at most
+    # 15 min (JWT_ACCESS_TOKEN_EXPIRES cap) and the deployment is a single
+    # worker / single instance (maxScale 1), so the store is consistent
+    # within its lifetime. Do NOT rely on this for long-lived tokens.
     _REVOKED_JTIS: dict[str, float] = {}
     _REVOKED_LOCK = threading.Lock()
 
@@ -365,13 +384,12 @@ def create_dashboard_app(
         )
 
     @jwt.unauthorized_loader
-    def _custom_jwt_unauthorized(err_str: str):
+    def _custom_jwt_unauthorized(_err_str: str):
         return (
             jsonify(
                 {
                     "status": "error",
                     "message": "Oturum doğrulanmadı veya token eksik.",
-                    "detail": err_str,
                 }
             ),
             401,
@@ -390,13 +408,12 @@ def create_dashboard_app(
         )
 
     @jwt.invalid_token_loader
-    def _custom_jwt_invalid(err_str: str):
+    def _custom_jwt_invalid(_err_str: str):
         return (
             jsonify(
                 {
                     "status": "error",
                     "message": "Geçersiz oturum anahtarı.",
-                    "detail": err_str,
                 }
             ),
             422,
@@ -842,6 +859,9 @@ def create_dashboard_app(
                     ).scalar_one()
                 )
         except IntegrityError:
+            # AppSec (Round 19): do not disclose "email already exists" —
+            # the message is generic so the register endpoint cannot be
+            # used to enumerate account ownership.
             return False, get_message("api.email_already_exists"), None
 
         return True, "", {"id": user_id, "email": email, "role": "user"}
@@ -868,32 +888,39 @@ def create_dashboard_app(
             # Pages are per-user dynamic shells (plan badge, gated content):
             # never let browsers heuristically cache them, otherwise users
             # keep seeing stale UI after deploys ("hala yok" class of bugs).
-            response.headers["Cache-Control"] = (
-                "no-cache"  # Pre-compressed asset fast-path: if client accepts gzip and a .gz
-            )
-            # file was shipped alongside the asset, serve it directly without
-            # re-compressing in Python.
-            accept_enc = request.headers.get("Accept-Encoding", "").lower()
-            if "gzip" in accept_enc and not response.headers.get("Content-Encoding"):
-                static_folder = app.static_folder
-                if static_folder:
-                    rel_path = request.path[len("/static/") :].lstrip("/")
-                    gz_path = os.path.join(static_folder, rel_path + ".gz")
-                    if os.path.isfile(gz_path):
-                        try:
-                            with open(gz_path, "rb") as f:
-                                gz_bytes = f.read()
-                            orig_type = response.headers.get("Content-Type")
-                            response.set_data(gz_bytes)
-                            response.direct_passthrough = False
-                            response.headers["Content-Encoding"] = "gzip"
-                            response.headers["Content-Length"] = str(len(gz_bytes))
-                            if orig_type:
-                                response.headers["Content-Type"] = orig_type
-                            response.headers["Vary"] = "Accept-Encoding"
-                            return response
-                        except OSError:
-                            pass
+            response.headers["Cache-Control"] = "no-cache"
+
+        # Pre-compressed asset fast-path: if client accepts gzip and a .gz
+        # file was shipped alongside the asset, serve it directly without
+        # re-compressing in Python. AppSec (Round 13): rel_path is derived
+        # from request.path, so it MUST be validated with werkzeug's
+        # safe_join against the static folder — os.path.join alone would
+        # allow traversal sequences to escape the static directory.
+        accept_enc = request.headers.get("Accept-Encoding", "").lower()
+        if (
+            "gzip" in accept_enc
+            and not response.headers.get("Content-Encoding")
+            and request.path.startswith("/static/")
+        ):
+            static_folder = app.static_folder
+            if static_folder:
+                rel_path = request.path[len("/static/") :].lstrip("/")
+                safe_path = safe_join(static_folder, rel_path + ".gz")
+                if safe_path and os.path.isfile(safe_path):
+                    try:
+                        with open(safe_path, "rb") as f:
+                            gz_bytes = f.read()
+                        orig_type = response.headers.get("Content-Type")
+                        response.set_data(gz_bytes)
+                        response.direct_passthrough = False
+                        response.headers["Content-Encoding"] = "gzip"
+                        response.headers["Content-Length"] = str(len(gz_bytes))
+                        if orig_type:
+                            response.headers["Content-Type"] = orig_type
+                        response.headers["Vary"] = "Accept-Encoding"
+                        return response
+                    except OSError:
+                        pass
 
         # Transparent Gzip compression for dynamic API JSON and template responses >= 512B
         accept_enc = request.headers.get("Accept-Encoding", "").lower()
@@ -975,7 +1002,7 @@ def create_dashboard_app(
         broker_mode = str(getattr(settings, "BROKER_MODE", "") or settings.BROKER_PROVIDER).lower()
         broker_provider = str(getattr(settings, "BROKER_PROVIDER", "paper") or "paper").lower()
         broker_status = "ok"
-        broker_detail = type(broker).__name__ if broker is not None else "none"
+        broker_detail = "unavailable" if broker is not None else "none"
         if broker is None:
             broker_status = "unconfigured"
         else:
@@ -995,9 +1022,9 @@ def create_dashboard_app(
                     broker_status = "ok" if ok else "auth_failed"
             except NotImplementedError:
                 broker_status = "stub"
-            except Exception as exc:
+            except Exception:
                 broker_status = "error"
-                broker_detail = f"{type(exc).__name__}"
+                broker_detail = "unavailable"
 
         last_scan_at: str | None = None
         last_scan_age_seconds: float | None = None
@@ -1085,7 +1112,7 @@ def create_dashboard_app(
         broker_mode = str(getattr(settings, "BROKER_MODE", "") or settings.BROKER_PROVIDER).lower()
         broker_provider = str(getattr(settings, "BROKER_PROVIDER", "paper") or "paper").lower()
         broker_status = "ok"
-        broker_detail = type(broker).__name__ if broker is not None else "none"
+        broker_detail = "unavailable" if broker is not None else "none"
         if broker is None:
             broker_status = "unconfigured"
         else:
@@ -1100,9 +1127,9 @@ def create_dashboard_app(
                     broker_status = "ok" if ok else "auth_failed"
             except NotImplementedError:
                 broker_status = "stub"
-            except Exception as exc:
+            except Exception:
                 broker_status = "error"
-                broker_detail = f"{type(exc).__name__}"
+                broker_detail = "unavailable"
 
         last_scan_at: str | None = None
         last_scan_age_seconds: float | None = None
@@ -1400,7 +1427,10 @@ def create_dashboard_app(
                     return jsonify(
                         {"status": "ok", "request": dict(existing), "duplicate": True}
                     ), 200
-                reference = f"BIST-{int(user['id'])}-{secrets.token_hex(3).upper()}"
+                # AppSec (Round 18): token_hex(3) = 24 bit. Referans gizli bir
+                # kimlik bilgisi değil ama brute-force ile tahmin edilebilirlik
+                # gereksiz ucuz olmasın diye 48 bit (12 hex).
+                reference = f"BIST-{int(user['id'])}-{secrets.token_hex(6).upper()}"
                 timestamp = datetime.now(UTC)
                 conn.execute(
                     text(
@@ -2367,8 +2397,10 @@ def create_dashboard_app(
 
         The HttpOnly JWT cookie is the authority here; /api/* keeps using the
         Authorization header. Cookie auth only ever guards GET page renders,
-        so no CSRF token dance is needed (unsafe methods still require the
-        header). Missing/invalid cookie -> 302 to /login.
+        so no CSRF token is needed on this path. INVARIANT (Round 11): keep it
+        that way — a cookie-authenticated unsafe method MUST require
+        X-CSRF-TOKEN (see the JWT config comment in create_dashboard_app).
+        Missing/invalid cookie -> 302 to /login.
         """
 
         @wraps(view)

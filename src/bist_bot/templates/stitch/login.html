@@ -395,7 +395,13 @@
       err.className = 'p-space-xs rounded-lg bg-error-container/30 border border-error/40 text-error font-body-sm text-body-sm flex items-center gap-space-xs';
       form.insertBefore(err, form.querySelector('button[type="submit"]'));
     }
-    err.innerHTML = '<span class="material-symbols-outlined text-[18px]">error</span><span>' + msg + '</span>';
+    // XSS defence-in-depth: msg içeriği bugün sunucu/tarayıcı kaynaklı olsa da
+    // (API data.message / err.message), gelecekte kullanıcı kontrollü bir alan
+    // yansıtılırsa script enjeksiyonu önlenir.
+    const safeMsg = String(msg).replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[c]);
+    err.innerHTML = '<span class="material-symbols-outlined text-[18px]">error</span><span>' + safeMsg + '</span>';
   }
 
   async function handleRegister(e) {

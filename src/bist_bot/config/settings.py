@@ -212,6 +212,24 @@ class Settings:
                 "JWT_SECRET_KEY is set to a known placeholder value. "
                 "Set a strong, unique secret before starting the dashboard."
             )
+        # AppSec R6: HS256 imza anahtari brute-force'a karsi yeterli entropi
+        # istiyor. Karaliste (yukarida) yalnizca BILINEN placeholder'lari
+        # yakalar; kisa-ama-ozel degerler ("abc" gibi) listeye dusmez ve
+        # cevrimsel olarak kirilabilir. Prod (CONFIG_STRICT=true) altinda
+        # minimum 32 karakter zorlanir; dev profilinde uyari verir.
+        if len(self.JWT_SECRET_KEY) < 32:
+            strict = str(os.getenv("CONFIG_STRICT", "false")).lower() in {"1", "true", "yes", "on"}
+            if strict:
+                raise RuntimeError(
+                    "JWT_SECRET_KEY en az 32 karakter olmali (HS256 brute-force "
+                    "savaruna yetersiz entropi). Ornek uretim: "
+                    '`python -c "import secrets; print(secrets.token_urlsafe(48))"`'
+                )
+            warnings.warn(
+                "JWT_SECRET_KEY 32 karakterden kisa — dev disina cikmadan "
+                "guclu bir degerle degistir (CONFIG_STRICT=true bunu zorlar).",
+                stacklevel=2,
+            )
 
     @property
     def admin_bootstrap_enabled(self) -> bool:

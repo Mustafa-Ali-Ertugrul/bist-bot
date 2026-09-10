@@ -22,6 +22,7 @@ import cProfile
 import logging
 import os
 import pstats
+import shutil
 import subprocess
 import sys
 from datetime import datetime
@@ -82,17 +83,27 @@ def build_synthetic_ohlcv(tickers: int, bars: int, seed: int) -> dict[str, pd.Da
 
 
 def _git_commit() -> str:
+    """Report short HEAD sha; never fail the benchmark on git problems.
+
+    AppSec (bandit B603/B607/B404): sabit arg list'i + ``shutil.which`` ile
+    çözülen tam yol + explicit ``OSError/TimeoutExpired`` yakalama — partial
+    PATH lookup ve geniş ``except Exception: pass`` desenleri kapatılır.
+    """
+    git_path = shutil.which("git")
+    if git_path is None:
+        return "bilinmiyor"
     try:
         proc = subprocess.run(
-            ["git", "rev-parse", "--short", "HEAD"],
+            [git_path, "rev-parse", "--short", "HEAD"],
             cwd=ROOT_DIR,
             capture_output=True,
             text=True,
             timeout=10,
+            shell=False,
         )
-        return proc.stdout.strip() or "bilinmiyor"
-    except Exception:
+    except (OSError, subprocess.TimeoutExpired):
         return "bilinmiyor"
+    return proc.stdout.strip() or "bilinmiyor"
 
 
 def _scenario_engine(frames: dict[str, pd.DataFrame], force_iterative: bool) -> dict:
@@ -242,10 +253,13 @@ def _refuse_results_dir(path: str) -> str:
 
 def main() -> None:
     # Windows cp1252 konsolunda Türkçe karakter çökmesin (stdout best-effort).
+    # Bandit B110: sessiz ``except: pass`` yerine açık neden listesi.
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    except Exception:
-        pass
+    except (AttributeError, OSError, ValueError):
+        # reconfigure desteklenmeyen akış: rapor yine üretilir, kodlanamayan
+        # karakterler platform davranışına kalır.
+        logging.getLogger(__name__).debug("stdout_reconfigure_unavailable")
     parser = argparse.ArgumentParser(description="Backtest profiler (Aşama 1).")
     parser.add_argument("--tickers", type=int, default=10)
     parser.add_argument("--bars", type=int, default=260)

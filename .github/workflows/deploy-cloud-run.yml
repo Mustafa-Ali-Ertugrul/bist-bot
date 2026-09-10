@@ -13,10 +13,16 @@ env:
 
 jobs:
   deploy:
+    # AppSec: workflow_run ayrıcalıklıdır (base-repo token + secrets).
+    # `head_branch == 'master'` tek başına YETMEZ: fork PR'ında head_branch
+    # saldırganın dal adıdır — fork dalına "master" adı verilerek gate
+    # bypass edilip head_sha (saldırgan commit'i) deploy edilebilir.
+    # head_repository.full_name kontrolü aynı-repo push'una kilitler.
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'workflow_run' &&
       github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
       github.event.workflow_run.head_branch == 'master')
     runs-on: ubuntu-latest
     permissions:
@@ -41,18 +47,18 @@ jobs:
           test -n "${{ secrets.GCP_SERVICE_ACCOUNT }}"
 
       - name: Check out repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
       - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v3
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
       - name: Set up gcloud
-        uses: google-github-actions/setup-gcloud@v3
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
         with:
           project_id: ${{ env.GCP_PROJECT_ID }}
 
@@ -60,7 +66,7 @@ jobs:
         run: gcloud auth configure-docker "$GCP_REGION-docker.pkg.dev" --quiet
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - name: Build and push container image
         env:
@@ -72,8 +78,13 @@ jobs:
           docker push "$IMAGE_URI"
 
       - name: Deploy API service
+        # AppSec (Round 12): this command — NOT cloudrun/api-service.yaml — is
+        # the real production env source. RBAC_MODE=warn would leave admin
+        # routes log-only, and JWT_COOKIE_SECURE=false would send auth cookies
+        # over plain HTTP. Both MUST stay in --set-env-vars (parity is locked
+        # by tests/test_manifest_hardening.py).
         run: |
-          gcloud run deploy "$API_SERVICE_NAME" --project "$GCP_PROJECT_ID" --region "$GCP_REGION" --image "$IMAGE_URI" --allow-unauthenticated --command gunicorn --args="--bind,0.0.0.0:8080,--workers,1,--threads,8,--timeout,330,--graceful-timeout,30,--forwarded-allow-ips=*,bist_bot.wsgi:app" --max-instances=1 --set-env-vars PYTHONPATH=/app/src,DB_PATH=/tmp/bist_signals.db,RATE_LIMIT_STORAGE_URI=memory://,EXPECTED_INSTANCE_COUNT=1 --set-secrets JWT_SECRET_KEY="${GCP_JWT_SECRET_NAME}:latest" --timeout=360 --no-cpu-throttling
+          gcloud run deploy "$API_SERVICE_NAME" --project "$GCP_PROJECT_ID" --region "$GCP_REGION" --image "$IMAGE_URI" --allow-unauthenticated --command gunicorn --args="--bind,0.0.0.0:8080,--workers,1,--threads,8,--timeout,330,--graceful-timeout,30,--forwarded-allow-ips=*,bist_bot.wsgi:app" --max-instances=1 --set-env-vars PYTHONPATH=/app/src,DB_PATH=/tmp/bist_signals.db,RATE_LIMIT_STORAGE_URI=memory://,EXPECTED_INSTANCE_COUNT=1,RBAC_MODE=enforce,JWT_COOKIE_SECURE=true --set-secrets JWT_SECRET_KEY="${GCP_JWT_SECRET_NAME}:latest" --timeout=360 --no-cpu-throttling
           API_URL="$(gcloud run services describe "$API_SERVICE_NAME" --project "$GCP_PROJECT_ID" --region "$GCP_REGION" --format 'value(status.url)')"
           echo "API_URL=$API_URL" >> "$GITHUB_ENV"
 
