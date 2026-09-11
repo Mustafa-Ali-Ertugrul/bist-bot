@@ -31,6 +31,92 @@ from .models import (
 logger = get_logger(__name__, component="backtest")
 
 
+# Aşama 2 (perf): _precalculate_signals bar-döngüsünün okuduğu TÜM sütunlar.
+# Skorlayıcılar satır-Series üzerinden yalnızca bu alanlara dokunur
+# (momentum: rsi/stoch/cci · trend: adx/ema/sma/macd/di · volume:
+# volume_* + obv_trend + price_volume_* · structure: bb_* + dist_* +
+# rsi/macd_divergence · gate'ler: obv_trend/price_volume_direction).
+# Döngü daraltılmış çerçevede koşar; satır-Series kurma maliyeti genişlikle
+# ölçeklendiği için bu liste hızı belirler. Skor hattına YENİ bir sütun
+# okuma eklenirse (last.get/prev.get/df[...] fark etmez) MUTLAKA buraya da
+# eklenmelidir — aksi halde parite testleri (vectorized↔iterative↔live)
+# kızarır, ama sessiz skor kayması yaşanmaması için liste güncel tutulur.
+_SCORE_LOOP_STATIC_COLUMNS: tuple[str, ...] = (
+    "close",
+    "volume",
+    "rsi",
+    "stoch_k",
+    "stoch_d",
+    "stoch_cross",
+    "cci",
+    "adx",
+    "plus_di",
+    "minus_di",
+    "sma_20",
+    "sma_cross",
+    "ema_cross",
+    "macd_cross",
+    "macd_histogram",
+    "macd_hist_increasing",
+    "di_cross",
+    "bb_position",
+    "bb_percent",
+    "bb_squeeze",
+    "dist_to_support_pct",
+    "dist_to_resistance_pct",
+    "rsi_divergence",
+    "macd_divergence",
+    "obv_trend",
+    "price_volume_direction",
+    "price_volume_confirm",
+    "volume_sma_20",
+    "volume_spike",
+    "volume_ratio",
+    "volume_trend",
+    "_prev_close_for_scoring",
+)
+
+
+def _score_loop_columns() -> list[str]:
+    """Skor döngüsü sütunları + ayar-bağımlı ema/sma adları (sıra korunur)."""
+    cols = list(_SCORE_LOOP_STATIC_COLUMNS)
+    for dynamic in (
+        f"ema_{settings.EMA_LONG}",
+        f"sma_{settings.SMA_FAST}",
+        f"sma_{settings.SMA_SLOW}",
+    ):
+        if dynamic not in cols:
+            cols.append(dynamic)
+    return cols
+
+
+def _scoring_history_window(params: Any) -> int:
+    """Bar-döngüsünde dilime alınacak trailing satır sayısı.
+
+    ``calculate_score_and_reasons`` içindeki HER df-tüketicisi yalnızca
+    kuyruk verisi okur: detect_regime (son satır + 20-close ortalaması +
+    len>=min_bars), MTF çelişki + EMA eğimi (len>=slope_lookback+1 +
+    sondan çift), momentum teyidi (len>=20 + son satır + 20-close
+    ortalaması). Pencere bu eşiklerin max'ı olduğu sürece skorlar
+    bit-bit aynı kalır; pencereyi büyütmek her zaman güvenli, küçültmek
+    pariteyi bozar. Yeni bir tüketici daha uzun geçmiş isterse burası
+    güncellenmelidir.
+    """
+
+    def _as_int(value: Any, fallback: int) -> int:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return fallback
+
+    slope_lb = max(_as_int(getattr(params, "slope_lookback", 40), 40), 1)
+    regime_bars = max(
+        _as_int(getattr(settings, "REGIME_MIN_BARS", 50), 50),
+        _as_int(getattr(params, "regime_min_bars", 50), 50),
+    )
+    return max(regime_bars, slope_lb + 1, 20)
+
+
 class Backtester:
     def __init__(
         self,
@@ -179,25 +265,37 @@ class Backtester:
             return score_structure(p, last)
 
         scores = np.zeros(len(df), dtype=float)
-        for i in range(1, len(df)):
-            last = df.iloc[i]
-            prev = df.iloc[i - 1]
-            result = calculate_score_and_reasons(
-                p,
-                "",
-                df.iloc[: i + 1],
-                last=last,
-                prev=prev,
-                momentum_scorer=momentum_scorer,
-                trend_scorer=trend_scorer,
-                volume_scorer=volume_scorer,
-                structure_scorer=structure_scorer,
-                momentum_checker=check_momentum_confirmation,
-                reject_logger=None,
-            )
-            # A None result means the row was filtered out by a regime/momentum
-            # gate (sideways, weak momentum). Treat as score 0 -> no signal.
-            scores[i] = result[0] if result is not None else 0.0
+        # Perf: prev satırı bir önceki turun last'idir (aynı değerler, yarı
+        # satır-Series maliyeti); dilim trailing pencereyle sınırlıdır
+        # (_scoring_history_window); satırlar daraltılmış çerçeveden kurulur.
+        # Üçü de parite-korumalıdır (gerekçeler helper'larda).
+        window = _scoring_history_window(p)
+        keep = [c for c in _score_loop_columns() if c in df.columns]
+        work = df[keep] if 0 < len(keep) < len(df.columns) else df
+        n = len(work)
+        if n >= 2:
+            prev = work.iloc[0]
+            for i in range(1, n):
+                last = work.iloc[i]
+                start = i - window + 1
+                sub = work.iloc[start : i + 1] if start > 0 else work.iloc[: i + 1]
+                result = calculate_score_and_reasons(
+                    p,
+                    "",
+                    sub,
+                    last=last,
+                    prev=prev,
+                    momentum_scorer=momentum_scorer,
+                    trend_scorer=trend_scorer,
+                    volume_scorer=volume_scorer,
+                    structure_scorer=structure_scorer,
+                    momentum_checker=check_momentum_confirmation,
+                    reject_logger=None,
+                )
+                # A None result means the row was filtered out by a regime/momentum
+                # gate (sideways, weak momentum). Treat as score 0 -> no signal.
+                scores[i] = result[0] if result is not None else 0.0
+                prev = last
 
         df["_raw_score"] = np.clip(scores, -100.0, 100.0)
         df["score"] = np.clip(scores, -100.0, 100.0)
@@ -664,6 +762,7 @@ class Backtester:
         ):
             vectors = self._build_vectorized_signals(self._precalculate_signals(df))
 
+        _iter_window: int | None = None
         for i in range(1, len(df)):
             bar = df.iloc[i]
             date = _to_datetime(df.index[i])
@@ -673,7 +772,21 @@ class Backtester:
             close_price = _to_float(bar.get("close"), open_price)
 
             if vectors is None:
-                signal = self._build_signal_context(ticker, df.iloc[:i])
+                hist = df.iloc[:i]
+                if (
+                    self.signal_builder is None
+                    and signal_context_builder is Backtester._build_signal_context
+                ):
+                    # YALNIZCA kanonik skor hattı pencerelenir: override
+                    # builder'lar (örn. testlerdeki ScriptedBacktester gibi
+                    # len(history) ile anahtarlayanlar) tam öneki görmelidir,
+                    # yoksa mutlak indeks mantıkları sessizce bozulur.
+                    if _iter_window is None:
+                        _iter_window = _scoring_history_window(self.strategy_params)
+                    wstart = i - _iter_window
+                    if wstart > 0:
+                        hist = hist.iloc[wstart:]
+                signal = self._build_signal_context(ticker, hist)
             else:
                 signal = self._build_precomputed_signal_context(df.iloc[i - 1], vectors, i)
 
