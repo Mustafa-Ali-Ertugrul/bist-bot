@@ -207,10 +207,17 @@ def calculate_score_and_reasons(
     structure_scorer: ScoreOneRow,
     momentum_checker: MomentumChecker = check_momentum_confirmation,
     reject_logger: RejectLogger | None = None,
+    regime_sma: float | None = None,
 ) -> tuple[float, list[str], float | None] | None:
-    """Calculate the bounded strategy score and explanatory reason list."""
+    """Calculate the bounded strategy score and explanatory reason list.
+
+    ``regime_sma`` verildiğinde ``detect_regime``'in bar başına
+    ``tail(lookback).mean()`` hesabı atlanır (backtest skor-döngüsü
+    precompute'ı; değer son satırın tail-ortalamasıyla birebir aynı
+    olmalıdır). None ise davranış değişmeden df'ten hesaplanır.
+    """
     reasons: list[str] = []
-    regime = detect_regime(df)
+    regime = detect_regime(df, sma=regime_sma)
     if _has_mtf_slope_contradiction(params, df):
         regime = MarketRegime.SIDEWAYS
         reasons.append("MTF çelişki: SMA20 ve EMA200 eğimleri zıt")

@@ -50,12 +50,25 @@ def _regime_thresholds(params) -> dict[str, float]:
     }
 
 
-def detect_regime(df: pd.DataFrame, lookback: int = 20, params=None) -> MarketRegime:
+def detect_regime(
+    df: pd.DataFrame,
+    lookback: int = 20,
+    params=None,
+    *,
+    sma: float | None = None,
+) -> MarketRegime:
     """Infer the current market regime from trend indicators.
 
     ``lookback`` artık SMA penceresinde gerçekten kullanılır (daha önce
     yok sayılıyordu; default 20 ile davranış aynıdır). ``params`` verilirse
     eşikler StrategyParams'tan okunur, yoksa mevcut sabitler geçerlidir.
+
+    Perf: ``sma`` verilirse ``df["close"].tail(lookback).mean()`` yeniden
+    hesaplanmaz — arayan taraf, SON satırdaki tail-ortalamasının birebir
+    aynı değerini garanti eder (backtest skor-döngüsü bar başına
+    ``rolling(lookback, min_periods=1)`` dizisinden besler; mikro-bench:
+    bar başına 0.15 ms → 0.0001 ms, parite bit-bit). ``sma`` verilmezse
+    davranış değişmeden df'ten hesaplanır (live motor yolu).
     """
     th = _regime_thresholds(params)
     if df is None or len(df) < th["min_bars"]:
@@ -73,7 +86,8 @@ def detect_regime(df: pd.DataFrame, lookback: int = 20, params=None) -> MarketRe
     momentum_pct = th["momentum_pct"]
 
     sma_window = max(int(lookback), 1)
-    sma = float(df["close"].tail(sma_window).mean())
+    if sma is None:
+        sma = float(df["close"].tail(sma_window).mean())
     momentum = (close - sma) / sma * 100
 
     if adx >= trend_adx:

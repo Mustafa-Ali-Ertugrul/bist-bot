@@ -273,6 +273,18 @@ class Backtester:
         keep = [c for c in _score_loop_columns() if c in df.columns]
         work = df[keep] if 0 < len(keep) < len(df.columns) else df
         n = len(work)
+        # Perf: detect_regime'in bar başına tail(20).mean() hesabı yerine
+        # rolling(20, min_periods=1) dizisi DÖNGÜ DIŞINDA bir kez kurulur.
+        # ``window`` (_scoring_history_window) her zaman >= 20 döndürdüğü
+        # için sub penceresindeki tail(20) tam olarak bu dizinin i.
+        # pozisyonudur (min_periods=1 ilk barlar için de aynı kümeyi
+        # ortalar; mikro-bench ~2700x, in-situ parite bit-bit). Lookback
+        # değeri detect_regime default'u ile senkron tutulmalıdır.
+        regime_sma = (
+            work["close"].rolling(20, min_periods=1).mean().to_numpy(dtype=float)
+            if n >= 2
+            else None
+        )
         if n >= 2:
             prev = work.iloc[0]
             for i in range(1, n):
@@ -291,6 +303,7 @@ class Backtester:
                     structure_scorer=structure_scorer,
                     momentum_checker=check_momentum_confirmation,
                     reject_logger=None,
+                    regime_sma=float(regime_sma[i]) if regime_sma is not None else None,
                 )
                 # A None result means the row was filtered out by a regime/momentum
                 # gate (sideways, weak momentum). Treat as score 0 -> no signal.
