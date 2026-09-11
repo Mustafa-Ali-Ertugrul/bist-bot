@@ -212,6 +212,24 @@ class Settings:
                 "JWT_SECRET_KEY is set to a known placeholder value. "
                 "Set a strong, unique secret before starting the dashboard."
             )
+        # AppSec R6: HS256 imza anahtari brute-force'a karsi yeterli entropi
+        # istiyor. Karaliste (yukarida) yalnizca BILINEN placeholder'lari
+        # yakalar; kisa-ama-ozel degerler ("abc" gibi) listeye dusmez ve
+        # cevrimsel olarak kirilabilir. Prod (CONFIG_STRICT=true) altinda
+        # minimum 32 karakter zorlanir; dev profilinde uyari verir.
+        if len(self.JWT_SECRET_KEY) < 32:
+            strict = str(os.getenv("CONFIG_STRICT", "false")).lower() in {"1", "true", "yes", "on"}
+            if strict:
+                raise RuntimeError(
+                    "JWT_SECRET_KEY en az 32 karakter olmali (HS256 brute-force "
+                    "savaruna yetersiz entropi). Ornek uretim: "
+                    '`python -c "import secrets; print(secrets.token_urlsafe(48))"`'
+                )
+            warnings.warn(
+                "JWT_SECRET_KEY 32 karakterden kisa — dev disina cikmadan "
+                "guclu bir degerle degistir (CONFIG_STRICT=true bunu zorlar).",
+                stacklevel=2,
+            )
 
     @property
     def admin_bootstrap_enabled(self) -> bool:
@@ -407,6 +425,27 @@ class Settings:
             errors.append("RSI_OVERSOLD must be < RSI_OVERBOUGHT")
         if not (0 < int(self.ADX_THRESHOLD) <= 100):
             errors.append("ADX_THRESHOLD must be in (0, 100]")
+
+        # --- Aşama 1: tunable strateji/indikatör/rejim sabitleri ---
+        # Kurallar StrategyParams.validate ile paylaşılır; burada settings
+        # üzerinden kurulan bir instance doğrulanır (env override'lar
+        # default_factory zinciriyle instance'a akar). İndikatör hesaplama
+        # pencereleri params alanı değildir; ayrıca aşağıda kontrol edilir.
+        from bist_bot.strategy.params import StrategyParams, validate_strategy_params
+
+        errors.extend(validate_strategy_params(StrategyParams()))
+        for period_name in (
+            "STOCH_K_PERIOD",
+            "STOCH_D_PERIOD",
+            "ADX_PERIOD",
+            "ATR_PERIOD",
+            "OBV_SMA_PERIOD",
+            "BB_SQUEEZE_PERIOD",
+        ):
+            if int(getattr(self, period_name)) < 1:
+                errors.append(f"{period_name} must be >= 1")
+        if float(self.MAX_SIGNAL_SCORE) < 0:
+            errors.append("MAX_SIGNAL_SCORE negatif olamaz")
 
         # --- Timeout / retry budgets vs Streamlit absolute budget ---
         streamlit_timeout = int(self.STREAMLIT_BACKGROUND_SCAN_TIMEOUT_SECONDS)

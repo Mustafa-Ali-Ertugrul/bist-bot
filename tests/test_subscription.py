@@ -360,12 +360,19 @@ def test_google_routes_gone(client: FlaskClient):
 
 
 def test_login_page_has_register_form(client: FlaskClient):
+    from pathlib import Path
+
     html = client.get("/login").get_data(as_text=True)
     assert 'id="auth-form-register"' in html
     assert 'id="tab-register"' in html
     assert 'id="register-email"' in html
     assert 'id="register-password-confirm"' in html
-    assert "handleRegister" in html
+    # CSP-safe: register handler lives in /static/login.js (no inline JS),
+    # wired via data-action="register-form" delegation.
+    assert 'data-action="register-form"' in html
+    login_js = Path(__file__).resolve().parents[1] / "src" / "bist_bot" / "static" / "login.js"
+    assert login_js.exists(), "login.js bulunamadı"
+    assert "handleRegister" in login_js.read_text(encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------

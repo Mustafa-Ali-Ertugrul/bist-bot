@@ -29,10 +29,32 @@ _MAX_RETRY_AFTER_SECONDS = 30.0
 _MAX_BACKOFF_SECONDS = 30.0
 _TOKEN_RE = re.compile(r"bot\d{5,}:[A-Za-z0-9_-]+")
 
+# URL şemaları içindeki kullanıcı/parola çiftleri: postgresql://user:pass@host
+_CREDENTIAL_URL_RE = re.compile(
+    r"(?P<scheme>[a-zA-Z][a-zA-Z0-9+.-]*)://(?P<userpass>[^\s/@:]+:[^\s/@]+)@"
+)
+# bcrypt hash gövdesi (log/uyarı metnine taşan şifre özetleri)
+_BCRYPT_RE = re.compile(r"\$2[aby]\$[0-9]{2}\$[./A-Za-z0-9]{53}")
+
 
 def _redact_telegram_url(msg: str) -> str:
     """Redact bot tokens from error strings / URLs before logging."""
     return _TOKEN_RE.sub("bot[REDACTED]", msg)
+
+
+def sanitize_outbound_text(text: str) -> str:
+    """Giden Telegram mesajlarından secret desenlerini temizler (choke-point).
+
+    AppSec: hata mesajlarına gömülen ``str(exc)`` içerikleri (DB bağlantı
+    hatası → ``postgresql://user:pass@host``, requests hatası → bot token'lı
+    URL, hash → bcrypt gövdesi) operatör sohbetine sızabilir. Log hattı
+    (``redact_sensitive_data`` + ``_redact_telegram_url``) bunu zaten
+    yapıyor; bu fonksiyon aynı disiplini giden mesaj metnine uygular.
+    """
+    cleaned = _CREDENTIAL_URL_RE.sub(lambda m: f"{m.group('scheme')}://[REDACTED]@", text)
+    cleaned = _TOKEN_RE.sub("bot[REDACTED]", cleaned)
+    cleaned = _BCRYPT_RE.sub("[REDACTED_HASH]", cleaned)
+    return cleaned
 
 
 class SlidingWindowRateLimiter:
@@ -248,6 +270,10 @@ class TelegramNotifier:
             logger.info("telegram_disabled", preview=text[:80])
             return False
 
+        # AppSec: hata detayı taşıyan tüm bildirimler (EOD/watchdog/scan-fail)
+        # bu tek geçitten sanitizasyonla çıkar; str(exc) kaynaklı DB URL'si
+        # veya token artığı operatör sohbetine sızmaz.
+        text = sanitize_outbound_text(text)
         try:
             send_kwargs: dict = {
                 "base_url": self.base_url,

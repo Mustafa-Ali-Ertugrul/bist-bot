@@ -55,6 +55,7 @@ def get_correlated_positions(
     portfolio_history: dict[str, pd.DataFrame],
     global_corr_cache: pd.DataFrame | None,
     correlation_threshold: float,
+    min_bars: int = 10,
 ) -> list[str]:
     if not portfolio_history:
         return []
@@ -72,7 +73,7 @@ def get_correlated_positions(
     for existing_ticker, history in portfolio_history.items():
         existing_close = history[["close"]].rename(columns={"close": existing_ticker}).astype(float)
         aligned = pd.concat([candidate_close, existing_close], axis=1, join="inner").dropna()
-        if aligned.empty or len(aligned) < 10:
+        if aligned.empty or len(aligned) < min_bars:
             continue
         corr = aligned.pct_change().dropna().corr().iloc[0, 1]
         if pd.notna(corr) and abs(float(corr)) >= correlation_threshold:
@@ -92,9 +93,10 @@ def apply_portfolio_risk(
     correlation_risk_step: float,
     capital: float,
     max_risk_pct: float,
+    min_bars: int = 10,
 ) -> RiskLevels:
     correlated = get_correlated_positions(
-        ticker, df, portfolio_history, global_corr_cache, correlation_threshold
+        ticker, df, portfolio_history, global_corr_cache, correlation_threshold, min_bars
     )
     levels.correlated_tickers = correlated
 

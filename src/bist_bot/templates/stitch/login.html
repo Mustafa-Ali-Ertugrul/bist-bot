@@ -117,15 +117,15 @@
 </div>
 <!-- Auth Mode Tabs -->
 <div class="flex items-center p-space-3xs rounded-full bg-surface-container-highest/60 backdrop-blur-md mb-space-md w-fit">
-<button class="px-space-sm py-space-2xs rounded-full font-label-code text-label-code transition-all text-on-primary bg-primary-container font-semibold shadow-[0_0_12px_rgba(16,185,129,0.3)]" id="tab-login" onclick="switchAuthMode('login')" type="button">
+<button class="px-space-sm py-space-2xs rounded-full font-label-code text-label-code transition-all text-on-primary bg-primary-container font-semibold shadow-[0_0_12px_rgba(16,185,129,0.3)]" id="tab-login" data-action="switch-login" type="button">
               Giriş Yap
             </button>
-<button class="px-space-sm py-space-2xs rounded-full font-label-code text-label-code transition-all text-on-surface-variant hover:text-on-surface" id="tab-register" onclick="switchAuthMode('register')" type="button">
+<button class="px-space-sm py-space-2xs rounded-full font-label-code text-label-code transition-all text-on-surface-variant hover:text-on-surface" id="tab-register" data-action="switch-register" type="button">
               Kayıt Ol
             </button>
 </div>
 <!-- Standard Credentials Form Panel -->
-<form class="flex flex-col gap-space-md" id="auth-form-standard" onsubmit="handleLogin(event)">
+<form class="flex flex-col gap-space-md" id="auth-form-standard" data-action="login-form">
 <!-- Corporate Email Input -->
 <div class="flex flex-col gap-space-3xs">
 <label class="font-label-caps text-label-caps uppercase text-on-surface-variant tracking-wider" for="operator-email">
@@ -144,7 +144,7 @@
 <label class="font-label-caps text-label-caps uppercase text-on-surface-variant tracking-wider" for="operator-password">
                 Operatör Şifresi
               </label>
-<a class="font-label-code text-label-code text-secondary-container hover:underline" href="javascript:void(0)" onclick="alert('Şifre sıfırlama yönergesi kayıtlı operatör e-postasına iletildi.')">
+<a class="font-label-code text-label-code text-secondary-container hover:underline" href="#" data-action="password-reset">
                 Şifremi Sıfırla
               </a>
 </div>
@@ -153,7 +153,7 @@
                 lock
               </span>
 <input class="w-full bg-surface-container-high/70 text-on-surface placeholder:text-on-surface-variant/40 font-metric-value text-metric-value pl-10 pr-10 py-space-sm rounded-lg focus:outline-none focus:bg-surface-container-highest/90 transition-all shadow-inner" id="operator-password" placeholder="••••••••••••" required="" type="password"/>
-<button class="absolute right-space-sm text-on-surface-variant hover:text-on-surface transition-colors p-space-3xs flex items-center justify-center" id="toggle-pass-btn" onclick="togglePasswordVisibility()" type="button">
+<button class="absolute right-space-sm text-on-surface-variant hover:text-on-surface transition-colors p-space-3xs flex items-center justify-center" id="toggle-pass-btn" data-action="toggle-pass" type="button">
 <span class="material-symbols-outlined text-[18px]" id="pass-icon">visibility</span>
 </button>
 </div>
@@ -179,7 +179,7 @@
 </button>
 </form>
 <!-- Registration Form Panel (Hidden by default) -->
-<form class="hidden flex-col gap-space-md" id="auth-form-register" onsubmit="handleRegister(event)">
+<form class="hidden flex-col gap-space-md" id="auth-form-register" data-action="register-form">
 <div class="flex items-center gap-space-xs bg-primary/10 border border-primary/30 rounded-lg px-space-sm py-space-xs">
 <span class="material-symbols-outlined text-primary text-[18px]">celebration</span>
 <span class="font-body-sm text-body-sm text-on-surface">Yeni hesaplar <strong class="text-primary">24 saat ücretsiz deneme</strong> ile başlar.</span>
@@ -206,7 +206,7 @@
                 lock
               </span>
 <input class="w-full bg-surface-container-high/70 text-on-surface placeholder:text-on-surface-variant/40 font-metric-value text-metric-value pl-10 pr-10 py-space-sm rounded-lg focus:outline-none focus:bg-surface-container-highest/90 transition-all shadow-inner" id="register-password" minlength="12" placeholder="••••••••••••" required="" type="password"/>
-<button class="absolute right-space-sm text-on-surface-variant hover:text-on-surface transition-colors p-space-3xs flex items-center justify-center" id="toggle-reg-pass-btn" onclick="toggleRegPasswordVisibility()" type="button">
+<button class="absolute right-space-sm text-on-surface-variant hover:text-on-surface transition-colors p-space-3xs flex items-center justify-center" id="toggle-reg-pass-btn" data-action="toggle-reg-pass" type="button">
 <span class="material-symbols-outlined text-[18px]" id="reg-pass-icon">visibility</span>
 </button>
 </div>
@@ -278,174 +278,5 @@
 </div>
 </div>
 </div>
-<script>
-  function switchAuthMode(mode) {
-    const loginForm = document.getElementById('auth-form-standard');
-    const registerForm = document.getElementById('auth-form-register');
-    const tabLogin = document.getElementById('tab-login');
-    const tabRegister = document.getElementById('tab-register');
-    const desc = document.getElementById('auth-context-desc');
-    const activeCls = ['text-on-primary', 'bg-primary-container', 'font-semibold', 'shadow-[0_0_12px_rgba(16,185,129,0.3)]'];
-    const idleCls = ['text-on-surface-variant'];
-    if (mode === 'register') {
-      loginForm.classList.add('hidden');
-      registerForm.classList.remove('hidden');
-      registerForm.classList.add('flex');
-      tabLogin.classList.remove(...activeCls);
-      tabLogin.classList.add(...idleCls);
-      tabRegister.classList.add(...activeCls);
-      tabRegister.classList.remove(...idleCls);
-      if (desc) desc.textContent = 'E-postanızla kaydolun, 24 saat ücretsiz deneme hemen başlasın.';
-    } else {
-      registerForm.classList.add('hidden');
-      registerForm.classList.remove('flex');
-      loginForm.classList.remove('hidden');
-      tabRegister.classList.remove(...activeCls);
-      tabRegister.classList.add(...idleCls);
-      tabLogin.classList.add(...activeCls);
-      tabLogin.classList.remove(...idleCls);
-      if (desc) desc.textContent = 'Tanımlı lisanslı operatör bilgilerinizle giriş yapın ve piyasa botlarını yönetin.';
-    }
-  }
-
-  function toggleRegPasswordVisibility() {
-    const passInput = document.getElementById('register-password');
-    const passIcon = document.getElementById('reg-pass-icon');
-    if (passInput.type === 'password') {
-      passInput.type = 'text';
-      passIcon.innerText = 'visibility_off';
-    } else {
-      passInput.type = 'password';
-      passIcon.innerText = 'visibility';
-    }
-  }
-
-  function togglePasswordVisibility() {
-    const passInput = document.getElementById('operator-password');
-    const passIcon = document.getElementById('pass-icon');
-    if (passInput.type === 'password') {
-      passInput.type = 'text';
-      passIcon.innerText = 'visibility_off';
-    } else {
-      passInput.type = 'password';
-      passIcon.innerText = 'visibility';
-    }
-  }
-
-  async function establishSession(token) {
-    // Ask the server to mint the HttpOnly UI cookie for this Bearer token.
-    // Returns true only when the cookie was set; the caller must NOT
-    // navigate to a gated page otherwise (that would ping-pong 302s).
-    try {
-      const res = await fetch('/api/auth/session', {
-        method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + token }
-      });
-      return res.ok;
-    } catch (err) {
-      return false;
-    }
-  }
-
-  async function handleLogin(e) {
-    e.preventDefault();
-    const btn = document.getElementById('submit-btn');
-    const email = document.getElementById('operator-email').value.trim();
-    const password = document.getElementById('operator-password').value;
-    const errDiv = document.getElementById('login-error-msg');
-    if (errDiv) errDiv.remove();
-
-    const originalContent = btn.innerHTML;
-    btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[20px]">sync</span><span>Yetkilendiriliyor...</span>';
-    btn.disabled = true;
-
-    try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email, password: password })
-      });
-      const data = await res.json();
-      if (res.ok && data.status === 'ok') {
-        localStorage.setItem('bistbot_token', data.access_token);
-        localStorage.setItem('bistbot_email', email);
-        btn.innerHTML = '<span class="material-symbols-outlined text-[20px]">check_circle</span><span>Bağlantı Kuruldu</span>';
-        await establishSession(data.access_token);
-        setTimeout(() => {
-          window.location.href = '/ui/dashboard';
-        }, 300);
-      } else {
-        btn.innerHTML = originalContent;
-        btn.disabled = false;
-        showLoginError(data.message || 'Geçersiz kurumsal kimlik bilgileri.');
-      }
-    } catch (err) {
-      btn.innerHTML = originalContent;
-      btn.disabled = false;
-      showLoginError('API sunucusuna erişilemedi: ' + err.message);
-    }
-  }
-
-  function showLoginError(msg, formId) {
-    const form = document.getElementById(formId || 'auth-form-standard');
-    let err = form.querySelector('#login-error-msg, #register-error-msg');
-    if (!err) {
-      err = document.createElement('div');
-      err.id = formId === 'auth-form-register' ? 'register-error-msg' : 'login-error-msg';
-      err.className = 'p-space-xs rounded-lg bg-error-container/30 border border-error/40 text-error font-body-sm text-body-sm flex items-center gap-space-xs';
-      form.insertBefore(err, form.querySelector('button[type="submit"]'));
-    }
-    err.innerHTML = '<span class="material-symbols-outlined text-[18px]">error</span><span>' + msg + '</span>';
-  }
-
-  async function handleRegister(e) {
-    e.preventDefault();
-    const btn = document.getElementById('register-btn');
-    const email = document.getElementById('register-email').value.trim();
-    const password = document.getElementById('register-password').value;
-    const confirm = document.getElementById('register-password-confirm').value;
-    const oldErr = document.getElementById('register-error-msg');
-    if (oldErr) oldErr.remove();
-
-    if (password !== confirm) {
-      showLoginError('Şifreler eşleşmiyor.', 'auth-form-register');
-      return;
-    }
-    if (password.length < 12) {
-      showLoginError('Şifre en az 12 karakter olmalı.', 'auth-form-register');
-      return;
-    }
-
-    const originalContent = btn.innerHTML;
-    btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[20px]">sync</span><span>Hesap Oluşturuluyor...</span>';
-    btn.disabled = true;
-
-    try {
-      const res = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email, password: password })
-      });
-      const data = await res.json();
-      if (res.ok && data.status === 'ok') {
-        localStorage.setItem('bistbot_token', data.access_token);
-        localStorage.setItem('bistbot_email', email);
-        btn.innerHTML = '<span class="material-symbols-outlined text-[20px]">check_circle</span><span>Deneme Başlatıldı</span>';
-        await establishSession(data.access_token);
-        setTimeout(() => {
-          window.location.href = '/ui/dashboard';
-        }, 300);
-      } else {
-        btn.innerHTML = originalContent;
-        btn.disabled = false;
-        showLoginError(data.message || 'Kayıt oluşturulamadı.', 'auth-form-register');
-      }
-    } catch (err) {
-      btn.innerHTML = originalContent;
-      btn.disabled = false;
-      showLoginError('API sunucusuna erişilemedi: ' + err.message, 'auth-form-register');
-    }
-  }
-
-</script></main><footer class="relative z-10 w-full px-terminal-margin py-space-md bg-surface-container-lowest/60 backdrop-blur-lg"><div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-space-sm text-on-surface-variant"><div class="flex items-center gap-space-md flex-wrap justify-center"><div class="flex items-center gap-space-2xs"><span class="material-symbols-outlined text-primary text-[14px]">verified_user</span><span class="font-label-code text-label-code text-on-surface-variant">256-Bit SSL Şifreleme</span></div><div class="flex items-center gap-space-2xs"><span class="material-symbols-outlined text-secondary-container text-[14px]">bolt</span><span class="font-label-code text-label-code text-on-surface-variant">API Statüsü:</span><span class="font-label-code text-label-code text-primary uppercase font-bold">Online (1.2ms)</span></div><div class="flex items-center gap-space-2xs"><span class="material-symbols-outlined text-on-surface-variant text-[14px]">shield</span><span class="font-label-code text-label-code text-on-surface-variant">SPK Uyumlu Altyapı</span></div></div><div class="flex items-center gap-space-xs"><span class="font-label-code text-label-code text-on-surface-variant">© 2024 Bist-Bot Quantitative Systems. Tüm Hakları Saklıdır.</span></div></div></footer><script src="/static/app.js?nocache=100011"></script>
+<script src="/static/login.js"></script></main><footer class="relative z-10 w-full px-terminal-margin py-space-md bg-surface-container-lowest/60 backdrop-blur-lg"><div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-space-sm text-on-surface-variant"><div class="flex items-center gap-space-md flex-wrap justify-center"><div class="flex items-center gap-space-2xs"><span class="material-symbols-outlined text-primary text-[14px]">verified_user</span><span class="font-label-code text-label-code text-on-surface-variant">256-Bit SSL Şifreleme</span></div><div class="flex items-center gap-space-2xs"><span class="material-symbols-outlined text-secondary-container text-[14px]">bolt</span><span class="font-label-code text-label-code text-on-surface-variant">API Statüsü:</span><span class="font-label-code text-label-code text-primary uppercase font-bold">Online (1.2ms)</span></div><div class="flex items-center gap-space-2xs"><span class="material-symbols-outlined text-on-surface-variant text-[14px]">shield</span><span class="font-label-code text-label-code text-on-surface-variant">SPK Uyumlu Altyapı</span></div></div><div class="flex items-center gap-space-xs"><span class="font-label-code text-label-code text-on-surface-variant">© 2024 Bist-Bot Quantitative Systems. Tüm Hakları Saklıdır.</span></div></div></footer><script src="/static/app.js?nocache=100011"></script>
 </body></html>

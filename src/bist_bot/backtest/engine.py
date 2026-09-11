@@ -306,6 +306,8 @@ class Backtester:
         )
 
     def _use_vectorized_path(self) -> bool:
+        if getattr(settings, "BACKTEST_FORCE_ITERATIVE", False):
+            return False
         if (
             self.signal_builder is not None
             or self.meta_model is not None

@@ -57,7 +57,7 @@ en = {
     "api.invalid_credentials": "Invalid credentials",
     "api.invalid_email": "Invalid email address",
     "api.password_too_short": "Password must be at least 12 characters",
-    "api.email_already_exists": "This email is already registered",
+    "api.email_already_exists": "Registration could not be completed for this email",
     "api.register_error": "Registration could not be completed",
     "api.registration_disabled": "Public registration is disabled",
     "api.data_not_found": "Data not found",

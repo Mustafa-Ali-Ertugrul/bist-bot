@@ -416,7 +416,10 @@ def test_register_rejects_duplicate_email(tmp_path):
     assert response.status_code == 400
     payload = response.get_json()
     assert payload is not None
-    assert payload["message"] == "Bu e-posta zaten kayıtlı"
+    # AppSec (Round 19): duplicate-email must NOT disclose account existence;
+    # the message is deliberately generic (same bucket as other failures).
+    assert "kayıtlı" not in payload["message"]
+    assert "kayıt" not in payload["message"].lower() or "oluşturulamadı" in payload["message"]
 
 
 def test_register_rejects_short_password(tmp_path):

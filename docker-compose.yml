@@ -55,7 +55,10 @@ services:
       - ALL
     volumes:
       - bot-data:/app/data
-      - ./results:/app/results:ro
+      # RW zorunlu: API de /api/scan uzerinden outcome/shadow ledger'a yazar
+      # (ScanService.process_scan -> results/*.json|csv). :ro (AppSec #121)
+      # EOD pass'i deterministik patlatiyordu (outcome_close EROFS).
+      - ./results:/app/results
     depends_on:
       postgres:
         condition: service_healthy
@@ -65,6 +68,12 @@ services:
       timeout: 10s
       retries: 3
       start_period: 20s
+    # AppSec: kaynak siniri — gunicorn taramasi bellek patlamasinda host'u
+    # dogurmamali (worker zaten 1g ile sinirli).
+    deploy:
+      resources:
+        limits:
+          memory: 1g
     restart: unless-stopped
 
   # Note: The legacy streamlit-ui service was retired in favor of the unified
@@ -102,7 +111,10 @@ services:
       CONFIG_STRICT: ${CONFIG_STRICT:-true}
     volumes:
       - bot-data:/app/data
-      - ./results:/app/results:ro
+      # RW zorunlu: EOD kapanis pass'i outcome/shadow ledger'a yazar
+      # (SignalOutcomeTracker._write_json/_append_closed). :ro (AppSec #121)
+      # yuzunden 09.09.2026'da 2/2 deneme EROFS ile patladi.
+      - ./results:/app/results
     depends_on:
       bot:
         condition: service_healthy
@@ -128,8 +140,16 @@ services:
         max-file: "5"
 
   postgres:
-    image: postgres:16-alpine
+    # AppSec: tag -> digest pin (mutable tag riskini kapatir; Dockerfile
+    # base'leri gibi). Digest = v2.54.1/16-alpine/11.2.0 tag'inin manifest
+    # list'i; tag hareket ederse burasi sabit kalir.
+    image: postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
     container_name: bist-bot-postgres
+    # AppSec #140: container sertleştirme (cap_drop postgres'un init
+    # chown/setuid gereksinimleri yüzünden YALNIZCA worker/bot'ta uygulanır;
+    # burada no-new-privileges + localhost-bind yeterli denge).
+    security_opt:
+      - no-new-privileges:true
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-bist}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bist}
@@ -144,11 +164,21 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+    # AppSec: kaynak siniri — sorgu patlamasi host bellegini kemirmemeli.
+    deploy:
+      resources:
+        limits:
+          memory: 512m
     restart: unless-stopped
 
   prometheus:
-    image: prom/prometheus:v2.54.1
+    image: prom/prometheus:v2.54.1@sha256:f6639335d34a77d9d9db382b92eeb7fc00934be8eae81dbc03b31cfe90411a94
     container_name: bist-bot-prometheus
+    # AppSec: prometheus root gerektirmez — tam cap_drop uygulanabilir.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
@@ -159,14 +189,24 @@ services:
       - prometheus-data:/prometheus
     ports:
       - "127.0.0.1:9090:9090"
+    # AppSec: TSDB boyutu sinirli — disk dolumu monitor host'u bozmasin.
+    deploy:
+      resources:
+        limits:
+          memory: 512m
     depends_on:
       bot:
         condition: service_healthy
     restart: unless-stopped
 
   grafana:
-    image: grafana/grafana:11.2.0
+    image: grafana/grafana:11.2.0@sha256:408afb9726de5122b00a2576763a8a57a3c86d5b0eff5305bc994ceb3eb96c3f
     container_name: bist-bot-grafana
+    # AppSec: grafana uid-1000 olarak koşar — tam cap_drop uygulanabilir.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD must be set — .env icinde tanimlayin}
@@ -177,6 +217,11 @@ services:
       - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
     ports:
       - "127.0.0.1:3000:3000"
+    # AppSec: sorgu/panel yuku bellek patlamasina donmesin.
+    deploy:
+      resources:
+        limits:
+          memory: 512m
     depends_on:
       - prometheus
     restart: unless-stopped

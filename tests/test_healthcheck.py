@@ -44,7 +44,7 @@ def app(mock_db, mock_circuit, mock_broker) -> Flask:
     from bist_bot.config.settings import settings
 
     with settings.override(
-        JWT_SECRET_KEY="test-secret",
+        JWT_SECRET_KEY="test-secret-health-check-fixture-0123456789",
         BROKER_MODE="paper",
         BROKER_PROVIDER="paper",
         METRICS_PUBLIC=False,

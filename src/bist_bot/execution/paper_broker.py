@@ -28,7 +28,9 @@ class PaperBroker(BaseExecutionProvider):
         manual_confirm: bool = False,
         costs: TradingCosts | None = None,
     ) -> None:
-        self.cash = float(initial_cash)
+        from bist_bot.risk.money import quantize_money
+
+        self.cash = quantize_money(initial_cash)
         self.manual_confirm = manual_confirm
         self.costs = costs or DEFAULT_COSTS
         self.cumulative_fees: float = 0.0
@@ -42,10 +44,15 @@ class PaperBroker(BaseExecutionProvider):
         return list(self.positions.values())
 
     def get_account_info(self) -> AccountInfo:
-        market_value = sum(
-            position.quantity * position.average_price for position in self.positions.values()
+        from bist_bot.risk.money import calc_notional, quantize_money
+
+        market_value = quantize_money(
+            sum(
+                calc_notional(position.quantity, position.average_price)
+                for position in self.positions.values()
+            )
         )
-        equity = self.cash + market_value
+        equity = quantize_money(self.cash + market_value)
         return AccountInfo(cash_balance=self.cash, buying_power=self.cash, equity=equity)
 
     def place_order(
@@ -163,11 +170,18 @@ class PaperBroker(BaseExecutionProvider):
         previous_filled = order.filled_quantity
         new_total = previous_filled + fill_qty
         if previous_filled <= 0:
-            order.average_fill_price = fill_price
+            from bist_bot.risk.money import quantize_price
+
+            order.average_fill_price = quantize_price(fill_price)
         elif order.average_fill_price is not None:
-            order.average_fill_price = (
-                (order.average_fill_price * previous_filled) + (fill_price * fill_qty)
-            ) / new_total
+            from bist_bot.risk.money import quantize_price, to_decimal
+
+            # Ağırlıklı ortalama Decimal ile: (avg*prev + price*qty)/total.
+            avg_dec = (
+                to_decimal(order.average_fill_price) * to_decimal(previous_filled)
+                + to_decimal(fill_price) * to_decimal(fill_qty)
+            ) / to_decimal(new_total)
+            order.average_fill_price = quantize_price(avg_dec)
 
         order.filled_quantity = new_total
         order.state = OrderState.FILLED if order.remaining_quantity() == 0 else OrderState.PARTIAL
@@ -176,45 +190,57 @@ class PaperBroker(BaseExecutionProvider):
         return True
 
     def _apply_fill(self, order: Order, quantity: float, fill_price: float) -> None:
+        from bist_bot.risk.money import (
+            calc_notional,
+            is_zero_qty,
+            quantize_money,
+            quantize_price,
+            to_decimal,
+        )
+
         ticker = order.ticker
-        notional = quantity * fill_price
+        # Kuruş-exact notional: float dust nakde/pozisyona sızmaz.
+        notional = calc_notional(quantity, fill_price)
         if order.side is OrderSide.BUY:
             fee = self.costs.buy_cost(notional)
-            self.cash -= notional + fee
-            self.cumulative_fees += fee
+            self.cash = quantize_money(self.cash - notional - fee)
+            self.cumulative_fees = quantize_money(self.cumulative_fees + fee)
             position = self.positions.get(ticker)
             if position is None:
                 self.positions[ticker] = Position(
                     ticker=ticker,
                     quantity=quantity,
-                    average_price=fill_price,
+                    average_price=quantize_price(fill_price),
                     market_value=notional,
                 )
                 return
 
             combined_qty = position.quantity + quantity
-            if combined_qty <= 0:
+            if combined_qty <= 0 or is_zero_qty(combined_qty):
                 self.positions.pop(ticker, None)
                 return
-            position.average_price = (
-                (position.average_price * position.quantity) + notional
-            ) / combined_qty
+            avg_dec = (
+                to_decimal(position.average_price) * to_decimal(position.quantity)
+                + to_decimal(notional)
+            ) / to_decimal(combined_qty)
+            position.average_price = quantize_price(avg_dec)
             position.quantity = combined_qty
-            position.market_value = combined_qty * position.average_price
+            position.market_value = calc_notional(combined_qty, position.average_price)
             position.updated_at = utc_now()
             return
 
         fee = self.costs.sell_cost(notional)
-        self.cash += notional - fee
-        self.cumulative_fees += fee
+        self.cash = quantize_money(self.cash + notional - fee)
+        self.cumulative_fees = quantize_money(self.cumulative_fees + fee)
         position = self.positions.get(ticker)
         if position is None:
             return
         position.quantity -= quantity
-        position.market_value = max(position.quantity, 0.0) * position.average_price
-        position.updated_at = utc_now()
-        if position.quantity <= 0:
+        if position.quantity <= 0 or is_zero_qty(position.quantity):
             self.positions.pop(ticker, None)
+            return
+        position.market_value = calc_notional(position.quantity, position.average_price)
+        position.updated_at = utc_now()
 
     # --- Product API compatibility (migrated from broker.paper.PaperBroker) ---
 

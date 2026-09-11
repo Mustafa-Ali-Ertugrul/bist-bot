@@ -118,6 +118,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-docker", action="store_true", help="log kontrolünü tamamen atla")
     args = parser.parse_args(argv)
 
+    # Windows cp1252 konsolu: Türkçe karakterli rapor satırları
+    # UnicodeEncodeError ile çöker (09.09.2026 --date kontrolünde gözlendi).
+    # Best-effort reconfigure; desteklenmeyen akışta sessizce devam.
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, OSError, ValueError):
+        pass
+
     target = (
         datetime.strptime(args.date, "%Y-%m-%d").date() if args.date else datetime.now(TR).date()
     )

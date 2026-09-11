@@ -12,9 +12,9 @@ class TestTradingCosts:
 
     def test_sell_cost_includes_taxes(self):
         costs = TradingCosts(commission_pct=0.0002, stamp_tax_pct=0.00093, bsmv_pct=0.0005)
-        total_pct = 0.0002 + 0.00093 + 0.0005
-        expected = 100_000 * total_pct
-        assert costs.sell_cost(100_000) == expected
+        # Kuruş-exact: 100000 * 0.00163 = 163.00 tam. Ham float'ta
+        # 163.00000000000003 olur (float dust) — artık kabul edilmiyor.
+        assert costs.sell_cost(100_000) == 163.0
 
     def test_round_trip(self):
         costs = TradingCosts(commission_pct=0.0002, stamp_tax_pct=0.00093, bsmv_pct=0.0005)

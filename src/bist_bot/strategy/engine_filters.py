@@ -131,9 +131,9 @@ def classify_signal(
     """Map a bounded numeric score to a signal type and confidence key."""
     if agreement_ratio is None:
         confidence = None
-    elif agreement_ratio >= 0.75:
+    elif agreement_ratio >= float(getattr(params, "agreement_full", 0.75)):
         confidence = "confidence.high"
-    elif agreement_ratio >= 0.5:
+    elif agreement_ratio >= float(getattr(params, "agreement_min", 0.5)):
         confidence = "confidence.medium"
     else:
         confidence = "confidence.low"
@@ -256,7 +256,8 @@ def calculate_score_and_reasons(
     )
     _components = (s1, s2, s3, s4)
     agree = sum(1 for c in _components if (score > 0 and c > 0) or (score < 0 and c < 0))
-    agreement_ratio = agree / 4.0
+    agreement_divisor = float(getattr(params, "agreement_divisor", 4.0)) or 4.0
+    agreement_ratio = agree / agreement_divisor
 
     if regime == MarketRegime.SIDEWAYS:
         score *= params.sideways_score_multiplier

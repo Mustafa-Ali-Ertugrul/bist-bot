@@ -6,6 +6,7 @@ Usage: python export_telegram_messages_postgres.py
 
 import io
 import json
+import os
 from datetime import UTC
 
 import psycopg2
@@ -15,7 +16,12 @@ from bist_bot.strategy.engine_filters import is_trade_actionable
 from bist_bot.strategy.params import StrategyParams
 from bist_bot.strategy.signal_models import Signal, SignalType
 
-DB_DSN = "postgresql://bist:bist@postgres:5432/bist_bot"
+# AppSec: DSN inline değil env'den okunur (gitleaks/in-band credential).
+# Container içi default: docker-compose Postgres servisi değeri.
+DB_DSN = os.environ.get(
+    "BIST_BOT_DATABASE_URL",
+    "postgresql://bist:bist@postgres:5432/bist_bot",
+)
 SINCE = "2026-08-12"
 OUT = "/app/results/telegram_messages_last_week_postgres.md"
 

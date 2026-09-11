@@ -213,6 +213,38 @@ class TradingSettings:
     BOLLINGER_PERIOD: int = _get_int_env("BOLLINGER_PERIOD", 20)
     BOLLINGER_STD: float = _get_float_env("BOLLINGER_STD", 2.0)
     ADX_THRESHOLD: int = _get_int_env("ADX_THRESHOLD", 20)
+    # Aşama 1: osilatör bölge eşikleri + skor cap'leri + rejim sabitleri
+    # (StrategyParams üzerinden tüketilir; indikatör hesaplama pencereleri
+    # dahil). Default'lar kodda doğrulanan mevcut değerlerdir.
+    STOCH_K_PERIOD: int = _get_int_env("STOCH_K_PERIOD", 14)
+    STOCH_D_PERIOD: int = _get_int_env("STOCH_D_PERIOD", 3)
+    STOCH_OVERSOLD: float = _get_float_env("STOCH_OVERSOLD", 20.0)
+    STOCH_OVERBOUGHT: float = _get_float_env("STOCH_OVERBOUGHT", 80.0)
+    STOCH_TREND_MID: float = _get_float_env("STOCH_TREND_MID", 50.0)
+    ADX_PERIOD: int = _get_int_env("ADX_PERIOD", 14)
+    ATR_PERIOD: int = _get_int_env("ATR_PERIOD", 14)
+    OBV_SMA_PERIOD: int = _get_int_env("OBV_SMA_PERIOD", 20)
+    BB_SQUEEZE_PERIOD: int = _get_int_env("BB_SQUEEZE_PERIOD", 20)
+    BB_SQUEEZE_RATIO: float = _get_float_env("BB_SQUEEZE_RATIO", 0.7)
+    BB_PCT_LOW: float = _get_float_env("BB_PCT_LOW", 0.2)
+    BB_PCT_HIGH: float = _get_float_env("BB_PCT_HIGH", 0.8)
+    CCI_MIN: float = _get_float_env("CCI_MIN", -50.0)
+    CCI_MAX: float = _get_float_env("CCI_MAX", 50.0)
+    ADX_STRONG_EDGE: float = _get_float_env("ADX_STRONG_EDGE", 25.0)
+    SR_DISTANCE_PCT: float = _get_float_env("SR_DISTANCE_PCT", 2.0)
+    MOMENTUM_SCORE_CAP: float = _get_float_env("MOMENTUM_SCORE_CAP", 45.0)
+    TREND_SCORE_CAP: float = _get_float_env("TREND_SCORE_CAP", 70.0)
+    VOLUME_SCORE_CAP: float = _get_float_env("VOLUME_SCORE_CAP", 26.0)
+    STRUCTURE_SCORE_CAP: float = _get_float_env("STRUCTURE_SCORE_CAP", 50.0)
+    REGIME_LOOKBACK: int = _get_int_env("REGIME_LOOKBACK", 20)
+    REGIME_MIN_BARS: int = _get_int_env("REGIME_MIN_BARS", 50)
+    REGIME_TREND_ADX: float = _get_float_env("REGIME_TREND_ADX", 20.0)
+    REGIME_WEAK_ADX: float = _get_float_env("REGIME_WEAK_ADX", 15.0)
+    REGIME_DI_RATIO: float = _get_float_env("REGIME_DI_RATIO", 1.25)
+    REGIME_MOMENTUM_PCT: float = _get_float_env("REGIME_MOMENTUM_PCT", 3.0)
+    AGREEMENT_FULL: float = _get_float_env("AGREEMENT_FULL", 0.75)
+    AGREEMENT_MIN: float = _get_float_env("AGREEMENT_MIN", 0.5)
+    AGREEMENT_DIVISOR: float = _get_float_env("AGREEMENT_DIVISOR", 4.0)
     VOLUME_CONFIRM_MULTIPLIER: float = _get_float_env("VOLUME_CONFIRM_MULTIPLIER", 1.5)
     VOLUME_SPIKE_MULTIPLIER: float = _get_float_env("VOLUME_SPIKE_MULTIPLIER", 1.5)
     VOLUME_CONFIRM_TICKER_OVERRIDES: dict[str, float] = field(
@@ -267,6 +299,9 @@ class RiskSettings:
     ATR_TARGET_FLOOR_PCT: float = _get_float_env("ATR_TARGET_FLOOR_PCT", 2.0)
     FALLBACK_TARGET_RR: float = _get_float_env("FALLBACK_TARGET_RR", 2.0)
     MAX_SIGNAL_SCORE: float = _get_float_env("MAX_SIGNAL_SCORE", 33.0)
+    # Aşama 1: pairwise korelasyon fallback'i için minimum örtüşen bar sayısı
+    # (risk/correlation.get_correlated_positions). Default kodda doğrulanan 10.
+    CORR_FALLBACK_MIN_BARS: int = _get_int_env("CORR_FALLBACK_MIN_BARS", 10)
     ATR_TARGET_MULT: float = _get_float_env("ATR_TARGET_MULT", 1.5)
 
 
@@ -333,6 +368,10 @@ class DatabaseSettings:
 @dataclass(frozen=True)
 class AuthSettings:
     JWT_SECRET_KEY: str = _get_str_env("JWT_SECRET_KEY")
+    # AppSec (Round 10): Flask session signing key, separated from the JWT key.
+    # Empty default preserves legacy behavior (falls back to JWT_SECRET_KEY);
+    # set SECRET_KEY in production for signing-domain separation.
+    SECRET_KEY: str = _get_str_env("SECRET_KEY")
     JWT_ACCESS_TOKEN_MINUTES: int = _get_int_env("JWT_ACCESS_TOKEN_MINUTES", 15)
     RBAC_MODE: str = _get_str_env("RBAC_MODE", "warn").lower()
     ADMIN_BOOTSTRAP_EMAIL: str = _get_str_env("ADMIN_BOOTSTRAP_EMAIL")
@@ -452,6 +491,9 @@ class BacktestSettings:
         "BACKTEST_COMMISSION_SELL_PCT", _get_float_env("BACKTEST_COMMISSION_PCT", 0.001)
     )
     BACKTEST_SLIPPAGE_PCT: float = _get_float_env("BACKTEST_SLIPPAGE_PCT", 0.0005)
+    # Aşama 3: True iken vektör yol zorla kapatılır (debug/test).
+    # Default False -> mevcut yol seçimi korunur.
+    BACKTEST_FORCE_ITERATIVE: bool = _get_bool_env("BACKTEST_FORCE_ITERATIVE", False)
 
 
 @dataclass(frozen=True)

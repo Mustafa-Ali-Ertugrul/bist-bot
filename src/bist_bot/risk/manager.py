@@ -60,10 +60,19 @@ class RiskManager:
         self._portfolio_history: dict[str, pd.DataFrame] = {}
         self._portfolio_history_limit = int(getattr(settings, "PORTFOLIO_HISTORY_LIMIT", 100))
         self._global_corr_cache: pd.DataFrame | None = None
+        # Aşama 2: günlük korelasyon memo'su (başarılı snapshot + anahtarı).
+        # reset_portfolio() BİLEREK memo'yu silmez: reset her scan_all'de
+        # çağrılır (engine.py), silinseydi cache hiç vurmazdı. Gerçek
+        # geçersizleşme = anahtar değişimi (tarih/evren/konfigürasyon/bağlam).
+        self._corr_memo_key: tuple | None = None
+        self._corr_memo_frame: pd.DataFrame | None = None
+        self._corr_memo_lock = threading.Lock()
         self.correlation_threshold = float(getattr(settings, "CORRELATION_THRESHOLD", 0.70))
         self.correlation_risk_step = float(getattr(settings, "CORRELATION_RISK_STEP", 0.35))
         self.correlation_min_scale = float(getattr(settings, "CORRELATION_MIN_SCALE", 0.25))
         self.correlation_max_cluster = int(getattr(settings, "CORRELATION_MAX_CLUSTER", 2))
+        # Aşama 1: pairwise fallback minimum örtüşen bar (env CORR_FALLBACK_MIN_BARS).
+        self.corr_fallback_min_bars = int(getattr(settings, "CORR_FALLBACK_MIN_BARS", 10))
         self.atr_baseline_pct = float(getattr(settings, "ATR_BASELINE_PCT", 0.025))
         self.atr_min_risk_scale = float(getattr(settings, "ATR_MIN_RISK_SCALE", 0.35))
         self.max_position_cap_pct = float(getattr(settings, "MAX_POSITION_CAP_PCT", 5.0))
@@ -125,6 +134,8 @@ class RiskManager:
     def reset_portfolio(self) -> None:
         self._portfolio_history.clear()
         self._global_corr_cache = None
+        # NOT: memo bilerek korunur (init'teki nota bak; reset her scan'de
+        # çağrılır, silinseydi cache hiç vurmazdı).
 
     def set_daily_realized_pnl(self, amount: float) -> None:
         self._roll_daily_realized_pnl_if_needed()
@@ -136,8 +147,62 @@ class RiskManager:
             return False
         return self.daily_realized_pnl <= -(self.capital * self.daily_loss_cap_pct / 100.0)
 
-    def build_global_correlation_cache(self, data: dict) -> None:
-        self._global_corr_cache = correlation_helpers.build_global_correlation_cache(data)
+    def _corr_memo_key_for(
+        self,
+        data: dict,
+        session_date,
+        data_context: str,
+    ) -> tuple:
+        """Build the daily memo key for a correlation snapshot.
+
+        Anahtar = (seans tarihi, evren imzası, korelasyon konfigürasyonu,
+        veri/çalışma bağlamı). Bar DEĞERLERİ bilerek dışarıda: aynı gün içi
+        fiyat güncellemeleri snapshot'ı yenilemez (günlük snapshot hedefi).
+        """
+        universe_sig = tuple(sorted(str(t) for t in data))
+        config_sig = (self.correlation_threshold, self.corr_fallback_min_bars)
+        return (session_date, universe_sig, config_sig, str(data_context))
+
+    def build_global_correlation_cache(
+        self,
+        data: dict,
+        *,
+        session_date=None,
+        data_context: str = "live",
+    ) -> None:
+        """Rebuild (or memo-restore) the global correlation snapshot.
+
+        Aynı anahtar için ilk BAŞARILI hesap gün boyu tekrar kullanılır;
+        tarih/evren/konfigürasyon/bağlam değişince yeniden hesaplanır.
+        Başarısız/boş hesap memo'lanmaz (canlı cache None kalır, mevcut
+        pairwise fallback davranışı korunur). ``session_date`` verilmezse
+        TR seans tarihi kullanılır; backtest simülasyon ``as_of`` tarihini
+        vermelidir (sistem tarihiyle anahtarlamak geleceğe bakma yanlılığı
+        üretirdi).
+        """
+        if session_date is None:
+            session_date = self._today()
+        key = self._corr_memo_key_for(data, session_date, data_context)
+        with self._corr_memo_lock:
+            if (
+                self._corr_memo_key is not None
+                and self._corr_memo_key == key
+                and self._corr_memo_frame is not None
+            ):
+                self._global_corr_cache = self._corr_memo_frame.copy()
+                logger.info(
+                    "correlation_cache_memo_hit",
+                    session_date=str(session_date),
+                    universe_size=len(key[1]),
+                    data_context=str(data_context),
+                )
+                self._restore_persisted_positions(data)
+                return
+            frame = correlation_helpers.build_global_correlation_cache(data)
+            self._global_corr_cache = frame
+            if frame is not None and not frame.empty:
+                self._corr_memo_key = key
+                self._corr_memo_frame = frame.copy()
         self._restore_persisted_positions(data)
 
     def get_correlation_matrix(self) -> pd.DataFrame:
@@ -195,6 +260,7 @@ class RiskManager:
             correlation_risk_step=self.correlation_risk_step,
             capital=self.capital,
             max_risk_pct=self.max_risk_pct,
+            min_bars=self.corr_fallback_min_bars,
         )
 
     def calculate(self, df: pd.DataFrame, direction: str = "LONG") -> RiskLevels:
@@ -300,4 +366,5 @@ class RiskManager:
             self._portfolio_history,
             self._global_corr_cache,
             self.correlation_threshold,
+            self.corr_fallback_min_bars,
         )

@@ -55,6 +55,19 @@ spec:
               value: "bist30"
             - name: CORS_ORIGINS
               value: "https://bist-bot-ui-REPLACE.a.run.app"
+            # AppSec (Round 9): RBAC must be enforced in production. In "warn"
+            # mode admin routes only LOG unauthorized access without blocking it.
+            # Fail-closed: without a seeded admin/trader user the app raises at
+            # startup instead of serving unprotected (see _ensure_privileged_user).
+            # So set ADMIN_BOOTSTRAP_* below (or via Secret Manager) BEFORE deploying
+            # with enforce, otherwise the service will crash-loop by design.
+            - name: RBAC_MODE
+              value: "enforce"
+            # AppSec (Round 9): Cloud Run is HTTPS-only, so cookies must carry
+            # the Secure flag. Without it the browser would also send
+            # access_token_cookie over plain-HTTP connections (downgrade/MITM).
+            - name: JWT_COOKIE_SECURE
+              value: "true"
             # Admin bootstrap: set these to seed an initial admin user on first startup.
             # ADMIN_BOOTSTRAP_PASSWORD_HASH must be a pre-computed bcrypt or scrypt hash.
             # Generate with: python -c "from werkzeug.security import generate_password_hash; print(generate_password_hash('your_password', method='scrypt'))"

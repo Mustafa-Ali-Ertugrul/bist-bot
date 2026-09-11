@@ -38,15 +38,18 @@ def upgrade() -> None:
             if "trial_ends_at" not in columns:
                 batch_op.add_column(sa.Column("trial_ends_at", sa.DateTime(), nullable=True))
 
-        # Seed existing users with a fresh 24h trial from migration timestamp if not set
+        # Seed existing users with a fresh 24h trial from migration timestamp if not set.
+        # AppSec (Round 15): parameterized bind instead of f-string interpolation —
+        # the timestamp is a migration constant, but string-formatted SQL is the
+        # wrong pattern and replaying this revision must never depend on it.
         op.execute(
             sa.text(
                 "UPDATE users SET "
-                f"plan = 'trial', "
-                f"plan_expires_at = '{trial_default_expiry.strftime('%Y-%m-%d %H:%M:%S')}', "
-                f"trial_ends_at = '{trial_default_expiry.strftime('%Y-%m-%d %H:%M:%S')}' "
+                "plan = 'trial', "
+                "plan_expires_at = :expiry, "
+                "trial_ends_at = :expiry "
                 "WHERE plan_expires_at IS NULL"
-            )
+            ).bindparams(sa.bindparam("expiry", value=trial_default_expiry, type_=sa.DateTime()))
         )
 
     if "payment_requests" not in tables:

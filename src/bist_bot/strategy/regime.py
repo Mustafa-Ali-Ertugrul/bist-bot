@@ -26,10 +26,39 @@ class TrendBias(Enum):
     NEUTRAL = "NEUTRAL"
 
 
-def detect_regime(df: pd.DataFrame, lookback: int = 20) -> MarketRegime:
-    """Infer the current market regime from trend indicators."""
-    _ = lookback
-    if df is None or len(df) < 50:
+def _regime_thresholds(params) -> dict[str, float]:
+    """Single maintenance point for detect_regime + vektörel ikizi.
+
+    ``params`` None ise settings'ten okunur (env override'lar params'sız
+    çağrılara da ulaşır); ``params`` verilirse StrategyParams alanları
+    okunur. Her iki yol da aynı default'lara düşer, davranış korunur.
+    """
+    if params is None:
+        return {
+            "min_bars": int(getattr(settings, "REGIME_MIN_BARS", 50)),
+            "trend_adx": float(getattr(settings, "REGIME_TREND_ADX", 20.0)),
+            "weak_adx": float(getattr(settings, "REGIME_WEAK_ADX", 15.0)),
+            "di_ratio": float(getattr(settings, "REGIME_DI_RATIO", 1.25)),
+            "momentum_pct": float(getattr(settings, "REGIME_MOMENTUM_PCT", 3.0)),
+        }
+    return {
+        "min_bars": int(getattr(params, "regime_min_bars", 50)),
+        "trend_adx": float(getattr(params, "regime_trend_adx", 20.0)),
+        "weak_adx": float(getattr(params, "regime_weak_adx", 15.0)),
+        "di_ratio": float(getattr(params, "regime_di_ratio", 1.25)),
+        "momentum_pct": float(getattr(params, "regime_momentum_pct", 3.0)),
+    }
+
+
+def detect_regime(df: pd.DataFrame, lookback: int = 20, params=None) -> MarketRegime:
+    """Infer the current market regime from trend indicators.
+
+    ``lookback`` artık SMA penceresinde gerçekten kullanılır (daha önce
+    yok sayılıyordu; default 20 ile davranış aynıdır). ``params`` verilirse
+    eşikler StrategyParams'tan okunur, yoksa mevcut sabitler geçerlidir.
+    """
+    th = _regime_thresholds(params)
+    if df is None or len(df) < th["min_bars"]:
         return MarketRegime.UNKNOWN
 
     last = df.iloc[-1]
@@ -38,12 +67,14 @@ def detect_regime(df: pd.DataFrame, lookback: int = 20) -> MarketRegime:
     minus_di = last.get("minus_di", 0)
     close = float(last["close"])
 
-    trend_adx = 20
-    weak_adx = 15
-    di_ratio = 1.25
+    trend_adx = th["trend_adx"]
+    weak_adx = th["weak_adx"]
+    di_ratio = th["di_ratio"]
+    momentum_pct = th["momentum_pct"]
 
-    sma_20 = float(df["close"].tail(20).mean())
-    momentum = (close - sma_20) / sma_20 * 100
+    sma_window = max(int(lookback), 1)
+    sma = float(df["close"].tail(sma_window).mean())
+    momentum = (close - sma) / sma * 100
 
     if adx >= trend_adx:
         if plus_di > minus_di * di_ratio:
@@ -53,16 +84,16 @@ def detect_regime(df: pd.DataFrame, lookback: int = 20) -> MarketRegime:
         return MarketRegime.SIDEWAYS
 
     if adx >= weak_adx:
-        if momentum > 3 and plus_di > minus_di:
+        if momentum > momentum_pct and plus_di > minus_di:
             return MarketRegime.BULL
-        if momentum < -3 and minus_di > plus_di:
+        if momentum < -momentum_pct and minus_di > plus_di:
             return MarketRegime.BEAR
         return MarketRegime.SIDEWAYS
 
     return MarketRegime.SIDEWAYS
 
 
-def get_trend_bias(indicators, df: pd.DataFrame) -> TrendBias:
+def get_trend_bias(indicators, df: pd.DataFrame, params=None) -> TrendBias:
     """Determine higher-timeframe directional bias for MTF confluence.
 
     H6: When SMA20 slope and EMA200 slope point in opposite directions, the
@@ -81,8 +112,14 @@ def get_trend_bias(indicators, df: pd.DataFrame) -> TrendBias:
     minus_di = last.get("minus_di", 0)
 
     # H6: SMA20/EMA200 slope contradiction → NEUTRAL (no new params)
-    mtf_block_enabled = getattr(settings, "MTF_CONFLUENCE_BLOCK_ENABLED", True)
-    slope_lookback = getattr(settings, "SLOPE_LOOKBACK", 40)
+    # Aşama 1: kill-switch ve lookback önce params'tan okunur (canlı motor
+    # params kaynaktır); params yoksa eski settings okuması geçerlidir.
+    if params is not None:
+        mtf_block_enabled = bool(getattr(params, "mtf_confluence_block_enabled", True))
+        slope_lookback = int(getattr(params, "slope_lookback", 40))
+    else:
+        mtf_block_enabled = getattr(settings, "MTF_CONFLUENCE_BLOCK_ENABLED", True)
+        slope_lookback = getattr(settings, "SLOPE_LOOKBACK", 40)
     if (
         mtf_block_enabled
         and "sma_20" in enriched.columns
@@ -212,7 +249,7 @@ def _normalize_benchmark_frame(df: pd.DataFrame) -> pd.DataFrame:
     return out.dropna(subset=["close"])
 
 
-def benchmark_regime_series(enriched: pd.DataFrame) -> pd.Series:
+def benchmark_regime_series(enriched: pd.DataFrame, params=None) -> pd.Series:
     """Vectorized per-date regime for one *enriched* benchmark frame.
 
     Row ``t`` reproduces ``detect_regime(enriched.iloc[:t+1])`` exactly
@@ -220,10 +257,17 @@ def benchmark_regime_series(enriched: pd.DataFrame) -> pd.Series:
     a 20-close trailing mean, and all indicators are causal). Rows before
     ``MACRO_REGIME_MIN_BARS`` get ``MarketRegime.UNKNOWN`` instead of a vote,
     mirroring the live ``len(df) < 50`` skip.
+
+    ``params`` verilirse eşikler ``_regime_thresholds`` üzerinden aynı
+    kaynaktan okunur (çift bakım noktası kapatıldı); verilmezse mevcut
+    sabitler geçerlidir. Eşdeğerlik, iki yola da aynı params/lookback
+    verildiği sürece korunur.
     """
-    trend_adx = 20
-    weak_adx = 15
-    di_ratio = 1.25
+    th = _regime_thresholds(params)
+    trend_adx = th["trend_adx"]
+    weak_adx = th["weak_adx"]
+    di_ratio = th["di_ratio"]
+    momentum_pct = th["momentum_pct"]
 
     close = enriched["close"].astype(float)
     adx = (
@@ -247,10 +291,10 @@ def benchmark_regime_series(enriched: pd.DataFrame) -> pd.Series:
     strong = adx >= trend_adx
     weak = (~strong) & (adx >= weak_adx)
     bull = (strong & (plus_di > minus_di * di_ratio)) | (
-        weak & (momentum > 3) & (plus_di > minus_di)
+        weak & (momentum > momentum_pct) & (plus_di > minus_di)
     )
     bear = (strong & (minus_di > plus_di * di_ratio)) | (
-        weak & (momentum < -3) & (minus_di > plus_di)
+        weak & (momentum < -momentum_pct) & (minus_di > plus_di)
     )
 
     out = pd.Series(MarketRegime.SIDEWAYS, index=enriched.index, dtype=object)

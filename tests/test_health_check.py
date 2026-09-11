@@ -44,7 +44,7 @@ def app(mock_db, mock_circuit, mock_broker) -> Flask:
     from bist_bot.config.settings import settings
 
     with settings.override(
-        JWT_SECRET_KEY="test-secret",
+        JWT_SECRET_KEY="test-secret-health-check-fixture-0123456789",
         BROKER_MODE="paper",
         BROKER_PROVIDER="paper",
         METRICS_PUBLIC=False,
@@ -103,7 +103,7 @@ def test_health_check_broker_auth_failure_degrades(app, mock_broker):
 
     mock_broker.authenticate.return_value = False
     with settings.override(
-        JWT_SECRET_KEY="test-secret",
+        JWT_SECRET_KEY="test-secret-health-check-fixture-0123456789",
         BROKER_MODE="live",
         BROKER_PROVIDER="algolab",
         ALGOLAB_API_KEY="test-key",
@@ -157,7 +157,7 @@ def test_metrics_public_when_enabled(mock_db, mock_circuit, mock_broker):
     from bist_bot.config.settings import settings
 
     with settings.override(
-        JWT_SECRET_KEY="test-secret",
+        JWT_SECRET_KEY="test-secret-health-check-fixture-0123456789",
         METRICS_PUBLIC=True,
         BROKER_MODE="paper",
         BROKER_PROVIDER="paper",

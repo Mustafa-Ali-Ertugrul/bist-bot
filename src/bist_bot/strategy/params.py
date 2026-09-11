@@ -1,8 +1,23 @@
-"""Centralized strategy threshold and scoring defaults."""
+"""Centralized strategy threshold and scoring defaults.
+
+Override önceliği (mevcut de-facto davranış, testlerle sabitlenmiştir):
+
+1. ``StrategyParams`` dataclass default'u (kanonik kod-içi değer)
+2. ``config.settings`` env değeri (construction anında ``default_factory`` ile okunur)
+3. Profil explicit değeri (``conservative()`` / ``champion_wr()`` içinde verilen
+   alanlar env'i ezer — örn. ``conservative().adx_threshold`` her zaman 20.0'dır)
+4. Çağrı-bazlı açık override (``StrategyParams(adx_threshold=35)`` veya
+   fonksiyonlara verilen ``params`` nesnesi)
+
+Env'i profile üstün kılmak (2<->3 sırasını değiştirmek) davranış değişikliğidir;
+ayrı karar gerektirir, bu refaktörde yapılmamıştır.
+"""
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
+from typing import Any
 
 from bist_bot.config.settings import settings
 
@@ -78,12 +93,14 @@ class StrategyParams:
     component_weight_volume: float = 0.15
     component_weight_structure: float = 0.10
 
-    # RSI Parametreleri
+    # RSI Parametreleri (Aşama 1: oversold/overbought settings'e bağlı —
+    # daha önce kod-içi 30/70 ile env RSI_OVERSOLD/RSI_OVERBOUGHT çift
+    # tanımlıydı. Diğer bantlar kod-içi default olarak kalır.)
     rsi_oversold_extreme: float = 25.0
-    rsi_oversold: float = 30.0
+    rsi_oversold: float = field(default_factory=lambda: float(settings.RSI_OVERSOLD))
     rsi_neutral_low: float = 40.0
     rsi_neutral_high: float = 60.0
-    rsi_overbought: float = 70.0
+    rsi_overbought: float = field(default_factory=lambda: float(settings.RSI_OVERBOUGHT))
     rsi_overbought_extreme: float = 80.0
 
     # Momentum Skorları
@@ -122,6 +139,43 @@ class StrategyParams:
     score_macd_divergence: float = 12.0
 
     # ------------------------------------------------------------------
+    # Aşama 1: scoring bölge eşikleri (env'den, default'lar kodda doğrulandı)
+    # ------------------------------------------------------------------
+    stoch_oversold: float = field(default_factory=lambda: float(settings.STOCH_OVERSOLD))
+    stoch_overbought: float = field(default_factory=lambda: float(settings.STOCH_OVERBOUGHT))
+    stoch_trend_mid: float = field(default_factory=lambda: float(settings.STOCH_TREND_MID))
+    cci_min: float = field(default_factory=lambda: float(settings.CCI_MIN))
+    cci_max: float = field(default_factory=lambda: float(settings.CCI_MAX))
+    bb_pct_low: float = field(default_factory=lambda: float(settings.BB_PCT_LOW))
+    bb_pct_high: float = field(default_factory=lambda: float(settings.BB_PCT_HIGH))
+    adx_strong_edge: float = field(default_factory=lambda: float(settings.ADX_STRONG_EDGE))
+    sr_distance_pct: float = field(default_factory=lambda: float(settings.SR_DISTANCE_PCT))
+
+    # Bileşen cap'leri (scoring clamp'leri + normalize araştırma modu paydası).
+    momentum_score_cap: float = field(default_factory=lambda: float(settings.MOMENTUM_SCORE_CAP))
+    trend_score_cap: float = field(default_factory=lambda: float(settings.TREND_SCORE_CAP))
+    volume_score_cap: float = field(default_factory=lambda: float(settings.VOLUME_SCORE_CAP))
+    structure_score_cap: float = field(default_factory=lambda: float(settings.STRUCTURE_SCORE_CAP))
+
+    # Rejim sabitleri (detect_regime + vektörel ikizi aynı helper'dan okur).
+    regime_lookback: int = field(default_factory=lambda: int(settings.REGIME_LOOKBACK))
+    regime_min_bars: int = field(default_factory=lambda: int(settings.REGIME_MIN_BARS))
+    regime_trend_adx: float = field(default_factory=lambda: float(settings.REGIME_TREND_ADX))
+    regime_weak_adx: float = field(default_factory=lambda: float(settings.REGIME_WEAK_ADX))
+    regime_di_ratio: float = field(default_factory=lambda: float(settings.REGIME_DI_RATIO))
+    regime_momentum_pct: float = field(default_factory=lambda: float(settings.REGIME_MOMENTUM_PCT))
+
+    # Agreement bantları (engine_filters classify + agree oranı).
+    agreement_full: float = field(default_factory=lambda: float(settings.AGREEMENT_FULL))
+    agreement_min: float = field(default_factory=lambda: float(settings.AGREEMENT_MIN))
+    agreement_divisor: float = field(default_factory=lambda: float(settings.AGREEMENT_DIVISOR))
+
+    # Korelasyon pairwise fallback minimum örtüşen bar (risk/correlation).
+    corr_fallback_min_bars: int = field(
+        default_factory=lambda: int(settings.CORR_FALLBACK_MIN_BARS)
+    )
+
+    # ------------------------------------------------------------------
     # Trade-actionability contract (single source for all downstream layers)
     # ------------------------------------------------------------------
     def buy_actionable_score(self, score: float) -> bool:
@@ -131,6 +185,15 @@ class StrategyParams:
     def sell_actionable_score(self, score: float) -> bool:
         """Return True when `score` crosses the sell-side trade threshold."""
         return score <= self.sell_threshold
+
+    def validate(self) -> list[str]:
+        """Return logical inconsistencies in this instance (empty = valid).
+
+        Aşama 1: preflight (``settings.collect_preflight_errors``) ile aynı
+        kuralları paylaşır — bkz. modül fonksiyonu ``validate_strategy_params``.
+        NaN/sonsuz float'lar reddedilir.
+        """
+        return validate_strategy_params(self)
 
     @classmethod
     def conservative(cls) -> StrategyParams:
@@ -196,3 +259,123 @@ class StrategyParams:
         if profile == "champion":
             return cls.champion_wr()
         return cls()
+
+
+def _is_finite_number(value: Any) -> bool:
+    return isinstance(value, int | float) and not isinstance(value, bool) and math.isfinite(value)
+
+
+def validate_strategy_params(params: Any) -> list[str]:
+    """Shared Aşama 1 rule set for StrategyParams instances.
+
+    Hem ``StrategyParams.validate()`` hem de settings preflight bu fonksiyonu
+    kullanır; kurallar tek kaynaktan gelir. ``params`` duck-typed okunur
+    (getattr + default), böylece kısmi stub nesneler de doğrulanabilir.
+    """
+    errors: list[str] = []
+
+    def _num(name: str, default: float) -> float | None:
+        try:
+            value = float(getattr(params, name, default))
+        except (TypeError, ValueError):
+            errors.append(f"{name} sayısal olmalı")
+            return None
+        if not _is_finite_number(value):
+            errors.append(f"{name} sonlu sayı olmalı")
+            return None
+        return value
+
+    def _int(name: str, default: int) -> int | None:
+        try:
+            value = int(getattr(params, name, default))
+        except (TypeError, ValueError):
+            errors.append(f"{name} tam sayı olmalı")
+            return None
+        return value
+
+    stoch_lo = _num("stoch_oversold", 20.0)
+    stoch_hi = _num("stoch_overbought", 80.0)
+    stoch_mid = _num("stoch_trend_mid", 50.0)
+    if stoch_lo is not None and not (0 <= stoch_lo <= 100):
+        errors.append("stoch_oversold 0-100 aralığında olmalı")
+    if stoch_hi is not None and not (0 <= stoch_hi <= 100):
+        errors.append("stoch_overbought 0-100 aralığında olmalı")
+    if stoch_lo is not None and stoch_hi is not None and not (stoch_lo < stoch_hi):
+        errors.append("stoch_oversold < stoch_overbought olmalı")
+    if stoch_mid is not None and not (0 <= stoch_mid <= 100):
+        errors.append("stoch_trend_mid 0-100 aralığında olmalı")
+    if (
+        stoch_lo is not None
+        and stoch_mid is not None
+        and stoch_hi is not None
+        and not (stoch_lo <= stoch_mid <= stoch_hi)
+    ):
+        errors.append("stoch_trend_mid, stoch bandı içinde olmalı")
+
+    cci_min = _num("cci_min", -50.0)
+    cci_max = _num("cci_max", 50.0)
+    if cci_min is not None and cci_max is not None and not (cci_min < cci_max):
+        errors.append("cci_min < cci_max olmalı")
+
+    bb_lo = _num("bb_pct_low", 0.2)
+    bb_hi = _num("bb_pct_high", 0.8)
+    if bb_lo is not None and not (0 <= bb_lo <= 1):
+        errors.append("bb_pct_low 0-1 aralığında olmalı")
+    if bb_hi is not None and not (0 <= bb_hi <= 1):
+        errors.append("bb_pct_high 0-1 aralığında olmalı")
+    if bb_lo is not None and bb_hi is not None and not (bb_lo < bb_hi):
+        errors.append("bb_pct_low < bb_pct_high olmalı")
+
+    adx_edge = _num("adx_strong_edge", 25.0)
+    if adx_edge is not None and adx_edge < 0:
+        errors.append("adx_strong_edge negatif olamaz")
+    sr_pct = _num("sr_distance_pct", 2.0)
+    if sr_pct is not None and sr_pct < 0:
+        errors.append("sr_distance_pct negatif olamaz")
+
+    for cap_name in (
+        "momentum_score_cap",
+        "trend_score_cap",
+        "volume_score_cap",
+        "structure_score_cap",
+    ):
+        cap = _num(cap_name, 1.0)
+        if cap is not None and cap < 0:
+            errors.append(f"{cap_name} negatif olamaz")
+
+    agr_full = _num("agreement_full", 0.75)
+    agr_min = _num("agreement_min", 0.5)
+    agr_div = _num("agreement_divisor", 4.0)
+    if agr_full is not None and not (0 <= agr_full <= 1):
+        errors.append("agreement_full 0-1 aralığında olmalı")
+    if agr_min is not None and not (0 <= agr_min <= 1):
+        errors.append("agreement_min 0-1 aralığında olmalı")
+    if agr_min is not None and agr_full is not None and not (agr_min <= agr_full):
+        errors.append("agreement_min <= agreement_full olmalı")
+    if agr_div is not None and agr_div <= 0:
+        errors.append("agreement_divisor pozitif olmalı")
+
+    for int_name in ("regime_lookback", "regime_min_bars"):
+        int_value = _int(int_name, 1)
+        if int_value is not None and int_value < 1:
+            errors.append(f"{int_name} >= 1 olmalı")
+    trend_adx = _num("regime_trend_adx", 20.0)
+    weak_adx = _num("regime_weak_adx", 15.0)
+    if trend_adx is not None and trend_adx < 0:
+        errors.append("regime_trend_adx negatif olamaz")
+    if weak_adx is not None and weak_adx < 0:
+        errors.append("regime_weak_adx negatif olamaz")
+    if trend_adx is not None and weak_adx is not None and not (trend_adx >= weak_adx):
+        errors.append("regime_trend_adx >= regime_weak_adx olmalı")
+    di_ratio = _num("regime_di_ratio", 1.25)
+    if di_ratio is not None and di_ratio <= 0:
+        errors.append("regime_di_ratio pozitif olmalı")
+    mom_pct = _num("regime_momentum_pct", 3.0)
+    if mom_pct is not None and mom_pct < 0:
+        errors.append("regime_momentum_pct negatif olamaz")
+
+    min_bars = _int("corr_fallback_min_bars", 10)
+    if min_bars is not None and min_bars < 2:
+        errors.append("corr_fallback_min_bars >= 2 olmalı")
+
+    return errors

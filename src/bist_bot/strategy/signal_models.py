@@ -72,11 +72,26 @@ class SignalCategory(Enum):
     HOLD = "HOLD"
 
 
+def _default_max_signal_score() -> float:
+    """Single live source for the category cap default.
+
+    Aşama 1: daha önce üç ayrı 33.0 vardı (env default, ``categorize``
+    default'u, ``categorize_signal`` fallback'u). Artık tek kaynak
+    ``settings.MAX_SIGNAL_SCORE``'dur (default 33.0); profil bandı
+    ``StrategyParams.max_actionable_score`` ise trade-actionability bandıdır
+    (``is_trade_actionable``), kategori cap'inden ayrı bir kapıdır.
+    """
+    try:
+        return float(settings.MAX_SIGNAL_SCORE)
+    except (TypeError, ValueError):
+        return 33.0
+
+
 def categorize(
     signal_type: SignalType,
     score: float,
     buy_threshold: float = 20.0,
-    max_signal_score: float = 33.0,
+    max_signal_score: float | None = None,
 ) -> SignalCategory:
     """Classify a signal into the canonical category (AL / RADAR / SAT / HOLD).
 
@@ -89,11 +104,13 @@ def categorize(
        - score > 0 -> RADAR
        - otherwise -> HOLD
 
-    NOTE: Effective score is capped at ``max_signal_score`` (default 33) to prevent
+    NOTE: Effective score is capped at ``max_signal_score`` (default
+    ``settings.MAX_SIGNAL_SCORE`` = 33) to prevent
     overconfident high scores from degrading trade performance (per challenge data:
     35+ scores have WR %69.7 but net −497 TL/işlem; 28-33 bandı %76.6 +630 TL).
     """
-    effective_score = min(score, max_signal_score)
+    cap = max_signal_score if max_signal_score is not None else _default_max_signal_score()
+    effective_score = min(score, cap)
     if signal_type.is_sell:
         return SignalCategory.SAT
     if signal_type is SignalType.HOLD:
@@ -122,14 +139,14 @@ def categorize_signal(
         Override the signal's internal buy_threshold. Defaults to the signal's
         ``buy_threshold`` attribute (default 20.0) or the settings value.
     max_signal_score : float, optional
-        Cap the effective score at this value (default 33.0 from settings).
+        Cap the effective score at this value (default ``settings.MAX_SIGNAL_SCORE``).
         Scores above this cap are treated as the cap value for categorization,
         preventing overconfident high scores from degrading performance.
     """
     threshold = (
         buy_threshold if buy_threshold is not None else getattr(signal, "buy_threshold", 20.0)
     )
-    mss = max_signal_score if max_signal_score is not None else 33.0
+    mss = max_signal_score if max_signal_score is not None else _default_max_signal_score()
     return categorize(signal.signal_type, float(signal.score), threshold, mss)
 
 

@@ -21,12 +21,12 @@ Bu doküman, BIST-Bot projesinin mevcut "Sinyal + Paper Trade" yapısından, öl
 **Bilinçli olarak ayrı proje olanlar (bu roadmap'in dışında):** KAP/haber entegrasyonu, sentiment analizi (SASA/ASTOR tipi), spread/kademe derinliği filtresi (yeni veri kaynağı gerektirir), `RESULTS_DIR` → Docker named volume (opsiyonel).
 
 ## 🔴 Aşama 1: Hemen Yapılacaklar (Hızlı Kazanımlar)
-- [ ] `strategy.py` içindeki gömülü değerleri (magic numbers) tek yere taşı (`config/settings.py` veya `strategy_params.py`).
-- [ ] Skor ağırlıkları, eşikler ve indikatör periyotları için tek bir parametre şeması (dataclass) oluştur.
-- [ ] `backtest.py` içinde performans profili çıkar; en yavaş bölümleri (darboğazları) ölç.
-- [ ] `risk_manager.py` için korelasyon hesaplamalarını hızlandıracak bir önbellek (cache) katmanı ekle.
+- [x] `strategy.py` içindeki gömülü değerleri (magic numbers) tek yere taşı (`config/settings.py` veya `strategy_params.py`). *(tamamlandı 2026-09-10: skor cap/bant, rejim, agreement, corr min-bar, indikatör pencereleri `StrategyParams` + env'e taşındı; RSI/MAX drift'i tekillendi)*
+- [x] Skor ağırlıkları, eşikler ve indikatör periyotları için tek bir parametre şeması (dataclass) oluştur. *(tamamlandı 2026-09-10: `StrategyParams` genişletildi + `validate_strategy_params` preflight ile paylaşıldı; override önceliği testlerle sabitlendi)*
+- [x] `backtest.py` içinde performans profili çıkar; en yavaş bölümleri (darboğazları) ölç. *(tamamlandı 2026-09-10: `scripts/profile_backtest.py` — stdout rapor, cProfile+pstats, results/'a yazmaz; ilk bulgu: satır-bazlı pandas erişimi (fast_xs/Series.__getitem__) darboğaz)*
+- [x] `risk_manager.py` için korelasyon hesaplamalarını hızlandıracak bir önbellek (cache) katmanı ekle. *(tamamlandı 2026-09-10: bağlam-anahtarlı günlük memo — tarih/evren/konfigürasyon/bağlam; backtest as-of ile look-ahead korumalı)*
 - [x] `README.md` dosyasını güncelle: Sistemin şu an "live trading" (canlı işlem) değil, "signal + paper trade" platformu olduğunu açıkça belirt. *(tamamlandı: README üst banner + yanlış clone URL düzeltildi)*
-- [ ] ML meta-model + olasılık kalibrasyonu (`Platt`/`isotonic`) + fractional Kelly pozisyon boyutlamasını üst seviye öncelik olarak devreye al.
+- [ ] ML meta-model + olasılık kalibrasyonu (`Platt`/`isotonic`) + fractional Kelly pozisyon boyutlamasını üst seviye öncelik olarak devreye al. *(ertelendi: P5 kalibrasyon verisi birikmeden erken kalibrasyon riski — ayrı program)*
 
 ## 🟡 Aşama 2: Kısa Vade (Performans ve Optimizasyon)
 - [ ] `backtest.py`'yi mümkün olduğu kadar vektörel (vectorized) hale getirerek iteratif (for döngüsü) işlemlerden kurtar.
