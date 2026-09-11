@@ -7,6 +7,7 @@ import json
 import logging
 import re
 import sys
+import traceback
 from contextvars import ContextVar
 from datetime import UTC, datetime
 from typing import Any
@@ -37,6 +38,11 @@ _SENSITIVE_KEYS = {
 
 _JWT_PATTERN_RE = re.compile(r"^[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}$")
 
+# Non-anchored variant for traceback/exception text where a JWT appears inside
+# a larger message (e.g. "Invalid token: eyJ...") — matches the 3-segment JWT
+# shape anywhere in the line.
+_JWT_FRAGMENT_RE = re.compile(r"[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}")
+
 # Telegram bot tokens embedded in URLs/errors: bot123456:ABC-DEF...
 # requests' hata metinleri tam URL'i taşır (örn. Max retries exceeded with url:
 # /bot<token>/createChatInviteLink) — "error" gibi hassas-sayılmayan anahtarlar
@@ -44,10 +50,36 @@ _JWT_PATTERN_RE = re.compile(r"^[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0
 _TG_TOKEN_RE = re.compile(r"bot\d{5,}:[A-Za-z0-9_-]+")
 
 
+class _TracebackRedactingFilter(logging.Filter):
+    """Redact bot tokens from exception text appended by logging handlers.
+
+    ``BoundLogger`` redacts structured payload fields, but the *traceback* is
+    formatted by the ``logging`` Formatter after our serialize/redact step, so
+    tokens inside exception messages (e.g. requests errors carrying the Telegram
+    URL with ``/bot<token>/...``) could otherwise reach the sink verbatim.
+    Formatting the exception text ourselves and storing it on
+    ``record.exc_text`` makes every Formatter reuse the redacted version.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if not record.exc_info or getattr(record, "exc_text", None):
+            return True
+        try:
+            text = "".join(traceback.format_exception(*record.exc_info))
+            text = _TG_TOKEN_RE.sub("bot[REDACTED]", text)
+            text = _JWT_FRAGMENT_RE.sub("[REDACTED_TOKEN]", text)
+            record.exc_text = text
+        except Exception:  # pragma: no cover - never break logging
+            pass
+        return True
+
+
 def _redact_value(key: str, val: Any) -> Any:
     key_lower = str(key).lower()
     if any(s in key_lower for s in _SENSITIVE_KEYS):
         return "[REDACTED]"
+    if isinstance(val, BaseException):
+        val = str(val)  # fall through to string/redaction
     if isinstance(val, str):
         val = _TG_TOKEN_RE.sub("bot[REDACTED]", val)
         val_trimmed = val.strip()
@@ -56,7 +88,7 @@ def _redact_value(key: str, val: Any) -> Any:
         return val
     if isinstance(val, dict):
         return {k: _redact_value(k, v) for k, v in val.items()}
-    if isinstance(val, list):
+    if isinstance(val, list | tuple | set):
         return [_redact_value(key, item) for item in val]
     return val
 
@@ -161,6 +193,7 @@ def configure_logging(
         formatter = logging.Formatter(fmt or "%(message)s")
     for h in handlers:
         h.setFormatter(formatter)
+        h.addFilter(_TracebackRedactingFilter())
     root = logging.getLogger()
     root.handlers.clear()
     for h in handlers:
@@ -200,7 +233,16 @@ class BoundLogger:
     def bind(self, **context: Any) -> BoundLogger:
         return BoundLogger(self._logger.name, **{**self._context, **context})
 
-    def _emit(self, level: int, event: str, *args: Any, **fields: Any) -> None:
+    def _emit(
+        self,
+        level: int,
+        event: str,
+        *args: Any,
+        exc_info: Any = None,
+        **fields: Any,
+    ) -> None:
+        if not self._logger.isEnabledFor(level):
+            return
         if args:
             try:
                 event = event % args
@@ -217,7 +259,18 @@ class BoundLogger:
         if cid is not None:
             payload["correlation_id"] = cid
 
-        self._logger.log(level, _serialize_event(payload))
+        # Pass traceback through to logging handlers (exception() sets this).
+        # Redact tokens in the formatted exception text before the formatter
+        # appends it to the message — this closes the leak where bot tokens in
+        # HTTP error messages survived redaction because exc_text is formatted
+        # by the logging Formatter, outside our serialize/redact pipeline.
+        _tg_redact_kw: dict[str, Any] = {}
+        if exc_info is True:
+            exc_info = sys.exc_info()
+        if exc_info:
+            _tg_redact_kw["exc_info"] = exc_info
+
+        self._logger.log(level, _serialize_event(payload), **_tg_redact_kw)
 
     def debug(self, event: str, *args: Any, **fields: Any) -> None:
         self._emit(logging.DEBUG, event, *args, **fields)
@@ -235,7 +288,14 @@ class BoundLogger:
         error = fields.pop("error", None)
         if error is not None and "error_type" not in fields:
             fields["error_type"] = type(error).__name__
-        self._emit(logging.ERROR, event, *args, **fields)
+        # Default to the active exception (like stdlib logging.exception); when
+        # an explicit exception instance is supplied (e.g. Flask error handlers)
+        # prefer it so the real traceback is captured even without an active
+        # exception frame.
+        exc_info = fields.pop("exc_info", True)
+        if isinstance(error, BaseException):
+            exc_info = error
+        self._emit(logging.ERROR, event, *args, exc_info=exc_info, **fields)
 
 
 def get_logger(name: str, *, component: str | None = None) -> BoundLogger:
