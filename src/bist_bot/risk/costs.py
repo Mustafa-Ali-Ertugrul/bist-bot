@@ -24,9 +24,7 @@ class TradingCosts:
         return calc_cost(notional, self.commission_pct)
 
     def sell_cost(self, notional: float) -> float:
-        return calc_cost(
-            notional, self.commission_pct + self.stamp_tax_pct + self.bsmv_pct
-        )
+        return calc_cost(notional, self.commission_pct + self.stamp_tax_pct + self.bsmv_pct)
 
     def round_trip_cost(self, buy_notional: float, sell_notional: float) -> float:
         # Her bacak zaten kuruşa yuvarlı; toplamı ham toplama, tekrar

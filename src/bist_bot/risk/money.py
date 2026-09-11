@@ -40,21 +40,15 @@ def quantize_price(value: float | int | str | Decimal) -> float:
 
 def calc_notional(quantity: float, price: float) -> float:
     """qty * price, kuruş-exact."""
-    return float(
-        (to_decimal(quantity) * to_decimal(price)).quantize(KURUS, rounding=ROUND_HALF_UP)
-    )
+    return float((to_decimal(quantity) * to_decimal(price)).quantize(KURUS, rounding=ROUND_HALF_UP))
 
 
 def calc_cost(notional: float, rate: float) -> float:
     """notional * rate (commission/tax), kuruş-exact."""
-    return float(
-        (to_decimal(notional) * to_decimal(rate)).quantize(KURUS, rounding=ROUND_HALF_UP)
-    )
+    return float((to_decimal(notional) * to_decimal(rate)).quantize(KURUS, rounding=ROUND_HALF_UP))
 
 
-def calc_pnl(
-    exit_price: float, entry_price: float, quantity: float, fees: float = 0.0
-) -> float:
+def calc_pnl(exit_price: float, entry_price: float, quantity: float, fees: float = 0.0) -> float:
     """(exit - entry) * qty - fees, kuruş-exact."""
     pnl = (to_decimal(exit_price) - to_decimal(entry_price)) * to_decimal(quantity)
     pnl -= to_decimal(fees)
