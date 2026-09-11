@@ -56,6 +56,7 @@ def detect_regime(
     params=None,
     *,
     sma: float | None = None,
+    last: pd.Series | Mapping[str, object] | None = None,
 ) -> MarketRegime:
     """Infer the current market regime from trend indicators.
 
@@ -63,18 +64,18 @@ def detect_regime(
     yok sayılıyordu; default 20 ile davranış aynıdır). ``params`` verilirse
     eşikler StrategyParams'tan okunur, yoksa mevcut sabitler geçerlidir.
 
-    Perf: ``sma`` verilirse ``df["close"].tail(lookback).mean()`` yeniden
-    hesaplanmaz — arayan taraf, SON satırdaki tail-ortalamasının birebir
-    aynı değerini garanti eder (backtest skor-döngüsü bar başına
-    ``rolling(lookback, min_periods=1)`` dizisinden besler; mikro-bench:
-    bar başına 0.15 ms → 0.0001 ms, parite bit-bit). ``sma`` verilmezse
-    davranış değişmeden df'ten hesaplanır (live motor yolu).
+    Perf (#146): ``sma`` verilirse ``df["close"].tail(lookback).mean()``,
+    ``last`` verilirse ``df.iloc[-1]`` yeniden hesaplanmaz — arayan taraf
+    bu değerlerin SON satırın birebir karşılığı olduğunu garanti eder
+    (backtest skor-döngüsü rolling dizisi + dict satır besler). None
+    verilirse davranış değişmeden df'ten hesaplanır (live motor yolu).
     """
     th = _regime_thresholds(params)
     if df is None or len(df) < th["min_bars"]:
         return MarketRegime.UNKNOWN
 
-    last = df.iloc[-1]
+    if last is None:
+        last = df.iloc[-1]
     adx = last.get("adx", 0)
     plus_di = last.get("plus_di", 0)
     minus_di = last.get("minus_di", 0)

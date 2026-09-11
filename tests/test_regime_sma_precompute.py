@@ -138,6 +138,71 @@ def test_detect_regime_with_precomputed_sma_identical_per_bar() -> None:
     assert len(seen) >= 2, seen
 
 
+def test_dict_rows_match_series_rows_in_scorers() -> None:
+    """#146 step 2: dict (Mapping) rows must score identical to Series rows.
+
+    Exercises the real scorers on every bar of a rich frame — the dict row
+    is built exactly like _precalculate_signals does (numpy column arrays).
+    """
+    from bist_bot.strategy.scoring import (
+        score_momentum,
+        score_structure,
+        score_trend,
+        score_volume,
+    )
+
+    df = _build_frame(200)
+    p = StrategyParams()
+    work_cols = [
+        "close",
+        "rsi",
+        "sma_cross",
+        "macd_cross",
+        "bb_position",
+        "sma_5",
+        "sma_20",
+        "volume",
+        "volume_sma_20",
+        "adx",
+        "plus_di",
+        "minus_di",
+        "stoch_k",
+        "stoch_d",
+        "cci",
+        "ema_cross",
+        "macd_histogram",
+        "macd_hist_increasing",
+        "di_cross",
+        "bb_percent",
+        "bb_squeeze",
+        "obv_trend",
+        "price_volume_direction",
+        "price_volume_confirm",
+        "volume_spike",
+        "volume_ratio",
+        "volume_trend",
+    ]
+    keep = [c for c in work_cols if c in df.columns]
+    cols = {c: df[c].to_numpy() for c in keep}
+    for i in range(1, len(df)):
+        series_last = df.iloc[i]
+        series_prev = df.iloc[i - 1]
+        dict_last = {c: arr[i] for c, arr in cols.items()}
+        dict_prev = {c: arr[i - 1] for c, arr in cols.items()}
+
+        for scorer in (score_momentum, score_volume):
+            s_series = scorer(p, series_last, series_prev)
+            s_dict = scorer(p, dict_last, dict_prev)
+            assert s_dict[0] == s_series[0], (scorer.__name__, i)
+            assert s_dict[1] == s_series[1], (scorer.__name__, i)
+        s_series = score_structure(p, series_last)
+        s_dict = score_structure(p, dict_last)
+        assert s_dict[0] == s_series[0] and s_dict[1] == s_series[1], i
+        t_series = score_trend(p, series_last, series_prev, df)
+        t_dict = score_trend(p, dict_last, dict_prev, df)
+        assert t_dict[0] == t_series[0] and t_dict[1] == t_series[1], i
+
+
 def test_score_identical_with_precomputed_sma() -> None:
     df = _build_frame(300)
     p = StrategyParams()

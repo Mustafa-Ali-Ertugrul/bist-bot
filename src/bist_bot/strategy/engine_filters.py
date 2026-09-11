@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
+from typing import Any
 
 import pandas as pd
 
@@ -199,8 +200,8 @@ def calculate_score_and_reasons(
     ticker: str,
     df: pd.DataFrame,
     *,
-    last: pd.Series,
-    prev: pd.Series,
+    last: pd.Series | Mapping[str, Any],
+    prev: pd.Series | Mapping[str, Any],
     momentum_scorer: ScoreTwoRows,
     trend_scorer: TrendScorer,
     volume_scorer: ScoreTwoRows,
@@ -208,16 +209,31 @@ def calculate_score_and_reasons(
     momentum_checker: MomentumChecker = check_momentum_confirmation,
     reject_logger: RejectLogger | None = None,
     regime_sma: float | None = None,
+    regime_last: pd.Series | Mapping[str, Any] | None = None,
 ) -> tuple[float, list[str], float | None] | None:
     """Calculate the bounded strategy score and explanatory reason list.
 
+    ``last``/``prev`` satır protokolü: pd.Series VEYA Mapping (dict) —
+    her ikisi ``.get``/``[]`` destekler (#146 adım-2: backtest skor
+    döngüsü dict satır besleyerek bar başına pandas satır-Series kurulumu
+    atlar; live motor Series beslemeye devam eder).
+
     ``regime_sma`` verildiğinde ``detect_regime``'in bar başına
-    ``tail(lookback).mean()`` hesabı atlanır (backtest skor-döngüsü
-    precompute'ı; değer son satırın tail-ortalamasıyla birebir aynı
-    olmalıdır). None ise davranış değişmeden df'ten hesaplanır.
+    ``tail(lookback).mean()`` hesabı, ``regime_last`` verildiğinde
+    ``df.iloc[-1]`` yeniden hesaplanmaz (backtest precompute'ı; değerler
+    son satırın birebir karşılığı olmalıdır). None ise davranış değişmeden
+    df'ten hesaplanır.
     """
     reasons: list[str] = []
-    regime = detect_regime(df, sma=regime_sma)
+    # Kwarg'lar YALNIZCA sağlandığında geçirilir: monkeypatch'lenmiş/custom
+    # detect_regime implementasyonları (tek positional arg kabul eden)
+    # bozulmaz; live yol çağrı imzası birebir eski hâlindedir.
+    regime_kwargs: dict[str, object] = {}
+    if regime_sma is not None:
+        regime_kwargs["sma"] = regime_sma
+    if regime_last is not None:
+        regime_kwargs["last"] = regime_last
+    regime = detect_regime(df, **regime_kwargs)
     if _has_mtf_slope_contradiction(params, df):
         regime = MarketRegime.SIDEWAYS
         reasons.append("MTF çelişki: SMA20 ve EMA200 eğimleri zıt")

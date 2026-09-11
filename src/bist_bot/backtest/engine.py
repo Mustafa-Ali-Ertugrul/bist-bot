@@ -285,10 +285,15 @@ class Backtester:
             if n >= 2
             else None
         )
+        # Perf (#146 adım-2): skor döngüsüne bar başına pandas satır-Series
+        # yerine dict satır beslenir — satır kurulumu 50µs → <1µs, etiketli
+        # erişim ~1µs → ~0.04µs (mikro-bench). Scorers Mapping protokolünü
+        # destekler (live yolu Series beslemeye devam eder, davranış aynı).
+        col_arrays = {c: work[c].to_numpy() for c in work.columns}
         if n >= 2:
-            prev = work.iloc[0]
+            prev = {c: arr[0] for c, arr in col_arrays.items()}
             for i in range(1, n):
-                last = work.iloc[i]
+                last = {c: arr[i] for c, arr in col_arrays.items()}
                 start = i - window + 1
                 sub = work.iloc[start : i + 1] if start > 0 else work.iloc[: i + 1]
                 result = calculate_score_and_reasons(
@@ -304,6 +309,7 @@ class Backtester:
                     momentum_checker=check_momentum_confirmation,
                     reject_logger=None,
                     regime_sma=float(regime_sma[i]) if regime_sma is not None else None,
+                    regime_last=last,
                 )
                 # A None result means the row was filtered out by a regime/momentum
                 # gate (sideways, weak momentum). Treat as score 0 -> no signal.

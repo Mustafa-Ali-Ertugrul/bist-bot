@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 import pandas as pd
 
 from bist_bot.config.settings import settings
@@ -306,7 +308,9 @@ def score_volume(params, last, prev) -> tuple[float, list[str]]:
     vol_trend = last.get("volume_trend", "FLAT")
 
     if vol_spike:
-        prev_close = prev.get("close") if isinstance(prev, pd.Series) else None
+        # Perf (#146 adım-2): backtest skor-döngüsü satırları dict olarak
+        # besleyebilir; Series/None davranışı birebir korunur.
+        prev_close = prev.get("close") if isinstance(prev, pd.Series | Mapping) else None
         current_close = last.get("close")
         if pd.notna(current_close) and pd.notna(prev_close):
             price_change = float(current_close) - float(prev_close)
