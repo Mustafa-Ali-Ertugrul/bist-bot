@@ -135,10 +135,21 @@ class PositionManager:
                     return
                 entry_price = float(row["entry_price"])
                 quantity = float(row["quantity"])
-                realized_pnl = (exit_price - entry_price) * quantity - fees_paid
-                realized_pnl_pct = (
-                    ((exit_price - entry_price) / entry_price * 100) if entry_price else 0.0
-                )
+                # Kuruş-exact PnL: float dust (0.1+0.2) gerçeğe sızmaz.
+                from bist_bot.risk.money import calc_pnl, to_decimal
+
+                realized_pnl = calc_pnl(exit_price, entry_price, quantity, fees_paid)
+                if entry_price:
+                    realized_pnl_pct = round(
+                        float(
+                            (to_decimal(exit_price) - to_decimal(entry_price))
+                            / to_decimal(entry_price)
+                            * to_decimal(100)
+                        ),
+                        2,
+                    )
+                else:
+                    realized_pnl_pct = 0.0
 
                 conn.execute(
                     text(

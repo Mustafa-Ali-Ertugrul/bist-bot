@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from bist_bot.risk.money import calc_cost
+
 
 @dataclass(frozen=True)
 class TradingCosts:
@@ -18,13 +20,20 @@ class TradingCosts:
     bsmv_pct: float = 0.0005
 
     def buy_cost(self, notional: float) -> float:
-        return notional * self.commission_pct
+        # Kuruş-exact: Decimal(str) + HALF_UP 2dp, float dust birikmez.
+        return calc_cost(notional, self.commission_pct)
 
     def sell_cost(self, notional: float) -> float:
-        return notional * (self.commission_pct + self.stamp_tax_pct + self.bsmv_pct)
+        return calc_cost(
+            notional, self.commission_pct + self.stamp_tax_pct + self.bsmv_pct
+        )
 
     def round_trip_cost(self, buy_notional: float, sell_notional: float) -> float:
-        return self.buy_cost(buy_notional) + self.sell_cost(sell_notional)
+        # Her bacak zaten kuruşa yuvarlı; toplamı ham toplama, tekrar
+        # quantize etme (çift yuvarlama yapmamak için Decimal ile topla).
+        from bist_bot.risk.money import quantize_money
+
+        return quantize_money(self.buy_cost(buy_notional) + self.sell_cost(sell_notional))
 
 
 DEFAULT_COSTS = TradingCosts()

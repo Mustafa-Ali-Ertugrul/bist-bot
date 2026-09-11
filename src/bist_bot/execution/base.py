@@ -92,7 +92,14 @@ class Order:
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def remaining_quantity(self) -> float:
-        return max(self.quantity - self.filled_quantity, 0.0)
+        # Float dust (örn. 0.3 - 0.30000000000000004) kalan sanılmasın:
+        # 1e-9 altı artık gerçek emir değil, tozdur.
+        from bist_bot.risk.money import QTY_EPS
+
+        remaining = self.quantity - self.filled_quantity
+        if abs(remaining) < QTY_EPS:
+            return 0.0
+        return max(remaining, 0.0)
 
 
 @dataclass
