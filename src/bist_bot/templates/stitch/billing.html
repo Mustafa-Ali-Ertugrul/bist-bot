@@ -42,7 +42,7 @@
 <li>• Mobil uygulama erişimi</li>
 <li>• Canlı sinyal akışı</li>
 </ul>
-<button class="mt-space-md w-full py-space-sm rounded-lg bg-surface-container-high text-on-surface font-body-md text-body-md hover:bg-primary hover:text-on-primary transition-all" data-plan="pro" onclick="selectBillingPlan('pro')">Pro'yu Seç</button>
+<button class="mt-space-md w-full py-space-sm rounded-lg bg-surface-container-high text-on-surface font-body-md text-body-md hover:bg-primary hover:text-on-primary transition-all" data-plan="pro">Pro'yu Seç</button>
 </div>
 <div class="bg-surface-container-low/90 rounded-xl p-space-lg shadow-lg border border-transparent" id="card-pro-plus">
 <div class="font-headline-md text-headline-md text-on-surface font-bold">Pro+ <span class="font-label-caps text-label-caps text-primary">ÖNERİLEN</span></div>
@@ -52,7 +52,7 @@
 <li>• Özel Telegram sinyal kanalı</li>
 <li>• Öncelikli destek</li>
 </ul>
-<button class="mt-space-md w-full py-space-sm rounded-lg bg-surface-container-high text-on-surface font-body-md text-body-md hover:bg-primary hover:text-on-primary transition-all" data-plan="pro_plus" onclick="selectBillingPlan('pro_plus')">Pro+'ı Seç</button>
+<button class="mt-space-md w-full py-space-sm rounded-lg bg-surface-container-high text-on-surface font-body-md text-body-md hover:bg-primary hover:text-on-primary transition-all" data-plan="pro_plus">Pro+'ı Seç</button>
 </div>
 </div>
 <div class="bg-surface-container-low/90 rounded-xl p-space-lg shadow-lg">
@@ -67,104 +67,11 @@
 <span class="font-metric-value text-metric-value text-primary" id="billing-ref">Önce plan seçin</span>
 </div>
 <p class="font-body-sm text-body-sm text-on-surface-variant">Açıklama kısmına yukarıdaki referans kodunu yazmayı unutmayın. Ödemeyi yaptıktan sonra aşağıdaki butona basın.</p>
-<button id="billing-claim-btn" class="w-full sm:w-auto px-space-lg py-space-sm rounded-lg bg-primary text-on-primary font-body-md text-body-md font-bold hover:opacity-95 transition-all" onclick="submitBillingClaim()">Ödemeyi Yaptım</button>
+<button id="billing-claim-btn" class="w-full sm:w-auto px-space-lg py-space-sm rounded-lg bg-primary text-on-primary font-body-md text-body-md font-bold hover:opacity-95 transition-all" >Ödemeyi Yaptım</button>
 <div id="billing-status" class="font-body-sm text-body-sm text-on-surface-variant"></div>
 </div>
 </div>
 </div></main>
-<footer class="w-full bg-surface-container-lowest py-space-sm shadow-[0_-1px_12px_rgba(0,0,0,0.5)] pb-20 sm:pb-space-sm"><div class="w-full px-terminal-margin flex flex-col sm:flex-row items-center justify-between gap-space-xs"><div class="flex items-center gap-space-md font-label-code text-label-code"><div class="flex items-center gap-space-2xs"><span class="w-2 h-2 rounded-full bg-primary"></span><span class="text-on-surface-variant">API: <span class="text-primary font-semibold">ONLINE</span></span></div><span class="text-outline">•</span><div class="flex items-center gap-space-2xs"><span class="material-symbols-outlined text-[14px] text-tertiary">wifi_tethering</span><span class="text-on-surface-variant">WS Latency: <span class="text-tertiary font-metric-value text-metric-value">18ms</span></span></div><span class="text-outline">•</span><span class="text-on-surface-variant hidden md:inline">Sunucu: <span class="text-on-surface">ist-eqx-algo-01</span></span></div><div class="font-body-sm text-body-sm text-outline text-center sm:text-right"><p>Yasal Uyarı: Burada yer alan algoritmik veriler yatırım danışmanlığı kapsamında değildir. Gecikmesiz BIST veri akışı.</p></div></div></footer><script>
-(function () {
-  'use strict';
-  let selectedPlan = null;
-  let billingInfo = null;
-
-  function authHeaders() {
-    const t = localStorage.getItem('bistbot_token');
-    return t ? { 'Authorization': 'Bearer ' + t, 'Content-Type': 'application/json' } : {};
-  }
-
-  window.selectBillingPlan = function (plan) {
-    selectedPlan = plan;
-    ['pro', 'pro_plus'].forEach(p => {
-      const card = document.getElementById(p === 'pro' ? 'card-pro' : 'card-pro-plus');
-      if (card) card.classList.toggle('border-primary', p === plan);
-    });
-    const st = document.getElementById('billing-status');
-    if (st) st.textContent = plan === 'pro_plus'
-      ? 'Pro+ seçildi: ödeme sonrası özel Telegram kanalı davet linki oluşturulur.'
-      : 'Pro seçildi.';
-  };
-
-  window.submitBillingClaim = async function () {
-    const st = document.getElementById('billing-status');
-    if (!selectedPlan) {
-      if (st) st.textContent = 'Lütfen önce bir plan seçin.';
-      return;
-    }
-    if (st) st.textContent = 'Bildirim gönderiliyor...';
-    try {
-      const res = await fetch('/api/billing/claim', {
-        method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify({ plan: selectedPlan })
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        if (st) st.textContent = data.message || 'Bildirim alınamadı.';
-        return;
-      }
-      const req = data.request || {};
-      const ref = document.getElementById('billing-ref');
-      if (ref) ref.textContent = req.reference || '—';
-      if (st) st.textContent = data.duplicate
-        ? 'Bu plan için zaten bekleyen bir bildiriminiz var. Onay sonrası planınız aktiflenir.'
-        : 'Ödeme bildiriminiz alındı! Açıklamaya referans kodunu yazdığınızdan emin olun. Onay sonrası planınız aktiflenir.';
-    } catch (e) {
-      if (st) st.textContent = 'Bağlantı hatası, lütfen tekrar deneyin.';
-    }
-  };
-
-  async function loadBilling() {
-    try {
-      const infoRes = await fetch('/api/billing/info', { headers: authHeaders() });
-      if (infoRes.ok) {
-        billingInfo = await infoRes.json();
-        const iban = document.getElementById('billing-iban');
-        if (iban && billingInfo.iban) iban.textContent = billingInfo.iban;
-        const pp = document.getElementById('price-pro');
-        if (pp && billingInfo.pro_price_try) pp.textContent = billingInfo.pro_price_try;
-        const ppp = document.getElementById('price-pro-plus');
-        if (ppp && billingInfo.pro_plus_price_try) ppp.textContent = billingInfo.pro_plus_price_try;
-      }
-      const subRes = await fetch('/api/me/subscription', { headers: authHeaders() });
-      if (subRes.ok) {
-        const sub = await subRes.json();
-        const labels = { trial: 'Deneme', pro: 'Pro', pro_plus: 'Pro+' };
-        const name = document.getElementById('billing-plan-name');
-        const detail = document.getElementById('billing-plan-detail');
-        if (name) name.textContent = labels[sub.plan] || sub.plan;
-        if (detail) {
-          detail.textContent = sub.status === 'active'
-            ? 'Planınız aktif. Kalan süre dolmadan yenileyebilirsiniz.'
-            : 'Planınızın süresi dolmuş. Devam etmek için yukarıdan bir plan seçip ödemenizi bildirin.';
-        }
-      }
-      const mineRes = await fetch('/api/billing/mine', { headers: authHeaders() });
-      if (mineRes.ok) {
-        const mine = await mineRes.json();
-        const pending = (mine.requests || []).find(r => r.status === 'pending');
-        const st = document.getElementById('billing-status');
-        if (pending) {
-          const ref = document.getElementById('billing-ref');
-          if (ref) ref.textContent = pending.reference;
-          if (st) st.textContent = 'Bekleyen ödemeniz admin onayında. Referans: ' + pending.reference;
-        }
-      }
-    } catch (e) { /* static fallbacks stay visible */ }
-  }
-
-  document.addEventListener('DOMContentLoaded', loadBilling);
-})();
-</script>
+<footer class="w-full bg-surface-container-lowest py-space-sm shadow-[0_-1px_12px_rgba(0,0,0,0.5)] pb-20 sm:pb-space-sm"><div class="w-full px-terminal-margin flex flex-col sm:flex-row items-center justify-between gap-space-xs"><div class="flex items-center gap-space-md font-label-code text-label-code"><div class="flex items-center gap-space-2xs"><span class="w-2 h-2 rounded-full bg-primary"></span><span class="text-on-surface-variant">API: <span class="text-primary font-semibold">ONLINE</span></span></div><span class="text-outline">•</span><div class="flex items-center gap-space-2xs"><span class="material-symbols-outlined text-[14px] text-tertiary">wifi_tethering</span><span class="text-on-surface-variant">WS Latency: <span class="text-tertiary font-metric-value text-metric-value">18ms</span></span></div><span class="text-outline">•</span><span class="text-on-surface-variant hidden md:inline">Sunucu: <span class="text-on-surface">ist-eqx-algo-01</span></span></div><div class="font-body-sm text-body-sm text-outline text-center sm:text-right"><p>Yasal Uyarı: Burada yer alan algoritmik veriler yatırım danışmanlığı kapsamında değildir. Gecikmesiz BIST veri akışı.</p></div></div></footer><script src="/static/billing.js"></script>
 <script src="/static/app.js?nocache=100011"></script>
 </body></html>

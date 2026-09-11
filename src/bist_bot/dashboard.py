@@ -332,11 +332,15 @@ def create_dashboard_app(
     access_token_minutes = max(1, min(int(settings.JWT_ACCESS_TOKEN_MINUTES), 15))
     app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(minutes=access_token_minutes)
     # HttpOnly UI cookie is the server-side authority for /ui/* page renders.
-    # /api/* keeps using the Authorization header. NOTE (Round 11): there is
-    # currently NO cookie-authenticated unsafe (POST/PUT/PATCH/DELETE) route,
-    # so Flask-JWT-Extended's cookie CSRF check never fires. INVARIANT: if a
-    # cookie-authenticated unsafe route is ever added, it MUST require the
-    # X-CSRF-TOKEN double-submit header or it will ship without CSRF defense.
+    # /api/* accepts either Authorization Bearer header OR HttpOnly cookie.
+    # AppSec (Round 20): JWT_TOKEN_LOCATION includes both "headers" and "cookies".
+    # When a cookie is used for unsafe methods (POST/PUT/PATCH/DELETE),
+    # Flask-JWT-Extended automatically requires the double-submit X-CSRF-TOKEN
+    # header matching the non-HttpOnly csrf_access_token cookie. Header-based
+    # Bearer auth (the primary API client path) bypasses the cookie CSRF check
+    # because headers cannot be forged cross-site without CORS permission.
+    app.config["JWT_TOKEN_LOCATION"] = ["headers", "cookies"]
+    app.config["JWT_COOKIE_CSRF_PROTECT"] = True
     app.config["JWT_COOKIE_HTTPONLY"] = True
     app.config["JWT_COOKIE_SAMESITE"] = "Strict"
     app.config["JWT_COOKIE_SECURE"] = settings.JWT_COOKIE_SECURE
@@ -875,7 +879,7 @@ def create_dashboard_app(
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
         response.headers["X-Request-ID"] = _request_id()
         response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; script-src 'self' 'unsafe-inline'; "
+            "default-src 'self'; script-src 'self'; "
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
             "img-src 'self' data: https://lh3.googleusercontent.com; "
             "font-src 'self' data: https://fonts.gstatic.com; "

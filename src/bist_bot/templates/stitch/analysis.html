@@ -59,12 +59,12 @@
 <!-- Quick Ticker Chips -->
 <div class="flex items-center gap-space-2xs overflow-x-auto pb-space-3xs lg:pb-0">
 <span class="font-label-caps text-label-caps text-outline shrink-0 mr-space-2xs uppercase">Hızlı Seçim:</span>
-<button class="ticker-chip px-space-sm py-1 rounded bg-surface-container-high text-primary font-label-code text-label-code hover:bg-primary hover:text-on-primary transition-all cursor-pointer" data-ticker="THYAO" onclick="runAnalysis('THYAO')">THYAO</button>
-<button class="ticker-chip px-space-sm py-1 rounded bg-surface-container text-on-surface-variant font-label-code text-label-code hover:bg-surface-container-high transition-all cursor-pointer" data-ticker="EREGL" onclick="runAnalysis('EREGL')">EREGL</button>
-<button class="ticker-chip px-space-sm py-1 rounded bg-surface-container text-on-surface-variant font-label-code text-label-code hover:bg-surface-container-high transition-all cursor-pointer" data-ticker="ASELS" onclick="runAnalysis('ASELS')">ASELS</button>
-<button class="ticker-chip px-space-sm py-1 rounded bg-surface-container text-on-surface-variant font-label-code text-label-code hover:bg-surface-container-high transition-all cursor-pointer" data-ticker="BIMAS" onclick="runAnalysis('BIMAS')">BIMAS</button>
-<button class="ticker-chip px-space-sm py-1 rounded bg-surface-container text-on-surface-variant font-label-code text-label-code hover:bg-surface-container-high transition-all cursor-pointer" data-ticker="TUPRS" onclick="runAnalysis('TUPRS')">TUPRS</button>
-<button class="ticker-chip px-space-sm py-1 rounded bg-surface-container text-on-surface-variant font-label-code text-label-code hover:bg-surface-container-high transition-all cursor-pointer" data-ticker="KCHOL" id="chip-kchol" onclick="runAnalysis('KCHOL')">KCHOL</button>
+<button class="ticker-chip px-space-sm py-1 rounded bg-surface-container-high text-primary font-label-code text-label-code hover:bg-primary hover:text-on-primary transition-all cursor-pointer" data-ticker="THYAO">THYAO</button>
+<button class="ticker-chip px-space-sm py-1 rounded bg-surface-container text-on-surface-variant font-label-code text-label-code hover:bg-surface-container-high transition-all cursor-pointer" data-ticker="EREGL">EREGL</button>
+<button class="ticker-chip px-space-sm py-1 rounded bg-surface-container text-on-surface-variant font-label-code text-label-code hover:bg-surface-container-high transition-all cursor-pointer" data-ticker="ASELS">ASELS</button>
+<button class="ticker-chip px-space-sm py-1 rounded bg-surface-container text-on-surface-variant font-label-code text-label-code hover:bg-surface-container-high transition-all cursor-pointer" data-ticker="BIMAS">BIMAS</button>
+<button class="ticker-chip px-space-sm py-1 rounded bg-surface-container text-on-surface-variant font-label-code text-label-code hover:bg-surface-container-high transition-all cursor-pointer" data-ticker="TUPRS">TUPRS</button>
+<button class="ticker-chip px-space-sm py-1 rounded bg-surface-container text-on-surface-variant font-label-code text-label-code hover:bg-surface-container-high transition-all cursor-pointer" data-ticker="KCHOL" id="chip-kchol">KCHOL</button>
 </div>
 </div>
 </div>
@@ -483,154 +483,6 @@
 </nav>
 </aside>
 
-</div></main><footer class="w-full bg-surface-container-lowest py-space-sm shadow-[0_-1px_12px_rgba(0,0,0,0.5)] pb-20 sm:pb-space-sm"><div class="w-full px-terminal-margin flex flex-col sm:flex-row items-center justify-between gap-space-xs"><div class="flex items-center gap-space-md font-label-code text-label-code"><div class="flex items-center gap-space-2xs"><span class="w-2 h-2 rounded-full bg-primary"></span><span class="text-on-surface-variant">API: <span class="text-primary font-semibold">ONLINE</span></span></div><span class="text-outline">•</span><div class="flex items-center gap-space-2xs"><span class="material-symbols-outlined text-[14px] text-tertiary">wifi_tethering</span><span class="text-on-surface-variant">WS Latency: <span class="text-tertiary font-metric-value text-metric-value">18ms</span></span></div><span class="text-outline">•</span><span class="text-on-surface-variant hidden md:inline">Sunucu: <span class="text-on-surface">ist-eqx-algo-01</span></span></div><div class="font-body-sm text-body-sm text-outline text-center sm:text-right"><p>Yasal Uyarı: Burada yer alan algoritmik veriler yatırım danışmanlığı kapsamında değildir. Gecikmesiz BIST veri akışı.</p></div></div></footer><script>
-  // Self-contained, robust inline engine for Analysis page
-  window.drawDynamicCandlestickChart = function(priceData) {
-    var svg = document.getElementById('candlestickSvg');
-    if (!svg || !Array.isArray(priceData) || priceData.length < 5) return;
-
-    var data = priceData.slice(-30);
-    var highs = data.map(function(d) { return Number(d.high); }).filter(Number.isFinite);
-    var lows = data.map(function(d) { return Number(d.low); }).filter(Number.isFinite);
-    if (!highs.length || !lows.length) return;
-
-    var minPrice = Math.min.apply(null, lows);
-    var maxPrice = Math.max.apply(null, highs);
-    var padding = (maxPrice - minPrice) * 0.08 || 1.0;
-    var yMin = Math.max(0, minPrice - padding);
-    var yMax = maxPrice + padding;
-    var priceRange = yMax - yMin;
-
-    for (var i = 0; i <= 4; i++) {
-      var p = yMin + (priceRange * (i / 4));
-      var elL = document.getElementById('grid-p' + i);
-      var elR = document.getElementById('grid-p' + i + '-r');
-      if (elL) elL.textContent = '₺' + p.toFixed(2);
-      if (elR) elR.textContent = p.toFixed(2);
-    }
-
-    var W = 800;
-    var H = 320;
-    var chartBottom = H - 20;
-    var chartTop = 20;
-    var chartH = chartBottom - chartTop;
-
-    function getY(val) {
-      return chartBottom - ((val - yMin) / priceRange) * chartH;
-    }
-
-    var barW = Math.max(6, Math.min(18, (W / data.length) * 0.55));
-    var stepX = W / data.length;
-
-    var barsHtml = '';
-    var emaFastPoints = [];
-    var emaSlowPoints = [];
-
-    data.forEach(function(d, idx) {
-      var cx = (idx + 0.5) * stepX;
-      var o = Number(d.open);
-      var h = Number(d.high);
-      var l = Number(d.low);
-      var c = Number(d.close);
-      var isGreen = c >= o;
-      var color = isGreen ? '#4edea3' : '#ffb4ab';
-
-      var yHigh = getY(h);
-      var yLow = getY(l);
-      var yOpen = getY(o);
-      var yClose = getY(c);
-
-      var bodyTop = Math.min(yOpen, yClose);
-      var bodyH = Math.max(2, Math.abs(yClose - yOpen));
-
-      barsHtml += '<line x1="' + cx.toFixed(1) + '" x2="' + cx.toFixed(1) + '" y1="' + yHigh.toFixed(1) + '" y2="' + yLow.toFixed(1) + '" stroke="' + color + '" stroke-width="1.5" />';
-      barsHtml += '<rect x="' + (cx - barW / 2).toFixed(1) + '" y="' + bodyTop.toFixed(1) + '" width="' + barW.toFixed(1) + '" height="' + bodyH.toFixed(1) + '" rx="1.5" fill="' + color + '" />';
-
-      if (Number.isFinite(d.sma_fast)) emaFastPoints.push(cx.toFixed(1) + ',' + getY(d.sma_fast).toFixed(1));
-      if (Number.isFinite(d.sma_slow)) emaSlowPoints.push(cx.toFixed(1) + ',' + getY(d.sma_slow).toFixed(1));
-    });
-
-    var emaHtml = '';
-    if (emaFastPoints.length > 1) {
-      emaHtml += '<polyline points="' + emaFastPoints.join(' ') + '" fill="none" stroke="#7bd0ff" stroke-width="2" stroke-linecap="round" />';
-    }
-    if (emaSlowPoints.length > 1) {
-      emaHtml += '<polyline points="' + emaSlowPoints.join(' ') + '" fill="none" stroke="#dcfdff" stroke-width="1.5" stroke-dasharray="4,4" stroke-linecap="round" />';
-    }
-
-    svg.innerHTML = emaHtml + barsHtml;
-  };
-
-  window.runAnalysis = async function(ticker) {
-    var cleanTicker = String(ticker || 'THYAO').replace('.IS', '') + '.IS';
-
-    // Chip active toggle
-    document.querySelectorAll('.ticker-chip').forEach(function(c) {
-      if (c.getAttribute('data-ticker') === cleanTicker.replace('.IS', '')) {
-        c.className = 'ticker-chip px-space-sm py-1 rounded bg-surface-container-high text-primary font-label-code text-label-code hover:bg-primary hover:text-on-primary transition-all cursor-pointer font-bold shadow-sm';
-      } else {
-        c.className = 'ticker-chip px-space-sm py-1 rounded bg-surface-container text-on-surface-variant font-label-code text-label-code hover:bg-surface-container-high transition-all cursor-pointer';
-      }
-    });
-
-    try {
-      var token = localStorage.getItem('bistbot_token');
-      var headers = { 'Content-Type': 'application/json' };
-      if (token) headers['Authorization'] = 'Bearer ' + token;
-
-      var res = await fetch('/api/analyze/' + cleanTicker, { headers: headers });
-      var data = await res.json();
-
-      if (res.ok && data.status === 'ok') {
-        var snap = data.snapshot || {};
-        var sig = data.signal || {};
-        var priceData = Array.isArray(data.price_data) ? data.price_data : [];
-
-        var cleanName = cleanTicker.replace('.IS', '');
-        var avatar = document.getElementById('asset-avatar');
-        var title = document.getElementById('asset-ticker-title');
-        var compName = document.getElementById('asset-company-name');
-        if (avatar) avatar.textContent = cleanName.slice(0, 4);
-        if (title) title.textContent = cleanTicker;
-        if (compName && data.name) compName.textContent = data.name;
-
-        var closePrice = Number(snap.close || (priceData[priceData.length - 1] && priceData[priceData.length - 1].close));
-        var pEl = document.getElementById('asset-current-price');
-        if (pEl && Number.isFinite(closePrice)) pEl.textContent = '₺' + closePrice.toFixed(2);
-
-        var low = Number(snap.low || (priceData[priceData.length - 1] && priceData[priceData.length - 1].low));
-        var high = Number(snap.high || (priceData[priceData.length - 1] && priceData[priceData.length - 1].high));
-        var rangeEl = document.getElementById('asset-day-range');
-        if (rangeEl && Number.isFinite(low) && Number.isFinite(high)) {
-          rangeEl.textContent = '₺' + low.toFixed(2) + ' - ₺' + high.toFixed(2);
-        }
-
-        var sigText = document.getElementById('asset-signal-text');
-        var algoScore = document.getElementById('asset-algo-score');
-        var stopLoss = document.getElementById('asset-stop-loss');
-        var targetPrice = document.getElementById('asset-target-price');
-        var rsiVal = document.getElementById('asset-rsi-val');
-
-        if (sigText && sig.signal_type) sigText.textContent = String(sig.signal_type).toUpperCase();
-        if (algoScore && sig.score !== undefined) {
-          algoScore.innerHTML = Math.round(sig.score) + '<span class="font-body-sm text-body-sm text-outline">/100</span>';
-        }
-        if (stopLoss && Number.isFinite(Number(sig.stop_loss))) {
-          stopLoss.textContent = '₺' + Number(sig.stop_loss).toFixed(2);
-        }
-        if (targetPrice && Number.isFinite(Number(sig.target_price))) {
-          targetPrice.textContent = '₺' + Number(sig.target_price).toFixed(2);
-        }
-        if (rsiVal && Number.isFinite(Number(snap.rsi))) {
-          rsiVal.textContent = Number(snap.rsi).toFixed(1);
-        }
-
-        window.drawDynamicCandlestickChart(priceData);
-      }
-    } catch (e) {
-      console.error('[bistbot] analysis error:', e);
-    }
-  };
-</script>
+</div></main><footer class="w-full bg-surface-container-lowest py-space-sm shadow-[0_-1px_12px_rgba(0,0,0,0.5)] pb-20 sm:pb-space-sm"><div class="w-full px-terminal-margin flex flex-col sm:flex-row items-center justify-between gap-space-xs"><div class="flex items-center gap-space-md font-label-code text-label-code"><div class="flex items-center gap-space-2xs"><span class="w-2 h-2 rounded-full bg-primary"></span><span class="text-on-surface-variant">API: <span class="text-primary font-semibold">ONLINE</span></span></div><span class="text-outline">•</span><div class="flex items-center gap-space-2xs"><span class="material-symbols-outlined text-[14px] text-tertiary">wifi_tethering</span><span class="text-on-surface-variant">WS Latency: <span class="text-tertiary font-metric-value text-metric-value">18ms</span></span></div><span class="text-outline">•</span><span class="text-on-surface-variant hidden md:inline">Sunucu: <span class="text-on-surface">ist-eqx-algo-01</span></span></div><div class="font-body-sm text-body-sm text-outline text-center sm:text-right"><p>Yasal Uyarı: Burada yer alan algoritmik veriler yatırım danışmanlığı kapsamında değildir. Gecikmesiz BIST veri akışı.</p></div></div></footer>
 <script src="/static/app.js?nocache=100011"></script>
 </body></html>

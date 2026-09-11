@@ -1486,6 +1486,15 @@
 
     // Auto-load live analysis for the default ticker on page load
     window.runAnalysis('THYAO');
+
+    // CSP-safe delegation for ticker chip clicks (was inline onclick)
+    document.addEventListener('click', function (e) {
+      var chip = e.target.closest('.ticker-chip[data-ticker]');
+      if (chip) {
+        e.preventDefault();
+        window.runAnalysis(chip.getAttribute('data-ticker'));
+      }
+    });
   }
 
   // -------------------------------------------------------------------------

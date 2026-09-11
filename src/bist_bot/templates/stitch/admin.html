@@ -31,7 +31,7 @@
 <div class="bg-surface-container-low/90 rounded-xl p-space-lg shadow-lg">
 <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-space-sm mb-space-md">
 <div class="font-headline-md text-headline-md text-on-surface font-bold">Bekleyen Ödemeler</div>
-<button class="px-space-sm py-space-2xs rounded-lg bg-surface-container-high text-on-surface font-label-code text-label-code" onclick="loadAdminRequests()">Yenile</button>
+<button class="px-space-sm py-space-2xs rounded-lg bg-surface-container-high text-on-surface font-label-code text-label-code" id="admin-refresh-requests">Yenile</button>
 </div>
 <div class="overflow-x-auto"><table class="w-full font-body-sm text-body-sm">
 <thead><tr class="text-left font-label-caps text-label-caps text-outline uppercase">
@@ -46,7 +46,7 @@
 <div class="font-headline-md text-headline-md text-on-surface font-bold">Kullanıcılar</div>
 <div class="flex gap-space-xs">
 <input id="admin-user-search" class="bg-surface-container-high/70 text-on-surface font-body-sm text-body-sm px-space-sm py-space-2xs rounded-lg focus:outline-none" placeholder="E-posta ara..."/>
-<button class="px-space-sm py-space-2xs rounded-lg bg-surface-container-high text-on-surface font-label-code text-label-code" onclick="loadAdminUsers()">Ara</button>
+<button class="px-space-sm py-space-2xs rounded-lg bg-surface-container-high text-on-surface font-label-code text-label-code" id="admin-refresh-users">Ara</button>
 </div>
 </div>
 <div class="overflow-x-auto"><table class="w-full font-body-sm text-body-sm">
@@ -57,114 +57,6 @@
 </table></div>
 </div>
 </div></main>
-<footer class="w-full bg-surface-container-lowest py-space-sm shadow-[0_-1px_12px_rgba(0,0,0,0.5)] pb-20 sm:pb-space-sm"><div class="w-full px-terminal-margin flex flex-col sm:flex-row items-center justify-between gap-space-xs"><div class="flex items-center gap-space-md font-label-code text-label-code"><div class="flex items-center gap-space-2xs"><span class="w-2 h-2 rounded-full bg-primary"></span><span class="text-on-surface-variant">API: <span class="text-primary font-semibold">ONLINE</span></span></div><span class="text-outline">•</span><div class="flex items-center gap-space-2xs"><span class="material-symbols-outlined text-[14px] text-tertiary">wifi_tethering</span><span class="text-on-surface-variant">WS Latency: <span class="text-tertiary font-metric-value text-metric-value">18ms</span></span></div><span class="text-outline">•</span><span class="text-on-surface-variant hidden md:inline">Sunucu: <span class="text-on-surface">ist-eqx-algo-01</span></span></div><div class="font-body-sm text-body-sm text-outline text-center sm:text-right"><p>Yasal Uyarı: Burada yer alan algoritmik veriler yatırım danışmanlığı kapsamında değildir. Gecikmesiz BIST veri akışı.</p></div></div></footer><script>
-(function () {
-  'use strict';
-
-  function authHeaders() {
-    const t = localStorage.getItem('bistbot_token');
-    return t ? { 'Authorization': 'Bearer ' + t, 'Content-Type': 'application/json' } : {};
-  }
-
-  function esc(s) {
-    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  }
-
-  window.loadAdminUsers = async function () {
-    const body = document.getElementById('admin-users-body');
-    const q = (document.getElementById('admin-user-search') || {}).value || '';
-    try {
-      const res = await fetch('/api/admin/users?q=' + encodeURIComponent(q), { headers: authHeaders() });
-      if (res.status === 403) {
-        if (body) body.innerHTML = '<tr><td colspan="6" class="py-space-md text-center text-error">Yetkisiz erişim.</td></tr>';
-        return;
-      }
-      const data = await res.json();
-      if (!res.ok || !Array.isArray(data.users) || !data.users.length) {
-        if (body) body.innerHTML = '<tr><td colspan="6" class="py-space-md text-center text-outline">Kullanıcı bulunamadı.</td></tr>';
-        return;
-      }
-      body.innerHTML = data.users.map(u => (
-        '<tr class="border-t border-surface-container-highest/40">' +
-        '<td class="py-space-2xs pr-space-sm font-label-code text-label-code">' + esc(u.id) + '</td>' +
-        '<td class="py-space-2xs pr-space-sm">' + esc(u.email) + '</td>' +
-        '<td class="py-space-2xs pr-space-sm">' + esc(u.role) + '</td>' +
-        '<td class="py-space-2xs pr-space-sm text-primary font-bold">' + esc(u.plan) + (u.active ? '' : ' (pasif)') + '</td>' +
-        '<td class="py-space-2xs pr-space-sm font-label-code text-label-code">' + esc(u.plan_expires_at || '—') + '</td>' +
-        '<td class="py-space-2xs"><div class="flex gap-space-2xs">' +
-        '<button class="px-space-xs py-space-3xs rounded bg-surface-container-high font-label-code text-label-code" onclick="setUserPlan(' + u.id + ',\'pro\')">Pro</button>' +
-        '<button class="px-space-xs py-space-3xs rounded bg-surface-container-high font-label-code text-label-code" onclick="setUserPlan(' + u.id + ',\'pro_plus\')">Pro+</button>' +
-        '</div></td></tr>'
-      )).join('');
-    } catch (e) {
-      if (body) body.innerHTML = '<tr><td colspan="6" class="py-space-md text-center text-error">Bağlantı hatası.</td></tr>';
-    }
-  };
-
-  window.setUserPlan = async function (userId, plan) {
-    try {
-      const res = await fetch('/api/admin/users/' + userId + '/plan', {
-        method: 'POST', headers: authHeaders(), body: JSON.stringify({ plan: plan })
-      });
-      const data = await res.json();
-      alert(res.ok ? ('Plan güncellendi: ' + data.plan + ' (bitiş: ' + data.plan_expires_at + ')') : ('Hata: ' + (data.message || res.status)));
-      if (res.ok) loadAdminUsers();
-    } catch (e) { alert('Bağlantı hatası.'); }
-  };
-
-  window.loadAdminRequests = async function () {
-    const body = document.getElementById('admin-requests-body');
-    try {
-      const res = await fetch('/api/admin/requests?status=pending', { headers: authHeaders() });
-      if (res.status === 403) {
-        if (body) body.innerHTML = '<tr><td colspan="7" class="py-space-md text-center text-error">Yetkisiz erişim.</td></tr>';
-        return;
-      }
-      const data = await res.json();
-      if (!res.ok || !Array.isArray(data.requests) || !data.requests.length) {
-        if (body) body.innerHTML = '<tr><td colspan="7" class="py-space-md text-center text-outline">Bekleyen ödeme yok.</td></tr>';
-        return;
-      }
-      body.innerHTML = data.requests.map(r => (
-        '<tr class="border-t border-surface-container-highest/40">' +
-        '<td class="py-space-2xs pr-space-sm font-label-code text-label-code">' + esc(r.id) + '</td>' +
-        '<td class="py-space-2xs pr-space-sm">' + esc(r.email) + '</td>' +
-        '<td class="py-space-2xs pr-space-sm text-primary font-bold">' + esc(r.plan) + '</td>' +
-        '<td class="py-space-2xs pr-space-sm">' + esc(r.amount_try) + ' TL</td>' +
-        '<td class="py-space-2xs pr-space-sm font-label-code text-label-code">' + esc(r.reference) + '</td>' +
-        '<td class="py-space-2xs pr-space-sm font-label-code text-label-code">' + esc(r.created_at) + '</td>' +
-        '<td class="py-space-2xs"><div class="flex gap-space-2xs">' +
-        '<button class="px-space-xs py-space-3xs rounded bg-primary text-on-primary font-label-code text-label-code" onclick="decideRequest(' + r.id + ',true)">Onayla</button>' +
-        '<button class="px-space-xs py-space-3xs rounded bg-surface-container-high font-label-code text-label-code" onclick="decideRequest(' + r.id + ',false)">Reddet</button>' +
-        '</div></td></tr>'
-      )).join('');
-    } catch (e) {
-      if (body) body.innerHTML = '<tr><td colspan="7" class="py-space-md text-center text-error">Bağlantı hatası.</td></tr>';
-    }
-  };
-
-  window.decideRequest = async function (requestId, approve) {
-    const box = document.getElementById('admin-invite-box');
-    try {
-      const res = await fetch('/api/admin/requests/' + requestId + (approve ? '/approve' : '/reject'), {
-        method: 'POST', headers: authHeaders()
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        alert('Hata: ' + (data.message || res.status));
-        return;
-      }
-      if (approve && data.invite_link && box) {
-        box.classList.remove('hidden');
-        box.textContent = 'Pro+ davet linki (tek kullanımlık, 48s): ' + data.invite_link;
-      }
-      loadAdminRequests();
-      loadAdminUsers();
-    } catch (e) { alert('Bağlantı hatası.'); }
-  };
-
-  document.addEventListener('DOMContentLoaded', () => { loadAdminRequests(); loadAdminUsers(); });
-})();
-</script>
+<footer class="w-full bg-surface-container-lowest py-space-sm shadow-[0_-1px_12px_rgba(0,0,0,0.5)] pb-20 sm:pb-space-sm"><div class="w-full px-terminal-margin flex flex-col sm:flex-row items-center justify-between gap-space-xs"><div class="flex items-center gap-space-md font-label-code text-label-code"><div class="flex items-center gap-space-2xs"><span class="w-2 h-2 rounded-full bg-primary"></span><span class="text-on-surface-variant">API: <span class="text-primary font-semibold">ONLINE</span></span></div><span class="text-outline">•</span><div class="flex items-center gap-space-2xs"><span class="material-symbols-outlined text-[14px] text-tertiary">wifi_tethering</span><span class="text-on-surface-variant">WS Latency: <span class="text-tertiary font-metric-value text-metric-value">18ms</span></span></div><span class="text-outline">•</span><span class="text-on-surface-variant hidden md:inline">Sunucu: <span class="text-on-surface">ist-eqx-algo-01</span></span></div><div class="font-body-sm text-body-sm text-outline text-center sm:text-right"><p>Yasal Uyarı: Burada yer alan algoritmik veriler yatırım danışmanlığı kapsamında değildir. Gecikmesiz BIST veri akışı.</p></div></div></footer><script src="/static/admin.js"></script>
 <script src="/static/app.js?nocache=100011"></script>
 </body></html>
