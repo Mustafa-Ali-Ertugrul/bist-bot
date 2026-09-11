@@ -16,17 +16,25 @@ import pathlib
 
 from werkzeug.utils import safe_join
 
+from bist_bot.dashboard import safe_join_static
+
 STATIC_DIR = pathlib.Path(__file__).resolve().parent.parent / "src" / "bist_bot" / "static"
 
 
 def test_safe_join_blocks_traversal_in_gz_fast_path():
-    """Decoded traversal payloads must resolve to None (no readable path)."""
+    """Decoded traversal payloads must resolve to None (no readable path).
+
+    Uses the app's safe_join_static wrapper (backslash-normalized), not
+    bare werkzeug safe_join: werkzeug only treats ``\\\\`` as a separator
+    on Windows, so the backslash payload sails through on Linux CI while
+    remaining a live traversal on Windows hosts.
+    """
     for payload in (
         "../../../etc/passwd",
         "..\\..\\..\\etc\\passwd",
         "subdir/../../secrets",
     ):
-        assert safe_join(str(STATIC_DIR), payload + ".gz") is None, payload
+        assert safe_join_static(str(STATIC_DIR), payload + ".gz") is None, payload
 
 
 def test_safe_join_result_stays_inside_static():

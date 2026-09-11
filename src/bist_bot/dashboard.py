@@ -61,6 +61,20 @@ TR = timezone(timedelta(hours=3))
 logger = get_logger(__name__, component="dashboard")
 
 
+def safe_join_static(directory: str, *untrusted: str) -> str | None:
+    """Cross-platform traversal guard for the static gzip fast-path.
+
+    Werkzeug's ``safe_join`` only treats ``\\`` as a separator on Windows
+    (``_os_alt_seps`` is OS-dependent), so a ``..\\..\\`` payload sails
+    through on Linux CI while being a live traversal on Windows dev
+    machines. Normalizing backslashes to ``/`` first makes the guard
+    identical on every platform: ``\\`` is never a legal static asset
+    character, only an evasion attempt.
+    """
+    normalized = [str(part).replace("\\", "/") for part in untrusted]
+    return safe_join(directory, *normalized)
+
+
 def _round_value(value: Any) -> float | None:
     if value is None:
         return None
@@ -896,10 +910,11 @@ def create_dashboard_app(
 
         # Pre-compressed asset fast-path: if client accepts gzip and a .gz
         # file was shipped alongside the asset, serve it directly without
-        # re-compressing in Python. AppSec (Round 13): rel_path is derived
-        # from request.path, so it MUST be validated with werkzeug's
-        # safe_join against the static folder — os.path.join alone would
-        # allow traversal sequences to escape the static directory.
+        # re-compressing in Python. AppSec (Round 13/21): rel_path is derived
+        # from request.path, so it MUST be validated with safe_join_static
+        # against the static folder — os.path.join alone would allow
+        # traversal sequences to escape, and bare werkzeug safe_join misses
+        # backslash traversal on non-Windows hosts (OS-dependent _os_alt_seps).
         accept_enc = request.headers.get("Accept-Encoding", "").lower()
         if (
             "gzip" in accept_enc
@@ -909,7 +924,7 @@ def create_dashboard_app(
             static_folder = app.static_folder
             if static_folder:
                 rel_path = request.path[len("/static/") :].lstrip("/")
-                safe_path = safe_join(static_folder, rel_path + ".gz")
+                safe_path = safe_join_static(static_folder, rel_path + ".gz")
                 if safe_path and os.path.isfile(safe_path):
                     try:
                         with open(safe_path, "rb") as f:
