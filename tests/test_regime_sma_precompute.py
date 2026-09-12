@@ -31,6 +31,7 @@ if ROOT_DIR not in sys.path:
     sys.path.insert(0, os.path.join(ROOT_DIR, "src"))
 
 from bist_bot.backtest.engine import Backtester, _scoring_history_window  # noqa: E402
+from bist_bot.config.settings import settings  # noqa: E402
 from bist_bot.strategy.engine_filters import calculate_score_and_reasons  # noqa: E402
 from bist_bot.strategy.params import StrategyParams  # noqa: E402
 from bist_bot.strategy.regime import MarketRegime, detect_regime  # noqa: E402
@@ -95,6 +96,7 @@ def _build_frame(n: int = 300) -> pd.DataFrame:
                 "volume_spike": (idx % 23) < 2,
                 "volume_ratio": 1.1,
                 "volume_trend": "UP",
+                f"ema_{settings.EMA_LONG}": base * 0.995 + math.sin(idx / 13.0) * 1.5,
             }
         )
     return pd.DataFrame(rows).set_index("date")
@@ -144,6 +146,7 @@ def test_dict_rows_match_series_rows_in_scorers() -> None:
     Exercises the real scorers on every bar of a rich frame — the dict row
     is built exactly like _precalculate_signals does (numpy column arrays).
     """
+    from bist_bot.backtest import engine as engine_mod
     from bist_bot.strategy.scoring import (
         score_momentum,
         score_structure,
@@ -153,36 +156,7 @@ def test_dict_rows_match_series_rows_in_scorers() -> None:
 
     df = _build_frame(200)
     p = StrategyParams()
-    work_cols = [
-        "close",
-        "rsi",
-        "sma_cross",
-        "macd_cross",
-        "bb_position",
-        "sma_5",
-        "sma_20",
-        "volume",
-        "volume_sma_20",
-        "adx",
-        "plus_di",
-        "minus_di",
-        "stoch_k",
-        "stoch_d",
-        "cci",
-        "ema_cross",
-        "macd_histogram",
-        "macd_hist_increasing",
-        "di_cross",
-        "bb_percent",
-        "bb_squeeze",
-        "obv_trend",
-        "price_volume_direction",
-        "price_volume_confirm",
-        "volume_spike",
-        "volume_ratio",
-        "volume_trend",
-    ]
-    keep = [c for c in work_cols if c in df.columns]
+    keep = [c for c in engine_mod._score_loop_columns() if c in df.columns]
     cols = {c: df[c].to_numpy() for c in keep}
     for i in range(1, len(df)):
         series_last = df.iloc[i]
@@ -244,33 +218,106 @@ def test_momentum_checker_with_precomputed_values_identical() -> None:
         assert fast == legacy, i
 
 
-def test_backtest_end_to_end_parity_with_and_without_precompute(monkeypatch) -> None:
-    df = _build_frame(300)
-    res_fast = Backtester(initial_capital=10_000, indicators=IdentityIndicators()).run(
-        "TEST.IS", df.copy(), verbose=False
-    )
-    assert res_fast is not None
+def test_engine_score_array_matches_legacy_window_slice_loop(monkeypatch) -> None:
+    """#146 step 4: the engine fast path (dict rows + scalar bar context, no
+    per-bar window DataFrame slice) must reproduce the legacy algorithm —
+    per-bar ``work.iloc[start:i+1]`` slice + pandas Series rows — exactly.
+
+    The returned ``score`` column is execution-shifted by design (signal at
+    close t runs at t+1), so the comparison records the engine's raw per-bar
+    scores as they are computed and matches them against the legacy loop.
+    """
+    import numpy as np
 
     import bist_bot.strategy.engine_filters as ef
-
-    orig = ef.detect_regime
-
-    def legacy(df_, lookback=20, params=None, **_kwargs):
-        # Drops the sma kwarg -> forces the per-bar tail().mean() path.
-        return orig(df_, lookback, params)
-
-    monkeypatch.setattr(ef, "detect_regime", legacy)
-    res_legacy = Backtester(initial_capital=10_000, indicators=IdentityIndicators()).run(
-        "TEST.IS", df.copy(), verbose=False
+    from bist_bot.backtest import engine as engine_mod
+    from bist_bot.strategy.regime import check_momentum_confirmation
+    from bist_bot.strategy.scoring import (
+        score_momentum,
+        score_structure,
+        score_trend,
+        score_volume,
     )
-    assert res_legacy is not None
 
-    assert res_fast.final_capital == res_legacy.final_capital
-    assert res_fast.total_trades == res_legacy.total_trades
-    assert len(res_fast.trades) == len(res_legacy.trades)
-    for tf, tl in zip(res_fast.trades, res_legacy.trades, strict=True):
-        assert tf.entry_date == tl.entry_date
-        assert tf.exit_date == tl.exit_date
-        assert tf.entry_price == tl.entry_price
-        assert tf.exit_price == tl.exit_price
-        assert tf.profit_pct == tl.profit_pct
+    df = _build_frame(200)
+    p = StrategyParams()
+    bt = Backtester(initial_capital=10_000, indicators=IdentityIndicators())
+
+    recorded: list[float] = []
+    orig = ef.calculate_score_and_reasons
+
+    def recorder(*args, **kwargs):
+        result = orig(*args, **kwargs)
+        recorded.append(result[0] if result is not None else 0.0)
+        return result
+
+    monkeypatch.setattr(ef, "calculate_score_and_reasons", recorder)
+    bt._precalculate_signals(df.copy())
+    fast_scores = np.clip(np.asarray(recorded, dtype=float), -100.0, 100.0)
+    assert len(fast_scores) == len(df) - 1
+
+    # Legacy algorithm mirroring the pre-#146 loop byte-for-byte.
+    window = _scoring_history_window(p)
+    keep = [c for c in engine_mod._score_loop_columns() if c in df.columns]
+    legacy_df = df.copy()
+    if "_prev_close_for_scoring" not in legacy_df.columns:
+        legacy_df["_prev_close_for_scoring"] = legacy_df["close"].diff().fillna(0.0)
+    work = legacy_df[keep] if 0 < len(keep) < len(legacy_df.columns) else legacy_df
+    legacy = np.zeros(len(work), dtype=float)
+
+    def momentum_scorer(last, prev):
+        return score_momentum(p, last, prev)
+
+    def trend_scorer(last, prev, d=None):
+        return score_trend(p, last, prev, d)
+
+    def volume_scorer(last, prev):
+        return score_volume(p, last, prev)
+
+    def structure_scorer(last):
+        return score_structure(p, last)
+
+    prev = work.iloc[0]
+    for i in range(1, len(work)):
+        last = work.iloc[i]
+        start = i - window + 1
+        sub = work.iloc[start : i + 1] if start > 0 else work.iloc[: i + 1]
+        result = calculate_score_and_reasons(
+            p,
+            "",
+            sub,
+            last=last,
+            prev=prev,
+            momentum_scorer=momentum_scorer,
+            trend_scorer=trend_scorer,
+            volume_scorer=volume_scorer,
+            structure_scorer=structure_scorer,
+            momentum_checker=check_momentum_confirmation,
+            reject_logger=None,
+        )
+        legacy[i] = result[0] if result is not None else 0.0
+        prev = last
+
+    legacy_scores = np.clip(legacy[1:], -100.0, 100.0)
+    assert np.array_equal(fast_scores, legacy_scores), np.flatnonzero(fast_scores != legacy_scores)[
+        :5
+    ]
+    # Guard the guard: the frame must produce non-trivial scoring, otherwise
+    # the comparison above is vacuous.
+    assert np.count_nonzero(fast_scores) > 20, np.count_nonzero(fast_scores)
+
+
+def test_lag_diff_matches_pandas_slope() -> None:
+    """#146 step 4: engine _lag_diff == pandas series.iloc[-1] - iloc[-1-k]."""
+    from bist_bot.backtest.engine import _lag_diff, _lag_value
+
+    df = _build_frame(200)
+    lb = max(int(getattr(StrategyParams(), "slope_lookback", 40)), 1)
+    arr = df["sma_20"].to_numpy(dtype=float)
+    lag = _lag_diff(arr, lb)
+    for i in range(1, len(df)):
+        if i < lb:
+            assert _lag_value(lag, lb, i) is None
+            continue
+        expected = float(df["sma_20"].iloc[i] - df["sma_20"].iloc[i - lb])
+        assert _lag_value(lag, lb, i) == pytest.approx(expected, abs=0.0, rel=0.0)

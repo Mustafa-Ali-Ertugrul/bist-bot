@@ -51,12 +51,13 @@ def _regime_thresholds(params) -> dict[str, float]:
 
 
 def detect_regime(
-    df: pd.DataFrame,
+    df: pd.DataFrame | None = None,
     lookback: int = 20,
     params=None,
     *,
     sma: float | None = None,
     last: pd.Series | Mapping[str, object] | None = None,
+    n_bars: int | None = None,
 ) -> MarketRegime:
     """Infer the current market regime from trend indicators.
 
@@ -65,16 +66,21 @@ def detect_regime(
     eşikler StrategyParams'tan okunur, yoksa mevcut sabitler geçerlidir.
 
     Perf (#146): ``sma`` verilirse ``df["close"].tail(lookback).mean()``,
-    ``last`` verilirse ``df.iloc[-1]`` yeniden hesaplanmaz — arayan taraf
-    bu değerlerin SON satırın birebir karşılığı olduğunu garanti eder
-    (backtest skor-döngüsü rolling dizisi + dict satır besler). None
-    verilirse davranış değişmeden df'ten hesaplanır (live motor yolu).
+    ``last`` verilirse ``df.iloc[-1]``, ``n_bars`` verilirse ``len(df)``
+    yeniden hesaplanmaz. ÜÇÜ birden verilirse ``df`` hiç okunmaz (backtest
+    skor-döngüsü skaler besler ve bar başına pencere dilimini tamamen
+    atlar). None verilen her alan davranış değişmeden df'ten hesaplanır
+    (live motor yolu).
     """
     th = _regime_thresholds(params)
-    if df is None or len(df) < th["min_bars"]:
+    if n_bars is None:
+        n_bars = 0 if df is None else len(df)
+    if n_bars < th["min_bars"]:
         return MarketRegime.UNKNOWN
 
     if last is None:
+        if df is None:
+            raise ValueError("detect_regime: df gerekli (last/n_bars verilmedi)")
         last = df.iloc[-1]
     adx = last.get("adx", 0)
     plus_di = last.get("plus_di", 0)
@@ -88,6 +94,8 @@ def detect_regime(
 
     sma_window = max(int(lookback), 1)
     if sma is None:
+        if df is None:
+            raise ValueError("detect_regime: df gerekli (sma verilmedi)")
         sma = float(df["close"].tail(sma_window).mean())
     momentum = (close - sma) / sma * 100
 
@@ -213,23 +221,28 @@ def check_regime_persistence(
 
 
 def check_momentum_confirmation(
-    df: pd.DataFrame,
+    df: pd.DataFrame | None = None,
     threshold: float = 4.0,
     *,
     last: pd.Series | Mapping[str, object] | None = None,
     sma: float | None = None,
+    n_bars: int | None = None,
 ) -> bool:
     """Validate momentum when the primary trend signal is weak.
 
-    Perf (#146 adım-3): ``last`` verilirse ``df.iloc[-1]``, ``sma`` verilirse
-    ``df["close"].tail(20).mean()`` yeniden hesaplanmaz — arayan taraf son
-    satırın birebir karşılığını garanti eder (backtest skor-döngüsü dict
-    satır + rolling(20) dizisi besler; detect_regime ile aynı sözleşme).
-    None ise davranış değişmeden df'ten hesaplanır (live motor yolu).
+    Perf (#146 adım-3/4): ``last`` verilirse ``df.iloc[-1]``, ``sma``
+    verilirse ``df["close"].tail(20).mean()``, ``n_bars`` verilirse
+    ``len(df)`` yeniden hesaplanmaz. ÜÇÜ birden verilirse ``df`` hiç
+    okunmaz. None verilen her alan davranış değişmeden df'ten hesaplanır
+    (live motor yolu).
     """
-    if len(df) < 20:
+    if n_bars is None:
+        n_bars = 0 if df is None else len(df)
+    if n_bars < 20:
         return True
     if last is None:
+        if df is None:
+            raise ValueError("check_momentum_confirmation: df gerekli (last/n_bars verilmedi)")
         last = df.iloc[-1]
     adx = last.get("adx", 0)
     plus_di = last.get("plus_di", 0)
@@ -239,6 +252,8 @@ def check_momentum_confirmation(
     if abs(plus_di - minus_di) >= 5:
         return True
     if sma is None:
+        if df is None:
+            raise ValueError("check_momentum_confirmation: df gerekli (sma verilmedi)")
         sma = float(df["close"].tail(20).mean())
     momentum = (float(last["close"]) - sma) / sma * 100
     return abs(momentum) >= threshold
