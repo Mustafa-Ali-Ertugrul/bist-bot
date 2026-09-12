@@ -54,6 +54,14 @@ class AppRepository:
     def get_latest_signal(self, ticker: str):
         return self.signals.get_latest_signal(ticker)
 
+    def get_last_signal_times(self, tickers, signal_types, since, min_score=None):
+        return self.signals.get_last_signal_times(
+            tickers=tickers,
+            signal_types=signal_types,
+            since=since,
+            min_score=min_score,
+        )
+
     def save_scan_log(
         self,
         total: int,
