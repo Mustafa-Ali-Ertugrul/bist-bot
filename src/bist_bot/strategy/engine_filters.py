@@ -53,12 +53,17 @@ class ScoreBarContext:
       okuduğu eğimler; ``None`` = sütun yok ya da yetersiz geçmiş
     - ``ema_slope``: ``score_trend``'in EMA eğimi (``_compute_ema_slope``
       karşılığı); ``nan`` = yetersiz geçmiş/sütun yok
+    - ``regime``: ``detect_regime(...)``in bu bar için sonucu
+      (``benchmark_regime_series`` vektörel ikizinden; MTF override'ı
+      öncesi temel rejim). ``None`` ise strateji katmanı detect_regime'i
+      kendisi çağırır.
     """
 
     n_bars: int
     mtf_sma_slope: float | None = None
     mtf_ema_slope: float | None = None
     ema_slope: float = float("nan")
+    regime: MarketRegime | None = None
 
 
 def _has_mtf_slope_contradiction(params: StrategyParams, df: pd.DataFrame) -> bool:
@@ -280,7 +285,12 @@ def calculate_score_and_reasons(
         regime_kwargs["last"] = regime_last
     if bar_ctx is not None:
         regime_kwargs["n_bars"] = bar_ctx.n_bars
-    regime = detect_regime(df, **regime_kwargs)
+    # Perf (#146 adım-5): temel rejim vektörel ikizden hazır geldiyse
+    # detect_regime hiç çağrılmaz (bar başına çağrı yükünün tamamı kalkar).
+    if bar_ctx is not None and bar_ctx.regime is not None:
+        regime = bar_ctx.regime
+    else:
+        regime = detect_regime(df, **regime_kwargs)
     if bar_ctx is not None:
         mtf_contradiction = _mtf_contradiction_from_ctx(params, bar_ctx)
     else:

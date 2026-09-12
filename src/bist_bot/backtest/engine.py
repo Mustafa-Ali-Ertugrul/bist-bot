@@ -261,7 +261,12 @@ class Backtester:
             ScoreBarContext,
             calculate_score_and_reasons,
         )
-        from bist_bot.strategy.regime import check_momentum_confirmation
+        from bist_bot.strategy.regime import (
+            MarketRegime,
+            _regime_thresholds,
+            benchmark_regime_series,
+            check_momentum_confirmation,
+        )
         from bist_bot.strategy.scoring import (
             score_momentum,
             score_structure,
@@ -331,6 +336,20 @@ class Backtester:
             _lag_diff(ema_arr, slope_lookback) if (mtf_enabled and ema_arr is not None) else None
         )
         ema_slope_arr = _lag_diff(ema_arr, slope_lookback) if ema_arr is not None else None
+        # Perf (#146 adım-5): temel rejim de döngü dışında BİR kez vektörel
+        # hesaplanır (benchmark_regime_series — detect_regime'in belgelenmiş
+        # birebir ikizi). min_bars, detect_regime'in okuduğu kaynaktan
+        # (_regime_thresholds) AÇIKÇA geçirilir; MACRO_REGIME_MIN_BARS sabiti
+        # REGIME_MIN_BARS override'ıyla sapmasın. MTF override'ı strateji
+        # katmanında kalır (bar_ctx üzerinden gelen temel rejim, mevcut
+        # akışla aynı sırada uygulanır).
+        regime_arr = (
+            benchmark_regime_series(
+                work, p, min_bars=int(_regime_thresholds(p)["min_bars"])
+            ).to_numpy(dtype=object)
+            if n >= 2
+            else None
+        )
         # score_trend'in df tüketicisi (_compute_ema_slope) yerine bar
         # başına skaler eğim beslenir; kapanış üzerinden okunur.
         ema_slope_cell = [float("nan")]
@@ -365,6 +384,7 @@ class Backtester:
                         else _lag_value(mtf_ema_slope, slope_lookback, i)
                     ),
                     ema_slope=ema_slope_cell[0],
+                    regime=(None if regime_arr is None else cast(MarketRegime, regime_arr[i])),
                 )
                 result = calculate_score_and_reasons(
                     p,

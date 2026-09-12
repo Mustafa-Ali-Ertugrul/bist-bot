@@ -294,25 +294,38 @@ def _normalize_benchmark_frame(df: pd.DataFrame) -> pd.DataFrame:
     return out.dropna(subset=["close"])
 
 
-def benchmark_regime_series(enriched: pd.DataFrame, params=None) -> pd.Series:
+def benchmark_regime_series(
+    enriched: pd.DataFrame,
+    params=None,
+    *,
+    min_bars: int | None = None,
+) -> pd.Series:
     """Vectorized per-date regime for one *enriched* benchmark frame.
 
     Row ``t`` reproduces ``detect_regime(enriched.iloc[:t+1])`` exactly
     (detect_regime only reads the last row's adx/plus_di/minus_di/close plus
     a 20-close trailing mean, and all indicators are causal). Rows before
-    ``MACRO_REGIME_MIN_BARS`` get ``MarketRegime.UNKNOWN`` instead of a vote,
-    mirroring the live ``len(df) < 50`` skip.
+    ``min_bars`` get ``MarketRegime.UNKNOWN`` instead of a vote, mirroring
+    the live ``len(df) < min_bars`` skip.
 
     ``params`` verilirse eşikler ``_regime_thresholds`` üzerinden aynı
     kaynaktan okunur (çift bakım noktası kapatıldı); verilmezse mevcut
     sabitler geçerlidir. Eşdeğerlik, iki yola da aynı params/lookback
     verildiği sürece korunur.
+
+    ``min_bars`` verilmezse ``MACRO_REGIME_MIN_BARS`` kullanılır (mevcut
+    makro-rejim davranışı birebir korunur). Backtest skor-döngüsü,
+    ``detect_regime``'in okuduğu ``_regime_thresholds(params)["min_bars"]``
+    değerini AÇIKÇA geçirir — ikizi ayar/environment override'larına karşı
+    de senkron tutar (aksi hâlde ``REGIME_MIN_BARS != 50`` iken sessiz
+    sapma oluşurdu).
     """
     th = _regime_thresholds(params)
     trend_adx = th["trend_adx"]
     weak_adx = th["weak_adx"]
     di_ratio = th["di_ratio"]
     momentum_pct = th["momentum_pct"]
+    mb = MACRO_REGIME_MIN_BARS if min_bars is None else int(min_bars)
 
     close = enriched["close"].astype(float)
     adx = (
@@ -346,7 +359,7 @@ def benchmark_regime_series(enriched: pd.DataFrame, params=None) -> pd.Series:
     out[bull] = MarketRegime.BULL
     out[bear] = MarketRegime.BEAR
     if len(out) > 0:
-        out.iloc[: max(0, min(len(out), MACRO_REGIME_MIN_BARS) - 1)] = MarketRegime.UNKNOWN
+        out.iloc[: max(0, min(len(out), mb) - 1)] = MarketRegime.UNKNOWN
     return out
 
 

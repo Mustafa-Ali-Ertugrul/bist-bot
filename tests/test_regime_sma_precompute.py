@@ -218,6 +218,43 @@ def test_momentum_checker_with_precomputed_values_identical() -> None:
         assert fast == legacy, i
 
 
+def test_regime_twin_matches_per_bar_detect_regime() -> None:
+    """#146 step 5: benchmark_regime_series must equal per-bar detect_regime.
+
+    Guards the vectorized twin used by the score loop. Covers the default
+    min_bars AND an explicit override — the twin historically hardcoded
+    MACRO_REGIME_MIN_BARS while detect_regime honors REGIME_MIN_BARS, so a
+    non-50 setting would silently diverge without the explicit min_bars
+    pass-through.
+    """
+    from dataclasses import replace
+
+    from bist_bot.strategy.params import StrategyParams as _P
+    from bist_bot.strategy.regime import (
+        _regime_thresholds,
+        benchmark_regime_series,
+        detect_regime,
+    )
+
+    df = _build_frame(200)
+    base = _P()
+    for min_bars in (int(_regime_thresholds(base)["min_bars"]), 20, 30):
+        # detect_regime reads min_bars from params; give it the same value so
+        # the comparison is apples-to-apples.
+        p = replace(base, regime_min_bars=min_bars)
+        assert int(_regime_thresholds(p)["min_bars"]) == min_bars
+        series = benchmark_regime_series(df, p, min_bars=min_bars).to_numpy()
+        seen: set[object] = set()
+        for i in range(1, len(df)):
+            window = 50
+            start = i - window + 1
+            sub = df.iloc[start : i + 1] if start > 0 else df.iloc[: i + 1]
+            expected = detect_regime(sub, params=p)
+            assert series[i] == expected, (min_bars, i, series[i], expected)
+            seen.add(expected)
+        assert len(seen) >= 2, (min_bars, seen)
+
+
 def test_engine_score_array_matches_legacy_window_slice_loop(monkeypatch) -> None:
     """#146 step 4: the engine fast path (dict rows + scalar bar context, no
     per-bar window DataFrame slice) must reproduce the legacy algorithm —
