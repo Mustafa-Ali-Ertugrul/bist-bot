@@ -518,3 +518,44 @@ def test_get_last_signal_times_min_score_filters_radar_persists(signals_repo):
     assert "GARAN.IS" not in result
     # ASELS's buy is before `since` — filtered out
     assert "ASELS.IS" not in result
+
+
+def test_data_access_facade_exposes_get_last_signal_times(signals_repo):
+    """Regression (#118 geri döüş): scanner DataAccess üzerinden
+    get_last_signal_times çağırır; facade delegasyonu eksikse her tarama
+    al_cooldown_lookup_failed ile düşer ve DB destekli AL cooldown
+    çalışmaz. Bu test facade'in metodu açtığını kilitler."""
+    from bist_bot.db.repositories import AppRepository
+
+    # Facade'in kendisi (mock'lu scanner testleri bunu yakalayamaz).
+    assert hasattr(AppRepository, "get_last_signal_times")
+
+    facade = AppRepository(manager=signals_repo.manager)
+    base = datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC)
+    facade.save_signals(
+        [
+            Signal(
+                ticker="TRALT.IS",
+                signal_type=SignalType.BUY,
+                score=50.0,
+                price=10.0,
+                timestamp=base.replace(hour=10, minute=30),
+            ),
+            Signal(
+                ticker="AKBNK.IS",
+                signal_type=SignalType.WEAK_BUY,
+                score=20.0,
+                price=10.0,
+                timestamp=base.replace(hour=10, minute=15),
+            ),
+        ]
+    )
+    buy_values = [t.value for t in SignalType if t.is_buy]
+    recent = facade.get_last_signal_times(
+        tickers=["TRALT.IS", "AKBNK.IS"],
+        signal_types=buy_values,
+        since=base,
+        min_score=45.0,
+    )
+    assert "TRALT.IS" in recent  # actionable AL arms the cooldown
+    assert "AKBNK.IS" not in recent  # RADAR persist below threshold — no arm
