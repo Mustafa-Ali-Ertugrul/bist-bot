@@ -90,6 +90,27 @@ def _score_loop_columns() -> list[str]:
     return cols
 
 
+def _lag_diff(arr: Any, lookback: int) -> np.ndarray:
+    """#146 adım-4: ``series.iloc[-1] - series.iloc[-1 - lookback]`` dizisi.
+
+    Sonuç[i] = arr[i] - arr[i - lookback]; ``i < lookback`` için NaN
+    (orijinal erken dönüş dallarının karşılığı). float64 aritmetiği
+    pandas skaler çıkarmayla birebir aynıdır.
+    """
+    n = len(arr)
+    out = np.full(n, np.nan, dtype=float)
+    if n > lookback:
+        out[lookback:] = arr[lookback:] - arr[: n - lookback]
+    return out
+
+
+def _lag_value(lag_arr: np.ndarray, lookback: int, i: int) -> float | None:
+    """``i`` pozisyonundaki lag-diff değeri; yetersizse None."""
+    if i < lookback:
+        return None
+    return float(lag_arr[i])
+
+
 def _scoring_history_window(params: Any) -> int:
     """Bar-döngüsünde dilime alınacak trailing satır sayısı.
 
@@ -236,8 +257,16 @@ class Backtester:
         execution path (entry/exit simulation) is unchanged; only the score
         source is unified.
         """
-        from bist_bot.strategy.engine_filters import calculate_score_and_reasons
-        from bist_bot.strategy.regime import check_momentum_confirmation
+        from bist_bot.strategy.engine_filters import (
+            ScoreBarContext,
+            calculate_score_and_reasons,
+        )
+        from bist_bot.strategy.regime import (
+            MarketRegime,
+            _regime_thresholds,
+            benchmark_regime_series,
+            check_momentum_confirmation,
+        )
         from bist_bot.strategy.scoring import (
             score_momentum,
             score_structure,
@@ -273,24 +302,105 @@ class Backtester:
         keep = [c for c in _score_loop_columns() if c in df.columns]
         work = df[keep] if 0 < len(keep) < len(df.columns) else df
         n = len(work)
+        # Perf: detect_regime'in bar başına tail(20).mean() hesabı yerine
+        # rolling(20, min_periods=1) dizisi DÖNGÜ DIŞINDA bir kez kurulur.
+        # ``window`` (_scoring_history_window) her zaman >= 20 döndürdüğü
+        # için sub penceresindeki tail(20) tam olarak bu dizinin i.
+        # pozisyonudur (min_periods=1 ilk barlar için de aynı kümeyi
+        # ortalar; mikro-bench ~2700x, in-situ parite bit-bit). Lookback
+        # değeri detect_regime default'u ile senkron tutulmalıdır.
+        regime_sma = (
+            work["close"].rolling(20, min_periods=1).mean().to_numpy(dtype=float)
+            if n >= 2
+            else None
+        )
+        # Perf (#146 adım-4): bar başına `work.iloc[start:i+1]` pencere
+        # DataFrame'i HİÇ kurulmaz. Skor hattının pencere diliminden
+        # okuduğu tüm değerler (satır sayısı + SMA20/EMA eğimleri) döngü
+        # dışında bir kez hesaplanan dizilerden beslenir. Eğimler orijinal
+        # `series.iloc[-1] - series.iloc[-1 - slope_lookback]` ifadesinin
+        # birebir float64 karşılığıdır; `slope_lookback + 1` satır
+        # koşulunu sağlamayan (ya da sütunu olmayan) barlarda None/NaN
+        # (orijinal erken `return False` / `float("nan")` dallarının aynısı).
+        slope_lookback = max(int(getattr(p, "slope_lookback", 40)), 1)
+        ema_col = f"ema_{settings.EMA_LONG}"
+        sma20_arr = work["sma_20"].to_numpy(dtype=float) if "sma_20" in work.columns else None
+        ema_arr = work[ema_col].to_numpy(dtype=float) if ema_col in work.columns else None
+        mtf_enabled = bool(getattr(p, "mtf_confluence_block_enabled", False))
+        mtf_sma_slope = (
+            _lag_diff(sma20_arr, slope_lookback)
+            if (mtf_enabled and sma20_arr is not None)
+            else None
+        )
+        mtf_ema_slope = (
+            _lag_diff(ema_arr, slope_lookback) if (mtf_enabled and ema_arr is not None) else None
+        )
+        ema_slope_arr = _lag_diff(ema_arr, slope_lookback) if ema_arr is not None else None
+        # Perf (#146 adım-5): temel rejim de döngü dışında BİR kez vektörel
+        # hesaplanır (benchmark_regime_series — detect_regime'in belgelenmiş
+        # birebir ikizi). min_bars, detect_regime'in okuduğu kaynaktan
+        # (_regime_thresholds) AÇIKÇA geçirilir; MACRO_REGIME_MIN_BARS sabiti
+        # REGIME_MIN_BARS override'ıyla sapmasın. MTF override'ı strateji
+        # katmanında kalır (bar_ctx üzerinden gelen temel rejim, mevcut
+        # akışla aynı sırada uygulanır).
+        regime_arr = (
+            benchmark_regime_series(
+                work, p, min_bars=int(_regime_thresholds(p)["min_bars"])
+            ).to_numpy(dtype=object)
+            if n >= 2
+            else None
+        )
+        # score_trend'in df tüketicisi (_compute_ema_slope) yerine bar
+        # başına skaler eğim beslenir; kapanış üzerinden okunur.
+        ema_slope_cell = [float("nan")]
+
+        def trend_scorer_with_slope(last, prev, _df=None):
+            return score_trend(p, last, prev, None, ema_slope=ema_slope_cell[0])
+
+        # Perf (#146 adım-2): skor döngüsüne bar başına pandas satır-Series
+        # yerine dict satır beslenir — satır kurulumu 50µs → <1µs, etiketli
+        # erişim ~1µs → ~0.04µs (mikro-bench). Scorers Mapping protokolünü
+        # destekler (live yolu Series beslemeye devam eder, davranış aynı).
+        col_arrays = {c: work[c].to_numpy() for c in work.columns}
         if n >= 2:
-            prev = work.iloc[0]
+            prev = {c: arr[0] for c, arr in col_arrays.items()}
             for i in range(1, n):
-                last = work.iloc[i]
-                start = i - window + 1
-                sub = work.iloc[start : i + 1] if start > 0 else work.iloc[: i + 1]
+                last = {c: arr[i] for c, arr in col_arrays.items()}
+                n_bars = window if i + 1 > window else i + 1
+                if ema_slope_arr is not None:
+                    ema_slope_cell[0] = float(ema_slope_arr[i])
+                else:
+                    ema_slope_cell[0] = float("nan")
+                bar_ctx = ScoreBarContext(
+                    n_bars=n_bars,
+                    mtf_sma_slope=(
+                        None
+                        if mtf_sma_slope is None
+                        else _lag_value(mtf_sma_slope, slope_lookback, i)
+                    ),
+                    mtf_ema_slope=(
+                        None
+                        if mtf_ema_slope is None
+                        else _lag_value(mtf_ema_slope, slope_lookback, i)
+                    ),
+                    ema_slope=ema_slope_cell[0],
+                    regime=(None if regime_arr is None else cast(MarketRegime, regime_arr[i])),
+                )
                 result = calculate_score_and_reasons(
                     p,
                     "",
-                    sub,
+                    None,
                     last=last,
                     prev=prev,
                     momentum_scorer=momentum_scorer,
-                    trend_scorer=trend_scorer,
+                    trend_scorer=trend_scorer_with_slope,
                     volume_scorer=volume_scorer,
                     structure_scorer=structure_scorer,
                     momentum_checker=check_momentum_confirmation,
                     reject_logger=None,
+                    regime_sma=float(regime_sma[i]) if regime_sma is not None else None,
+                    regime_last=last,
+                    bar_ctx=bar_ctx,
                 )
                 # A None result means the row was filtered out by a regime/momentum
                 # gate (sideways, weak momentum). Treat as score 0 -> no signal.

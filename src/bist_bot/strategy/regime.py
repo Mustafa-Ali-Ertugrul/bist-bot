@@ -50,18 +50,38 @@ def _regime_thresholds(params) -> dict[str, float]:
     }
 
 
-def detect_regime(df: pd.DataFrame, lookback: int = 20, params=None) -> MarketRegime:
+def detect_regime(
+    df: pd.DataFrame | None = None,
+    lookback: int = 20,
+    params=None,
+    *,
+    sma: float | None = None,
+    last: pd.Series | Mapping[str, object] | None = None,
+    n_bars: int | None = None,
+) -> MarketRegime:
     """Infer the current market regime from trend indicators.
 
     ``lookback`` artık SMA penceresinde gerçekten kullanılır (daha önce
     yok sayılıyordu; default 20 ile davranış aynıdır). ``params`` verilirse
     eşikler StrategyParams'tan okunur, yoksa mevcut sabitler geçerlidir.
+
+    Perf (#146): ``sma`` verilirse ``df["close"].tail(lookback).mean()``,
+    ``last`` verilirse ``df.iloc[-1]``, ``n_bars`` verilirse ``len(df)``
+    yeniden hesaplanmaz. ÜÇÜ birden verilirse ``df`` hiç okunmaz (backtest
+    skor-döngüsü skaler besler ve bar başına pencere dilimini tamamen
+    atlar). None verilen her alan davranış değişmeden df'ten hesaplanır
+    (live motor yolu).
     """
     th = _regime_thresholds(params)
-    if df is None or len(df) < th["min_bars"]:
+    if n_bars is None:
+        n_bars = 0 if df is None else len(df)
+    if n_bars < th["min_bars"]:
         return MarketRegime.UNKNOWN
 
-    last = df.iloc[-1]
+    if last is None:
+        if df is None:
+            raise ValueError("detect_regime: df gerekli (last/n_bars verilmedi)")
+        last = df.iloc[-1]
     adx = last.get("adx", 0)
     plus_di = last.get("plus_di", 0)
     minus_di = last.get("minus_di", 0)
@@ -73,7 +93,10 @@ def detect_regime(df: pd.DataFrame, lookback: int = 20, params=None) -> MarketRe
     momentum_pct = th["momentum_pct"]
 
     sma_window = max(int(lookback), 1)
-    sma = float(df["close"].tail(sma_window).mean())
+    if sma is None:
+        if df is None:
+            raise ValueError("detect_regime: df gerekli (sma verilmedi)")
+        sma = float(df["close"].tail(sma_window).mean())
     momentum = (close - sma) / sma * 100
 
     if adx >= trend_adx:
@@ -197,11 +220,30 @@ def check_regime_persistence(
     return True
 
 
-def check_momentum_confirmation(df: pd.DataFrame, threshold: float = 4.0) -> bool:
-    """Validate momentum when the primary trend signal is weak."""
-    if len(df) < 20:
+def check_momentum_confirmation(
+    df: pd.DataFrame | None = None,
+    threshold: float = 4.0,
+    *,
+    last: pd.Series | Mapping[str, object] | None = None,
+    sma: float | None = None,
+    n_bars: int | None = None,
+) -> bool:
+    """Validate momentum when the primary trend signal is weak.
+
+    Perf (#146 adım-3/4): ``last`` verilirse ``df.iloc[-1]``, ``sma``
+    verilirse ``df["close"].tail(20).mean()``, ``n_bars`` verilirse
+    ``len(df)`` yeniden hesaplanmaz. ÜÇÜ birden verilirse ``df`` hiç
+    okunmaz. None verilen her alan davranış değişmeden df'ten hesaplanır
+    (live motor yolu).
+    """
+    if n_bars is None:
+        n_bars = 0 if df is None else len(df)
+    if n_bars < 20:
         return True
-    last = df.iloc[-1]
+    if last is None:
+        if df is None:
+            raise ValueError("check_momentum_confirmation: df gerekli (last/n_bars verilmedi)")
+        last = df.iloc[-1]
     adx = last.get("adx", 0)
     plus_di = last.get("plus_di", 0)
     minus_di = last.get("minus_di", 0)
@@ -209,8 +251,11 @@ def check_momentum_confirmation(df: pd.DataFrame, threshold: float = 4.0) -> boo
         return True
     if abs(plus_di - minus_di) >= 5:
         return True
-    sma_20 = float(df["close"].tail(20).mean())
-    momentum = (float(last["close"]) - sma_20) / sma_20 * 100
+    if sma is None:
+        if df is None:
+            raise ValueError("check_momentum_confirmation: df gerekli (sma verilmedi)")
+        sma = float(df["close"].tail(20).mean())
+    momentum = (float(last["close"]) - sma) / sma * 100
     return abs(momentum) >= threshold
 
 
@@ -249,25 +294,38 @@ def _normalize_benchmark_frame(df: pd.DataFrame) -> pd.DataFrame:
     return out.dropna(subset=["close"])
 
 
-def benchmark_regime_series(enriched: pd.DataFrame, params=None) -> pd.Series:
+def benchmark_regime_series(
+    enriched: pd.DataFrame,
+    params=None,
+    *,
+    min_bars: int | None = None,
+) -> pd.Series:
     """Vectorized per-date regime for one *enriched* benchmark frame.
 
     Row ``t`` reproduces ``detect_regime(enriched.iloc[:t+1])`` exactly
     (detect_regime only reads the last row's adx/plus_di/minus_di/close plus
     a 20-close trailing mean, and all indicators are causal). Rows before
-    ``MACRO_REGIME_MIN_BARS`` get ``MarketRegime.UNKNOWN`` instead of a vote,
-    mirroring the live ``len(df) < 50`` skip.
+    ``min_bars`` get ``MarketRegime.UNKNOWN`` instead of a vote, mirroring
+    the live ``len(df) < min_bars`` skip.
 
     ``params`` verilirse eşikler ``_regime_thresholds`` üzerinden aynı
     kaynaktan okunur (çift bakım noktası kapatıldı); verilmezse mevcut
     sabitler geçerlidir. Eşdeğerlik, iki yola da aynı params/lookback
     verildiği sürece korunur.
+
+    ``min_bars`` verilmezse ``MACRO_REGIME_MIN_BARS`` kullanılır (mevcut
+    makro-rejim davranışı birebir korunur). Backtest skor-döngüsü,
+    ``detect_regime``'in okuduğu ``_regime_thresholds(params)["min_bars"]``
+    değerini AÇIKÇA geçirir — ikizi ayar/environment override'larına karşı
+    de senkron tutar (aksi hâlde ``REGIME_MIN_BARS != 50`` iken sessiz
+    sapma oluşurdu).
     """
     th = _regime_thresholds(params)
     trend_adx = th["trend_adx"]
     weak_adx = th["weak_adx"]
     di_ratio = th["di_ratio"]
     momentum_pct = th["momentum_pct"]
+    mb = MACRO_REGIME_MIN_BARS if min_bars is None else int(min_bars)
 
     close = enriched["close"].astype(float)
     adx = (
@@ -301,7 +359,7 @@ def benchmark_regime_series(enriched: pd.DataFrame, params=None) -> pd.Series:
     out[bull] = MarketRegime.BULL
     out[bear] = MarketRegime.BEAR
     if len(out) > 0:
-        out.iloc[: max(0, min(len(out), MACRO_REGIME_MIN_BARS) - 1)] = MarketRegime.UNKNOWN
+        out.iloc[: max(0, min(len(out), mb) - 1)] = MarketRegime.UNKNOWN
     return out
 
 

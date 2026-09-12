@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
+from typing import Any
 
 import pandas as pd
 
@@ -38,6 +40,32 @@ def component_direction(score: float) -> int:
     return 0
 
 
+@dataclass(frozen=True)
+class ScoreBarContext:
+    """Perf (#146 adım-4): skor-döngüsü için bar başına skaler bağlam.
+
+    ``calculate_score_and_reasons``'in pencere DataFrame'inden (``df``)
+    okuduğu TÜM değerleri taşır; verildiğinde bar başına ``df.iloc[...]``
+    dilimi hiç kurulmaz:
+
+    - ``n_bars``: trailing pencerenin satır sayısı (``len(sub)``)
+    - ``mtf_sma_slope`` / ``mtf_ema_slope``: MTF çelişki kontrolünün
+      okuduğu eğimler; ``None`` = sütun yok ya da yetersiz geçmiş
+    - ``ema_slope``: ``score_trend``'in EMA eğimi (``_compute_ema_slope``
+      karşılığı); ``nan`` = yetersiz geçmiş/sütun yok
+    - ``regime``: ``detect_regime(...)``in bu bar için sonucu
+      (``benchmark_regime_series`` vektörel ikizinden; MTF override'ı
+      öncesi temel rejim). ``None`` ise strateji katmanı detect_regime'i
+      kendisi çağırır.
+    """
+
+    n_bars: int
+    mtf_sma_slope: float | None = None
+    mtf_ema_slope: float | None = None
+    ema_slope: float = float("nan")
+    regime: MarketRegime | None = None
+
+
 def _has_mtf_slope_contradiction(params: StrategyParams, df: pd.DataFrame) -> bool:
     if not params.mtf_confluence_block_enabled:
         return False
@@ -49,6 +77,23 @@ def _has_mtf_slope_contradiction(params: StrategyParams, df: pd.DataFrame) -> bo
     ema_slope = float(df[ema_column].iloc[-1]) - float(df[ema_column].iloc[-1 - lookback])
     sma_dir = component_direction(sma_slope)
     ema_dir = component_direction(ema_slope)
+    return sma_dir != 0 and ema_dir != 0 and sma_dir != ema_dir
+
+
+def _mtf_contradiction_from_ctx(params: StrategyParams, ctx: ScoreBarContext) -> bool:
+    """#146 adım-4: ``_has_mtf_slope_contradiction``in skaler karşılığı.
+
+    ``ScoreBarContext.mtf_*_slope`` alanları, pencere dilimindeki eğimlerin
+    (``df[col].iloc[-1] - df[col].iloc[-1 - slope_lookback]``) birebir
+    değerleridir; ``None`` = sütun yok ya da yetersiz geçmiş (orijinal
+    fonksiyonun ``return False`` dalları).
+    """
+    if not params.mtf_confluence_block_enabled:
+        return False
+    if ctx.mtf_sma_slope is None or ctx.mtf_ema_slope is None:
+        return False
+    sma_dir = component_direction(ctx.mtf_sma_slope)
+    ema_dir = component_direction(ctx.mtf_ema_slope)
     return sma_dir != 0 and ema_dir != 0 and sma_dir != ema_dir
 
 
@@ -197,21 +242,60 @@ def apply_low_adx_penalty(
 def calculate_score_and_reasons(
     params: StrategyParams,
     ticker: str,
-    df: pd.DataFrame,
+    df: pd.DataFrame | None,
     *,
-    last: pd.Series,
-    prev: pd.Series,
+    last: pd.Series | Mapping[str, Any],
+    prev: pd.Series | Mapping[str, Any],
     momentum_scorer: ScoreTwoRows,
     trend_scorer: TrendScorer,
     volume_scorer: ScoreTwoRows,
     structure_scorer: ScoreOneRow,
     momentum_checker: MomentumChecker = check_momentum_confirmation,
     reject_logger: RejectLogger | None = None,
+    regime_sma: float | None = None,
+    regime_last: pd.Series | Mapping[str, Any] | None = None,
+    bar_ctx: ScoreBarContext | None = None,
 ) -> tuple[float, list[str], float | None] | None:
-    """Calculate the bounded strategy score and explanatory reason list."""
+    """Calculate the bounded strategy score and explanatory reason list.
+
+    ``last``/``prev`` satır protokolü: pd.Series VEYA Mapping (dict) —
+    her ikisi ``.get``/``[]`` destekler (#146 adım-2: backtest skor
+    döngüsü dict satır besleyerek bar başına pandas satır-Series kurulumu
+    atlar; live motor Series beslemeye devam eder).
+
+    ``regime_sma`` verildiğinde ``detect_regime``'in bar başına
+    ``tail(lookback).mean()`` hesabı, ``regime_last`` verildiğinde
+    ``df.iloc[-1]`` yeniden hesaplanmaz (backtest precompute'ı; değerler
+    son satırın birebir karşılığı olmalıdır). None ise davranış değişmeden
+    df'ten hesaplanır.
+
+    ``bar_ctx`` (#146 adım-4) verildiğinde pencere DataFrame'inin (``df``)
+    okuduğu TÜM değerler skaler olarak taşınır — ``df`` None olabilir ve
+    bar başına pencere dilimi hiç kurulmaz (live motor df beslemeye devam
+    eder, davranış aynıdır).
+    """
     reasons: list[str] = []
-    regime = detect_regime(df)
-    if _has_mtf_slope_contradiction(params, df):
+    # Kwarg'lar YALNIZCA sağlandığında geçirilir: monkeypatch'lenmiş/custom
+    # detect_regime implementasyonları (tek positional arg kabul eden)
+    # bozulmaz; live yol çağrı imzası birebir eski hâlindedir.
+    regime_kwargs: dict[str, object] = {}
+    if regime_sma is not None:
+        regime_kwargs["sma"] = regime_sma
+    if regime_last is not None:
+        regime_kwargs["last"] = regime_last
+    if bar_ctx is not None:
+        regime_kwargs["n_bars"] = bar_ctx.n_bars
+    # Perf (#146 adım-5): temel rejim vektörel ikizden hazır geldiyse
+    # detect_regime hiç çağrılmaz (bar başına çağrı yükünün tamamı kalkar).
+    if bar_ctx is not None and bar_ctx.regime is not None:
+        regime = bar_ctx.regime
+    else:
+        regime = detect_regime(df, **regime_kwargs)
+    if bar_ctx is not None:
+        mtf_contradiction = _mtf_contradiction_from_ctx(params, bar_ctx)
+    else:
+        mtf_contradiction = _has_mtf_slope_contradiction(params, df)
+    if mtf_contradiction:
         regime = MarketRegime.SIDEWAYS
         reasons.append("MTF çelişki: SMA20 ve EMA200 eğimleri zıt")
     if regime == MarketRegime.SIDEWAYS:
@@ -276,21 +360,35 @@ def calculate_score_and_reasons(
                 )
             return None
 
-    if score != 0 and not momentum_checker(df, params.momentum_confirmation_threshold):
-        if score < 0 or abs(score) < params.buy_threshold + params.sideways_extra_threshold:
-            logger.debug(
-                "strategy_momentum_filtered",
-                ticker=ticker,
-                score=round(float(score), 2),
+    if score != 0:
+        # Perf (#146 adım-3/4): default momentum checker'da precompute'ları
+        # yeniden kullan; custom checker'lar (testler) 2-arg imzasıyla
+        # çağrılmaya devam eder — identity guard sayesinde TypeError yok.
+        if momentum_checker is check_momentum_confirmation:
+            momentum_ok = momentum_checker(
+                df,
+                params.momentum_confirmation_threshold,
+                last=regime_last,
+                sma=regime_sma,
+                n_bars=bar_ctx.n_bars if bar_ctx is not None else None,
             )
-            if reject_logger is not None:
-                reject_logger(
-                    stage="scoring",
-                    reason_code="score_filtered_momentum",
+        else:
+            momentum_ok = momentum_checker(df, params.momentum_confirmation_threshold)
+        if not momentum_ok:
+            if score < 0 or abs(score) < params.buy_threshold + params.sideways_extra_threshold:
+                logger.debug(
+                    "strategy_momentum_filtered",
+                    ticker=ticker,
                     score=round(float(score), 2),
-                    reason_detail="momentum confirmation failed near buy threshold",
                 )
-            return None
+                if reject_logger is not None:
+                    reject_logger(
+                        stage="scoring",
+                        reason_code="score_filtered_momentum",
+                        score=round(float(score), 2),
+                        reason_detail="momentum confirmation failed near buy threshold",
+                    )
+                return None
 
     # H4 — OBV / volume divergence gate.
     # Raw volume spike can pad the volume score (vol_confirm +8, vol_spike +8, total +16)

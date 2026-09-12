@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 import pandas as pd
 
 from bist_bot.config.settings import settings
@@ -153,7 +155,9 @@ def _compute_ema_slope(df: pd.DataFrame, slope_lookback: int) -> float | None:
     return series.iloc[-1] - series.iloc[-1 - slope_lookback]
 
 
-def score_trend(params, last, prev, df=None) -> tuple[float, list[str]]:
+def score_trend(
+    params, last, prev, df=None, *, ema_slope: float | None = None
+) -> tuple[float, list[str]]:
     score = 0.0
     reasons: list[str] = []
 
@@ -165,7 +169,16 @@ def score_trend(params, last, prev, df=None) -> tuple[float, list[str]]:
         last_above_ema = prev["close"] > prev.get(f"ema_{settings.EMA_LONG}", ema_long)
 
         slope_lookback_val = getattr(params, "slope_lookback", 40)
-        slope = _compute_ema_slope(df, slope_lookback_val) if df is not None else float("nan")
+        # Perf (#146 adım-4): skor-döngüsü ema eğimini önden hesaplayıp
+        # verir; o zaman pencere dilimi (df) hiç kurulmaz. df yokluğunda
+        # eski davranış float("nan") idi — NaN tüm karşılaştırmalarda
+        # False olduğu için None ile aynı dalı izler.
+        if ema_slope is not None:
+            slope = ema_slope
+        elif df is not None:
+            slope = _compute_ema_slope(df, slope_lookback_val)
+        else:
+            slope = float("nan")
 
         if above_ema and not last_above_ema:
             score += params.score_ema_initial_cross
@@ -306,7 +319,9 @@ def score_volume(params, last, prev) -> tuple[float, list[str]]:
     vol_trend = last.get("volume_trend", "FLAT")
 
     if vol_spike:
-        prev_close = prev.get("close") if isinstance(prev, pd.Series) else None
+        # Perf (#146 adım-2): backtest skor-döngüsü satırları dict olarak
+        # besleyebilir; Series/None davranışı birebir korunur.
+        prev_close = prev.get("close") if isinstance(prev, pd.Series | Mapping) else None
         current_close = last.get("close")
         if pd.notna(current_close) and pd.notna(prev_close):
             price_change = float(current_close) - float(prev_close)
