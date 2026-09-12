@@ -63,6 +63,8 @@ class StrategyEngineProtocol(Protocol):
         ticker: str,
         df: pd.DataFrame | dict[str, pd.DataFrame],
         enforce_sector_limit: bool = ...,
+        *,
+        pre_enriched: bool = ...,
     ) -> Signal | None: ...
     def get_last_rejection_breakdown(self) -> dict[str, Any]: ...
 

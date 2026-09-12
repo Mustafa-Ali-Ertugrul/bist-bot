@@ -176,7 +176,8 @@ def score_trend(
         if ema_slope is not None:
             slope = ema_slope
         elif df is not None:
-            slope = _compute_ema_slope(df, slope_lookback_val)
+            ema_slope_val = _compute_ema_slope(df, slope_lookback_val)
+            slope = ema_slope_val if ema_slope_val is not None else float("nan")
         else:
             slope = float("nan")
 
