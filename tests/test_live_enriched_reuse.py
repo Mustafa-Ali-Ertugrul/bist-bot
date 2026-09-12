@@ -86,9 +86,7 @@ def test_full_frame_divergence_equals_live_knowledge_one_bar_later() -> None:
     full = TechnicalIndicators().add_all(raw.copy())
     for t in range(30, 159, 11):
         later = TechnicalIndicators().add_all(raw.iloc[: t + 2].copy())
-        assert str(full["macd_divergence"].iloc[t]) == str(
-            later["macd_divergence"].iloc[t]
-        ), t
+        assert str(full["macd_divergence"].iloc[t]) == str(later["macd_divergence"].iloc[t]), t
 
 
 def test_strategy_backtester_enriched_reuse_matches_legacy() -> None:
@@ -105,9 +103,7 @@ def test_strategy_backtester_enriched_reuse_matches_legacy() -> None:
     )
 
     def run(force_legacy: bool):
-        sb = StrategyBacktester(
-            initial_capital=10_000, engine=StrategyEngine(params=params)
-        )
+        sb = StrategyBacktester(initial_capital=10_000, engine=StrategyEngine(params=params))
         if force_legacy:
             orig = sb.engine.analyze
 

@@ -26,6 +26,19 @@ class TrendBias(Enum):
     NEUTRAL = "NEUTRAL"
 
 
+def _coerce_float(value: object, default: float = 0.0) -> float:
+    """Satur-lerden mypy-güvenli skaler çıkarımı.
+
+    ``last.get("adx", 0)`` bir Series'te Any, bir Mapping[str, object]'te
+    object döner; aritmetikte (>=, *, -) mypy "object" operands hatası
+    üretir. None → default değerine çekilir, gerisi float'a çevrilir.
+    NaN float kalır (tüm karşılaştırmalarda False → eski davranış).
+    """
+    if value is None:
+        return default
+    return float(value)
+
+
 def _regime_thresholds(params) -> dict[str, float]:
     """Single maintenance point for detect_regime + vektörel ikizi.
 
@@ -82,9 +95,9 @@ def detect_regime(
         if df is None:
             raise ValueError("detect_regime: df gerekli (last/n_bars verilmedi)")
         last = df.iloc[-1]
-    adx = last.get("adx", 0)
-    plus_di = last.get("plus_di", 0)
-    minus_di = last.get("minus_di", 0)
+    adx = _coerce_float(last.get("adx", 0.0))
+    plus_di = _coerce_float(last.get("plus_di", 0.0))
+    minus_di = _coerce_float(last.get("minus_di", 0.0))
     close = float(last["close"])
 
     trend_adx = th["trend_adx"]
@@ -244,9 +257,9 @@ def check_momentum_confirmation(
         if df is None:
             raise ValueError("check_momentum_confirmation: df gerekli (last/n_bars verilmedi)")
         last = df.iloc[-1]
-    adx = last.get("adx", 0)
-    plus_di = last.get("plus_di", 0)
-    minus_di = last.get("minus_di", 0)
+    adx = _coerce_float(last.get("adx", 0.0))
+    plus_di = _coerce_float(last.get("plus_di", 0.0))
+    minus_di = _coerce_float(last.get("minus_di", 0.0))
     if adx >= 20:
         return True
     if abs(plus_di - minus_di) >= 5:
