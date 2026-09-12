@@ -229,6 +229,21 @@ def test_score_identical_with_precomputed_sma() -> None:
             assert fast[0] == pytest.approx(legacy[0], abs=1e-9, rel=1e-9), i
 
 
+def test_momentum_checker_with_precomputed_values_identical() -> None:
+    """#146 step 3: check_momentum_confirmation with last/sma == df-computed."""
+    from bist_bot.strategy.regime import check_momentum_confirmation
+
+    df = _build_frame(200)
+    rolled = _precomputed_sma(df).to_numpy()
+    for i in range(20, len(df)):
+        start = i - WINDOW + 1
+        sub = df.iloc[start : i + 1] if start > 0 else df.iloc[: i + 1]
+        dict_last = {c: df[c].to_numpy()[i] for c in df.columns}
+        legacy = check_momentum_confirmation(sub, 4.0)
+        fast = check_momentum_confirmation(sub, 4.0, last=dict_last, sma=float(rolled[i]))
+        assert fast == legacy, i
+
+
 def test_backtest_end_to_end_parity_with_and_without_precompute(monkeypatch) -> None:
     df = _build_frame(300)
     res_fast = Backtester(initial_capital=10_000, indicators=IdentityIndicators()).run(

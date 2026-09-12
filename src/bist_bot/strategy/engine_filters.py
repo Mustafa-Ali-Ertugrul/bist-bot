@@ -299,21 +299,34 @@ def calculate_score_and_reasons(
                 )
             return None
 
-    if score != 0 and not momentum_checker(df, params.momentum_confirmation_threshold):
-        if score < 0 or abs(score) < params.buy_threshold + params.sideways_extra_threshold:
-            logger.debug(
-                "strategy_momentum_filtered",
-                ticker=ticker,
-                score=round(float(score), 2),
+    if score != 0:
+        # Perf (#146 adım-3): default momentum checker'da precompute'ları
+        # yeniden kullan; custom checker'lar (testler) 2-arg imzasıyla
+        # çağrılmaya devam eder — identity guard sayesinde TypeError yok.
+        if momentum_checker is check_momentum_confirmation:
+            momentum_ok = momentum_checker(
+                df,
+                params.momentum_confirmation_threshold,
+                last=regime_last,
+                sma=regime_sma,
             )
-            if reject_logger is not None:
-                reject_logger(
-                    stage="scoring",
-                    reason_code="score_filtered_momentum",
+        else:
+            momentum_ok = momentum_checker(df, params.momentum_confirmation_threshold)
+        if not momentum_ok:
+            if score < 0 or abs(score) < params.buy_threshold + params.sideways_extra_threshold:
+                logger.debug(
+                    "strategy_momentum_filtered",
+                    ticker=ticker,
                     score=round(float(score), 2),
-                    reason_detail="momentum confirmation failed near buy threshold",
                 )
-            return None
+                if reject_logger is not None:
+                    reject_logger(
+                        stage="scoring",
+                        reason_code="score_filtered_momentum",
+                        score=round(float(score), 2),
+                        reason_detail="momentum confirmation failed near buy threshold",
+                    )
+                return None
 
     # H4 — OBV / volume divergence gate.
     # Raw volume spike can pad the volume score (vol_confirm +8, vol_spike +8, total +16)

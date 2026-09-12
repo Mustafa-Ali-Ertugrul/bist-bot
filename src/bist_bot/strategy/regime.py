@@ -212,11 +212,25 @@ def check_regime_persistence(
     return True
 
 
-def check_momentum_confirmation(df: pd.DataFrame, threshold: float = 4.0) -> bool:
-    """Validate momentum when the primary trend signal is weak."""
+def check_momentum_confirmation(
+    df: pd.DataFrame,
+    threshold: float = 4.0,
+    *,
+    last: pd.Series | Mapping[str, object] | None = None,
+    sma: float | None = None,
+) -> bool:
+    """Validate momentum when the primary trend signal is weak.
+
+    Perf (#146 adım-3): ``last`` verilirse ``df.iloc[-1]``, ``sma`` verilirse
+    ``df["close"].tail(20).mean()`` yeniden hesaplanmaz — arayan taraf son
+    satırın birebir karşılığını garanti eder (backtest skor-döngüsü dict
+    satır + rolling(20) dizisi besler; detect_regime ile aynı sözleşme).
+    None ise davranış değişmeden df'ten hesaplanır (live motor yolu).
+    """
     if len(df) < 20:
         return True
-    last = df.iloc[-1]
+    if last is None:
+        last = df.iloc[-1]
     adx = last.get("adx", 0)
     plus_di = last.get("plus_di", 0)
     minus_di = last.get("minus_di", 0)
@@ -224,8 +238,9 @@ def check_momentum_confirmation(df: pd.DataFrame, threshold: float = 4.0) -> boo
         return True
     if abs(plus_di - minus_di) >= 5:
         return True
-    sma_20 = float(df["close"].tail(20).mean())
-    momentum = (float(last["close"]) - sma_20) / sma_20 * 100
+    if sma is None:
+        sma = float(df["close"].tail(20).mean())
+    momentum = (float(last["close"]) - sma) / sma * 100
     return abs(momentum) >= threshold
 
 
