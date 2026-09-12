@@ -43,8 +43,18 @@ class StrategyBacktester:
             if self._enriched_cache is None or idx < 0 or idx >= len(self._enriched_cache):
                 return self._empty_signal_context()
 
+            # perf (#146 canlı yol): dilim, BİR KEZ zenginleştirilmiş
+            # _enriched_cache'ten alınır; engine.analyze'a pre_enriched=True
+            # geçilir ki bar başına add_all (tüm indikatör paketi) tekrar
+            # hesaplanmasın. Divergence sütunlarının çerçeve-uzunluğu bağımlı
+            # son-satır bastırması engine tarafında uygulanır (parite birebir).
             enriched_slice = self._enriched_cache.iloc[: idx + 1]
-            signal = self.engine.analyze(ticker, enriched_slice, enforce_sector_limit=False)
+            signal = self.engine.analyze(
+                ticker,
+                enriched_slice,
+                enforce_sector_limit=False,
+                pre_enriched=True,
+            )
             if signal is None:
                 return self._empty_signal_context()
             return {

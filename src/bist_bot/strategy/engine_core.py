@@ -22,6 +22,9 @@ def extract_timeframes(
     return market_data, market_data, False
 
 
+DIVERGENCE_COLUMNS = ("rsi_divergence", "macd_divergence")
+
+
 def prepare_analysis_frame(
     indicators: TechnicalIndicators,
     trigger_df: pd.DataFrame,
@@ -29,11 +32,32 @@ def prepare_analysis_frame(
     trend_df: pd.DataFrame,
     multi_timeframe: bool,
     params=None,
+    pre_enriched: bool = False,
 ) -> tuple[pd.DataFrame, TrendBias, pd.Series, pd.Series]:
-    """Enrich trigger data and extract current/previous scoring rows."""
+    """Enrich trigger data and extract current/previous scoring rows.
+
+    ``pre_enriched`` (#146 canlı yol): ``trigger_df`` zaten indikatörlerle
+    zenginleştirilmiş kabul edilir ve ``add_all`` YENİDEN çalıştırılmaz.
+
+    Tek istisna divergence sütunlarıdır: ``_add_min_divergence`` çerçevenin
+    SON satırını bilinçli olarak bastırır (onaysız pivotda sinyal üretmez),
+    bu yüzden o sütunların son satır değeri çerçeve uzunluğuna bağlıdır.
+    Önbellekten gelen değerler "sonraki bar da elimizde" bilgisiyle
+    hesaplanmıştır; karar barı için doğru değer "NONE"dur. Bu yüzden
+    pre_enriched yolunda divergence sütunları son satırda NONE'a çekilir
+    (diğer 56 sütunun son satır değerleri tam çerçeve değerleriyle
+    birebir aynıdır).
+    """
     if trigger_df.empty or len(trigger_df) < 2:
         raise ValueError("Trigger veri setinde analiz için yeterli satir yok")
-    analysis_df = indicators.add_all(trigger_df.copy())
+    if pre_enriched:
+        analysis_df = trigger_df.copy()
+        last_label = analysis_df.index[-1]
+        for col in DIVERGENCE_COLUMNS:
+            if col in analysis_df.columns:
+                analysis_df.loc[last_label, col] = "NONE"
+    else:
+        analysis_df = indicators.add_all(trigger_df.copy())
     if analysis_df.empty or len(analysis_df) < 2:
         raise ValueError("Indikator hesaplamasi sonrasi yeterli veri kalmadi")
     trend_bias = (

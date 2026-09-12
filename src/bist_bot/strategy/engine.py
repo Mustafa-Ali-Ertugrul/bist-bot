@@ -11,7 +11,11 @@ from bist_bot.config.settings import settings
 from bist_bot.indicators import TechnicalIndicators
 from bist_bot.risk import RiskLevels, RiskManager
 from bist_bot.strategy.base import BaseStrategy
-from bist_bot.strategy.engine_core import extract_timeframes, prepare_analysis_frame
+from bist_bot.strategy.engine_core import (
+    DIVERGENCE_COLUMNS,
+    extract_timeframes,
+    prepare_analysis_frame,
+)
 from bist_bot.strategy.engine_filters import (
     apply_low_adx_penalty,
     calculate_score_and_reasons,
@@ -286,9 +290,17 @@ class StrategyEngine:
         *,
         trend_df: pd.DataFrame,
         multi_timeframe: bool,
+        pre_enriched: bool = False,
     ) -> tuple[pd.DataFrame, TrendBias, pd.Series, pd.Series]:
         if multi_timeframe and getattr(settings, "MTF_ENABLED", True):
-            analysis_df = self.indicators.add_all(trigger_df.copy())
+            if pre_enriched:
+                analysis_df = trigger_df.copy()
+                last_label = analysis_df.index[-1]
+                for col in DIVERGENCE_COLUMNS:
+                    if col in analysis_df.columns:
+                        analysis_df.loc[last_label, col] = "NONE"
+            else:
+                analysis_df = self.indicators.add_all(trigger_df.copy())
             trend_bias = self._get_trend_bias(trend_df)
             last = analysis_df.iloc[-1].copy()
             prev = analysis_df.iloc[-2]
@@ -300,6 +312,7 @@ class StrategyEngine:
             trend_df=trend_df,
             multi_timeframe=multi_timeframe,
             params=self.params,
+            pre_enriched=pre_enriched,
         )
 
     def _passes_adx_filter(self, ticker: str, last: pd.Series) -> bool:
@@ -517,8 +530,19 @@ class StrategyEngine:
         ticker: str,
         df: pd.DataFrame | dict[str, pd.DataFrame],
         enforce_sector_limit: bool = False,
+        *,
+        pre_enriched: bool = False,
     ) -> Signal | None:
-        """Score a ticker and build a signal when thresholds are met."""
+        """Score a ticker and build a signal when thresholds are met.
+
+        ``pre_enriched`` (#146 canlı yol): ``df`` zaten indikatörlerle
+        zenginleştirilmişse ``add_all`` tekrar çalıştırılmaz. Backtest
+        ``signal_builder`` çağıranı zengin çerçeveyi önbellekte tuttuğu
+        için bar başına tüm indikatör paketini yeniden hesaplamak O(n²)
+        maliyet üretiyordu. Divergence sütunları karar barında NONE'a
+        çekilir (çerçeve-uzunluğu bağımlı bastırma kuralının birebir
+        karşılığı). Varsayılan (False) canlı akışta davranışı korur.
+        """
         trend_df, trigger_df, multi_timeframe = self._extract_timeframes(df)
         if not self._has_enough_trigger_data(ticker, trigger_df):
             self._log_candidate_rejected(
@@ -535,6 +559,7 @@ class StrategyEngine:
             trigger_df,
             trend_df=trend_df,
             multi_timeframe=multi_timeframe,
+            pre_enriched=pre_enriched,
         )
         if not self._passes_adx_filter(ticker, last):
             self._log_candidate_rejected(
