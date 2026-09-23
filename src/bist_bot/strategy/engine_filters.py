@@ -255,6 +255,7 @@ def calculate_score_and_reasons(
     regime_sma: float | None = None,
     regime_last: pd.Series | Mapping[str, Any] | None = None,
     bar_ctx: ScoreBarContext | None = None,
+    components_out: dict[str, float] | None = None,
 ) -> tuple[float, list[str], float | None] | None:
     """Calculate the bounded strategy score and explanatory reason list.
 
@@ -306,6 +307,14 @@ def calculate_score_and_reasons(
     s3, r3 = volume_scorer(last, prev)
     s4, r4 = structure_scorer(last)
     reasons.extend(r1 + r2 + r3 + r4)
+
+    # capture raw (pre-multiplier) component values for the explainability
+    # path so _build_score_breakdown can consume them without re-scoring.
+    if components_out is not None:
+        components_out["momentum"] = float(s1)
+        components_out["trend"] = float(s2)
+        components_out["volume"] = float(s3)
+        components_out["structure"] = float(s4)
 
     raw_score, _raw_components = combine_component_scores(params, s1, s2, s3, s4)
     if getattr(params, "normalized_component_scoring", False):
@@ -364,7 +373,13 @@ def calculate_score_and_reasons(
         # Perf (#146 adım-3/4): default momentum checker'da precompute'ları
         # yeniden kullan; custom checker'lar (testler) 2-arg imzasıyla
         # çağrılmaya devam eder — identity guard sayesinde TypeError yok.
-        if momentum_checker is check_momentum_confirmation:
+        # ``momentum_checker`` bir bound method ise (__func__ ile ayrıştırılır)
+        # altta yatan düz fonksiyon ile karşılaştırılır; böylece
+        # self._check_momentum_confirmation gibi pass-through'lar da
+        # algılanır. Monkepatch-safe kalır (testler kendi callable'ini
+        # geçebilir ve __func__ yoktur → else dalı çalışır).
+        _resolved_checker = getattr(momentum_checker, "__func__", momentum_checker)
+        if _resolved_checker is check_momentum_confirmation:
             momentum_ok = momentum_checker(
                 df,
                 params.momentum_confirmation_threshold,

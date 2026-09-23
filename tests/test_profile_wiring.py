@@ -28,12 +28,16 @@ def test_strategy_params_from_settings_returns_default_for_non_conservative() ->
     assert params.counter_trend_multiplier == 0.3
 
 
-def test_strategy_params_from_settings_defaults_to_conservative(tmp_path: Path) -> None:
-    """STRATEGY_PROFILE nowhere (clean env + no .env file) → conservative.
+def test_strategy_params_from_settings_defaults_to_champion(tmp_path: Path) -> None:
+    """STRATEGY_PROFILE nowhere (clean env + no .env file) → champion.
+
+    Canlı varsayılan 2026-09-17 itibarıyla champion (challenge 2026-08-29:
+    %76.4 WR, skor bandı 28-33, pv-gate). Eski davranış için
+    STRATEGY_PROFILE=conservative.
 
     Runs in a subprocess because the setting is baked at import time via
     dotenv; this keeps the test hermetic regardless of the developer's
-    local .env (e.g. STRATEGY_PROFILE=champion).
+    local .env (e.g. STRATEGY_PROFILE=conservative).
     """
     repo_root = Path(__file__).resolve().parents[1]
     env = {k: v for k, v in os.environ.items() if k != "STRATEGY_PROFILE"}
@@ -52,7 +56,7 @@ def test_strategy_params_from_settings_defaults_to_conservative(tmp_path: Path) 
         timeout=180,
     )
     assert proc.returncode == 0, proc.stderr[-2000:]
-    assert proc.stdout.strip() == "25.0"
+    assert proc.stdout.strip() == "28.0"
 
 
 def test_engine_uses_conservative_params_by_default() -> None:

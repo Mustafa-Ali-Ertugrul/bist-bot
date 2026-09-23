@@ -72,6 +72,58 @@ class StrategyParams:
     # Varsayılanlar kapalı/0.5 → mevcut davranış değişmez.
     oversold_requires_trend_confirm: bool = False
     oversold_unconfirmed_score_multiplier: float = 0.5
+
+    # ------------------------------------------------------------------
+    # Makro bağlam filtreleri (varsayılan KAPALI → mevcut davranış aynı).
+    # USD/TRY cezası sabit puan olarak uygulanır (çarpan yok — eşik
+    # kalibrasyonu bozulmaz); yalnızca long adaylara (score > 0) işler.
+    # ------------------------------------------------------------------
+    forex_filter_enabled: bool = field(default_factory=lambda: bool(settings.FOREX_FILTER_ENABLED))
+    forex_penalty_points: float = field(
+        default_factory=lambda: float(settings.FOREX_PENALTY_POINTS)
+    )
+    forex_risk_sectors: tuple[str, ...] = field(
+        default_factory=lambda: tuple(settings.FOREX_RISK_SECTORS)
+    )
+    forex_trend_lookback: int = field(default_factory=lambda: int(settings.FOREX_TREND_LOOKBACK))
+    usdtry_ticker: str = field(default_factory=lambda: str(settings.USDTRY_TICKER))
+    xu100_voter_enabled: bool = field(default_factory=lambda: bool(settings.XU100_VOTER_ENABLED))
+    xu100_ticker: str = field(default_factory=lambda: str(settings.XU100_TICKER))
+    # ------------------------------------------------------------------
+    # Gun-ici seans metrik ayarlamasi (session_metrics). Varsayilan ACIK;
+    # taban-kilitli alim engeli disinda kucuk (±cap) additif ayar yapar.
+    # ------------------------------------------------------------------
+    session_adj_enabled: bool = field(default_factory=lambda: bool(settings.SESSION_ADJ_ENABLED))
+    session_limit_down_block: bool = field(
+        default_factory=lambda: bool(settings.SESSION_LIMIT_DOWN_BLOCK)
+    )
+    session_limit_up_penalty: float = field(
+        default_factory=lambda: float(settings.SESSION_LIMIT_UP_PENALTY)
+    )
+    session_range_pos_min: float = field(
+        default_factory=lambda: float(settings.SESSION_RANGE_POS_MIN)
+    )
+    session_recovery_min_pct: float = field(
+        default_factory=lambda: float(settings.SESSION_RECOVERY_MIN_PCT)
+    )
+    session_recovery_bonus: float = field(
+        default_factory=lambda: float(settings.SESSION_RECOVERY_BONUS)
+    )
+    session_rel_threshold: float = field(
+        default_factory=lambda: float(settings.SESSION_REL_THRESHOLD)
+    )
+    session_rel_bonus: float = field(default_factory=lambda: float(settings.SESSION_REL_BONUS))
+    session_pace_min: float = field(default_factory=lambda: float(settings.SESSION_PACE_MIN))
+    session_pace_bonus: float = field(default_factory=lambda: float(settings.SESSION_PACE_BONUS))
+    session_breadth_min_pct: float = field(
+        default_factory=lambda: float(settings.SESSION_BREADTH_MIN_PCT)
+    )
+    session_breadth_penalty: float = field(
+        default_factory=lambda: float(settings.SESSION_BREADTH_PENALTY)
+    )
+    session_max_bonus: float = field(default_factory=lambda: float(settings.SESSION_MAX_BONUS))
+    session_max_penalty: float = field(default_factory=lambda: float(settings.SESSION_MAX_PENALTY))
+    session_limit_pct: float = field(default_factory=lambda: float(settings.SESSION_LIMIT_PCT))
     # Deney F (P0/P1 kanıtı): long adaylar için fiyat-hacim boğa teyidi şartı.
     # Açıkken skoru buy_threshold'u geçen long aday
     # ``price_volume_direction != BULLISH_CONFIRMATION`` ise reddedilir.
@@ -377,5 +429,25 @@ def validate_strategy_params(params: Any) -> list[str]:
     min_bars = _int("corr_fallback_min_bars", 10)
     if min_bars is not None and min_bars < 2:
         errors.append("corr_fallback_min_bars >= 2 olmalı")
+
+    forex_penalty = _num("forex_penalty_points", 5.0)
+    if forex_penalty is not None and forex_penalty < 0:
+        errors.append("forex_penalty_points negatif olamaz")
+    forex_lookback = _int("forex_trend_lookback", 20)
+    if forex_lookback is not None and forex_lookback < 2:
+        errors.append("forex_trend_lookback >= 2 olmalı")
+
+    sess_bonus = _num("session_max_bonus", 8.0)
+    if sess_bonus is not None and sess_bonus < 0:
+        errors.append("session_max_bonus negatif olamaz")
+    sess_pen = _num("session_max_penalty", 8.0)
+    if sess_pen is not None and sess_pen < 0:
+        errors.append("session_max_penalty negatif olamaz")
+    sess_lim = _num("session_limit_pct", 9.5)
+    if sess_lim is not None and not (0 < sess_lim <= 20):
+        errors.append("session_limit_pct (0, 20] aralığında olmalı")
+    sess_breadth = _num("session_breadth_min_pct", 40.0)
+    if sess_breadth is not None and not (0 <= sess_breadth <= 100):
+        errors.append("session_breadth_min_pct 0-100 aralığında olmalı")
 
     return errors

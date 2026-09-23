@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 
 from bist_bot.config.settings import settings
-from bist_bot.indicators import TechnicalIndicators
+from bist_bot.indicators import cached_add_all
 from bist_bot.ml.features import FEATURE_COLUMNS, build_feature_payload, to_float
 from bist_bot.ml.meta_model import (
     CalibrationMethod,
@@ -84,7 +84,7 @@ def build_training_dataset(
     for ticker, raw_df in price_data.items():
         if raw_df is None or raw_df.empty:
             continue
-        enriched = TechnicalIndicators.add_all(raw_df.copy())
+        enriched = cached_add_all(raw_df, ticker)
         enriched = enriched.sort_index()
         future_close = enriched["close"].shift(-label_definition.horizon_bars)
         future_return = (future_close / enriched["close"]) - 1.0

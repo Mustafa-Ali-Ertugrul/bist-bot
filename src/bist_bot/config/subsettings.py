@@ -199,6 +199,35 @@ class TradingSettings:
     SIDEWAYS_EXTRA_THRESHOLD: float = _get_float_env("SIDEWAYS_EXTRA_THRESHOLD", 5.0)
     MOMENTUM_CONFIRMATION_THRESHOLD: float = _get_float_env("MOMENTUM_CONFIRMATION_THRESHOLD", 4.0)
     MACRO_REGIME_GATE_ENABLED: bool = _get_bool_env("MACRO_REGIME_GATE_ENABLED", True)
+    # USD/TRY döviz-riski cezası + XU100 doğrudan voter (varsayılan kapalı;
+    # açıldığında davranış değişir — backtest ablation ile doğrulanmalı).
+    FOREX_FILTER_ENABLED: bool = _get_bool_env("FOREX_FILTER_ENABLED", False)
+    FOREX_PENALTY_POINTS: float = _get_float_env("FOREX_PENALTY_POINTS", 5.0)
+    FOREX_RISK_SECTORS: tuple[str, ...] = field(
+        default_factory=lambda: _get_csv_env("FOREX_RISK_SECTORS") or ("HAVACILIK",)
+    )
+    FOREX_TREND_LOOKBACK: int = _get_int_env("FOREX_TREND_LOOKBACK", 20)
+    USDTRY_TICKER: str = _get_str_env("USDTRY_TICKER", "USDTRY=X")
+    XU100_VOTER_ENABLED: bool = _get_bool_env("XU100_VOTER_ENABLED", False)
+    XU100_TICKER: str = _get_str_env("XU100_TICKER", "XU100.IS")
+    # Gun-ici seans metrikleri (2026-09-17 gozlemi: tepki gunleri, taban
+    # kilitleri, sektor liderligi). Varsayilan ACIK — kucuk cap'li (±8)
+    # additif ayar; esik kalibrasyonu korunur.
+    SESSION_ADJ_ENABLED: bool = _get_bool_env("SESSION_ADJ_ENABLED", True)
+    SESSION_LIMIT_DOWN_BLOCK: bool = _get_bool_env("SESSION_LIMIT_DOWN_BLOCK", True)
+    SESSION_LIMIT_UP_PENALTY: float = _get_float_env("SESSION_LIMIT_UP_PENALTY", 6.0)
+    SESSION_RANGE_POS_MIN: float = _get_float_env("SESSION_RANGE_POS_MIN", 0.8)
+    SESSION_RECOVERY_MIN_PCT: float = _get_float_env("SESSION_RECOVERY_MIN_PCT", 2.0)
+    SESSION_RECOVERY_BONUS: float = _get_float_env("SESSION_RECOVERY_BONUS", 4.0)
+    SESSION_REL_THRESHOLD: float = _get_float_env("SESSION_REL_THRESHOLD", 2.0)
+    SESSION_REL_BONUS: float = _get_float_env("SESSION_REL_BONUS", 3.0)
+    SESSION_PACE_MIN: float = _get_float_env("SESSION_PACE_MIN", 1.5)
+    SESSION_PACE_BONUS: float = _get_float_env("SESSION_PACE_BONUS", 2.0)
+    SESSION_BREADTH_MIN_PCT: float = _get_float_env("SESSION_BREADTH_MIN_PCT", 40.0)
+    SESSION_BREADTH_PENALTY: float = _get_float_env("SESSION_BREADTH_PENALTY", 4.0)
+    SESSION_MAX_BONUS: float = _get_float_env("SESSION_MAX_BONUS", 8.0)
+    SESSION_MAX_PENALTY: float = _get_float_env("SESSION_MAX_PENALTY", 8.0)
+    SESSION_LIMIT_PCT: float = _get_float_env("SESSION_LIMIT_PCT", 9.5)
     RSI_PERIOD: int = _get_int_env("RSI_PERIOD", 14)
     RSI_OVERSOLD: int = _get_int_env("RSI_OVERSOLD", 30)
     RSI_OVERBOUGHT: int = _get_int_env("RSI_OVERBOUGHT", 70)
@@ -297,7 +326,9 @@ class RiskSettings:
     DAILY_LOSS_CAP_PCT: float = _get_float_env("DAILY_LOSS_CAP_PCT", 3.0)
     MIN_STOP_LOSS_PCT: float = _get_float_env("MIN_STOP_LOSS_PCT", 1.8)
     ATR_TARGET_FLOOR_PCT: float = _get_float_env("ATR_TARGET_FLOOR_PCT", 2.0)
-    FALLBACK_TARGET_RR: float = _get_float_env("FALLBACK_TARGET_RR", 2.0)
+    # Champion profili RR 0.5 ile doğrulandı (küçük hedef, yüksek isabet).
+    # Varsayılan, champion canlı konfigürasyonuyla aynı tutulur.
+    FALLBACK_TARGET_RR: float = _get_float_env("FALLBACK_TARGET_RR", 0.5)
     MAX_SIGNAL_SCORE: float = _get_float_env("MAX_SIGNAL_SCORE", 33.0)
     # Aşama 1: pairwise korelasyon fallback'i için minimum örtüşen bar sayısı
     # (risk/correlation.get_correlated_positions). Default kodda doğrulanan 10.
@@ -391,6 +422,14 @@ class ServerSettings:
     METRICS_PUBLIC: bool = _get_bool_env("METRICS_PUBLIC", False)
     API_BASE_URL: str = _get_str_env("API_BASE_URL", f"http://localhost:{DEFAULT_FLASK_PORT}")
     RATE_LIMIT_STORAGE_URI: str = _get_str_env("RATE_LIMIT_STORAGE_URI", "memory://")
+    # AppSec finding #21: number of trusted reverse-proxy hops that rewrite
+    # X-Forwarded-For. 0 (default) = remote_addr stays the TCP peer (current,
+    # spoof-proof behavior). >0 enables werkzeug ProxyFix in wsgi.py so
+    # remote_addr is derived from the rightmost XFF entry. ONLY set to 1 on
+    # Cloud Run AFTER a live request confirms the XFF chain (see
+    # docs/security/phase0_phase1_report.md). Never set on direct-client
+    # deployments (compose/local) — clients could spoof their IP.
+    TRUSTED_PROXY_HOPS: int = _get_int_env("TRUSTED_PROXY_HOPS", 0)
     EXPECTED_INSTANCE_COUNT: int = _get_int_env("EXPECTED_INSTANCE_COUNT", 1)
     DEGRADED_MAX_SECONDS: int = _get_int_env("DEGRADED_MAX_SECONDS", 300)
     SENTRY_DSN: str | None = _get_str_env("SENTRY_DSN") or None
@@ -476,7 +515,9 @@ class BrokerSettings:
     MAX_ACCOUNT_DRAWDOWN: float = _get_float_env("MAX_ACCOUNT_DRAWDOWN", 0.15)
     AUTO_EXECUTE_ENABLED: bool = _get_bool_env("AUTO_EXECUTE_ENABLED", False)
     AUTO_EXECUTE: bool = _get_bool_env("AUTO_EXECUTE", False)
-    STRATEGY_PROFILE: str = _get_str_env("STRATEGY_PROFILE", "conservative")
+    # Varsayılan canlı profil: champion (challenge 2026-08-29 — %76.4 WR,
+    # skor bandı 28-33, pv-gate). Eski davranış için STRATEGY_PROFILE=conservative.
+    STRATEGY_PROFILE: str = _get_str_env("STRATEGY_PROFILE", "champion")
     CONFIRM_LIVE_TRADING: bool = _get_bool_env("CONFIRM_LIVE_TRADING", False)
     AUTO_EXECUTE_WARN_MAX_QUANTITY: int = _get_int_env("AUTO_EXECUTE_WARN_MAX_QUANTITY", 100000)
 
@@ -491,6 +532,25 @@ class BacktestSettings:
         "BACKTEST_COMMISSION_SELL_PCT", _get_float_env("BACKTEST_COMMISSION_PCT", 0.001)
     )
     BACKTEST_SLIPPAGE_PCT: float = _get_float_env("BACKTEST_SLIPPAGE_PCT", 0.0005)
+    # v2 toparlama planı §3: gerçekçi (live-like) replay senaryosu varsayımları.
+    # Yalnızca "realistic" senaryoyu besler; base/zero/stress değişmez.
+    BACKTEST_REALISTIC_COMMISSION_BPS: float = _get_float_env(
+        "BACKTEST_REALISTIC_COMMISSION_BPS", 15.0
+    )
+    BACKTEST_REALISTIC_SPREAD_BPS: float = _get_float_env("BACKTEST_REALISTIC_SPREAD_BPS", 20.0)
+    BACKTEST_REALISTIC_SLIPPAGE_BPS: float = _get_float_env("BACKTEST_REALISTIC_SLIPPAGE_BPS", 30.0)
+    BACKTEST_REALISTIC_ENTRY_DELAY_BARS: int = _get_int_env(
+        "BACKTEST_REALISTIC_ENTRY_DELAY_BARS", 1
+    )
+    BACKTEST_REALISTIC_MIN_VOLUME_TRY: float = _get_float_env(
+        "BACKTEST_REALISTIC_MIN_VOLUME_TRY", 100_000.0
+    )
+    BACKTEST_REALISTIC_MAX_PARTICIPATION_PCT: float = _get_float_env(
+        "BACKTEST_REALISTIC_MAX_PARTICIPATION_PCT", 1.0
+    )
+    BACKTEST_REALISTIC_FILL_PROBABILITY: float = _get_float_env(
+        "BACKTEST_REALISTIC_FILL_PROBABILITY", 0.95
+    )
     # Aşama 3: True iken vektör yol zorla kapatılır (debug/test).
     # Default False -> mevcut yol seçimi korunur.
     BACKTEST_FORCE_ITERATIVE: bool = _get_bool_env("BACKTEST_FORCE_ITERATIVE", False)
@@ -588,6 +648,12 @@ class NotificationSettings:
 class BillingSettings:
     """Membership subscription + manual EFT/havale billing configuration."""
 
+    # FAIL-CLOSED satış anahtarı (2026-09-17): canlı sinyal kanıtı zayıfken
+    # (n=45 → WR %33.3, skor↔PnL r=0.147, net -1.695 TL) ücretli abonelik
+    # satışı DURAKLATILDI. Yeniden açmak için env'e explicitly true verin:
+    # kanıt eşiği = signal_outcomes n>=100 ve WR backtest'e yakınsaması.
+    # Deneme (trial) kayıtları bu anahtardan etkilenmez.
+    BILLING_ENROLLMENT_ENABLED: bool = _get_bool_env("BILLING_ENROLLMENT_ENABLED", False)
     # Trial granted on registration (and to pre-existing users at migration).
     TRIAL_HOURS: int = _get_int_env("TRIAL_HOURS", 24)
     # Paid plan prices (integer TL, backend-authoritative — never trusted from
