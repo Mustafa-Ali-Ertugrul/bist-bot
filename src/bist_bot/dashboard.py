@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import concurrent.futures
 import json
+import math
 import os
 import re
 import secrets
 import threading
 import time
+from collections import OrderedDict
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta, timezone
 from functools import wraps
@@ -43,7 +45,7 @@ from bist_bot.contracts import (
     StrategyEngineProtocol,
 )
 from bist_bot.dependencies import AppContainer, get_default_container
-from bist_bot.indicators import TechnicalIndicators
+from bist_bot.indicators import TechnicalIndicators, cached_add_all
 from bist_bot.locales import get_message
 from bist_bot.risk.circuit_breaker import CircuitBreaker
 from bist_bot.scanner import ScanService
@@ -94,6 +96,89 @@ def _coerce_bool(value: Any) -> bool:
 
 _DUMMY_PASSWORD = secrets.token_urlsafe(24)
 _DUMMY_HASH = hash_password(_DUMMY_PASSWORD)
+
+# --- /api/stats response cache -------------------------------------------
+# Serves the (identical) dashboard counter payload for a short window instead
+# of re-running the stats/scan/recent-signals queries on every poll. It sits
+# INSIDE the view body, so both @jwt_required() and @require_active_subscription
+# have already rejected unauthenticated / lapsed callers before a hit is
+# possible — the cache never bypasses an auth gate.
+_API_STATS_CACHE_TTL_S = 30.0
+_api_stats_cache_lock = threading.Lock()
+_api_stats_cache: dict[str, Any] = {}
+
+
+def _clear_api_stats_cache() -> None:
+    """Drop the /api/stats cache (tests and post-write freshness)."""
+    with _api_stats_cache_lock:
+        _api_stats_cache.clear()
+
+
+# --- /api/analyze indicator cache ----------------------------------------
+# Content-keyed FIFO so force_refresh / repeated analyze polls re-use the
+# expensive add_all+get_snapshot when the fetched frame is unchanged.
+_ANALYZE_INDICATORS_CACHE_MAX = 128
+_analyze_indicators_cache_lock = threading.Lock()
+_analyze_indicators_cache: OrderedDict[tuple[str, int, float, float], Any] = OrderedDict()
+
+
+def _clear_analyze_indicators_cache() -> None:
+    """Drop the /api/analyze indicator cache (tests and post-write freshness)."""
+    with _analyze_indicators_cache_lock:
+        _analyze_indicators_cache.clear()
+
+
+def _cached_analyze_add_all(df: Any, ticker: str) -> Any:
+    """``TechnicalIndicators().add_all`` with a content-keyed FIFO cache (D4 pattern)."""
+    key = None
+    try:
+        if df is not None and not getattr(df, "empty", True):
+            first_close = float(df["close"].iloc[0])
+            last_close = float(df["close"].iloc[-1])
+            if math.isfinite(first_close) and math.isfinite(last_close):
+                key = (ticker, len(df), first_close, last_close)
+    except Exception:
+        key = None
+    if key is not None:
+        with _analyze_indicators_cache_lock:
+            cached = _analyze_indicators_cache.get(key)
+            if cached is not None:
+                _analyze_indicators_cache.move_to_end(key)
+                return cached
+    # Shared content memo under the local D4 wrapper: cross-module hits
+    # (whale/analyze/signal_card) reuse the same frame without recompute.
+    result = cached_add_all(df, ticker)
+    if key is not None and result is not None and not getattr(result, "empty", True):
+        with _analyze_indicators_cache_lock:
+            _analyze_indicators_cache[key] = result
+            _analyze_indicators_cache.move_to_end(key)
+            while len(_analyze_indicators_cache) > _ANALYZE_INDICATORS_CACHE_MAX:
+                _analyze_indicators_cache.popitem(last=False)
+    return result
+
+
+# --- rbac_access_granted audit throttle -----------------------------------
+# Granted-access audit rows are pure success telemetry and dominate the audit
+# table (one INSERT per authenticated request). Persist at most one row per
+# identity per window; the structured log line is still emitted every time, so
+# no observability is lost — only the duplicate INSERTs.
+_RBAC_GRANTED_AUDIT_INTERVAL_S = 60.0
+_rbac_granted_audit_written_at: dict[str, float] = {}
+
+
+def _clear_rbac_granted_audit_throttle() -> None:
+    """Reset the granted-audit throttle (tests start from a clean slate)."""
+    _rbac_granted_audit_written_at.clear()
+
+
+def _should_write_rbac_granted_audit(identity: str) -> bool:
+    now = time.monotonic()
+    key = identity or ""
+    last = _rbac_granted_audit_written_at.get(key)
+    if last is not None and (now - last) < _RBAC_GRANTED_AUDIT_INTERVAL_S:
+        return False
+    _rbac_granted_audit_written_at[key] = now
+    return True
 
 
 def _mask_email(email: str) -> str:
@@ -313,6 +398,39 @@ def _auth_rate_limit_key() -> str:
     return str(remote_addr)
 
 
+def _client_rate_limit_key() -> str:
+    """Per-user rate-limit bucket via VERIFIED JWT identity, IP fallback.
+
+    AppSec finding #21: on Cloud Run every client shares the frontend proxy
+    peer IP, so IP-based keys collapse all users into one shared bucket (a
+    busy trader could lock everyone out of /api/scan, order-intent resolve,
+    etc.). Keying on the JWT identity fixes the bucket per authenticated
+    user, independent of the deployment topology.
+
+    Rules (do not weaken):
+    - Identity MUST come from verify_jwt_in_request (HMAC signature +
+      expiry + blocklist verified). Parsing the raw Authorization header
+      would let attackers rotate fake identities to evade every bucket.
+    - Runs in flask-limiter's before_request, i.e. BEFORE the route's
+      @jwt_required(): hence the optional self-verification here
+      (same pattern as api_auth_logout). optional=True returns None when
+      no token is present — anonymous requests stay IP-keyed.
+    - Broad except is intentional: expired/invalid tokens, revoked JTIs,
+      and cookie-CSRF errors (unsafe methods with cookie location) all
+      raise here. The key function must NEVER raise — fall back to the
+      (possibly collapsed) IP bucket; the route itself still returns the
+      proper 401/422 for those requests.
+    """
+    try:
+        verify_jwt_in_request(optional=True)
+        identity = get_jwt_identity()
+    except Exception:  # never break limit evaluation
+        identity = None
+    if identity:
+        return f"user:{identity}"
+    return str(get_remote_address())
+
+
 def create_dashboard_app(
     fetcher: DataFetcherProtocol,
     engine: StrategyEngineProtocol,
@@ -437,7 +555,10 @@ def create_dashboard_app(
             422,
         )
 
-    limiter = Limiter(get_remote_address, app=app, default_limits=["60 per minute"])
+    # AppSec finding #21: default key is the verified JWT identity (per-user
+    # buckets behind Cloud Run's shared frontend IP); anonymous requests fall
+    # back to remote_addr. See _client_rate_limit_key above.
+    limiter = Limiter(_client_rate_limit_key, app=app, default_limits=["60 per minute"])
     CORS(app, resources={r"/api/*": {"origins": _cors_origins()}})
 
     def get_fetcher() -> DataFetcherProtocol:
@@ -573,7 +694,10 @@ def create_dashboard_app(
                         "rbac_access_granted",
                         **audit_details,
                     )
-                    _write_security_audit("rbac_access_granted", audit_details)
+                    # Success telemetry only: throttle the INSERT (one row per
+                    # identity per window) while logging every occurrence.
+                    if _should_write_rbac_granted_audit(identity):
+                        _write_security_audit("rbac_access_granted", audit_details)
                 return view(*args, **kwargs)
 
             return wrapped
@@ -1366,6 +1490,7 @@ def create_dashboard_app(
         return jsonify(
             {
                 "status": "ok",
+                "enrollment_enabled": bool(getattr(settings, "BILLING_ENROLLMENT_ENABLED", False)),
                 "pro_price_try": int(getattr(settings, "PRO_PRICE_TRY", 500) or 500),
                 "pro_plus_price_try": int(getattr(settings, "PRO_PLUS_PRICE_TRY", 700) or 700),
                 "days": int(getattr(settings, "SUBSCRIPTION_DAYS", 30) or 30),
@@ -1414,6 +1539,19 @@ def create_dashboard_app(
         user = _get_request_user()
         if user is None:
             return jsonify({"status": "error", "message": "Authentication required"}), 401
+        # FAIL-CLOSED satış anahtarı: ücretli talep kaydı duraklatıldı.
+        if not bool(getattr(settings, "BILLING_ENROLLMENT_ENABLED", False)):
+            logger.warning("billing_claim_paused", user_id=int(user["id"]))
+            return jsonify(
+                {
+                    "status": "error",
+                    "message": (
+                        "Ücretli abonelik satışı geçici olarak duraklatıldı (beta). "
+                        "Sinyallerin canlı performans kanıtı birikene kadar yeni "
+                        "satış yapılmıyor; mevcut üyelikler etkilenmez."
+                    ),
+                }
+            ), 403
         payload = _safe_json_payload()
         plan = normalize_plan(payload.get("plan"))
         if plan not in PAID_PLANS:
@@ -1671,6 +1809,18 @@ def create_dashboard_app(
             admin_id = int(admin_identity)
         except (TypeError, ValueError):
             return jsonify({"status": "error", "message": "Authentication required"}), 401
+        # FAIL-CLOSED satış anahtarı: bekleyen eski talepler bile onaylanamaz.
+        if not bool(getattr(settings, "BILLING_ENROLLMENT_ENABLED", False)):
+            logger.warning("billing_approve_paused", request_id=request_id, admin_id=admin_id)
+            return jsonify(
+                {
+                    "status": "error",
+                    "message": (
+                        "Ücretli abonelik satışı duraklatıldı (beta); talepler "
+                        "geçici olarak onaylanmıyor."
+                    ),
+                }
+            ), 403
         result, error = _decide_request(request_id, True, admin_id)
         if error == "already_decided":
             return jsonify({"status": "error", "message": "Bu talep zaten karara bağlanmış."}), 409
@@ -2186,7 +2336,7 @@ def create_dashboard_app(
                 ), 404
 
             indicator_engine = TechnicalIndicators()
-            enriched = indicator_engine.add_all(chart_df.copy())
+            enriched = _cached_analyze_add_all(chart_df, normalized_ticker)
             snapshot = indicator_engine.get_snapshot(enriched)
             signal = runtime_engine.analyze(normalized_ticker, analysis_input)
 
@@ -2284,10 +2434,58 @@ def create_dashboard_app(
             signals = trimmed
         return jsonify({"status": "ok", "signals": signals})
 
+    def _finish_api_stats(
+        stats: dict[str, Any],
+        latest_scan: dict[str, Any],
+        recent_signals: list[dict[str, Any]],
+        breadth: dict[str, Any],
+    ):
+        """Assemble the /api/stats payload (shared by cache hit and miss)."""
+        response: dict[str, Any] = {
+            "status": "ok",
+            "stats": stats,
+            "latest_scan": latest_scan,
+            "rejection_breakdown": latest_scan["rejection_breakdown"],
+            "breadth": breadth,
+            "benchmarks": _get_live_benchmarks(),
+        }
+        if _coerce_bool(request.args.get("include_signals")):
+            # Dashboard boot piggy-backs the top-10 signals on this response
+            # (reuses the recent_signals query above: zero extra DB hit) so
+            # the UI can skip its second /api/signals/history round trip.
+            embedded = []
+            for sig in recent_signals[:10]:
+                s = dict(sig)
+                s.pop("conditions", None)
+                s.pop("score_breakdown", None)
+                reasons = s.get("reasons")
+                if isinstance(reasons, list):
+                    s["reasons"] = reasons[:1]
+                embedded.append(s)
+            response["top_signals"] = embedded
+        return jsonify(response)
+
     @app.route("/api/stats")
     @jwt_required()
     @require_active_subscription()
     def api_stats():
+        # The two decorators above have already enforced authentication and an
+        # active subscription, so this body (cache hit included) is only ever
+        # reached by an authorized caller.
+        now = time.monotonic()
+        hit_payload: tuple[Any, Any, list[dict[str, Any]], dict[str, Any]] | None = None
+        with _api_stats_cache_lock:
+            entry = _api_stats_cache
+            if entry and (now - float(entry.get("at", 0.0))) < _API_STATS_CACHE_TTL_S:
+                hit_payload = (
+                    entry["stats"],
+                    entry["latest_scan"],
+                    entry["recent_signals"],
+                    entry["breadth"],
+                )
+        if hit_payload is not None:
+            return _finish_api_stats(*hit_payload)
+
         db = get_db()
         bundle_fn = getattr(db, "get_dashboard_stats_bundle", None)
         if callable(bundle_fn):
@@ -2376,29 +2574,18 @@ def create_dashboard_app(
             "actionable_summary": actionable_summary,
         }
 
-        response: dict[str, Any] = {
-            "status": "ok",
-            "stats": stats,
-            "latest_scan": latest_scan,
-            "rejection_breakdown": latest_scan["rejection_breakdown"],
-            "breadth": breadth,
-            "benchmarks": _get_live_benchmarks(),
-        }
-        if _coerce_bool(request.args.get("include_signals")):
-            # Dashboard boot piggy-backs the top-10 signals on this response
-            # (reuses the recent_signals query above: zero extra DB hit) so
-            # the UI can skip its second /api/signals/history round trip.
-            embedded = []
-            for sig in recent_signals[:10]:
-                s = dict(sig)
-                s.pop("conditions", None)
-                s.pop("score_breakdown", None)
-                reasons = s.get("reasons")
-                if isinstance(reasons, list):
-                    s["reasons"] = reasons[:1]
-                embedded.append(s)
-            response["top_signals"] = embedded
-        return jsonify(response)
+        with _api_stats_cache_lock:
+            _api_stats_cache.clear()
+            _api_stats_cache.update(
+                {
+                    "at": now,
+                    "stats": stats,
+                    "latest_scan": latest_scan,
+                    "recent_signals": recent_signals,
+                    "breadth": breadth,
+                }
+            )
+        return _finish_api_stats(stats, latest_scan, recent_signals, breadth)
 
     @app.route("/api/scans/history")
     @jwt_required()
