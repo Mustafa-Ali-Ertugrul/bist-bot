@@ -13,6 +13,7 @@ if ROOT_DIR not in sys.path:
 import bist_bot.backtest_runner as backtest_runner_module  # noqa: E402
 from bist_bot.backtest_runner import run_backtest  # noqa: E402
 from bist_bot.config.settings import settings  # noqa: E402
+from bist_bot.data.bist100 import BIST100_2023_01_01  # noqa: E402
 
 
 def test_run_backtest_returns_without_crash_on_empty_watchlist(monkeypatch):
@@ -56,4 +57,4 @@ def test_run_backtest_uses_historical_universe_when_requested(monkeypatch):
     run_backtest(fetcher)
 
     fetched = [call.args[0] for call in fetcher.fetch_single.call_args_list]
-    assert fetched == ["THYAO.IS", "GARAN.IS", "TUPRS.IS", "BIMAS.IS", "SAHOL.IS"]
+    assert fetched == list(BIST100_2023_01_01)

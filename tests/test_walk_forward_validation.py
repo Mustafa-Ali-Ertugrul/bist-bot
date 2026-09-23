@@ -3,7 +3,7 @@
 WARNING / UYARI
 ---------------
 If you intentionally change default train/test/step day windows, cost bps
-defaults, or the overfitting return ratio in
+defaults, purge/embargo defaults, or the overfitting return ratio in
 ``bist_bot.validation.walk_forward``, update the expected window counts and
 flag assertions below consciously.
 """
@@ -346,3 +346,69 @@ def test_result_to_dict_is_json_friendly() -> None:
     assert isinstance(payload["windows"], list)
     assert isinstance(payload["flags"], list)
     assert "oos_aggregate" in payload
+
+
+def test_purge_and_embargo_shrink_effective_rows_not_splits() -> None:
+    """Purge/embargo satırları kırpar; pencere sayısını/konumunu oynatmaz."""
+    df = build_synthetic_ohlcv(500)
+    plain = WalkForwardValidator(
+        train_window=100,
+        test_window=50,
+        step_size=50,
+        backtester_factory=_factory(),
+    )
+    purged = WalkForwardValidator(
+        train_window=100,
+        test_window=50,
+        step_size=50,
+        purge_bars=20,
+        embargo_bars=10,
+        backtester_factory=_factory(),
+    )
+    plain_windows = plain.build_windows(df)
+    purged_windows = purged.build_windows(df)
+
+    assert len(purged_windows) == len(plain_windows) == 8
+    for (plain_train, plain_test), (train_df, test_df) in zip(
+        plain_windows, purged_windows, strict=True
+    ):
+        assert len(train_df) == len(plain_train) - 20
+        assert len(test_df) == len(plain_test) - 10
+        # Split konumu sabit: train kuyruğu kırpıldı, test başı ötelendi.
+        assert pd.Timestamp(train_df.index.max()) < pd.Timestamp(plain_train.index.max())
+        assert pd.Timestamp(test_df.index.min()) > pd.Timestamp(plain_test.index.min())
+        assert pd.Timestamp(test_df.index.max()) == pd.Timestamp(plain_test.index.max())
+        assert pd.Timestamp(test_df.index.min()) > pd.Timestamp(train_df.index.max())
+
+
+def test_purge_embargo_recorded_in_result() -> None:
+    df = build_synthetic_ohlcv(400)
+    validator = WalkForwardValidator(
+        train_window=100,
+        test_window=50,
+        step_size=50,
+        purge_bars=20,
+        embargo_bars=10,
+        backtester_factory=_factory(),
+    )
+    result = validator.run("PURGE.IS", df)
+    assert result is not None
+    assert result.purge_bars == 20
+    assert result.embargo_bars == 10
+    payload = result.to_dict()
+    assert payload["purge_bars"] == 20
+    assert payload["embargo_bars"] == 10
+    for window in result.windows:
+        assert window.train_rows == 80
+        assert window.test_rows == 40
+
+
+def test_invalid_purge_embargo_args_raise() -> None:
+    with pytest.raises(ValueError):
+        WalkForwardValidator(train_window=100, test_window=50, purge_bars=-1)
+    with pytest.raises(ValueError):
+        WalkForwardValidator(train_window=100, test_window=50, embargo_bars=-1)
+    with pytest.raises(ValueError):
+        WalkForwardValidator(train_window=100, test_window=50, purge_bars=100)
+    with pytest.raises(ValueError):
+        WalkForwardValidator(train_window=100, test_window=50, embargo_bars=50)

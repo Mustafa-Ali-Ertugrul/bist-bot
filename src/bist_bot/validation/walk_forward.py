@@ -4,9 +4,10 @@ WARNING / UYARI
 ---------------
 If you intentionally change default ``train_window`` / ``test_window`` /
 ``step_size`` (in trading days), the cost defaults (commission/slippage bps),
-or the overfitting threshold (``overfitting_return_ratio``), you MUST
-consciously update the expected window counts, no-leakage assertions, and
-flag triggers in ``tests/test_walk_forward_validation.py``.
+``purge_bars`` / ``embargo_bars``, or the overfitting threshold
+(``overfitting_return_ratio``), you MUST consciously update the expected
+window counts, no-leakage assertions, and flag triggers in
+``tests/test_walk_forward_validation.py``.
 
 This module complements the existing month-based
 ``bist_bot.backtest.walkforward.WalkForwardValidator`` with a simpler day-based
@@ -97,6 +98,8 @@ class WalkForwardValidationResult:
     step_size: int
     commission_bps: float
     slippage_bps: float
+    purge_bars: int = 0
+    embargo_bars: int = 0
     windows: list[WalkForwardWindowMetrics] = field(default_factory=list)
     oos_aggregate: dict[str, float] = field(default_factory=dict)
     is_aggregate: dict[str, float] = field(default_factory=dict)
@@ -119,6 +122,8 @@ class WalkForwardValidationResult:
             "step_size": self.step_size,
             "commission_bps": self.commission_bps,
             "slippage_bps": self.slippage_bps,
+            "purge_bars": self.purge_bars,
+            "embargo_bars": self.embargo_bars,
             "windows": [window.to_dict() for window in self.windows],
             "oos_aggregate": self.oos_aggregate,
             "is_aggregate": self.is_aggregate,
@@ -224,6 +229,8 @@ class WalkForwardValidator:
         slippage_bps: float = DEFAULT_SLIPPAGE_BPS,
         initial_capital: float = 100_000.0,
         overfitting_return_ratio: float = DEFAULT_OVERFITTING_RETURN_RATIO,
+        purge_bars: int = 0,
+        embargo_bars: int = 0,
         backtester_factory: BacktesterFactory | None = None,
         use_cost_model: bool = True,
         strategy_params: Any | None = None,
@@ -239,6 +246,12 @@ class WalkForwardValidator:
             raise ValueError("step_size must be >= 1")
         if commission_bps < 0 or slippage_bps < 0:
             raise ValueError("commission_bps and slippage_bps must be >= 0")
+        if purge_bars < 0 or embargo_bars < 0:
+            raise ValueError("purge_bars and embargo_bars must be >= 0")
+        if purge_bars >= train_window:
+            raise ValueError("purge_bars must be < train_window")
+        if embargo_bars >= test_window:
+            raise ValueError("embargo_bars must be < test_window")
         if initial_capital <= 0:
             raise ValueError("initial_capital must be > 0")
         if not (0.0 < overfitting_return_ratio <= 1.0):
@@ -262,6 +275,8 @@ class WalkForwardValidator:
         self.train_window = int(train_window)
         self.test_window = int(test_window)
         self.step_size = int(step_size)
+        self.purge_bars = int(purge_bars)
+        self.embargo_bars = int(embargo_bars)
         self.commission_bps = float(commission_bps)
         self.slippage_bps = float(slippage_bps)
         self.initial_capital = float(initial_capital)
@@ -274,7 +289,14 @@ class WalkForwardValidator:
         self.macro_regime_mode = macro_regime_mode
 
     def build_windows(self, df: pd.DataFrame) -> list[tuple[pd.DataFrame, pd.DataFrame]]:
-        """Return (train_df, test_df) pairs with no look-ahead leakage."""
+        """Return (train_df, test_df) pairs with no look-ahead leakage.
+
+        ``purge_bars`` drops the last N train rows (label/feature horizons that
+        straddle the boundary); ``embargo_bars`` drops the first N test rows
+        (post-event drift leaking back into the split). Nominal window sizes
+        still drive stepping/counting, so purge/embargo only shrink effective
+        rows — they never move the split itself.
+        """
         if df is None or df.empty:
             return []
         sorted_df = df.sort_index()
@@ -284,8 +306,11 @@ class WalkForwardValidator:
         while start + self.train_window + self.test_window <= n:
             train_end = start + self.train_window
             test_end = train_end + self.test_window
-            train_df = sorted_df.iloc[start:train_end]
-            test_df = sorted_df.iloc[train_end:test_end]
+            if self.purge_bars:
+                train_df = sorted_df.iloc[start : train_end - self.purge_bars]
+            else:
+                train_df = sorted_df.iloc[start:train_end]
+            test_df = sorted_df.iloc[train_end + self.embargo_bars : test_end]
             if train_df.empty or test_df.empty:
                 break
             # Hard no-leakage invariant.
@@ -455,6 +480,8 @@ class WalkForwardValidator:
             step_size=self.step_size,
             commission_bps=self.commission_bps,
             slippage_bps=self.slippage_bps,
+            purge_bars=self.purge_bars,
+            embargo_bars=self.embargo_bars,
             windows=window_metrics,
             oos_aggregate=oos_aggregate,
             is_aggregate=is_aggregate,

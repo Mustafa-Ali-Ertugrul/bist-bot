@@ -93,6 +93,8 @@ def check_docker_logs(container: str, since: str, runner=subprocess.run) -> tupl
             ["docker", "logs", "--since", since, container],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=60,
             check=False,
         )

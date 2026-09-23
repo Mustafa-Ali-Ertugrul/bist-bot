@@ -7,7 +7,7 @@ import pandas as pd
 
 from bist_bot.app_logging import get_logger
 from bist_bot.config.settings import settings
-from bist_bot.indicators import TechnicalIndicators
+from bist_bot.indicators import TechnicalIndicators, cached_add_all
 from bist_bot.ml.features import build_feature_payload
 from bist_bot.risk.sizing import calculate_kelly_fraction
 from bist_bot.risk.ticks import round_to_tick
@@ -158,6 +158,9 @@ class Backtester:
         strategy_params: Any | None = None,
         macro_regime_series: pd.Series | None = None,
         macro_regime_mode: str = "off",
+        max_hold_bars: int | None = None,
+        target_atr_mult: float | None = None,
+        trailing_atr_mult: float | None = None,
     ):
         from bist_bot.strategy.params import StrategyParams
 
@@ -184,6 +187,24 @@ class Backtester:
         self.macro_regime_mode = macro_regime_mode
         self.last_macro_bear_bars: int = 0
         self.last_macro_bear_entry_candidates: int = 0
+        # Zaman stopu: girişten sonra N bar içinde stop/hedef/sinyal çıkışı
+        # olmazsa N. barın kapanışında TIME_STOP ile çıkılır. None = kapalı.
+        self.max_hold_bars = int(max_hold_bars) if max_hold_bars is not None else None
+        if self.max_hold_bars is not None and self.max_hold_bars < 1:
+            raise ValueError("max_hold_bars must be >= 1")
+        # Ayrık ATR hedef: doluysa hedef close+k·ATR olur (stop-hedef bağı
+        # kopar); boşsa klasik risk×RR. None = kapalı (davranış korunur).
+        self.target_atr_mult = float(target_atr_mult) if target_atr_mult is not None else None
+        if self.target_atr_mult is not None and self.target_atr_mult <= 0:
+            raise ValueError("target_atr_mult must be > 0")
+        # Deney M trailing paritesi: trail = peak_close - mult·ATR(bar),
+        # yalnızca sıkılaşır (canlı position_manager.check_exit_conditions
+        # ile aynı kural). Stop kapanışta hesaplanır ve bir SONRAKİ bar
+        # boyunca aktiftir (nedensel; intrabar look-ahead yok).
+        # None = kapalı (davranış korunur).
+        self.trailing_atr_mult = float(trailing_atr_mult) if trailing_atr_mult is not None else None
+        if self.trailing_atr_mult is not None and self.trailing_atr_mult <= 0:
+            raise ValueError("trailing_atr_mult must be > 0")
 
         self.initial_capital = float(
             initial_capital
@@ -416,9 +437,15 @@ class Backtester:
             df["calculated_stop"] = df["close"] * 0.95
 
         df["risk_per_share"] = np.maximum(df["close"] - df["calculated_stop"], df["close"] * 0.01)
-        df["target_price"] = np.maximum(
-            df["close"] + (df["risk_per_share"] * self.target_rr), df["close"]
-        )
+        if self.target_atr_mult is not None and "atr" in df.columns:
+            atr_component = pd.to_numeric(df["atr"], errors="coerce").fillna(0.0)
+            df["target_price"] = np.maximum(
+                df["close"] + atr_component * self.target_atr_mult, df["close"]
+            )
+        else:
+            df["target_price"] = np.maximum(
+                df["close"] + (df["risk_per_share"] * self.target_rr), df["close"]
+            )
 
         # H8: BIST tick rounding — stop SELL (floor), target BUY (ceiling)
         df["calculated_stop"] = df["calculated_stop"].apply(lambda p: round_to_tick(p, "SELL"))
@@ -500,6 +527,7 @@ class Backtester:
         return df
 
     def _build_vectorized_signals(self, df: pd.DataFrame) -> VectorizedSignals:
+        atr_col = pd.to_numeric(df.get("atr"), errors="coerce").fillna(0.0)
         return VectorizedSignals(
             dates=df.index.to_numpy(),
             opens=cast(pd.Series, df["open"]).to_numpy(dtype=float),
@@ -511,6 +539,7 @@ class Backtester:
             scores=cast(pd.Series, df["score"]).to_numpy(dtype=float),
             stop_losses=cast(pd.Series, df["calculated_stop"]).to_numpy(dtype=float),
             target_prices=cast(pd.Series, df["target_price"]).to_numpy(dtype=float),
+            atrs=atr_col.to_numpy(dtype=float),
         )
 
     def _use_vectorized_path(self) -> bool:
@@ -561,9 +590,30 @@ class Backtester:
         closes = vectors.closes[slice_start:]
         exit_signals = vectors.exit_signals[slice_start:]
 
-        stop_gap = stop_loss > 0 and np.less_equal(opens, stop_loss)
+        # Deney M trailing (vectorized, nedensel): bar k'nın stop'u YALNIZCA
+        # bar k-1'e kadar bilinen veriden türetilir — peak = giriş kapanışı
+        # tohumlu, k-1'e kadarki kapanışların cummax'i; ATR = bar k-1'in
+        # ATR'si. Bu, canlı position_manager ratchet'iyle aynı sıradır:
+        # stop kapanışta hesaplanır ve bir SONRAKİ bar boyunca aktiftir;
+        # aynı barın low'una kendi kapanışından türetilen stop'la bakmak
+        # intrabar look-ahead olurdu. Trail kapalıyken yol sabit stopa
+        # indirgenir (davranış korunur).
+        trail_mult = self.trailing_atr_mult
+        stop_path: np.ndarray | None = None
+        if trail_mult is not None and stop_loss > 0 and len(opens) > 0:
+            seed = float(vectors.closes[entry_idx])
+            # Lagged peak: peak[k] = max(seed, closes[0..k-1]) (boyut N).
+            peak = np.maximum.accumulate(np.concatenate(([seed], closes[:-1])))
+            # Lagged ATR: bar k'nın stop'u bar k-1'in ATR'siyle hesaplanır.
+            atr_lagged = vectors.atrs[entry_idx : entry_idx + len(opens)]
+            valid_atr = np.isfinite(atr_lagged) & (atr_lagged > 0)
+            raw = np.where(valid_atr, peak - trail_mult * atr_lagged, -np.inf)
+            stop_path = np.maximum.accumulate(np.maximum(stop_loss, raw))
+
+        stop_ref = stop_path if stop_path is not None else stop_loss
+        stop_gap = stop_loss > 0 and np.less_equal(opens, stop_ref)
         target_gap = target_price > 0 and np.greater_equal(opens, target_price)
-        stop_hit = stop_loss > 0 and np.less_equal(lows, stop_loss)
+        stop_hit = stop_loss > 0 and np.less_equal(lows, stop_ref)
         target_hit = target_price > 0 and np.greater_equal(highs, target_price)
 
         event_mask = exit_signals.copy()
@@ -577,6 +627,16 @@ class Backtester:
             event_mask |= target_hit
 
         event_positions = np.flatnonzero(event_mask)
+        # Zaman stopu (vectorized): ilk olay zaman penceresinin dışındaysa
+        # (veya hiç olay yoksa) N. barın kapanışında TIME_STOP ile çık.
+        max_hold = self.max_hold_bars
+        if max_hold is not None and (
+            len(event_positions) == 0 or int(event_positions[0]) > max_hold - 1
+        ):
+            rel = max_hold - 1
+            if rel < len(closes):
+                return slice_start + rel, "TIME_STOP", float(closes[rel])
+            return None, None, None
         if len(event_positions) == 0:
             return None, None, None
 
@@ -585,6 +645,10 @@ class Backtester:
         if bool(exit_signals[rel_idx]):
             return abs_idx, "SIGNAL_OPEN", float(opens[rel_idx])
 
+        if stop_path is not None and stop_path[rel_idx] > stop_loss:
+            position["trailing_stop"] = float(stop_path[rel_idx])
+        else:
+            position["trailing_stop"] = 0.0
         intrabar_exit = self._simulate_intrabar_exit(
             position,
             float(opens[rel_idx]),
@@ -623,10 +687,15 @@ class Backtester:
             self.last_macro_bear_bars = 0
             self.last_macro_bear_entry_candidates = 0
 
-        df = df.copy()
-        if "rsi" not in df.columns or f"sma_{settings.SMA_SLOW}" not in df.columns:
-            df = self.indicators.add_all(df)
-        df = df.dropna(subset=["rsi", f"sma_{settings.SMA_SLOW}"])
+        slow_key = f"sma_{settings.SMA_SLOW}"
+        if "rsi" not in df.columns or slow_key not in df.columns:
+            # Content-keyed FIFO memo (run_ablation hits the same df 3×;
+            # multi-ticker runners re-use identical frames across modes).
+            # Mock/patched indicators bypass the cache automatically.
+            df = cached_add_all(df, ticker, indicators=self.indicators)
+        else:
+            df = df.copy()
+        df = df.dropna(subset=["rsi", slow_key])
         if len(df) < 2:
             return None
 
@@ -705,6 +774,9 @@ class Backtester:
             strategy_params=self.strategy_params,
             macro_regime_series=self.macro_regime_series,
             macro_regime_mode=self.macro_regime_mode,
+            max_hold_bars=self.max_hold_bars,
+            target_atr_mult=self.target_atr_mult,
+            trailing_atr_mult=self.trailing_atr_mult,
         )
         clone.signal_builder = self.signal_builder
         return clone
@@ -762,6 +834,7 @@ class Backtester:
                 capital_history[entry_idx + 1] = capital
                 cursor = entry_idx + 1
                 continue
+            position["trail_peak"] = close_price
 
             capital -= position["cost"]
             last_buy_date = date
@@ -937,6 +1010,12 @@ class Backtester:
                         signal, entry_fill_price, open_price, date, capital
                     )
                     if position is not None:
+                        position["entry_idx"] = i
+                        # Trailing tohumu: giriş barı kapanışı (canlı
+                        # closes_map'teki giriş-tarihli kapanışla aynı).
+                        # Giriş barında ratchet YOK (canlı ilk kontrolü
+                        # sonraki döngüde yapar).
+                        position["trail_peak"] = close_price
                         capital -= position["cost"]
                         last_buy_date = date
                         if verbose:
@@ -947,6 +1026,12 @@ class Backtester:
                             )
 
             if position is not None:
+                # Nedensel trailing sırası: bar i'nin çıkış kontrolü, bar i-1
+                # sonunda kalıcılaşmış trail'i okur (position["trailing_stop"]);
+                # ratchet bar i kapanışıyla hesaplanıp bir SONRAKİ bar için
+                # yazılır — canlı position_manager._update_stop_loss ratchet'i
+                # ile aynı sıra. Aynı barın kapanışından türetilen stop'a aynı
+                # barın low'uyla bakmak intrabar look-ahead olurdu.
                 intrabar_exit = self._simulate_intrabar_exit(
                     position, open_price, high_price, low_price, close_price
                 )
@@ -967,6 +1052,37 @@ class Backtester:
                         fill_price=exit_fill_price,
                         reference_price=ref_price,
                         reason=intrabar_exit["reason"],
+                        verbose=verbose,
+                    )
+                    position = None
+                elif int(position.get("entry_idx", i)) < i:
+                    # Çıkış yoksa: bar i kapanışı/ATR'siyle ratchet → bar i+1.
+                    # Giriş barında ratchet YOK (canlı ilk kontrolü sonraki
+                    # döngüde yapar).
+                    self._apply_trailing(
+                        position,
+                        _to_float(bar.get("atr"), 0.0),
+                        close_price,
+                    )
+
+            if position is not None and self.max_hold_bars is not None:
+                bars_held = i - int(position.get("entry_idx", i))
+                if bars_held >= self.max_hold_bars:
+                    exit_fill_price = self._calculate_fill_price(
+                        close_price,
+                        bar,
+                        is_buy=False,
+                        shares=int(position["shares"]),
+                    )
+                    capital = self._close_position(
+                        capital=capital,
+                        position=position,
+                        trades=trades,
+                        ticker=ticker,
+                        exit_date=date,
+                        fill_price=exit_fill_price,
+                        reference_price=close_price,
+                        reason="TIME_STOP",
                         verbose=verbose,
                     )
                     position = None
@@ -1005,7 +1121,11 @@ class Backtester:
         last_close = _to_float(history.iloc[-1].get("close"))
         stop_loss = _to_float(history.iloc[-1].get("stop_loss_atr"), last_close * 0.95)
         risk_per_share = max(last_close - stop_loss, last_close * 0.01)
-        target_price = max(last_close + risk_per_share * self.target_rr, last_close)
+        if self.target_atr_mult is not None:
+            atr_last = _to_float(history.iloc[-1].get("atr"), 0.0)
+            target_price = max(last_close + atr_last * self.target_atr_mult, last_close)
+        else:
+            target_price = max(last_close + risk_per_share * self.target_rr, last_close)
         signal: dict[str, float | bool] = {
             "enter": score >= self.buy_threshold,
             "exit": score <= self.sell_threshold,
@@ -1268,6 +1388,8 @@ class Backtester:
             "cost": cost,
             "stop_loss": _to_float(signal.get("stop_loss"), entry_price * 0.95),
             "target_price": _to_float(signal.get("target_price"), 0.0),
+            "trailing_stop": 0.0,
+            "trail_peak": 0.0,
             "score": _to_float(signal.get("score"), 0.0),
             "signal_probability": signal.get("signal_probability"),
             "position_fraction": position_fraction,
@@ -1280,6 +1402,39 @@ class Backtester:
             "entry_notional_tl": shares * entry_price,
         }
 
+    def _apply_trailing(self, position: dict[str, Any], atr_val: float, close_val: float) -> float:
+        """Deney M trailing ratchet (canlı parity, nedensel sıra).
+
+        peak = girişten beri görülen en yüksek kapanış; trail =
+        peak - mult·ATR(güncel bar); stop yalnızca yukarı sıkılaşır.
+        Orijinal stop korunur (TRAILING_STOP vs STOP_HIT ayrımı için);
+        efektif stop döner. Giriş barında çağrılmaz (canlı ilk kontrolü
+        sonraki döngüde yapar). ``_run_iterative`` bu metodu barın çıkış
+        kontrolünden SONRA çağırır: yazılan ratchet bir sonraki barın
+        kontrolünde aktiftir — aynı barın low'una bakılmaz.
+        """
+        mult = self.trailing_atr_mult
+        stop0 = _to_float(position.get("stop_loss"), 0.0)
+        if mult is None or stop0 <= 0:
+            return stop0
+        try:
+            close_f = float(close_val)
+        except (TypeError, ValueError):
+            close_f = 0.0
+        if close_f > 0 and np.isfinite(close_f):
+            if close_f > _to_float(position.get("trail_peak"), 0.0):
+                position["trail_peak"] = close_f
+        peak = _to_float(position.get("trail_peak"), 0.0)
+        try:
+            atr_f = float(atr_val)
+        except (TypeError, ValueError):
+            atr_f = 0.0
+        if peak > 0 and np.isfinite(atr_f) and atr_f > 0:
+            trail = peak - mult * atr_f
+            if trail > stop0 and trail > _to_float(position.get("trailing_stop"), 0.0):
+                position["trailing_stop"] = float(trail)
+        return max(stop0, _to_float(position.get("trailing_stop"), 0.0))
+
     def _simulate_intrabar_exit(
         self,
         position: dict[str, Any],
@@ -1289,13 +1444,16 @@ class Backtester:
         close_price: float,
     ) -> IntrabarExit | None:
         stop_loss = _to_float(position.get("stop_loss"), 0.0)
+        trailing_stop = _to_float(position.get("trailing_stop"), 0.0)
         target_price = _to_float(position.get("target_price"), 0.0)
-        if stop_loss <= 0 and target_price <= 0:
+        trail_on = trailing_stop > stop_loss
+        eff_stop = trailing_stop if trail_on else stop_loss
+        if eff_stop <= 0 and target_price <= 0:
             return None
 
-        if stop_loss > 0 and open_price <= stop_loss:
+        if eff_stop > 0 and open_price <= eff_stop:
             return {
-                "reason": "STOP_GAP",
+                "reason": "TRAILING_GAP" if trail_on else "STOP_GAP",
                 "reference_price": open_price,
             }
 
@@ -1305,7 +1463,7 @@ class Backtester:
                 "reference_price": open_price,
             }
 
-        stop_hit = stop_loss > 0 and low_price <= stop_loss
+        stop_hit = eff_stop > 0 and low_price <= eff_stop
         target_hit = target_price > 0 and high_price >= target_price
 
         if not stop_hit and not target_hit:
@@ -1315,11 +1473,11 @@ class Backtester:
             # OHLC bars do not reveal whether stop or target traded first.
             # Use the conservative fill for long-only simulations instead of
             # inferring an impossible intrabar path from open/close direction.
-            first_reason = "STOP_LOSS"
-            first_price = stop_loss
+            first_reason = "TRAILING_STOP" if trail_on else "STOP_LOSS"
+            first_price = eff_stop
         elif stop_hit:
-            first_reason = "STOP_LOSS"
-            first_price = stop_loss
+            first_reason = "TRAILING_STOP" if trail_on else "STOP_LOSS"
+            first_price = eff_stop
         else:
             first_reason = "TAKE_PROFIT"
             first_price = target_price

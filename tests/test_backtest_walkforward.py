@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 import pandas as pd
+import pytest
 
 from bist_bot.backtest import BacktestResult, BacktestTrade, WalkForwardValidator
 from bist_bot.strategy.params import StrategyParams
@@ -125,3 +126,46 @@ def test_walk_forward_anchored_mode_expands_training_window() -> None:
     assert len(windows) >= 3
     assert len(windows[1][0]) > len(windows[0][0])
     assert windows[0][0].index.min() == windows[1][0].index.min()
+
+
+def test_monthly_walk_forward_purge_trims_train_tail() -> None:
+    """purge_bars train kuyruğunu kırpar; pencere sayısı ve test korunur."""
+    df = build_two_year_frame()
+    plain = WalkForwardValidator(
+        train_window=12,
+        test_window=3,
+        step=3,
+        mode="rolling",
+        optimizer_factory=DummyOptimizer,
+        backtester_factory=DummyBacktester,
+    )
+    purged = WalkForwardValidator(
+        train_window=12,
+        test_window=3,
+        step=3,
+        mode="rolling",
+        optimizer_factory=DummyOptimizer,
+        backtester_factory=DummyBacktester,
+        purge_bars=20,
+    )
+    plain_windows = plain._build_windows(df)
+    purged_windows = purged._build_windows(df)
+
+    assert len(purged_windows) == len(plain_windows) > 0
+    for (plain_train, plain_test), (train_df, test_df) in zip(
+        plain_windows, purged_windows, strict=True
+    ):
+        assert len(train_df) == len(plain_train) - 20
+        assert test_df.index.min() == plain_test.index.min()
+        assert test_df.index.max() == plain_test.index.max()
+
+    result = purged.run("TEST.IS", df, initial_capital=10_000)
+    assert result is not None
+    assert result.purge_bars == 20
+    assert result.to_dict()["purge_bars"] == 20
+    assert all(window.purge_bars == 20 for window in result.windows)
+
+
+def test_monthly_walk_forward_negative_purge_raises() -> None:
+    with pytest.raises(ValueError):
+        WalkForwardValidator(purge_bars=-1)
