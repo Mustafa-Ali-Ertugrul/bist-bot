@@ -33,7 +33,7 @@ class FakeEngine:
             Signal(ticker="THYAO.IS", signal_type=SignalType.BUY, score=30.0, price=300.0)
         ]
 
-    def scan_all(self, data):
+    def scan_all(self, data, **_kw):
         return list(self._signals)
 
     def get_actionable_signals(self, signals):

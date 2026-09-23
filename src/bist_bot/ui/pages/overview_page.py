@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import html
+import threading
+import time
+from typing import Any
 
 import streamlit as st
 
@@ -19,6 +22,48 @@ from bist_bot.ui.runtime import (
     get_market_summary,
     request_scan,
 )
+
+#: Overview re-renders on every Streamlit interaction; the two panel reads
+#: below are identical across those reruns, so they are memoised briefly.
+_API_RESPONSE_CACHE_TTL_S = 30.0
+
+#: Request key -> ``(monotonic timestamp, Response)``. Only ``ok`` responses
+#: are stored so a transient failure still retries on the next rerun.
+_api_response_cache: dict[tuple[Any, ...], tuple[float, Any]] = {}
+_api_response_cache_lock = threading.Lock()
+
+
+def _clear_api_response_cache() -> None:
+    """Drop every cached overview API response (test isolation / manual reset)."""
+    with _api_response_cache_lock:
+        _api_response_cache.clear()
+
+
+def _cached_api_request(method: str, path: str, **kwargs: Any) -> Any:
+    """``api_request`` with a short TTL memo, resolving the module global late.
+
+    ``globals().get("api_request")`` is evaluated at call time so tests can
+    keep patching ``overview_page.api_request``. Kwarg values are keyed by
+    ``repr`` so unhashable payloads (e.g. ``params={"limit": 20}``) still
+    cache; a failing ``repr`` or a non-``ok`` response bypasses the cache.
+    """
+    key: tuple[Any, ...] | None
+    try:
+        key = (method, path, tuple(sorted((name, repr(val)) for name, val in kwargs.items())))
+    except Exception:
+        key = None
+    now = time.monotonic()
+    if key is not None:
+        with _api_response_cache_lock:
+            hit = _api_response_cache.get(key)
+        if hit is not None and now - hit[0] < _API_RESPONSE_CACHE_TTL_S:
+            return hit[1]
+    requester = globals().get("api_request") or api_request
+    response = requester(method, path, **kwargs)
+    if key is not None and getattr(response, "ok", False):
+        with _api_response_cache_lock:
+            _api_response_cache[key] = (now, response)
+    return response
 
 
 def _badge(label: str, positive: bool = True) -> str:
@@ -198,8 +243,8 @@ def render_overview_page() -> None:
     summary = get_market_summary(signals, all_data)
 
     try:
-        stats_response = api_request("GET", "/api/stats")
-        signals_response = api_request("GET", "/api/signals/history", params={"limit": 20})
+        stats_response = _cached_api_request("GET", "/api/stats")
+        signals_response = _cached_api_request("GET", "/api/signals/history", params={"limit": 20})
     except Exception as exc:
         st.warning(f"{get_message('ui.api_data_failed')}: {exc}")
         return

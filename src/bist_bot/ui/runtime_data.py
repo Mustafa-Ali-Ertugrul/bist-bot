@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import xml.etree.ElementTree as ET  # nosec B405: defusedxml primary; fallback capped.
+from collections import OrderedDict
 from datetime import UTC, datetime, timedelta, timezone
 from typing import cast
 
@@ -12,7 +13,7 @@ import requests
 import streamlit as st
 
 from bist_bot.config.settings import settings
-from bist_bot.indicators import TechnicalIndicators
+from bist_bot.indicators import cached_add_all
 from bist_bot.strategy.signal_models import Signal, SignalType
 
 try:  # XXE-safe RSS parsing when available (declared in requirements.txt).
@@ -142,26 +143,77 @@ def fetch_bist100_news(max_results: int = 5) -> list[dict[str, str]]:
     return all_news[:max_results]
 
 
+#: Last-bar metric cache cap. Entries are tiny (two scalars) and keyed on
+#: session-state frames, so 2000 comfortably exceeds a BIST100 universe.
+_LAST_ROW_METRICS_CACHE_MAX = 2000
+
+#: ``(id(df), len(df), last close)`` -> raw ``(rsi, volume_ratio)`` of bar -1.
+_last_row_metrics_cache: OrderedDict[tuple[int, int, float], tuple[object, object]] = OrderedDict()
+
+
+def _clear_last_row_metrics_cache() -> None:
+    """Drop every cached last-bar metric (test isolation / manual reset)."""
+    _last_row_metrics_cache.clear()
+
+
+def _last_row_metrics(df):
+    """Return the raw ``(rsi, volume_ratio)`` of ``df``'s last bar, cached.
+
+    Values are returned exactly as ``add_all(...).iloc[-1].get(...)`` yields
+    them (NaN/inf preserved) so each caller keeps its own fallback semantics.
+    ``None`` means the frame is unusable — empty input, ``add_all`` raised, or
+    its result had no rows — i.e. the cases callers already skipped via
+    ``continue``/``except``.
+
+    The computation path is ``cached_add_all`` (shared content memo under
+    this session-state short-circuit); only repeat reads of the same frame
+    are short-circuited here. The key
+    carries ``id`` plus length and last close so an in-place mutation of the
+    frame (or id reuse after GC) cannot serve a stale row, and non-finite
+    closes are simply not cached.
+    """
+    key = None
+    try:
+        if df is None or getattr(df, "empty", True):
+            return None
+        last_close = float(df["close"].iloc[-1])
+        if np.isfinite(last_close):
+            key = (id(df), len(df), last_close)
+    except Exception:
+        key = None
+    if key is not None:
+        cached = _last_row_metrics_cache.get(key)
+        if cached is not None:
+            _last_row_metrics_cache.move_to_end(key)
+            return cached
+    try:
+        last = cached_add_all(df).iloc[-1]
+        metrics = (last.get("rsi", 50), last.get("volume_ratio", 1.0))
+    except Exception:
+        return None
+    if key is not None:
+        _last_row_metrics_cache[key] = metrics
+        _last_row_metrics_cache.move_to_end(key)
+        while len(_last_row_metrics_cache) > _LAST_ROW_METRICS_CACHE_MAX:
+            _last_row_metrics_cache.popitem(last=False)
+    return metrics
+
+
 def get_market_summary(signals, all_data):
     """Build aggregate market summary metrics for the portfolio view."""
     if not signals or not all_data:
         return {}
-    ti = TechnicalIndicators()
     sector_data = {}
     rsi_values = []
     vol_ratios = []
     total_analyzed = 0
     for _ticker, df in all_data.items():
         try:
-            if df is None or df.empty:
-                continue
-            df_ind = ti.add_all(df.copy())
-            if df_ind is None or df_ind.empty:
+            metrics = _last_row_metrics(df)
+            if metrics is None:
                 continue
             total_analyzed += 1
-            last = df_ind.iloc[-1]
-            rsi_raw = last.get("rsi", 50)
-            vol_raw = last.get("volume_ratio", 1.0)
+            rsi_raw, vol_raw = metrics
             rsi = float(rsi_raw) if pd.notna(rsi_raw) and np.isfinite(rsi_raw) else 50.0
             vol = float(vol_raw) if pd.notna(vol_raw) and np.isfinite(vol_raw) else 1.0
             rsi_values.append(rsi)
@@ -232,16 +284,16 @@ def filter_signals(base_signals, all_data):
         and st.session_state.vol_ratio_filter <= 0
     ):
         return filtered
-    ti = TechnicalIndicators()
     result = []
     for signal in filtered:
         df = all_data.get(signal.ticker)
         if df is None:
             continue
         try:
-            last = ti.add_all(df.copy()).iloc[-1]
-            rsi = last.get("rsi", 50)
-            volume_ratio = last.get("volume_ratio", 1.0)
+            metrics = _last_row_metrics(df)
+            if metrics is None:
+                continue
+            rsi, volume_ratio = metrics
             if (
                 st.session_state.rsi_min_filter <= rsi <= st.session_state.rsi_max_filter
                 and volume_ratio >= st.session_state.vol_ratio_filter

@@ -55,7 +55,10 @@ class DataFetcherProtocol(Protocol):
 
 class StrategyEngineProtocol(Protocol):
     def scan_all(
-        self, data: dict[str, pd.DataFrame] | dict[str, dict[str, pd.DataFrame]]
+        self,
+        data: dict[str, pd.DataFrame] | dict[str, dict[str, pd.DataFrame]],
+        *,
+        market_context: Any | None = ...,
     ) -> list[Signal]: ...
     def get_actionable_signals(self, signals: list[Signal]) -> list[Signal]: ...
     def analyze(

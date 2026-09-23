@@ -89,7 +89,7 @@ class MetricsFetcher:
 
 
 class MetricsEngine:
-    def scan_all(self, data):
+    def scan_all(self, data, **_kw):
         _ = data
         return [Signal(ticker="THYAO.IS", signal_type=SignalType.BUY, score=25, price=10.0)]
 

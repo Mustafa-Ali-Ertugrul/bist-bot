@@ -96,7 +96,7 @@ class ApiEngineStub:
         self.scan_signals = scan_signals or []
         self.analyze_signal = analyze_signal
 
-    def scan_all(self, data):
+    def scan_all(self, data, **_kw):
         _ = data
         return list(self.scan_signals)
 
