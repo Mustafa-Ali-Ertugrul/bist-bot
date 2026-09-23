@@ -22,7 +22,7 @@ from bist_bot.app_logging import configure_logging, get_logger
 from bist_bot.backtest import Backtester, StrategyBacktester, compare_benchmark
 from bist_bot.config.settings import settings
 from bist_bot.data.fetcher import BISTDataFetcher
-from bist_bot.indicators import TechnicalIndicators
+from bist_bot.indicators import cached_add_all
 from bist_bot.strategy import StrategyEngine
 from bist_bot.strategy.regime import MarketRegime, detect_regime
 
@@ -47,8 +47,7 @@ class CompareRow:
 
 
 def _sideways_pct(df: pd.DataFrame) -> float:
-    ti = TechnicalIndicators()
-    df = ti.add_all(df).dropna(subset=["rsi", f"sma_{settings.SMA_SLOW}"])
+    df = cached_add_all(df).dropna(subset=["rsi", f"sma_{settings.SMA_SLOW}"])
     start = min(50, len(df))
     regimes = [detect_regime(df.iloc[: i + 1]) for i in range(start, len(df))]
     if not regimes:

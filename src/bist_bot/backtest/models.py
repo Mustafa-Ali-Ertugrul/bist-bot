@@ -232,6 +232,7 @@ class VectorizedSignals:
     scores: np.ndarray
     stop_losses: np.ndarray
     target_prices: np.ndarray
+    atrs: np.ndarray
 
 
 class WindowMode(str, Enum):
@@ -285,6 +286,7 @@ class WalkForwardWindowResult:
     test_rows: int
     params: dict[str, Any]
     metrics: dict[str, Any]
+    purge_bars: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -293,6 +295,7 @@ class WalkForwardWindowResult:
             "test_period": self.test_period,
             "train_rows": self.train_rows,
             "test_rows": self.test_rows,
+            "purge_bars": self.purge_bars,
             "params": self.params,
             "metrics": self.metrics,
         }
@@ -310,6 +313,7 @@ class WalkForwardResult:
     universe_as_of: str | None
     windows: list[WalkForwardWindowResult]
     combined_metrics: dict[str, Any]
+    purge_bars: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -321,6 +325,7 @@ class WalkForwardResult:
             "step_months": self.step_months,
             "mode": self.mode,
             "window_count": len(self.windows),
+            "purge_bars": self.purge_bars,
             "universe_as_of": self.universe_as_of,
             "combined_metrics": self.combined_metrics,
             "windows": [window.to_dict() for window in self.windows],

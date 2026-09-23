@@ -7,7 +7,14 @@ using the conservative exit semantics from the Faz 2 contract:
 - Exit: persisted stop/target levels only (never recomputed); same-bar
   TP+SL collision resolves SL-first; open gaps exit at bar open.
 - Timeout: configurable bars (default 5), exits at the last bar close.
-- Costs: zero / base / stress scenarios from the shared CostModel.
+- Costs: zero / base / stress / realistic scenarios from the shared CostModel.
+  "realistic" is the live-like v2 scenario (15 bps commission, 20 bps spread,
+  30 bps/side slippage); pair it with --entry-delay-bars 1 for the latency leg.
+- Entry delay: --entry-delay-bars N shifts entry N bars after the first
+  tradable bar (default 0). The summary auto-adds a zero-vs-realistic
+  cost_comparison block per dataset when both scenarios are present.
+- Degenerate-risk gate: --min-risk-pct X skips setups whose planned risk is
+  below X of entry (default 0.0 = legacy; 0.005 recommended for live-like runs).
 - Guard: N >= --min-n (default 10) per analysis cell; below that the cell is
   flagged low_n and no threshold recommendation is emitted.
 
@@ -33,6 +40,7 @@ from typing import Any
 
 import pandas as pd
 
+from bist_bot.backtest.realistic_costs import compare_cost_scenarios, realistic_execution
 from bist_bot.backtest.signal_replay import (
     CONFIDENCE_KEYS,
     ReplaySignal,
@@ -59,7 +67,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SUMMARY = REPO_ROOT / "results" / "signal_replay_summary.json"
 
 DATASETS = ("raw", "episodes", "first_actionable")
-COST_SCENARIOS = ("zero", "base", "stress")
+COST_SCENARIOS = ("zero", "base", "stress", "realistic")
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -77,6 +85,20 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help=f"Comma-separated cost scenarios: {','.join(COST_SCENARIOS)} or 'all' (default: all)",
     )
     parser.add_argument("--timeout-bars", type=int, default=5, help="Timeout in bars (default 5)")
+    parser.add_argument(
+        "--entry-delay-bars",
+        type=int,
+        default=0,
+        help="Shift entry N bars after the first tradable bar (default 0; "
+        "use 1 with --cost realistic for the live-latency leg)",
+    )
+    parser.add_argument(
+        "--min-risk-pct",
+        type=float,
+        default=0.0,
+        help="Skip setups whose planned risk (entry vs stop) is below this "
+        "fraction of entry, e.g. 0.005 (default 0.0 = legacy behavior)",
+    )
     parser.add_argument(
         "--episode-gap-bars",
         type=int,
@@ -237,6 +259,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  datasets      : {', '.join(datasets)}")
     print(f"  costs         : {', '.join(costs)}")
     print(f"  timeout-bars  : {args.timeout_bars}")
+    print(f"  entry-delay   : {args.entry_delay_bars} bar(s)")
     print(f"  episode-gap   : {args.episode_gap_bars} bars")
     print(f"  min-n guard   : {args.min_n}")
     print("=" * 70)
@@ -257,6 +280,7 @@ def main(argv: list[str] | None = None) -> int:
     engine = SignalReplayEngine(
         timeout_bars=args.timeout_bars,
         cost_models=build_cost_scenarios(),
+        min_risk_pct=args.min_risk_pct,
     )
 
     # ---- Datasets ----
@@ -283,6 +307,7 @@ def main(argv: list[str] | None = None) -> int:
                 bars_by_ticker,
                 cost_model_name=cost_name,
                 dataset_name=ds_name,
+                entry_delay_bars=args.entry_delay_bars,
             )
             block = {
                 "dataset": ds_name,
@@ -302,6 +327,27 @@ def main(argv: list[str] | None = None) -> int:
                 f"skips={sum(skips.values())} win%="
                 f"{block['overall']['win_rate']:.1%} avgR={block['overall']['avg_r_net']:.3f}"
             )
+
+    # ---- zero-vs-realistic dual-run report (v2 §3 kabul kuralı) ----
+    cost_comparison: dict[str, dict] = {}
+    if "zero" in costs and "realistic" in costs:
+        for ds_name in datasets_map:
+            zero_key, realistic_key = f"{ds_name}__zero", f"{ds_name}__realistic"
+            if zero_key in summary_blocks and realistic_key in summary_blocks:
+                cost_comparison[ds_name] = compare_cost_scenarios(
+                    {
+                        "zero": summary_blocks[zero_key]["overall"],
+                        "realistic": summary_blocks[realistic_key]["overall"],
+                    }
+                )
+        if cost_comparison:
+            print("  [cost_comparison] zero -> realistic per dataset:")
+            for ds_name, report in cost_comparison.items():
+                print(
+                    f"    {ds_name}: WR {report['win_rate_delta_pp']:+.1f}pp, "
+                    f"avgNet {report['avg_net_pnl_delta_pp']:+.3f}pp, "
+                    f"traded {report['baseline_traded']}->{report['candidate_traded']}"
+                )
 
     # ---- Cross-cutting analyses (raw dataset, base cost) ----
     raw_signals = datasets_map.get("raw") or signals
@@ -359,6 +405,9 @@ def main(argv: list[str] | None = None) -> int:
             "datasets": datasets,
             "costs": costs,
             "timeout_bars": args.timeout_bars,
+            "entry_delay_bars": args.entry_delay_bars,
+            "min_risk_pct": args.min_risk_pct,
+            "realistic_latency_bars": realistic_execution().latency_bars,
             "episode_gap_bars": args.episode_gap_bars,
             "min_score": args.min_score,
             "min_n": args.min_n,
@@ -374,6 +423,7 @@ def main(argv: list[str] | None = None) -> int:
             "confidence_keys": CONFIDENCE_KEYS,
         },
         "blocks": summary_blocks,
+        "cost_comparison": cost_comparison,
         "cross_cutting": extra,
         "decision": decision,
     }

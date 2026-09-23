@@ -172,6 +172,8 @@ class ReplayTrade:
 
 
 def build_cost_scenarios() -> dict[str, CostModel]:
+    from bist_bot.backtest.realistic_costs import realistic_cost_model
+
     return {
         "zero": CostModel(
             commission_bps=0.0,
@@ -197,6 +199,8 @@ def build_cost_scenarios() -> dict[str, CostModel]:
             spread_bps=15.0,
             fixed_slippage_bps=15.0,
         ),
+        # v2 §3: live-like gerçekçi senaryo (maliyet + latency varsayımları).
+        "realistic": realistic_cost_model(),
     }
 
 
@@ -374,9 +378,17 @@ class SignalReplayEngine:
         self,
         timeout_bars: int = 5,
         cost_models: dict[str, CostModel] | None = None,
+        min_risk_pct: float = 0.0,
     ) -> None:
+        if min_risk_pct < 0:
+            raise ValueError("min_risk_pct must be >= 0")
         self.timeout_bars = timeout_bars
         self.cost_models = cost_models or build_cost_scenarios()
+        # Tradability gate: planned risk (entry vs persisted stop) below this
+        # fraction of entry is unexecutable live (sizing explodes, friction
+        # dwarfs the setup) — skip instead of printing -400000R artifacts.
+        # 0.0 preserves the legacy Faz 2 behavior.
+        self.min_risk_pct = float(min_risk_pct)
 
     def simulate_single_signal(
         self,
@@ -424,6 +436,14 @@ class SignalReplayEngine:
                 return None, "skipped_gap_through_stop"
             if entry_price <= target_price:
                 return None, "skipped_gap_through_target"
+
+        # Degenerate-risk gate: entry hugging the persisted stop (float dust
+        # above it, or a setup whose planned risk is smaller than live
+        # friction) is not a tradable setup — skip before R explodes.
+        if entry_price > 0 and self.min_risk_pct > 0:
+            risk_per_share = abs(entry_price - stop_loss)
+            if (risk_per_share / entry_price) < self.min_risk_pct:
+                return None, "skipped_degenerate_risk"
 
         # Scanning loop for exit
         exit_reason: str | None = None

@@ -4,7 +4,7 @@ import pandas as pd
 
 from bist_bot import strategy as strategy_module
 from bist_bot.contracts import StrategyEngineProtocol
-from bist_bot.indicators import TechnicalIndicators
+from bist_bot.indicators import TechnicalIndicators, cached_add_all
 from bist_bot.strategy.signal_models import SignalType
 
 from .engine import Backtester
@@ -36,7 +36,10 @@ class StrategyBacktester:
         }
 
     def run(self, ticker: str, df: pd.DataFrame, verbose: bool = False) -> BacktestResult | None:
-        self._enriched_cache = TechnicalIndicators().add_all(df.copy())
+        # Content-keyed FIFO memo: re-runs of the same ticker/frame hit the
+        # cache instead of recomputing the full indicator package. add_all is
+        # a @staticmethod that copies on entry, so no defensive copy needed.
+        self._enriched_cache = cached_add_all(df, ticker)
 
         def signal_builder(ticker: str, history: pd.DataFrame) -> dict[str, float | bool]:
             idx = len(history) - 1

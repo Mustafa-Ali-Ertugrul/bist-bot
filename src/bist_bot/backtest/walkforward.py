@@ -33,11 +33,15 @@ class WalkForwardValidator:
         param_grid: dict[str, list[Any]] | None = None,
         optimizer_factory: Any | None = None,
         backtester_factory: Any | None = None,
+        purge_bars: int = 0,
     ) -> None:
+        if purge_bars < 0:
+            raise ValueError("purge_bars must be >= 0")
         self.train_window = train_window
         self.test_window = test_window
         self.step = step
         self.mode = WindowMode(mode)
+        self.purge_bars = int(purge_bars)
         self.optimizer_iterations = optimizer_iterations
         self.param_grid = param_grid or {
             "buy_threshold": [12.0, 15.0, 20.0],
@@ -67,6 +71,10 @@ class WalkForwardValidator:
 
             train_df = df.loc[(df.index >= current_train_start) & (df.index < train_end)]
             test_df = df.loc[(df.index >= train_end) & (df.index < test_end)]
+            if self.purge_bars:
+                # Purge: sınırda kalan etiket/özellik ufku sızıntısını kesmek için
+                # train kuyruğundaki son N bar optimize ediciye verilmez.
+                train_df = train_df.iloc[: -self.purge_bars]
             if not train_df.empty and not test_df.empty:
                 windows.append((train_df, test_df))
 
@@ -144,6 +152,7 @@ class WalkForwardValidator:
                     test_period=f"{_to_datetime(test_df.index[0]).strftime('%Y-%m-%d')} -> {_to_datetime(test_df.index[-1]).strftime('%Y-%m-%d')}",
                     train_rows=len(train_df),
                     test_rows=len(test_df),
+                    purge_bars=self.purge_bars,
                     params={
                         key: value for key, value in params_dict.items() if key in self.param_grid
                     },
@@ -187,6 +196,7 @@ class WalkForwardValidator:
             universe_as_of=universe_as_of,
             windows=window_results,
             combined_metrics=combined_metrics,
+            purge_bars=self.purge_bars,
         )
 
         if output_path is not None:

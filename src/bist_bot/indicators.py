@@ -1,3 +1,6 @@
+import math
+from collections import OrderedDict
+
 import numpy as np
 import pandas as pd
 
@@ -6,6 +9,58 @@ from bist_bot.config.settings import settings
 
 logger = get_logger(__name__, component="indicators")
 
+_ADD_ALL_CACHE_MAX = 512
+_add_all_cache: OrderedDict[tuple, pd.DataFrame] = OrderedDict()
+
+
+def _clear_add_all_cache() -> None:
+    """Drop the shared ``add_all`` content memo (tests / force refresh)."""
+    _add_all_cache.clear()
+
+
+def cached_add_all(
+    frame: pd.DataFrame,
+    ticker: str = "",
+    *,
+    indicators=None,
+) -> pd.DataFrame:
+    """Content-keyed FIFO memo around ``TechnicalIndicators.add_all``.
+
+    Key is ``(ticker, len, first close, last close)`` with finite-close
+    checks (same D4 discipline as the UI/dashboard memos). Only the real
+    ``TechnicalIndicators.add_all`` is memoized; mocks and patched
+    implementations always recompute.
+    """
+    if indicators is None:
+        indicators = TechnicalIndicators()
+    compute = getattr(indicators, "add_all", None)
+    if compute is not TechnicalIndicators.add_all:
+        return compute(frame)
+
+    key = None
+    try:
+        if len(frame) > 0 and "close" in frame.columns:
+            first = float(frame["close"].iloc[0])
+            last = float(frame["close"].iloc[-1])
+            if math.isfinite(first) and math.isfinite(last):
+                key = (ticker, len(frame), first, last)
+    except Exception:
+        key = None
+
+    if key is not None:
+        cached = _add_all_cache.get(key)
+        if cached is not None:
+            _add_all_cache.move_to_end(key)
+            return cached
+
+    result = TechnicalIndicators.add_all(frame)
+    if key is not None:
+        _add_all_cache[key] = result
+        _add_all_cache.move_to_end(key)
+        while len(_add_all_cache) > _ADD_ALL_CACHE_MAX:
+            _add_all_cache.popitem(last=False)
+    return result
+
 
 class TechnicalIndicators:
     @staticmethod
@@ -13,6 +68,64 @@ class TechnicalIndicators:
         if np.isnan(values).all():
             return np.nan
         return float(np.nanargmin(values))
+
+    @staticmethod
+    def _rolling_nanargmin(values: np.ndarray, window: int, min_periods: int) -> np.ndarray:
+        """Vectorized twin of ``Series.rolling(window, min_periods).apply(_nanargmin)``.
+
+        Semantics mirrored from pandas:
+        - a window is evaluated only when it holds >= ``min_periods`` non-NaN
+          values; otherwise the result is NaN;
+        - ``_nanargmin`` ignores NaN and returns the FIRST index of the minimum;
+        - positions before a full window fits use the truncated left-anchored
+          window ``values[0 : i + 1]``.
+        Only the first ``window - 1`` positions need a Python loop (tiny); the
+        bulk runs on ``sliding_window_view``.
+        """
+        from numpy.lib.stride_tricks import sliding_window_view
+
+        n = values.shape[0]
+        out = np.full(n, np.nan, dtype=float)
+        start_full = max(window - 1, 0)
+        if n > start_full:
+            wins = sliding_window_view(values, window)  # (n - window + 1, window)
+            counts = np.count_nonzero(~np.isnan(wins), axis=1)
+            has_value = ~np.isnan(wins).all(axis=1)
+            arg = np.full(wins.shape[0], np.nan, dtype=float)
+            if has_value.any():
+                # Rows are guaranteed non-empty, so nanargmin never raises.
+                arg[has_value] = np.nanargmin(wins[has_value], axis=1)
+            arg[counts < min_periods] = np.nan
+            out[start_full:] = arg
+        # Left-truncated windows (i < window - 1): window == values[0 : i + 1].
+        for i in range(min(start_full, n)):
+            window_vals = values[: i + 1]
+            count = np.count_nonzero(~np.isnan(window_vals))
+            if count >= min_periods and count > 0:
+                out[i] = float(np.nanargmin(window_vals))
+        return out
+
+    @staticmethod
+    def _rolling_mean_abs_dev(values: np.ndarray, window: int) -> np.ndarray:
+        """Vectorized twin of ``rolling(window).apply(lambda x: |x - x.mean()| .mean())``.
+
+        ``rolling(window)`` uses ``min_periods == window``, so only windows
+        entirely free of NaN are evaluated; everything else is NaN.
+        """
+        from numpy.lib.stride_tricks import sliding_window_view
+
+        n = values.shape[0]
+        out = np.full(n, np.nan, dtype=float)
+        if n < window:
+            return out
+        wins = sliding_window_view(values, window)
+        counts = np.count_nonzero(~np.isnan(wins), axis=1)
+        valid = counts == window
+        if valid.any():
+            full = wins[valid]
+            deviation = np.abs(full - full.mean(axis=1, keepdims=True)).mean(axis=1)
+            out[np.arange(window - 1, n)[valid]] = deviation
+        return out
 
     @staticmethod
     def _add_min_divergence(
@@ -38,16 +151,22 @@ class TechnicalIndicators:
         row_positions = np.arange(n_rows)
 
         current_min = source.rolling(window=lookback + 1, min_periods=lookback + 1).min()
-        current_argmin = source.rolling(window=lookback + 1, min_periods=lookback + 1).apply(
-            TechnicalIndicators._nanargmin,
-            raw=True,
+        # Vectorized twin of rolling(...).apply(_nanargmin, raw=True): same
+        # min_periods gate, same first-minimum tie-break, same NaN placement.
+        current_argmin = pd.Series(
+            TechnicalIndicators._rolling_nanargmin(
+                source.to_numpy(dtype=float), lookback + 1, lookback + 1
+            ),
+            index=source.index,
         )
 
         previous_source = source.shift(lookback + 1)
         previous_min = previous_source.rolling(window=lookback, min_periods=1).min()
-        previous_argmin = previous_source.rolling(window=lookback, min_periods=1).apply(
-            TechnicalIndicators._nanargmin,
-            raw=True,
+        previous_argmin = pd.Series(
+            TechnicalIndicators._rolling_nanargmin(
+                previous_source.to_numpy(dtype=float), lookback, 1
+            ),
+            index=previous_source.index,
         )
 
         current_positions = row_positions - lookback + current_argmin.to_numpy(dtype=float)
@@ -267,8 +386,11 @@ class TechnicalIndicators:
 
         typical_price = (df["high"] + df["low"] + df["close"]) / 3
         sma_tp = typical_price.rolling(window=period).mean()
-        mean_dev = typical_price.rolling(window=period).apply(
-            lambda x: np.abs(x - x.mean()).mean(), raw=True
+        # Vectorized twin of rolling(window).apply(|x - x.mean()|.mean()):
+        # min_periods defaults to window, so only NaN-free windows count.
+        mean_dev = pd.Series(
+            TechnicalIndicators._rolling_mean_abs_dev(typical_price.to_numpy(dtype=float), period),
+            index=typical_price.index,
         )
 
         df["cci"] = pd.Series(np.nan, index=df.index, dtype=float)
@@ -379,8 +501,19 @@ class TechnicalIndicators:
         fast = settings.MACD_FAST
         slow = settings.MACD_SLOW
         signal_period = settings.MACD_SIGNAL
-        ema_fast = df["close"].ewm(span=fast, adjust=False).mean()
-        ema_slow = df["close"].ewm(span=slow, adjust=False).mean()
+        # Reuse EMAs already computed by add_ema when it ran first (add_all
+        # does). The column name encodes the span, so ema_{fast} existing
+        # guarantees it was built with span=fast; otherwise recompute.
+        fast_col = f"ema_{fast}"
+        slow_col = f"ema_{slow}"
+        if fast_col in df.columns:
+            ema_fast = df[fast_col]
+        else:
+            ema_fast = df["close"].ewm(span=fast, adjust=False).mean()
+        if slow_col in df.columns:
+            ema_slow = df[slow_col]
+        else:
+            ema_slow = df["close"].ewm(span=slow, adjust=False).mean()
         df["macd"] = ema_fast - ema_slow
         df["macd_signal"] = df["macd"].ewm(span=signal_period, adjust=False, min_periods=1).mean()
         df["macd_histogram"] = df["macd"] - df["macd_signal"]
@@ -420,7 +553,14 @@ class TechnicalIndicators:
         if not in_place:
             df = df.copy()
 
-        df["bb_middle"] = df["close"].rolling(window=period, min_periods=1).mean()
+        # Reuse sma_{period} when add_sma already produced it (identical
+        # rolling(window=period, min_periods=1).mean() formula); otherwise
+        # compute it here. Standalone add_bollinger calls fall back cleanly.
+        sma_col = f"sma_{period}"
+        if sma_col in df.columns:
+            df["bb_middle"] = df[sma_col]
+        else:
+            df["bb_middle"] = df["close"].rolling(window=period, min_periods=1).mean()
         rolling_std = (
             df["close"].rolling(window=period, min_periods=1).std().fillna(0.0).clip(lower=1e-9)
         )

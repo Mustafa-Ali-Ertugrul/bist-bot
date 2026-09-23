@@ -756,3 +756,93 @@ def test_e2e_runner_sqlite_csv(tmp_path) -> None:
     assert trades_csv.exists()
     df = pd.read_csv(trades_csv)
     assert len(df) == 2  # raw x (zero + base)
+
+
+def test_degenerate_risk_skipped_with_gate() -> None:
+    sig = make_signal(price=100.0, stop_loss=99.95, target_price=110.0)
+    bars = flat_bars(date(2025, 1, 13), 6)
+    engine = SignalReplayEngine(
+        timeout_bars=5, cost_models=build_cost_scenarios(), min_risk_pct=0.005
+    )
+    trade, status = engine.simulate_single_signal(
+        sig, bars, cost_model_name="zero", dataset_name="raw"
+    )
+    assert trade is None
+    assert status == "skipped_degenerate_risk"
+
+
+def test_degenerate_risk_trades_without_gate_legacy() -> None:
+    """Default engine preserves legacy behavior (no tradability gate)."""
+    sig = make_signal(price=100.0, stop_loss=99.95, target_price=110.0)
+    bars = flat_bars(date(2025, 1, 13), 6)
+    trade, status = replay_one(sig, bars)
+    assert status == "ok"
+    assert trade is not None
+
+
+def test_negative_min_risk_pct_raises() -> None:
+    with pytest.raises(ValueError):
+        SignalReplayEngine(min_risk_pct=-0.1)
+
+
+def test_e2e_runner_realistic_dual_run(tmp_path) -> None:
+    import importlib.util
+    from pathlib import Path
+
+    script_path = Path(__file__).resolve().parents[1] / "scripts" / "run_signal_replay.py"
+    spec = importlib.util.spec_from_file_location("run_signal_replay_dual", script_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    db_path = tmp_path / "signals.db"
+    bars_dir = tmp_path / "bars"
+    bars_dir.mkdir()
+
+    from bist_bot.db.database import DatabaseManager
+    from bist_bot.db.repositories.signals_repository import SignalsRepository
+
+    manager = DatabaseManager(sqlite_path=str(db_path))
+    repo = SignalsRepository(manager)
+    repo.save_signal(
+        Signal(
+            ticker="AAA.IS",
+            signal_type=SignalType.BUY,
+            score=28.0,
+            price=100.0,
+            stop_loss=90.0,
+            target_price=120.0,
+            timestamp=datetime(2025, 1, 10, 9, 30, tzinfo=UTC),
+            confidence="confidence.medium",
+        )
+    )
+
+    bars = flat_bars(date(2025, 1, 13), 6)
+    bars.loc[1, "high"] = 120.0
+    bars.to_csv(bars_dir / "AAA.IS.csv", index=False)
+
+    out = tmp_path / "dual.json"
+    rc = module.main(
+        [
+            "--db-path",
+            str(db_path),
+            "--bars-dir",
+            str(bars_dir),
+            "--dataset",
+            "raw",
+            "--cost",
+            "zero,realistic",
+            "--entry-delay-bars",
+            "1",
+            "--min-risk-pct",
+            "0.005",
+            "--out",
+            str(out),
+        ]
+    )
+    assert rc == 0
+    summary = json.loads(out.read_text(encoding="utf-8"))
+    assert summary["config"]["entry_delay_bars"] == 1
+    assert summary["config"]["min_risk_pct"] == 0.005
+    assert "raw" in summary["cost_comparison"]
+    assert summary["cost_comparison"]["raw"]["baseline_traded"] == 1

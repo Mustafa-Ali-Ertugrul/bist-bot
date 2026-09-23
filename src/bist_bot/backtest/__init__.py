@@ -21,6 +21,14 @@ from bist_bot.backtest.models import (
     _to_datetime,
     _to_float,
 )
+from bist_bot.backtest.realistic_costs import (
+    REALISTIC_COSTS,
+    RealisticExecution,
+    compare_cost_scenarios,
+    realistic_cost_model,
+    realistic_cost_scenarios,
+    realistic_execution,
+)
 from bist_bot.backtest.report import (
     calculate_metrics,
     compare_benchmark,
@@ -30,6 +38,7 @@ from bist_bot.backtest.strategy import StrategyBacktester
 from bist_bot.backtest.walkforward import WalkForwardValidator
 
 __all__ = [
+    "REALISTIC_COSTS",
     "AblationComparison",
     "BacktestAblationResult",
     "BacktestMode",
@@ -39,6 +48,7 @@ __all__ = [
     "CostBreakdown",
     "CostModel",
     "IntrabarExit",
+    "RealisticExecution",
     "SignalBuilder",
     "StrategyBacktester",
     "VectorizedSignals",
@@ -55,5 +65,9 @@ __all__ = [
     "_to_float",
     "calculate_metrics",
     "compare_benchmark",
+    "compare_cost_scenarios",
     "generate_report",
+    "realistic_cost_model",
+    "realistic_cost_scenarios",
+    "realistic_execution",
 ]
