@@ -86,6 +86,20 @@ def _serialize_breakdown(payload: Any, *, scan_id: str = "") -> str:
     return json.dumps(_normalize_breakdown(payload, scan_id=scan_id), ensure_ascii=False)
 
 
+def _db_timestamp_key(value: Any) -> Any:
+    """Normalize a timestamp for composite-key matching against DB values.
+
+    SQLite strips tzinfo on read (documented DB boundary assumption), so an
+    aware UTC value from a ``Signal`` must be reduced to its naive UTC form to
+    compare equal to the row that the same instant produced when written.
+    """
+    if isinstance(value, datetime):
+        if value.tzinfo is not None:
+            return value.astimezone(UTC).replace(tzinfo=None)
+        return value
+    return value
+
+
 def _deserialize_breakdown(raw: str | None, *, scan_id: str = "") -> dict[str, Any]:
     if not raw:
         return _empty_rejection_breakdown(scan_id=scan_id)
@@ -142,28 +156,70 @@ class SignalsRepository:
         self.manager.run_session(_write)
 
     def save_signals(self, signals: Sequence[Signal]) -> None:
-        """Batch-insert multiple signals in a single database transaction/checkout."""
+        """Batch-insert multiple signals in a single database transaction/checkout.
+
+        Deduplication against already-persisted rows used to run one SELECT per
+        signal. It now runs a single shortlisting query (3 ``IN`` predicates —
+        SQLite has no row-value tuples) and matches composite keys in Python,
+        then inserts the misses with ONE flush so ids are assigned in a single
+        round-trip.
+        """
         if not signals:
             return
 
         def _write(session):
-            for signal in signals:
-                created_at = signal.timestamp
-                existing = session.scalar(
-                    select(SignalRecord)
-                    .where(
-                        SignalRecord.ticker == signal.ticker,
-                        SignalRecord.signal_type == signal.signal_type.value,
-                        SignalRecord.timestamp == created_at,
-                    )
-                    .limit(1)
+            # 1) Shortlist every possibly-existing row for this key space.
+            keys = [
+                (
+                    signal.ticker,
+                    signal.signal_type.value,
+                    _db_timestamp_key(signal.timestamp),
                 )
-                if existing is not None:
-                    signal.record_id = int(existing.id)
+                for signal in signals
+            ]
+            tickers = sorted({k[0] for k in keys})
+            types = sorted({k[1] for k in keys})
+            # Raw (non-normalized) values are what the SQL predicate compares;
+            # Python-side matching below normalizes both sides afterwards.
+            raw_timestamps: list[Any] = list(dict.fromkeys(signal.timestamp for signal in signals))
+
+            existing_ids: dict[tuple[str, str, Any], int] = {}
+            if tickers and types and raw_timestamps:
+                rows = session.execute(
+                    select(
+                        SignalRecord.ticker,
+                        SignalRecord.signal_type,
+                        SignalRecord.timestamp,
+                        SignalRecord.id,
+                    ).where(
+                        SignalRecord.ticker.in_(tickers),
+                        SignalRecord.signal_type.in_(types),
+                        SignalRecord.timestamp.in_(raw_timestamps),
+                    )
+                ).all()
+                for row in rows:
+                    existing_ids[(str(row[0]), str(row[1]), _db_timestamp_key(row[2]))] = int(
+                        row[3]
+                    )
+
+            # 2) Walk inputs in order; misses become pending inserts. In-batch
+            #    duplicates must collapse to the FIRST row (matches the old
+            #    per-signal loop, which saw earlier flushes).
+            pending_rows: list[tuple[Signal, tuple[str, str, Any], SignalRecord]] = []
+            pending_dupes: list[tuple[Signal, tuple[str, str, Any]]] = []
+            seen: dict[tuple[str, str, Any], Signal] = {}
+            new_records: list[SignalRecord] = []
+
+            for signal, key in zip(signals, keys, strict=True):
+                if key in existing_ids:
+                    signal.record_id = existing_ids[key]
+                    continue
+                if key in seen:
+                    pending_dupes.append((signal, key))
                     continue
                 rec = SignalRecord(
-                    timestamp=created_at,
-                    created_at=created_at,
+                    timestamp=signal.timestamp,
+                    created_at=signal.timestamp,
                     ticker=signal.ticker,
                     signal_type=signal.signal_type.value,
                     score=float(signal.score),
@@ -179,9 +235,19 @@ class SignalsRepository:
                     expires_at=signal.expires_at,
                     score_breakdown=_serialize_breakdown(signal.score_breakdown),
                 )
-                session.add(rec)
+                seen[key] = signal
+                pending_rows.append((signal, key, rec))
+                new_records.append(rec)
+
+            # 3) One flush assigns every new id.
+            if new_records:
+                session.add_all(new_records)
                 session.flush()
-                signal.record_id = int(rec.id)
+                for signal, key, rec in pending_rows:
+                    signal.record_id = int(rec.id)
+                    existing_ids[key] = int(rec.id)
+                for signal, key in pending_dupes:
+                    signal.record_id = existing_ids[key]
             return None
 
         self.manager.run_session(_write)
@@ -304,6 +370,52 @@ class SignalsRepository:
             read_only=True,
         )
         return self._signal_to_dict(row) if row else None
+
+    def get_latest_signals(self, tickers: Sequence[str]) -> dict[str, dict[str, Any]]:
+        """Return ``{ticker: latest_signal}`` for every listed ticker that has a
+        row, in TWO round-trips instead of one query per ticker.
+
+        Callers that need per-ticker isolation should keep using
+        :meth:`get_latest_signal`; this exists to collapse the scan-time N+1.
+        """
+        wanted = list(dict.fromkeys(tickers))
+        if not wanted:
+            return {}
+
+        def _read(session):
+            # Pass 1: newest timestamp per ticker (GROUP BY, one round-trip).
+            max_rows = session.execute(
+                select(SignalRecord.ticker, func.max(SignalRecord.timestamp))
+                .where(SignalRecord.ticker.in_(wanted))
+                .group_by(SignalRecord.ticker)
+            ).all()
+            if not max_rows:
+                return {}
+            pairs = {str(row[0]): row[1] for row in max_rows}
+            # Pass 2: fetch only rows sitting on those timestamps, ordered so
+            # the first row seen per ticker is its latest (timestamp DESC,
+            # then id DESC — same tie-break as get_latest_signal).
+            rows = session.scalars(
+                select(SignalRecord)
+                .where(
+                    SignalRecord.ticker.in_(list(pairs)),
+                    SignalRecord.timestamp.in_(list({ts for ts in pairs.values()})),
+                )
+                .order_by(
+                    SignalRecord.ticker.asc(),
+                    SignalRecord.timestamp.desc(),
+                    SignalRecord.id.desc(),
+                )
+            ).all()
+            latest: dict[str, dict[str, Any]] = {}
+            for row in rows:
+                key = str(row.ticker)
+                if key not in latest:
+                    latest[key] = self._signal_to_dict(row)
+            return latest
+
+        result = self.manager.run_session(_read, read_only=True)
+        return result or {}
 
     def signal_exists(
         self,

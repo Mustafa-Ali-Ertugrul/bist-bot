@@ -54,6 +54,10 @@ class AppRepository:
     def get_latest_signal(self, ticker: str):
         return self.signals.get_latest_signal(ticker)
 
+    def get_latest_signals(self, tickers):
+        """Batch latest-per-ticker lookup (capability-probed by callers)."""
+        return self.signals.get_latest_signals(tickers)
+
     def get_last_signal_times(self, tickers, signal_types, since, min_score=None):
         return self.signals.get_last_signal_times(
             tickers=tickers,
