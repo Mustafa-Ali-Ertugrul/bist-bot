@@ -101,6 +101,21 @@ def _coerce_int(value: object, default: int = 0) -> int:
     return default
 
 
+def _clean_float(value: object, default: float = 0.0) -> float:
+    """None/NaN guvenli float donusumu.
+
+    ``float(nan or 0.0)`` tuzagi: NaN truthy oldugu icin ``or`` fallback'i
+    devreye girmez ve NaN modelde kalir. Bu helper NaN/None -> default.
+    """
+    try:
+        f = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return default
+    if math.isnan(f) or math.isinf(f):
+        return default
+    return f
+
+
 _MACRO_BENCH_ENRICH_MAX = 256
 _macro_bench_enrich_cache: OrderedDict[tuple, pd.DataFrame] = OrderedDict()
 
@@ -520,7 +535,7 @@ class StrategyEngine:
             buy_threshold=self.params.buy_threshold,
             sell_threshold=self.params.sell_threshold,
             score_breakdown=score_breakdown,
-            ema_200=float(last.get(f"ema_{settings.EMA_LONG}", last.get("ema_200")) or 0.0),
+            ema_200=_clean_float(last.get(f"ema_{settings.EMA_LONG}", last.get("ema_200"))),
             ema_200_slope=self._get_ema200_slope(trigger_df),
         )
         # Single source of actionable truth: engine computes, downstream reads.

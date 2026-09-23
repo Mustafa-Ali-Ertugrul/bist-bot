@@ -113,12 +113,19 @@ class CommandHandler:
             pm = self.agent.position_manager
             pos = pm.get_position(ticker)
             if pos:
+                # Anlik fiyati cek (entry_price degil): audit/PnL dogru olsun.
+                try:
+                    prices = self.agent._fetch_prices([ticker])
+                    current_price = float(prices.get(ticker, pos["entry_price"]) or pos["entry_price"])
+                except Exception:
+                    logger.warning("manual_close_price_fetch_failed", ticker=ticker)
+                    current_price = pos["entry_price"]
                 self.agent.exit_service.exit_position(
                     position_id=pos["id"],
                     ticker=ticker,
                     quantity=pos["quantity"],
                     exit_reason="MANUAL",
-                    current_price=pos["entry_price"],
+                    current_price=current_price,
                 )
                 success = True
         except Exception as exc:

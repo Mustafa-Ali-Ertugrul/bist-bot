@@ -123,6 +123,12 @@ class AppRepository:
     def get_closed_paper_trades(self, since=None):
         return self.portfolio.get_closed_trades(since=since)
 
+    def get_recent_closed_trades(self, ticker: str, days: int = 5):
+        return self.portfolio.get_recent_closed_trades(ticker, days=days)
+
+    def get_dashboard_stats_bundle(self, *args, **kwargs):
+        return self.signals.get_dashboard_stats_bundle(*args, **kwargs)
+
     def record_ledger_open(self, *args, **kwargs):
         return self.ledger.record_open(*args, **kwargs)
 

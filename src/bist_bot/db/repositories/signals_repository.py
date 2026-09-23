@@ -491,10 +491,15 @@ class SignalsRepository:
                 is_short = SignalType.from_value(str(row.signal_type)).is_sell
             except ValueError:
                 is_short = False
-            if is_short:
-                row.profit_pct = round((original_price - outcome_price) / original_price * 100, 2)
+            if original_price > 0:
+                if is_short:
+                    row.profit_pct = round((original_price - outcome_price) / original_price * 100, 2)
+                else:
+                    row.profit_pct = round((outcome_price - original_price) / original_price * 100, 2)
             else:
-                row.profit_pct = round((outcome_price - original_price) / original_price * 100, 2)
+                # price=0 kayitlarinda ZeroDivisionError outcome'u tamamen
+                # kaybetir; parity: portfolio._gross_profit_pct guard'i.
+                row.profit_pct = None
             if source is not None:
                 row.outcome_source = source
             return None

@@ -103,6 +103,8 @@ class PaperTradeService:
             recent = self.db.get_recent_closed_trades(ticker, days=cooldown_days)
             return len(recent) > 0
         except Exception:
+            # Cooldown hatasi sessizce engeli kaldirir: her zaman logla.
+            logger.exception("paper_cooldown_check_failed", ticker=ticker)
             return False
 
     def queue_actionable_signals(self, signals) -> bool:
