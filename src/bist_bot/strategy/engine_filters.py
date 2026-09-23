@@ -380,7 +380,10 @@ def calculate_score_and_reasons(
         # geçebilir ve __func__ yoktur → else dalı çalışır).
         _resolved_checker = getattr(momentum_checker, "__func__", momentum_checker)
         if _resolved_checker is check_momentum_confirmation:
-            momentum_ok = momentum_checker(
+            # Guard, çağrılanın birebir check_momentum_confirmation olduğunu
+            # kanıtladığından doğrudan onu çağır (mypy kwargs imzasını görsün);
+            # davranış momentum_checker(...) çağrısıyla özdeş.
+            momentum_ok = check_momentum_confirmation(
                 df,
                 params.momentum_confirmation_threshold,
                 last=regime_last,

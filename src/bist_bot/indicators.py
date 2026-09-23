@@ -34,7 +34,7 @@ def cached_add_all(
     if indicators is None:
         indicators = TechnicalIndicators()
     compute = getattr(indicators, "add_all", None)
-    if compute is not TechnicalIndicators.add_all:
+    if compute is not None and compute is not TechnicalIndicators.add_all:
         return compute(frame)
 
     key = None

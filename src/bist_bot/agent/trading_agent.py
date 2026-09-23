@@ -292,7 +292,7 @@ class TradingAgent:
         # Content-keyed ATR-only memo: exit checks re-fetch the same 3mo
         # window for open positions on every scheduler tick. Key is the
         # same D4 discipline as cached_add_all (ticker, len, endpoint closes).
-        atr_cache: OrderedDict[tuple[str, int, float, float], float] = getattr(
+        atr_cache: OrderedDict[tuple[str, int, float, float], float] | None = getattr(
             self, "_atr_last_cache", None
         )
         if atr_cache is None:
