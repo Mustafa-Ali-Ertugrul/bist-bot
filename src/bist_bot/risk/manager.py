@@ -85,7 +85,12 @@ class RiskManager:
         self.max_risk_pct = self.max_total_risk_pct
         self.kelly_fraction_scale = float(getattr(settings, "KELLY_FRACTION_SCALE", 0.25))
         self.min_signal_probability = float(getattr(settings, "MIN_SIGNAL_PROBABILITY", 0.50))
-        self.min_liquidity_value_tl = float(getattr(settings, "MIN_LIQUIDITY_VALUE_TL", 0.0))
+        # Fallback, RiskSettings defaultuyla (5M TL) aynı tutulur — 0.0
+        # fallback'i settings okunamadığında likidite kapısını sessizce
+        # devre dışı bırakırdı.
+        self.min_liquidity_value_tl = float(
+            getattr(settings, "MIN_LIQUIDITY_VALUE_TL", 5_000_000.0)
+        )
         self.daily_loss_cap_pct = float(getattr(settings, "DAILY_LOSS_CAP_PCT", 0.0))
         self.daily_realized_pnl = 0.0
         self._daily_realized_pnl_date = self._today()

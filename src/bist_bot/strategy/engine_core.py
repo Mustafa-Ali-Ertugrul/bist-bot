@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 
 from bist_bot.config.settings import settings
-from bist_bot.indicators import TechnicalIndicators
+from bist_bot.indicators import TechnicalIndicators, cached_add_all
 from bist_bot.strategy.regime import TrendBias, get_trend_bias
 
 
@@ -33,6 +33,7 @@ def prepare_analysis_frame(
     multi_timeframe: bool,
     params=None,
     pre_enriched: bool = False,
+    ticker: str = "",
 ) -> tuple[pd.DataFrame, TrendBias, pd.Series, pd.Series]:
     """Enrich trigger data and extract current/previous scoring rows.
 
@@ -51,13 +52,9 @@ def prepare_analysis_frame(
     if trigger_df.empty or len(trigger_df) < 2:
         raise ValueError("Trigger veri setinde analiz için yeterli satir yok")
     if pre_enriched:
-        analysis_df = trigger_df.copy()
-        last_label = analysis_df.index[-1]
-        for col in DIVERGENCE_COLUMNS:
-            if col in analysis_df.columns:
-                analysis_df.loc[last_label, col] = "NONE"
+        analysis_df = trigger_df
     else:
-        analysis_df = indicators.add_all(trigger_df.copy())
+        analysis_df = cached_add_all(trigger_df, ticker, indicators=indicators)
     if analysis_df.empty or len(analysis_df) < 2:
         raise ValueError("Indikator hesaplamasi sonrasi yeterli veri kalmadi")
     trend_bias = (
@@ -66,5 +63,9 @@ def prepare_analysis_frame(
         else TrendBias.NEUTRAL
     )
     last = analysis_df.iloc[-1].copy()
+    if pre_enriched:
+        for col in DIVERGENCE_COLUMNS:
+            if col in analysis_df.columns:
+                last[col] = "NONE"
     prev = analysis_df.iloc[-2]
     return analysis_df, trend_bias, last, prev
