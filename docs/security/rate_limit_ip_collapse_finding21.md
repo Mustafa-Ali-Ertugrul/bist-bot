@@ -3,7 +3,18 @@
 Date: 2026-09-21
 Related: `docs/security/phase0_phase1_report.md` (Round 17 auth rate-limit key,
 "Proxy/XFF and concurrency" section), `tests/test_auth_ratelimit_key.py`
-Status: **Mitigated (Layer 1 deployed in code) / Layer 2 gated** (verify-then-flip)
+Status: **Layer 1 active (JWT-keyed buckets) / Layer 2 CLOSED-N/A** — Cloud Run
+deploy path retired 2026-09-23 (`chore/retire-cloud-run`); TRUSTED_PROXY_HOPS
+stays 0 everywhere. Re-open Layer 2 only if a trusted reverse-proxy deployment
+returns, and only after live XFF-chain verification (runbook below).
+
+> **Kapatma notu (2026-09-23):** GCP projesi faturalandırması kapalıydı; deploy'lar
+> 12 Eylül'den beri billing hatasıyla düşüyor ve servis 503 dönüyordu. Cloud Run
+> pipeline'ı repodan kaldırıldı (workflow, manifestler, deploy.ps1, README
+> talimatları). Layer 2'nin hedefi (Google front-end'in XFF zinciri) artık yok;
+> kompozisyon/lokal dağıtımda `TRUSTED_PROXY_HOPS>0` ASLA ayarlanmaz (aşağıdaki
+> uyarı). Layer 1 (doğrulanmış JWT kimliğiyle per-user bucket'lar) kodda aktif
+> kalır ve anonim istekler için yeterli korumadır (401 dönerler).
 
 ## Finding
 
@@ -71,10 +82,10 @@ Regression tests: `tests/test_client_ratelimit_key.py`.
 - `0` keeps current behavior everywhere (compose/local/tests): `REMOTE_ADDR`
   stays the TCP peer; client-sent XFF can never move a request to another
   bucket.
-- Cloud Run artifacts (`cloudrun/api-service.yaml`,
-  `.github/workflows/deploy-cloud-run.yml`, `cloudrun/deploy.ps1`, README)
-  pin `TRUSTED_PROXY_HOPS=0` with parity tests
-  (`tests/test_manifest_hardening.py`).
+- ~~Cloud Run artifacts pin `TRUSTED_PROXY_HOPS=0` with parity tests~~ —
+  bu artefaktlar (`cloudrun/api-service.yaml`, deploy workflow'u,
+  `cloudrun/deploy.ps1`, `tests/test_manifest_hardening.py`) 2026-09-23'te
+  Cloud Run emekliliğiyle birlikte repodan silindi (bkz. üstteki kapatma notu).
 
 ### Runbook before flipping to 1 (honors the phase report's constraint)
 

@@ -95,7 +95,6 @@ High-risk paths:
 - src/bist_bot/config/
 - src/bist_bot/ui/runtime*.py
 - src/bist_bot/scanner.py
-- cloudrun/
 - .github/workflows/
 
 ## Mandatory Validation

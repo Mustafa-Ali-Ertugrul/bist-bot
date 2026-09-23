@@ -154,12 +154,3 @@ jobs:
           tags: bist-bot:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-  # Optional production deploy remains in deploy-cloud-run.yml (manual / post-CI).
-  deploy:
-    name: Deploy (optional gate)
-    runs-on: ubuntu-latest
-    needs: [docker]
-    if: false
-    steps:
-      - run: echo "Enable via deploy-cloud-run.yml workflow_dispatch or workflow_run"

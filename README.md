@@ -89,7 +89,7 @@ Onemli notlar:
 
 - Eski `ADMIN_EMAIL` ve `ADMIN_PASSWORD_HASH` env adlari okunmaz; sadece `ADMIN_BOOTSTRAP_EMAIL` ve `ADMIN_BOOTSTRAP_PASSWORD_HASH` kullanilir.
 - `TELEGRAM_MIN_SCORE` varsayilan olarak `STRONG_BUY_THRESHOLD` ile hizalanmistir; varsayilan esik `48`'dir.
-- Cloud Run / Cloud SQL kullaniminda `DATABASE_URL` tercih edin; lokal SQLite fallback icin `DB_PATH` kullanilabilir.
+- Kalici/uzak veritabani (PostgreSQL) kullaniminda `DATABASE_URL` tercih edin; lokal SQLite fallback icin `DB_PATH` kullanilabilir.
 
 ## Kullanım
 
@@ -175,88 +175,19 @@ Healthcheckler:
 
 Backtest JSON ciktilari `data/` altina yazilir.
 
-## Cloud Run
+## Cloud Run (EMEKLİ — 2026-09-23)
 
-- Bu repo Cloud Run'da tek servis yerine iki servis olarak deploy edilmelidir: `bist-bot-api` ve `bist-bot-ui`.
-- `bist-bot-ui` Streamlit'i calistirir; `bist-bot-api` ise Flask JSON API'yi tek-worker threaded Gunicorn ile acar.
-- UI servisinde `API_BASE_URL`, API servisinin Cloud Run URL'sine ayarlanmalidir.
-- API servisinde `CORS_ORIGINS`, UI servisinin Cloud Run URL'sini icermelidir.
-- Hem UI hem API servisinde `DB_PATH=/tmp/bist_signals.db` ayarlayin; bu gecicidir ve instance yeniden olusunca sifirlanir.
-- Kod tarafinda SQLite parent klasoru artik otomatik olusturulur, fakat Cloud Run'da yine de yazilabilir path olarak `/tmp` kullanilmalidir.
+Cloud Run deploy yolu **kaldırıldı**: `deploy-cloud-run.yml` workflow'u, `cloudrun/`
+manifestleri ve `deploy.ps1` repodan silindi. Gerekçe: GCP projesinin faturalandırması
+kapalıydı, deploy'lar 12 Eylül'den beri başarısızdı ve servis 503 dönüyordu.
 
-Hazir manifest ornekleri `cloudrun/api-service.yaml` ve `cloudrun/ui-service.yaml` altindadir.
-
-Windows PowerShell ile hizli deploy:
-
-```powershell
-gcloud secrets create jwt-secret-key
-Set-Content -Path jwt_secret.txt -Value "replace-with-long-random-secret"
-gcloud secrets versions add jwt-secret-key --data-file=jwt_secret.txt
-
-.\cloudrun\deploy.ps1 `
-  -ProjectId YOUR_PROJECT_ID `
-  -Region YOUR_REGION `
-  -Repository YOUR_ARTIFACT_REGISTRY_REPOSITORY `
-  -JwtSecretKey jwt-secret-key
-```
-
-Elle deploy etmek isterseniz:
-
-```bash
-gcloud builds submit --tag REGION-docker.pkg.dev/PROJECT_ID/REPOSITORY/bist-bot:latest
-
-gcloud run deploy bist-bot-api \
-  --image REGION-docker.pkg.dev/PROJECT_ID/REPOSITORY/bist-bot:latest \
-  --region YOUR_REGION \
-  --allow-unauthenticated \
-  --command gunicorn \
-  --args="--bind,0.0.0.0:8080,--workers,1,--threads,8,--timeout,330,--graceful-timeout,30,--forwarded-allow-ips=*,bist_bot.wsgi:app" \
-  --set-env-vars PYTHONPATH=/app/src,DB_PATH=/tmp/bist_signals.db,RATE_LIMIT_STORAGE_URI=memory://,TRUSTED_PROXY_HOPS=0 \
-  --set-secrets JWT_SECRET_KEY=jwt-secret-key:latest
-
-gcloud run deploy bist-bot-ui \
-  --image REGION-docker.pkg.dev/PROJECT_ID/REPOSITORY/bist-bot:latest \
-  --region YOUR_REGION \
-  --allow-unauthenticated \
-  --set-env-vars PYTHONPATH=/app/src,DB_PATH=/tmp/bist_signals.db,API_BASE_URL=https://YOUR_API_URL,STREAMLIT_BACKGROUND_SCAN_TIMEOUT_SECONDS=180,API_REQUEST_TIMEOUT_SECONDS=45
-
-gcloud run services update bist-bot-api \
-  --region YOUR_REGION \
-  --update-env-vars CORS_ORIGINS=https://YOUR_UI_URL
-```
-
-### Cloud SQL
-
-- `DB_PATH=/tmp/bist_signals.db` sadece gecici/demo kullanim icindir.
-- Kalici ve iki servis tarafindan ortak kullanilan veritabani icin `DATABASE_URL` kullanin.
-- Kod tarafinda `DATABASE_URL` varsa SQLAlchemy dogrudan bu baglantiyle calisir; yoksa SQLite fallback devam eder.
-
-PostgreSQL baglanti string ornegi:
-
-```env
-DATABASE_URL=postgresql+psycopg2://bist_bot_app:YOUR_PASSWORD@/bist_bot?host=/cloudsql/YOUR_PROJECT:YOUR_REGION:YOUR_INSTANCE
-```
-
-Cloud Run servislerine Cloud SQL baglantisi ekleyip `DATABASE_URL` secret olarak verin:
-
-```bash
-gcloud run services update bist-bot-api \
-  --region YOUR_REGION \
-  --add-cloudsql-instances YOUR_PROJECT:YOUR_REGION:YOUR_INSTANCE \
-  --set-secrets DATABASE_URL=database-url:latest,JWT_SECRET_KEY=jwt-secret-key:latest
-
-gcloud run services update bist-bot-ui \
-  --region YOUR_REGION \
-  --add-cloudsql-instances YOUR_PROJECT:YOUR_REGION:YOUR_INSTANCE \
-  --set-secrets DATABASE_URL=database-url:latest \
-  --update-env-vars API_BASE_URL=https://YOUR_API_URL,PYTHONPATH=/app/src
-```
-
-Notlar:
-
-- `DATABASE_URL` verildiginde `DB_PATH` gereksiz hale gelir.
-- UI ve API ayni Cloud SQL instance/database kullandigi icin login ve kaydol verileri ortak olur.
-- Ilk geciste eski SQLite verisini tasimak gerekiyorsa ayri bir migration/export-import adimi planlayin.
+- Desteklenen dağıtım yolu: **Docker Compose** (yukarıdaki bölüm).
+- Uzak veritabanı gerekiyorsa `DATABASE_URL` hâlâ desteklenir (PostgreSQL bağlantı
+  string'i compose servislerine verilebilir); `DB_PATH` SQLite fallback olarak kalır.
+- `TRUSTED_PROXY_HOPS` ayarı kodda durur ve **her yerde 0 kalmalıdır** (AppSec
+  Finding #21 Layer 2, bkz. `docs/security/rate_limit_ip_collapse_finding21.md`).
+  Ters proxy arkasına geri dönülürse canlı X-Forwarded-For doğrulaması yapmadan
+  1 YAPILMAZ.
 
 ## Official Data Provider
 
