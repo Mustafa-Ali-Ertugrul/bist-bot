@@ -38,6 +38,9 @@ def app(tmp_path) -> Flask:
         PRO_PRICE_TRY=500,
         PRO_PLUS_PRICE_TRY=700,
         SUBSCRIPTION_DAYS=30,
+        # Mekanik satış testleri için açık: canlı default FAILED-CLOSED
+        # (pause). Pause davranışı aşağıdaki ayrı testlerde kapsanır.
+        BILLING_ENROLLMENT_ENABLED=True,
     ):
         manager = DatabaseManager(sqlite_path=db_path)
         db = DataAccess(manager)
@@ -243,6 +246,56 @@ def test_claim_invalid_plan_rejected(client: FlaskClient):
     assert res.status_code == 400
     res2 = client.post("/api/billing/claim", headers=_auth_headers(token), json={"plan": "admin"})
     assert res2.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# Fail-closed enrollment pause (2026-09-17: canlı kanıt zayıf → satış duraklatıldı)
+# ---------------------------------------------------------------------------
+
+
+def test_billing_enrollment_paused_blocks_claim_and_approve(client: FlaskClient, app: Flask):
+    from bist_bot.config.settings import settings
+
+    with settings.override(BILLING_ENROLLMENT_ENABLED=False):
+        # 1) claim reddedilir, talep oluşmaz
+        _register(client, "paused1@example.com")
+        token = _login(client, "paused1@example.com")
+        res = client.post("/api/billing/claim", headers=_auth_headers(token), json={"plan": "pro"})
+        assert res.status_code == 403
+        assert "duraklatıldı" in res.get_json()["message"]
+
+        # 2) önceki talepler olsa bile onay reddedilir
+        with settings.override(BILLING_ENROLLMENT_ENABLED=True):
+            claim = client.post(
+                "/api/billing/claim", headers=_auth_headers(token), json={"plan": "pro"}
+            )
+            assert claim.status_code == 201
+        rid = claim.get_json()["request"]["id"]
+        admin_c, atoken = _admin_client(app)
+        res2 = admin_c.post(f"/api/admin/requests/{rid}/approve", headers=_auth_headers(atoken))
+        assert res2.status_code == 403
+        assert "duraklatıldı" in res2.get_json()["message"]
+
+        # 3) info endpoint pause durumunu dışarı yansıtır
+        info = client.get("/api/billing/info", headers=_auth_headers(token))
+        assert info.status_code == 200
+        assert info.get_json()["enrollment_enabled"] is False
+
+    # 4) anahtar yeniden açılınca onay geçer
+    res3 = admin_c.post(f"/api/admin/requests/{rid}/approve", headers=_auth_headers(atoken))
+    assert res3.status_code == 200
+
+
+def test_billing_enrollment_open_allows_flow(client: FlaskClient):
+    from bist_bot.config.settings import settings
+
+    with settings.override(BILLING_ENROLLMENT_ENABLED=True):
+        _register(client, "open1@example.com")
+        token = _login(client, "open1@example.com")
+        res = client.post("/api/billing/claim", headers=_auth_headers(token), json={"plan": "pro"})
+        assert res.status_code == 201
+        info = client.get("/api/billing/info", headers=_auth_headers(token))
+        assert info.get_json()["enrollment_enabled"] is True
 
 
 # ---------------------------------------------------------------------------
