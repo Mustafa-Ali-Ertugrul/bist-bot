@@ -510,6 +510,49 @@ class SignalsRepository:
 
         self.manager.run_session(_write)
 
+    def update_outcomes(
+        self,
+        updates: Sequence[tuple[int, str, float, str | None]],
+    ) -> None:
+        """Batch-update signal outcomes in a single DB session.
+
+        Each tuple is (signal_id, outcome, outcome_price, source). Rows with
+        unknown signal_id are skipped (parity with single update_outcome).
+        Direction-aware profit_pct calculation matches update_outcome exactly.
+        """
+        if not updates:
+            return
+
+        def _write(session):
+            for signal_id, outcome, outcome_price, source in updates:
+                row = session.get(SignalRecord, signal_id)
+                if row is None:
+                    continue
+                original_price = float(row.price)
+                row.outcome = outcome
+                row.outcome_price = outcome_price
+                row.outcome_date = datetime.now(UTC)
+                try:
+                    is_short = SignalType.from_value(str(row.signal_type)).is_sell
+                except ValueError:
+                    is_short = False
+                if original_price > 0:
+                    if is_short:
+                        row.profit_pct = round(
+                            (original_price - outcome_price) / original_price * 100, 2
+                        )
+                    else:
+                        row.profit_pct = round(
+                            (outcome_price - original_price) / original_price * 100, 2
+                        )
+                else:
+                    row.profit_pct = None
+                if source is not None:
+                    row.outcome_source = source
+            return None
+
+        self.manager.run_session(_write)
+
     def get_performance_stats(self) -> dict[str, Any]:
         def _read(session):
             # Single conditional-aggregation query instead of 4 full-table

@@ -105,6 +105,9 @@ class AppRepository:
     def update_outcome(self, signal_id: int, outcome: str, outcome_price: float, source=None):
         return self.signals.update_outcome(signal_id, outcome, outcome_price, source=source)
 
+    def update_outcomes(self, updates):
+        return self.signals.update_outcomes(updates)
+
     def get_performance_stats(self):
         return self.signals.get_performance_stats()
 

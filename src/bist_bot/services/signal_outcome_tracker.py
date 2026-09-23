@@ -98,23 +98,28 @@ class SignalOutcomeTracker:
                 self._write_json(self.open_path, positions)
             if closed:
                 self._append_closed(closed)
-                # DB geri yazım
-                for row in closed:
-                    try:
-                        if self.db is not None and row.get("signal_id") is not None:
-                            self.db.update_outcome(
-                                int(row["signal_id"]),
-                                str(row["outcome"]),
-                                float(row["exit_price"]),
-                                source="live_tracker",
+                # DB geri yazım — tek oturumda toplu güncelleme (N kapanış = 1 session).
+                if self.db is not None:
+                    updates: list[tuple[int, str, float, str | None]] = []
+                    for row in closed:
+                        if row.get("signal_id") is not None:
+                            updates.append(
+                                (
+                                    int(row["signal_id"]),
+                                    str(row["outcome"]),
+                                    float(row["exit_price"]),
+                                    "live_tracker",
+                                )
                             )
-                        elif self.db is not None:
-                            # fallback via ticker+time lookup not needed for test
-                            pass
-                    except Exception as exc:
-                        logger.warning(
-                            "outcome_db_update_failed", ticker=row.get("ticker"), error=str(exc)
-                        )
+                    if updates:
+                        try:
+                            self.db.update_outcomes(updates)
+                        except Exception as exc:
+                            logger.warning(
+                                "outcome_db_batch_update_failed",
+                                update_count=len(updates),
+                                error=str(exc),
+                            )
             logger.info(
                 "outcome_scan",
                 candidates=len(candidates),

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 import sys
+import threading
+import time
 
 import pandas as pd
 import pytest
@@ -561,3 +563,106 @@ def test_fetch_all_recovers_partial_batch_failures_with_fallback():
     assert "bist_provider_fetch_outcome_success_total" in rendered_metrics
     assert "bist_provider_fetch_outcome_fallback_success_total" in rendered_metrics
     assert "bist_provider_fetch_coverage_pct 100.0" in rendered_metrics
+
+
+def test_fetch_multi_timeframe_all_runs_timeframes_in_parallel():
+    """fetch_multi_timeframe_all should run trend + trigger fetches concurrently."""
+    from bist_bot.data.fetcher import BISTDataFetcher
+
+    frame = pd.DataFrame(
+        {
+            "open": [1, 1, 1, 1, 1],
+            "high": [2, 2, 2, 2, 2],
+            "low": [0.5, 0.5, 0.5, 0.5, 0.5],
+            "close": [1.5, 1.5, 1.5, 1.5, 1.5],
+            "volume": [100, 100, 100, 100, 100],
+        },
+        index=pd.date_range("2025-01-01", periods=5),
+    )
+
+    class SleepingProvider:
+        def __init__(self):
+            self.batch_calls: list[tuple[list[str], str, str]] = []
+
+        def fetch_history(self, ticker: str, period: str, interval: str):
+            _ = ticker, period, interval
+            return None
+
+        def fetch_batch(self, tickers: list[str], period: str, interval: str):
+            self.batch_calls.append((list(tickers), period, interval))
+            time.sleep(0.3)
+            return {ticker: frame.copy() for ticker in tickers}
+
+        def fetch_quote(self, ticker: str):
+            _ = ticker
+            return None
+
+        def fetch_universe(self, force_refresh: bool = False):
+            _ = force_refresh
+            return ["THYAO.IS", "ASELS.IS"]
+
+    provider = SleepingProvider()
+    fetcher = BISTDataFetcher(watchlist=["THYAO.IS", "ASELS.IS"], provider=provider)
+
+    wall_start = time.perf_counter()
+    result = fetcher.fetch_multi_timeframe_all(force_refresh=True)
+    wall_elapsed = time.perf_counter() - wall_start
+
+    # Both timeframes should have been requested
+    periods_seen = {call[1] for call in provider.batch_calls}
+    assert len(periods_seen) == 2
+    assert len(provider.batch_calls) == 2
+
+    # All tickers should be present in combined output
+    assert set(result.keys()) == {"THYAO.IS", "ASELS.IS"}
+    for ticker_data in result.values():
+        assert "trend" in ticker_data
+        assert "trigger" in ticker_data
+
+    # Parallel execution must be significantly faster than sequential.
+    # Sequential would take >= 0.6 s (two 0.3 s sleeps); parallel should finish
+    # well under 0.55 s because the two sleeps overlap.
+    assert wall_elapsed < 0.55, f"Expected parallel execution < 0.55 s, got {wall_elapsed:.3f} s"
+
+
+def test_history_cache_concurrent_store_get_no_error():
+    """Mixed concurrent _store_cache / _get_cached_data calls must not raise."""
+    from bist_bot.data.fetcher import BISTDataFetcher
+
+    fetcher = BISTDataFetcher(watchlist=["THYAO.IS"])
+
+    frame = pd.DataFrame(
+        {
+            "open": [1, 1, 1, 1, 1],
+            "high": [2, 2, 2, 2, 2],
+            "low": [0.5, 0.5, 0.5, 0.5, 0.5],
+            "close": [1.5, 1.5, 1.5, 1.5, 1.5],
+            "volume": [100, 100, 100, 100, 100],
+        },
+        index=pd.date_range("2025-01-01", periods=5),
+    )
+
+    errors: list[BaseException] = []
+    barrier = threading.Barrier(8)
+
+    def worker(_: int) -> None:
+        try:
+            barrier.wait()
+            for _ in range(50):
+                fetcher._store_cache("THYAO.IS", "1mo", "1d", frame)
+                fetcher._get_cached_data("THYAO.IS", "1mo", "1d", force=False)
+        except BaseException as exc:
+            errors.append(exc)
+
+    threads = [threading.Thread(target=worker, args=(i,)) for i in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert errors == [], f"Concurrent cache operations raised: {errors}"
+    # The cache should contain a valid entry after the concurrent writes.
+    cached = fetcher._get_cached_data("THYAO.IS", "1mo", "1d", force=False)
+    assert cached is not None
+    assert isinstance(cached, pd.DataFrame)
+    assert len(cached) == 5

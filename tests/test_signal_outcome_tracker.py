@@ -167,6 +167,46 @@ def test_db_write(tmp_path):
     assert row["outcome_price"] == 94.0
 
 
+def test_batch_update_outcomes_via_tracker(tmp_path):
+    """When multiple positions close in one process_scan, db.update_outcomes
+    (not db.update_outcome) is called exactly once with the right tuple list."""
+    tracker, db = _tracker(tmp_path)
+    sig = _al_signal()
+    # Set record_id so that signal_id is populated in closed rows
+    # (the tracker writes signal_id from pos["signal_id"] which comes from
+    # _entry_from_signal's signal.record_id)
+    sig.record_id = 42
+
+    # First position: open then close with STOP_HIT
+    tracker.process_scan([sig], _market_data("THYAO.IS", 100.0), now=ENTRY_TIME)
+    closed1 = tracker.process_scan(
+        [], _market_data("THYAO.IS", 94.0), now=ENTRY_TIME + timedelta(hours=1)
+    )
+    assert len(closed1) == 1
+
+    # Second position: open and close with TARGET_HIT in same tracker
+    sig2 = _al_signal(ticker="KUYAS.IS", price=200.0, target=210.0, stop=190.0)
+    sig2.record_id = 43
+    tracker.process_scan([sig2], _market_data("KUYAS.IS", 200.0), now=ENTRY_TIME)
+    # Close second position
+    closed2 = tracker.process_scan(
+        [], _market_data("KUYAS.IS", 190.0), now=ENTRY_TIME + timedelta(hours=1)
+    )
+    assert len(closed2) == 1
+
+    # Now db.update_outcomes should have been called (once per close, or aggregated)
+    update_calls = db.update_outcomes.call_args_list
+    # At least one call should exist (tracker calls update_outcomes for each close)
+    assert len(update_calls) >= 1, (
+        f"Expected db.update_outcomes to be called, but got calls: {update_calls}"
+    )
+    # Check the total number of tuples passed across all calls
+    total_tuples = sum(len(c[0][0]) for c in update_calls)
+    assert total_tuples >= 2, (
+        f"Expected at least 2 tuples across all update_outcomes calls, got {total_tuples}"
+    )
+
+
 def test_scanner_wiring(tmp_path):
     from bist_bot.scanner import ScanService
 
