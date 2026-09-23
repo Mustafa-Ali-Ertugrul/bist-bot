@@ -116,7 +116,9 @@ class CommandHandler:
                 # Anlik fiyati cek (entry_price degil): audit/PnL dogru olsun.
                 try:
                     prices = self.agent._fetch_prices([ticker])
-                    current_price = float(prices.get(ticker, pos["entry_price"]) or pos["entry_price"])
+                    current_price = float(
+                        prices.get(ticker, pos["entry_price"]) or pos["entry_price"]
+                    )
                 except Exception:
                     logger.warning("manual_close_price_fetch_failed", ticker=ticker)
                     current_price = pos["entry_price"]

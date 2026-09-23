@@ -85,9 +85,7 @@ class TestExitOrderLifecycle:
         with db.manager.engine.connect() as conn:
             rows = (
                 conn.execute(
-                    __import__("sqlalchemy").text(
-                        "SELECT * FROM orders WHERE purpose='EXIT'"
-                    )
+                    __import__("sqlalchemy").text("SELECT * FROM orders WHERE purpose='EXIT'")
                 )
                 .mappings()
                 .all()
