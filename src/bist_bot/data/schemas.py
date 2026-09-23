@@ -58,9 +58,15 @@ def _normalize_timestamp(df: pd.DataFrame) -> pd.DatetimeIndex:
 
 
 def _clean_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
-    """Replace inf with NaN, then drop rows with invalid OHLCV values."""
-    df = df.copy()
-    df.replace([np.inf, -np.inf], np.nan, inplace=True)
+    """Replace inf with NaN, then drop rows with invalid OHLCV values.
+
+    C2/C3: no defensive ``.copy()`` here. ``validate_dataframe`` already
+    isolates the caller at its own ``df.copy()`` before column/index
+    mutation; this helper only receives that private intermediate. With
+    pandas 3.0 Copy-on-Write, ``replace`` and boolean ``loc`` both return
+    frames that cannot leak writes back to the caller.
+    """
+    df = df.replace([np.inf, -np.inf], np.nan)
 
     # Drop rows where any required OHLCV field is NaN
     ohlcv_cols = ["open", "high", "low", "close", "volume"]
@@ -74,7 +80,7 @@ def _clean_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
         & (df["close"] > 0)
         & (df["volume"] >= 0)
     )
-    return df.loc[mask].copy()
+    return df.loc[mask]
 
 
 def validate_dataframe(df: pd.DataFrame | None, validate: bool = True) -> pd.DataFrame | None:

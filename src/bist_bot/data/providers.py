@@ -40,6 +40,22 @@ def validate_ticker_symbol(ticker: str) -> str:
 # API only answers reliably with a browser UA.
 _YAHOO_CHART_HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
+# C1: one keep-alive Session for the HTTP provider paths (Yahoo chart +
+# StockAnalysis fallback). A fresh connection per ticker is pure handshake
+# overhead on a 400-ticker scan. Lazy so importing providers stays cheap and
+# the session is created on the process that actually fetches.
+_HTTP_SESSION: Any | None = None
+
+
+def _http_session() -> Any:
+    """Shared ``requests.Session`` for provider HTTP calls (TCP keep-alive)."""
+    global _HTTP_SESSION
+    if _HTTP_SESSION is None:
+        import requests
+
+        _HTTP_SESSION = requests.Session()
+    return _HTTP_SESSION
+
 
 class RateLimiterProtocol(Protocol):
     def wait_if_needed(self, domain: str) -> None: ...
@@ -171,11 +187,9 @@ class YFinanceProvider:
     def _fetch_chart_history(
         self, ticker: str, period: str, interval: str, *, rate_limit: bool = True
     ) -> pd.DataFrame | None:
-        import requests
-
         if rate_limit:
             self.rate_limiter.wait_if_needed("yahoo.finance")
-        response = requests.get(
+        response = _http_session().get(
             f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}",
             params={"range": period, "interval": interval},
             headers=_YAHOO_CHART_HEADERS,
@@ -205,11 +219,10 @@ class YFinanceProvider:
 
     def _fetch_stockanalysis_history(self, ticker: str) -> pd.DataFrame | None:
         """Fetch daily BIST OHLCV data from StockAnalysis when Yahoo is rate-limited."""
-        import requests
         from bs4 import BeautifulSoup
 
         symbol = ticker.upper().replace(".IS", "")
-        response = requests.get(
+        response = _http_session().get(
             f"https://stockanalysis.com/quote/ist/{symbol}/history/",
             headers={"User-Agent": "Mozilla/5.0"},
             timeout=10,
@@ -349,10 +362,15 @@ class YFinanceProvider:
                 results: dict[str, pd.DataFrame | None] = {}
                 for ticker in tickers:
                     try:
+                        # C2/C3: no defensive ``.copy()``. MultiIndex column
+                        # selection already yields a distinct frame per ticker;
+                        # the flat path shares one object across keys. pandas
+                        # 3.0 Copy-on-Write keeps downstream in-place writes
+                        # from leaking between tickers or back into ``raw_data``.
                         if isinstance(raw_data.columns, pd.MultiIndex):
-                            results[ticker] = raw_data[ticker].copy()
+                            results[ticker] = raw_data[ticker]
                         else:
-                            results[ticker] = raw_data.copy()
+                            results[ticker] = raw_data
                     except KeyError:
                         logger.warning("yfinance_batch_missing_ticker", ticker=ticker)
                         results[ticker] = None

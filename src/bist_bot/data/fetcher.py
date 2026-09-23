@@ -1083,7 +1083,11 @@ class BISTDataFetcher:
         trigger_period: str | None = None,
         trigger_interval: str | None = None,
         force_refresh: bool = False,
-        validate: bool = True,
+        # C6: scan hot path skips strict per-row Pydantic candle validation.
+        # Parity with validate=True on cacheable frames is pinned by
+        # tests/test_validate_parity.py; callers that need the strict pass can
+        # still opt in explicitly.
+        validate: bool = False,
     ) -> dict[str, dict[str, pd.DataFrame]]:
         trend_period = trend_period or getattr(settings, "MTF_TREND_PERIOD", "6mo")
         trend_interval = trend_interval or getattr(settings, "MTF_TREND_INTERVAL", "1d")
@@ -1120,7 +1124,8 @@ class BISTDataFetcher:
         trigger_period: str | None = None,
         trigger_interval: str | None = None,
         force_refresh: bool = False,
-        validate: bool = True,
+        # C6: same fast path as fetch_multi_timeframe_all (see the parity gate).
+        validate: bool = False,
     ) -> dict[str, dict[str, pd.DataFrame]]:
         trend_period = trend_period or getattr(settings, "MTF_TREND_PERIOD", "6mo")
         trend_interval = trend_interval or getattr(settings, "MTF_TREND_INTERVAL", "1d")

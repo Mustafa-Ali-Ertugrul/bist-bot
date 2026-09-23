@@ -1,104 +1,25 @@
 """Static fallback ticker universe for BIST 100 scans."""
 
-BIST100_TICKERS = [
-    "BTCIM.IS",
-    "KUYAS.IS",
-    "TCELL.IS",
-    "TTKOM.IS",
-    "VESTL.IS",
-    "PETKM.IS",
-    "SISE.IS",
-    "MGROS.IS",
-    "ENKAI.IS",
-    "YKBNK.IS",
-    "ISMEN.IS",
-    "HALKB.IS",
-    "AKSEN.IS",
-    "TSKB.IS",
-    "DOAS.IS",
-    "ZOREN.IS",
-    "VAKBN.IS",
-    "DOHOL.IS",
-    "SKBNK.IS",
-    "AKBNK.IS",
-    "GSRAY.IS",
-    "SARKY.IS",
-    "FENER.IS",
-    "TKFEN.IS",
-    "BIMAS.IS",
-    "BRSAN.IS",
-    "ANSGR.IS",
-    "GARAN.IS",
-    "FROTO.IS",
-    "TUPRS.IS",
-    "ECILC.IS",
-    "BSOKE.IS",
-    "TOASO.IS",
-    "ODAS.IS",
-    "KRDMD.IS",
-    "ASELS.IS",
-    "CIMSA.IS",
-    "EREGL.IS",
-    "EKGYO.IS",
-    "ALARK.IS",
-    "KCHOL.IS",
-    "PGSUS.IS",
-    "ARCLK.IS",
-    "ISCTR.IS",
-    "TUKAS.IS",
-    "ULKER.IS",
-    "CCOLA.IS",
-    "BRYAT.IS",
-    "THYAO.IS",
-    "HEKTS.IS",
-    "AEFES.IS",
-    "TAVHL.IS",
-    "SASA.IS",
-    "OTKAR.IS",
-    "SAHOL.IS",
-    "AKSA.IS",
-    "GUBRF.IS",
-    "MAVI.IS",
-    "AGHOL.IS",
-    "ENJSA.IS",
-    "MPARK.IS",
-    "RALYH.IS",
-    "SOKM.IS",
-    "OYAKC.IS",
-    "TURSG.IS",
-    "KONTR.IS",
-    "TUREX.IS",
-    "QUAGR.IS",
-    "CANTE.IS",
-    "GENIL.IS",
-    "GESAN.IS",
-    "MAGEN.IS",
-    "MIATK.IS",
-    "PSGYO.IS",
-    "DAPGM.IS",
-    "GRSEL.IS",
-    "EUREN.IS",
-    "KLRHO.IS",
-    "ASTOR.IS",
-    "CVKMD.IS",
-    "EUPWR.IS",
-    "CWENE.IS",
-    "KTLEV.IS",
-    "PASEU.IS",
-    "IZENR.IS",
-    "ENERY.IS",
-    "REEDR.IS",
-    "TABGD.IS",
-    "PATEK.IS",
-    "OBAMS.IS",
-    "ALTNY.IS",
-    "GRTHO.IS",
-    "GLRMK.IS",
-    "DSTKF.IS",
-    "BALSU.IS",
-    "EFOR.IS",
-    "PAHOL.IS",
-    "TRENJ.IS",
-    "TRMET.IS",
-    "TRALT.IS",
-]
+import json
+from pathlib import Path
+
+_UNIVERSE_DIR = Path(__file__).resolve().parent / "universe"
+
+
+def _load_members(as_of: str) -> list[str]:
+    payload = json.loads((_UNIVERSE_DIR / f"bist100_{as_of}.json").read_text(encoding="utf-8"))
+    return [str(m) for m in payload["members"]]
+
+
+# 2026-09-17: listeler bağımsız güncel kaynaklarla çapraz doğrulandı;
+# 10 değişken sembolün tamamı yfinance üzerinde canlı veriyle teyit edildi.
+# Endeks üyeliği çeyreklik değişir — bu snapshot'lar "o tarihte bilinen en iyi
+# yaklaşık üyelik"tir; resmi kaynakla yenilenmesi önerilir.
+BIST100_2023_01_01: list[str] = _load_members("2023-01-01")
+BIST100_2024_01_01: list[str] = _load_members("2024-01-01")
+
+# Geriye dönük uyumluluk: mevcut içe aktarımların kullandığı ana liste,
+# bilinen en güncel snapshot'tır.
+BIST100_TICKERS: list[str] = BIST100_2024_01_01
+
+__all__ = ["BIST100_2023_01_01", "BIST100_2024_01_01", "BIST100_TICKERS"]
