@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import threading
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Any
@@ -10,7 +11,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from bist_bot.indicators import cached_add_all
+from bist_bot.indicators import _indicator_settings_fingerprint, cached_add_all
 from bist_bot.strategy.signal_models import Signal, SignalType
 
 #: Whale-radar indicator cache cap. The Streamlit page re-renders on every
@@ -18,21 +19,23 @@ from bist_bot.strategy.signal_models import Signal, SignalType
 #: content avoids recomputing ``add_all`` for every ticker on each rerun.
 _WHALE_INDICATORS_CACHE_MAX = 256
 
-#: ``(ticker, len(df), first close, last close)`` -> computed indicator frame.
-_whale_indicators_cache: OrderedDict[tuple[str, int, float, float], pd.DataFrame] = OrderedDict()
+#: ``(ticker, len(df), first close, last close, settings fingerprint)`` -> computed indicator frame.
+_whale_indicators_cache: OrderedDict[tuple, pd.DataFrame] = OrderedDict()
+_whale_indicators_cache_lock = threading.Lock()
 
 
 def _clear_whale_indicators_cache() -> None:
     """Drop every cached whale indicator frame (test isolation / manual reset)."""
-    _whale_indicators_cache.clear()
+    with _whale_indicators_cache_lock:
+        _whale_indicators_cache.clear()
 
 
 def _cached_add_all(frame: pd.DataFrame, ticker: str) -> pd.DataFrame:
     """``TechnicalIndicators().add_all`` with a content-keyed FIFO cache.
 
-    Keyed on ``(ticker, len, first close, last close)``; non-finite endpoint
-    closes bypass. Returns the cached frame directly — callers only read
-    ``iloc`` / column values (matching D4).
+    Keyed on ``(ticker, len, first close, last close, settings fingerprint)``;
+    non-finite endpoint closes bypass. Returns the cached frame directly —
+    callers only read ``iloc`` / column values (matching D4).
     """
     key = None
     try:
@@ -40,20 +43,28 @@ def _cached_add_all(frame: pd.DataFrame, ticker: str) -> pd.DataFrame:
             first_close = float(frame["close"].iloc[0])
             last_close = float(frame["close"].iloc[-1])
             if math.isfinite(first_close) and math.isfinite(last_close):
-                key = (ticker, len(frame), first_close, last_close)
+                key = (
+                    ticker,
+                    len(frame),
+                    first_close,
+                    last_close,
+                    _indicator_settings_fingerprint(),
+                )
     except Exception:
         key = None
     if key is not None:
-        cached = _whale_indicators_cache.get(key)
-        if cached is not None:
-            _whale_indicators_cache.move_to_end(key)
-            return cached
+        with _whale_indicators_cache_lock:
+            cached = _whale_indicators_cache.get(key)
+            if cached is not None:
+                _whale_indicators_cache.move_to_end(key)
+                return cached
     result = cached_add_all(frame, ticker)
     if key is not None and result is not None and not getattr(result, "empty", True):
-        _whale_indicators_cache[key] = result
-        _whale_indicators_cache.move_to_end(key)
-        while len(_whale_indicators_cache) > _WHALE_INDICATORS_CACHE_MAX:
-            _whale_indicators_cache.popitem(last=False)
+        with _whale_indicators_cache_lock:
+            _whale_indicators_cache[key] = result
+            _whale_indicators_cache.move_to_end(key)
+            while len(_whale_indicators_cache) > _WHALE_INDICATORS_CACHE_MAX:
+                _whale_indicators_cache.popitem(last=False)
     return result
 
 

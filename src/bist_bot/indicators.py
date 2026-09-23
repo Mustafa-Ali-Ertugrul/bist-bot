@@ -1,4 +1,5 @@
 import math
+import threading
 from collections import OrderedDict
 
 import numpy as np
@@ -9,13 +10,47 @@ from bist_bot.config.settings import settings
 
 logger = get_logger(__name__, component="indicators")
 
+
+def _indicator_settings_fingerprint() -> tuple:
+    """Tuple of every settings field that affects indicator output.
+
+    Read fresh on every call so that ``settings.override(...)`` / runtime
+    reloads are reflected without a process restart.
+    """
+    return (
+        int(getattr(settings, "RSI_PERIOD", 14)),
+        int(getattr(settings, "SMA_FAST", 5)),
+        int(getattr(settings, "SMA_SLOW", 20)),
+        int(getattr(settings, "EMA_FAST", 12)),
+        int(getattr(settings, "EMA_SLOW", 26)),
+        int(getattr(settings, "EMA_LONG", 200)),
+        int(getattr(settings, "MACD_FAST", 12)),
+        int(getattr(settings, "MACD_SLOW", 26)),
+        int(getattr(settings, "MACD_SIGNAL", 9)),
+        int(getattr(settings, "BOLLINGER_PERIOD", 20)),
+        float(getattr(settings, "BOLLINGER_STD", 2.0)),
+        int(getattr(settings, "BB_SQUEEZE_PERIOD", 20)),
+        float(getattr(settings, "BB_SQUEEZE_RATIO", 0.7)),
+        int(getattr(settings, "ADX_PERIOD", 14)),
+        int(getattr(settings, "ATR_PERIOD", 14)),
+        int(getattr(settings, "OBV_SMA_PERIOD", 20)),
+        float(getattr(settings, "VOLUME_SPIKE_MULTIPLIER", 1.5)),
+        int(getattr(settings, "STOCH_K_PERIOD", 14)),
+        int(getattr(settings, "STOCH_D_PERIOD", 3)),
+        float(getattr(settings, "STOCH_OVERSOLD", 20.0)),
+        float(getattr(settings, "STOCH_OVERBOUGHT", 80.0)),
+    )
+
+
 _ADD_ALL_CACHE_MAX = 512
 _add_all_cache: OrderedDict[tuple, pd.DataFrame] = OrderedDict()
+_add_all_cache_lock = threading.Lock()
 
 
 def _clear_add_all_cache() -> None:
     """Drop the shared ``add_all`` content memo (tests / force refresh)."""
-    _add_all_cache.clear()
+    with _add_all_cache_lock:
+        _add_all_cache.clear()
 
 
 def cached_add_all(
@@ -26,10 +61,18 @@ def cached_add_all(
 ) -> pd.DataFrame:
     """Content-keyed FIFO memo around ``TechnicalIndicators.add_all``.
 
-    Key is ``(ticker, len, first close, last close)`` with finite-close
-    checks (same D4 discipline as the UI/dashboard memos). Only the real
-    ``TechnicalIndicators.add_all`` is memoized; mocks and patched
-    implementations always recompute.
+    Key is ``(ticker, len, first close, last close, settings fingerprint)``
+    with finite-close checks (same D4 discipline as the UI/dashboard memos).
+    Only the real ``TechnicalIndicators.add_all`` is memoized; mocks and
+    patched implementations always recompute. The settings-fingerprint tail
+    guarantees a cache miss whenever any setting consumed by an add_* method
+    changes (e.g. via ``settings.override(RSI_PERIOD=...)``).
+
+    Returned frames must be treated as read-only by callers: identity is
+    preserved on a cache hit (deliberate — same object for the same key), so
+    a caller that mutates the returned frame would poison the shared entry.
+    ``add_all`` copies its *input* at entry; that only protects the caller's
+    source frame, not the memoized result.
     """
     if indicators is None:
         indicators = TechnicalIndicators()
@@ -43,23 +86,37 @@ def cached_add_all(
             first = float(frame["close"].iloc[0])
             last = float(frame["close"].iloc[-1])
             if math.isfinite(first) and math.isfinite(last):
-                key = (ticker, len(frame), first, last)
+                key = (ticker, len(frame), first, last, _indicator_settings_fingerprint())
     except Exception:
         key = None
 
     if key is not None:
-        cached = _add_all_cache.get(key)
-        if cached is not None:
-            _add_all_cache.move_to_end(key)
-            return cached
+        with _add_all_cache_lock:
+            cached = _add_all_cache.get(key)
+            if cached is not None:
+                _add_all_cache.move_to_end(key)
+                return cached
 
     result = TechnicalIndicators.add_all(frame)
     if key is not None:
-        _add_all_cache[key] = result
-        _add_all_cache.move_to_end(key)
-        while len(_add_all_cache) > _ADD_ALL_CACHE_MAX:
-            _add_all_cache.popitem(last=False)
+        with _add_all_cache_lock:
+            _add_all_cache[key] = result
+            _add_all_cache.move_to_end(key)
+            while len(_add_all_cache) > _ADD_ALL_CACHE_MAX:
+                _add_all_cache.popitem(last=False)
     return result
+
+
+def clear_force_refresh_caches() -> None:
+    """Clear all content-keyed indicator enrich caches (force refresh paths)."""
+    _clear_add_all_cache()
+    from bist_bot.services.whale_alert_service import _clear_whale_indicators_cache
+    from bist_bot.strategy.engine import _clear_macro_benchmark_enrich_cache
+    from bist_bot.strategy.regime import _clear_trend_bias_enrich_cache
+
+    _clear_trend_bias_enrich_cache()
+    _clear_macro_benchmark_enrich_cache()
+    _clear_whale_indicators_cache()
 
 
 class TechnicalIndicators:

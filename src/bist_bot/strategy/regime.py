@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import threading
 from collections import Counter, OrderedDict
 from collections.abc import Mapping
 from enum import Enum
@@ -11,26 +12,28 @@ from pathlib import Path
 import pandas as pd
 
 from bist_bot.config.settings import settings
-from bist_bot.indicators import TechnicalIndicators, cached_add_all
+from bist_bot.indicators import TechnicalIndicators, _indicator_settings_fingerprint, cached_add_all
 from bist_bot.strategy.signal_models import SignalType
 
 _TREND_BIAS_ENRICH_MAX = 256
 _trend_bias_enrich_cache: OrderedDict[tuple, pd.DataFrame] = OrderedDict()
+_trend_bias_enrich_cache_lock = threading.Lock()
 
 
 def _clear_trend_bias_enrich_cache() -> None:
     """Drop the trend-bias enriched-frame memo (tests / force refresh)."""
-    _trend_bias_enrich_cache.clear()
+    with _trend_bias_enrich_cache_lock:
+        _trend_bias_enrich_cache.clear()
 
 
 def _trend_bias_content_key(frame: pd.DataFrame) -> tuple | None:
-    """Content key ``(len, first close, last close)`` with finite-close checks."""
+    """Content key ``(len, first close, last close, settings fingerprint)`` with finite-close checks."""
     try:
         if len(frame) > 0 and "close" in frame.columns:
             first = float(frame["close"].iloc[0])
             last = float(frame["close"].iloc[-1])
             if math.isfinite(first) and math.isfinite(last):
-                return (len(frame), first, last)
+                return (len(frame), first, last, _indicator_settings_fingerprint())
     except Exception:
         return None
     return None
@@ -178,9 +181,10 @@ def get_trend_bias(indicators, df: pd.DataFrame, params=None) -> TrendBias:
         key = _trend_bias_content_key(df) if real else None
         hit: pd.DataFrame | None = None
         if key is not None:
-            hit = _trend_bias_enrich_cache.get(key)
-            if hit is not None:
-                _trend_bias_enrich_cache.move_to_end(key)
+            with _trend_bias_enrich_cache_lock:
+                hit = _trend_bias_enrich_cache.get(key)
+                if hit is not None:
+                    _trend_bias_enrich_cache.move_to_end(key)
         if hit is not None:
             enriched = hit
         else:
@@ -190,10 +194,11 @@ def get_trend_bias(indicators, df: pd.DataFrame, params=None) -> TrendBias:
             enriched = indicators.add_sma(enriched, in_place=True)
             enriched = indicators.add_ema(enriched, in_place=True)
             if key is not None:
-                _trend_bias_enrich_cache[key] = enriched
-                _trend_bias_enrich_cache.move_to_end(key)
-                while len(_trend_bias_enrich_cache) > _TREND_BIAS_ENRICH_MAX:
-                    _trend_bias_enrich_cache.popitem(last=False)
+                with _trend_bias_enrich_cache_lock:
+                    _trend_bias_enrich_cache[key] = enriched
+                    _trend_bias_enrich_cache.move_to_end(key)
+                    while len(_trend_bias_enrich_cache) > _TREND_BIAS_ENRICH_MAX:
+                        _trend_bias_enrich_cache.popitem(last=False)
     else:
         enriched = cached_add_all(df, indicators=indicators)
     regime = detect_regime(enriched)

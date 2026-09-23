@@ -45,7 +45,12 @@ from bist_bot.contracts import (
     StrategyEngineProtocol,
 )
 from bist_bot.dependencies import AppContainer, get_default_container
-from bist_bot.indicators import TechnicalIndicators, cached_add_all
+from bist_bot.indicators import (
+    TechnicalIndicators,
+    _indicator_settings_fingerprint,
+    cached_add_all,
+    clear_force_refresh_caches,
+)
 from bist_bot.locales import get_message
 from bist_bot.risk.circuit_breaker import CircuitBreaker
 from bist_bot.scanner import ScanService
@@ -119,7 +124,7 @@ def _clear_api_stats_cache() -> None:
 # expensive add_all+get_snapshot when the fetched frame is unchanged.
 _ANALYZE_INDICATORS_CACHE_MAX = 128
 _analyze_indicators_cache_lock = threading.Lock()
-_analyze_indicators_cache: OrderedDict[tuple[str, int, float, float], Any] = OrderedDict()
+_analyze_indicators_cache: OrderedDict[tuple, Any] = OrderedDict()
 
 
 def _clear_analyze_indicators_cache() -> None:
@@ -136,7 +141,7 @@ def _cached_analyze_add_all(df: Any, ticker: str) -> Any:
             first_close = float(df["close"].iloc[0])
             last_close = float(df["close"].iloc[-1])
             if math.isfinite(first_close) and math.isfinite(last_close):
-                key = (ticker, len(df), first_close, last_close)
+                key = (ticker, len(df), first_close, last_close, _indicator_settings_fingerprint())
     except Exception:
         key = None
     if key is not None:
@@ -2287,6 +2292,8 @@ def create_dashboard_app(
 
             if force_refresh:
                 runtime_fetcher.clear_cache(scope="analysis", ticker=normalized_ticker)
+                _clear_analyze_indicators_cache()
+                clear_force_refresh_caches()
 
             fetch_meta_getter = getattr(runtime_fetcher, "get_last_history_fetch_meta", None)
             if use_mtf_analysis and fetch_mtf is not None:

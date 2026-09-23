@@ -18,6 +18,7 @@ from bist_bot.contracts import (
     SignalRepositoryProtocol,
     StrategyEngineProtocol,
 )
+from bist_bot.indicators import clear_force_refresh_caches
 from bist_bot.market_calendar import TR, is_bist_open
 from bist_bot.observability.logging import log_signal
 from bist_bot.observability.metrics import record_signal
@@ -342,6 +343,7 @@ class ScanService:
             if force_refresh:
                 self.fetcher.clear_cache(scope="intraday_fetch")
                 self.fetcher.clear_cache(scope="analysis")
+                clear_force_refresh_caches()
             all_data = self.fetcher.fetch_multi_timeframe_all(
                 trend_period=getattr(self.settings, "MTF_TREND_PERIOD", "6mo"),
                 trend_interval=getattr(self.settings, "MTF_TREND_INTERVAL", "1d"),

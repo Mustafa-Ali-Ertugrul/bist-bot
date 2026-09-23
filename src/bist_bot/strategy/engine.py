@@ -1,6 +1,7 @@
 """Signal scoring and classification orchestration for BIST trading ideas."""
 
 import math
+import threading
 from collections import OrderedDict
 from contextlib import AbstractContextManager
 from datetime import datetime
@@ -11,7 +12,7 @@ import pandas as pd
 
 from bist_bot.app_logging import get_logger
 from bist_bot.config.settings import settings
-from bist_bot.indicators import TechnicalIndicators, cached_add_all
+from bist_bot.indicators import TechnicalIndicators, _indicator_settings_fingerprint, cached_add_all
 from bist_bot.market_calendar import TR
 from bist_bot.risk import RiskLevels, RiskManager
 from bist_bot.strategy.base import BaseStrategy
@@ -118,21 +119,23 @@ def _clean_float(value: object, default: float = 0.0) -> float:
 
 _MACRO_BENCH_ENRICH_MAX = 256
 _macro_bench_enrich_cache: OrderedDict[tuple, pd.DataFrame] = OrderedDict()
+_macro_bench_enrich_cache_lock = threading.Lock()
 
 
 def _clear_macro_benchmark_enrich_cache() -> None:
     """Drop the macro-benchmark enriched-frame memo (tests / force refresh)."""
-    _macro_bench_enrich_cache.clear()
+    with _macro_bench_enrich_cache_lock:
+        _macro_bench_enrich_cache.clear()
 
 
 def _macro_bench_content_key(frame: pd.DataFrame) -> tuple | None:
-    """Content key ``(len, first close, last close)`` with finite-close checks."""
+    """Content key ``(len, first close, last close, settings fingerprint)`` with finite-close checks."""
     try:
         if len(frame) > 0 and "close" in frame.columns:
             first = float(frame["close"].iloc[0])
             last = float(frame["close"].iloc[-1])
             if math.isfinite(first) and math.isfinite(last):
-                return (len(frame), first, last)
+                return (len(frame), first, last, _indicator_settings_fingerprint())
     except Exception:
         return None
     return None
@@ -873,18 +876,20 @@ class StrategyEngine:
         """
         key = _macro_bench_content_key(frame)
         if key is not None:
-            cached = _macro_bench_enrich_cache.get(key)
-            if cached is not None:
-                _macro_bench_enrich_cache.move_to_end(key)
-                return cached
+            with _macro_bench_enrich_cache_lock:
+                cached = _macro_bench_enrich_cache.get(key)
+                if cached is not None:
+                    _macro_bench_enrich_cache.move_to_end(key)
+                    return cached
         enriched = frame.copy()
         enriched = TechnicalIndicators.add_atr(enriched, in_place=True)
         enriched = TechnicalIndicators.add_adx(enriched, in_place=True)
         if key is not None:
-            _macro_bench_enrich_cache[key] = enriched
-            _macro_bench_enrich_cache.move_to_end(key)
-            while len(_macro_bench_enrich_cache) > _MACRO_BENCH_ENRICH_MAX:
-                _macro_bench_enrich_cache.popitem(last=False)
+            with _macro_bench_enrich_cache_lock:
+                _macro_bench_enrich_cache[key] = enriched
+                _macro_bench_enrich_cache.move_to_end(key)
+                while len(_macro_bench_enrich_cache) > _MACRO_BENCH_ENRICH_MAX:
+                    _macro_bench_enrich_cache.popitem(last=False)
         return enriched
 
     def _apply_macro_regime_gate(
