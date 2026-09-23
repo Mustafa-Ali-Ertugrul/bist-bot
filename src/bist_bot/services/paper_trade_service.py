@@ -47,6 +47,28 @@ class PaperTradeService:
         self._price_skip_warned: set[str] = set()
 
     @staticmethod
+    def _close_price(df: Any, ticker: str) -> float | None:
+        """Last close of a price frame, or ``None`` when unusable."""
+        if df is None:
+            return None
+        try:
+            if len(df) == 0 or "close" not in df.columns:
+                return None
+        except Exception:
+            return None
+        try:
+            return float(df["close"].iloc[-1])
+        except (TypeError, ValueError, KeyError, IndexError) as exc:
+            logger.warning(
+                "paper_price_parse_skipped",
+                ticker=ticker,
+                error_type=type(exc).__name__,
+            )
+            return None
+        except Exception:
+            return None
+
+    @staticmethod
     def net_profit_pct(
         entry_price: float,
         exit_price: float,
@@ -271,8 +293,10 @@ class PaperTradeService:
 
         Price-source contract (single source of truth):
         current scan ``signals`` are the primary price source (zero-latency);
-        only tickers missing from the scan are fetched via ``fetcher.fetch_all``.
-        When ``signals`` is None/empty the fetch fallback is used for all tickers
+        only tickers missing from the scan are fetched, one ticker at a time
+        via ``fetcher.fetch_single`` when available (whole-watchlist
+        ``fetch_all`` is the fallback for whatever stays unresolved). When
+        ``signals`` is None/empty the fetch fallback is used for all tickers
         (result identical, only optimization skipped).
         """
         if not getattr(self.settings, "PAPER_MODE", False):
@@ -305,31 +329,47 @@ class PaperTradeService:
                     except (TypeError, ValueError):
                         pass
 
-        # Fetch only missing tickers (fallback). Documented fallback: if
-        # test_broker_paper mocks fetch_all, the result is unchanged — only the
-        # optimization is skipped when signals are absent.
+        # Fetch only missing tickers (fallback). Prefer per-ticker fetch_single
+        # so a handful of open positions never pulls the whole watchlist; fall
+        # back to fetch_all for whatever stays unresolved (legacy fetchers
+        # without fetch_single, or fetch_all-mocked batches) — documented
+        # fallback, result unchanged, only the optimization is skipped.
         missing = [t for t in unique_tickers if t not in prices]
         if missing:
-            try:
-                batch = self.fetcher.fetch_all(period="1d", force=False) or {}
-            except Exception as exc:
-                logger.error(
-                    "paper_price_fetch_empty",
-                    error=str(exc),
-                    missing_tickers=missing,
-                )
-                batch = {}
-            for ticker in missing:
-                df = batch.get(ticker)
-                if df is not None and len(df) > 0 and "close" in df.columns:
+            resolved: dict[str, float] = {}
+            fetch_single = getattr(self.fetcher, "fetch_single", None)
+            if callable(fetch_single):
+                for ticker in missing:
                     try:
-                        prices[ticker] = float(df["close"].iloc[-1])
-                    except (TypeError, ValueError, KeyError, IndexError) as exc:
+                        frame = fetch_single(ticker, period="1d", force=False)
+                    except Exception as exc:
                         logger.warning(
-                            "paper_price_parse_skipped",
+                            "paper_price_fetch_single_failed",
                             ticker=ticker,
-                            error_type=type(exc).__name__,
+                            error=str(exc),
                         )
+                        continue
+                    price = self._close_price(frame, ticker)
+                    if price is not None:
+                        resolved[ticker] = price
+            unresolved = [t for t in missing if t not in resolved]
+
+            if unresolved:
+                try:
+                    batch = self.fetcher.fetch_all(period="1d", force=False) or {}
+                except Exception as exc:
+                    logger.error(
+                        "paper_price_fetch_empty",
+                        error=str(exc),
+                        missing_tickers=unresolved,
+                    )
+                    batch = {}
+                for ticker in unresolved:
+                    price = self._close_price(batch.get(ticker), ticker)
+                    if price is not None:
+                        resolved[ticker] = price
+
+            prices.update(resolved)
 
         # B3: "if not prices: return" erken cikisi kaldirildi — fiyat hic
         # gelmediginde her acik pozisyon miss sayacina dusmeli (sessiz OPEN

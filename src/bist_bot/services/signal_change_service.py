@@ -56,8 +56,10 @@ class SignalChangeService:
         self.min_score_delta = _normalize_min_score_delta(min_score_delta)
 
     def check_signal_changes(self, signals: list[Signal]) -> None:
-        for signal in signals:
-            previous = self.db.get_latest_signal(signal.ticker)
+        if not signals:
+            return
+        previous_rows = self._load_previous_signals(signals)
+        for signal, previous in zip(signals, previous_rows, strict=True):
             if not previous:
                 self._log_first_seen(signal)
                 continue
@@ -87,6 +89,27 @@ class SignalChangeService:
 
             self.notifier.send_signal_change(signal.ticker, old_signal, signal)
             self.sleeper(1)
+
+    def _load_previous_signals(self, signals: list[Signal]) -> list[dict | None]:
+        """Resolve the latest stored row for each input signal, ideally in one
+        query, returning a list ALIGNED with ``signals``.
+
+        The batch path is capability-probed rather than assumed: mocks and
+        older facades may expose only ``get_latest_signal``, and a MagicMock
+        auto-attribute is callable but never returns a ``dict`` — so those
+        callers keep the legacy per-ticker loop (same call order and count).
+        """
+        batch_lookup = getattr(self.db, "get_latest_signals", None)
+        if callable(batch_lookup):
+            try:
+                batched = batch_lookup([signal.ticker for signal in signals])
+            except (TypeError, NotImplementedError):
+                batched = None
+            if isinstance(batched, dict):
+                return [batched.get(signal.ticker) for signal in signals]
+
+        # Legacy path: one lookup per signal, in input order.
+        return [self.db.get_latest_signal(signal.ticker) for signal in signals]
 
     @staticmethod
     def _log_first_seen(signal: Signal) -> None:
