@@ -81,8 +81,8 @@ def init_session_state(container=None) -> None:
 
     tg = stored.get("telegram", {})
     tg_defaults = config_store.get_telegram_settings()
-    st.session_state["tg_token_input"] = settings.TELEGRAM_BOT_TOKEN or tg_defaults["bot_token"]
-    st.session_state["tg_chat_input"] = settings.TELEGRAM_CHAT_ID or tg_defaults["chat_id"]
+    # Not: ham token/chat_id session_state'e yazilmaz (salinti riski);
+    # settings sayfasi degerleri dogrudan settings'ten maskeli okur.
     st.session_state["notify_min_score"] = tg.get(
         "notify_min_score", tg_defaults["notify_min_score"]
     )

@@ -57,7 +57,10 @@ class AlphaTrendStrategy(BaseStrategy):
     def analyze(self, ticker: str, data: pd.DataFrame | dict[str, pd.DataFrame]) -> Signal | None:
         """Analyze a stock for Relative Strength & Volume breakout setup."""
         if isinstance(data, dict):
-            df = data.get("trend") or data.get("trigger")
+            # DataFrame truthy degil: ``or`` ValueError firlatir.
+            df = data.get("trend")
+            if df is None:
+                df = data.get("trigger")
         else:
             df = data
 

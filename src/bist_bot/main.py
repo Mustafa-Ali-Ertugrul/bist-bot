@@ -77,13 +77,13 @@ def main():
                 print(f"Hata: Geçersiz tarih formatı '{sys.argv[idx + 1]}'. YYYY-MM-DD bekleniyor.")
                 return
 
-        # AppContainer has no signals_repo; the report builds its own
-        # SignalsRepository on the shared DatabaseManager when repo=None.
-        from bist_bot.db.repositories.portfolio_repository import PortfolioRepository
-
+        # DataAccess facade'inde hazir repo'lar var: signals/portfolio.
+        # Yeni DatabaseManager kurmak (ikinci engine + create_all + bootstrap)
+        # ve PortfolioRepository(container.db) tip hatasi onlenir.
         report_md = generate_daily_report(
             day=target_date,
-            portfolio_repo=PortfolioRepository(container.db),
+            repo=container.db.signals,
+            portfolio_repo=container.db.portfolio,
         )
         print(report_md)
     elif "--backtest" in sys.argv:
