@@ -114,9 +114,12 @@ def validate_dataframe(df: pd.DataFrame | None, validate: bool = True) -> pd.Dat
 
     df = cast(pd.DataFrame, df[keep_cols])
 
-    # Normalize timestamp and set as index
+    # Normalize timestamp and set as index: convert aware indexes to UTC
+    # naive (same contract as regime/backtest); leave naive indexes untouched.
     dt_index = _normalize_timestamp(df)
-    df.index = dt_index.tz_localize(None)
+    if dt_index.tz is not None:
+        dt_index = dt_index.tz_convert("UTC").tz_localize(None)
+    df.index = dt_index
 
     # Drop the timestamp column if it was a column (not the original index)
     if ts_col is not None and ts_col in df.columns:
