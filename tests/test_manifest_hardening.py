@@ -75,3 +75,18 @@ def test_deploy_workflow_enforces_rbac():
 def test_deploy_workflow_secures_auth_cookies():
     """The real deploy path must carry JWT_COOKIE_SECURE=true (Round 12)."""
     assert "JWT_COOKIE_SECURE=true" in _workflow_deploy_env()
+
+
+def test_manifest_trusted_proxy_hops_present():
+    """AppSec #21: TRUSTED_PROXY_HOPS must be explicit (0 until the live
+    XFF chain is verified; must never silently change)."""
+    env = _load_env()
+    assert env.get("TRUSTED_PROXY_HOPS", "").isdigit()
+
+
+def test_deploy_workflow_trusted_proxy_hops_parity():
+    """Parity: workflow carries the same TRUSTED_PROXY_HOPS value."""
+    env = _load_env()
+    expected = env.get("TRUSTED_PROXY_HOPS", "")
+    assert expected != "", "manifest must pin TRUSTED_PROXY_HOPS"
+    assert f"TRUSTED_PROXY_HOPS={expected}" in _workflow_deploy_env()

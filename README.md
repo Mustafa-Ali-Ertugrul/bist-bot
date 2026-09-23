@@ -211,7 +211,7 @@ gcloud run deploy bist-bot-api \
   --allow-unauthenticated \
   --command gunicorn \
   --args="--bind,0.0.0.0:8080,--workers,1,--threads,8,--timeout,330,--graceful-timeout,30,--forwarded-allow-ips=*,bist_bot.wsgi:app" \
-  --set-env-vars PYTHONPATH=/app/src,DB_PATH=/tmp/bist_signals.db,RATE_LIMIT_STORAGE_URI=memory:// \
+  --set-env-vars PYTHONPATH=/app/src,DB_PATH=/tmp/bist_signals.db,RATE_LIMIT_STORAGE_URI=memory://,TRUSTED_PROXY_HOPS=0 \
   --set-secrets JWT_SECRET_KEY=jwt-secret-key:latest
 
 gcloud run deploy bist-bot-ui \

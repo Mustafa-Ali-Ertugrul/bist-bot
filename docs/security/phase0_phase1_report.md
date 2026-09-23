@@ -233,6 +233,8 @@ public key; manifests are small JSON files so re-signing is cheap and atomic per
   at the managed proxy. Local Compose does not enable wildcard forwarded-header trust.
 - `ProxyFix` is not installed and no production request capture was available, so XFF hop count was
   **not measured**. Do not enable ProxyFix until a trusted Cloud Run/LB request confirms the chain.
+  Follow-up (2026-09-21, finding #21): rate-limit key IP collapse is fixed via JWT-identity keying;
+  opt-in `TRUSTED_PROXY_HOPS` gate added — see `docs/security/rate_limit_ip_collapse_finding21.md`.
 - `RATE_LIMIT_STORAGE_URI=memory://`; it is acceptable only while max instance count remains one.
 - **Cloud Run deployment reality:** The GCP project currently has billing disabled and the Checked-in
   profile uses ephemeral `/tmp` SQLite. Consequently, the Cloud Run profile **can currently only run
