@@ -141,6 +141,7 @@ class BISTDataFetcher:
         self._quote_cache: dict[str, CacheEntry] = {}
         self._quote_resolution_meta: dict[str, QuoteResolutionMeta] = {}
         self._last_skipped_tickers: list[str] = []
+        self._cache_lock = threading.RLock()
         self._max_workers = 8  # Will be updated when watchlist is resolved
         if watchlist is not None:
             self._watchlist: list[str] | None = _clean_ticker_list(watchlist)
@@ -260,13 +261,14 @@ class BISTDataFetcher:
     def _get_valid_cache_entry(
         self, cache: dict[Any, CacheEntry], cache_key: Any, ttl: timedelta
     ) -> Any | None:
-        entry = cache.get(cache_key)
-        if entry is None:
+        with self._cache_lock:
+            entry = cache.get(cache_key)
+            if entry is None:
+                return None
+            if self._now() - entry.cached_at < ttl:
+                return entry.value
+            cache.pop(cache_key, None)
             return None
-        if self._now() - entry.cached_at < ttl:
-            return entry.value
-        cache.pop(cache_key, None)
-        return None
 
     def _get_cached_data(
         self,
@@ -353,10 +355,11 @@ class BISTDataFetcher:
             ticker: Stock symbol.
             df: Normalized dataframe to cache.
         """
-        cache_key = self._cache_key(ticker, period, interval)
-        self._evict_oldest_if_needed(self._history_cache, self._MAX_HISTORY_CACHE)
-        self._history_cache[cache_key] = CacheEntry(value=df, cached_at=self._now())
-        self.clear_cache(scope="analysis", ticker=ticker)
+        with self._cache_lock:
+            cache_key = self._cache_key(ticker, period, interval)
+            self._evict_oldest_if_needed(self._history_cache, self._MAX_HISTORY_CACHE)
+            self._history_cache[cache_key] = CacheEntry(value=df, cached_at=self._now())
+            self.clear_cache(scope="analysis", ticker=ticker)
 
     def _record_history_fetch_meta(
         self,
@@ -368,12 +371,13 @@ class BISTDataFetcher:
         status: str,
         reason: str | None = None,
     ) -> None:
-        cache_key = self._cache_key(ticker, period, interval)
-        self._history_fetch_meta[cache_key] = HistoryFetchMeta(
-            source=source,
-            status=status,
-            reason=reason,
-        )
+        with self._cache_lock:
+            cache_key = self._cache_key(ticker, period, interval)
+            self._history_fetch_meta[cache_key] = HistoryFetchMeta(
+                source=source,
+                status=status,
+                reason=reason,
+            )
 
     def get_last_history_fetch_meta(
         self,
@@ -381,14 +385,15 @@ class BISTDataFetcher:
         period: str,
         interval: str,
     ) -> dict[str, str] | None:
-        cache_key = self._cache_key(normalize_ticker(ticker), period, interval)
-        meta = self._history_fetch_meta.get(cache_key)
-        if meta is None:
-            return None
-        payload = {"source": meta.source, "status": meta.status}
-        if meta.reason is not None:
-            payload["reason"] = meta.reason
-        return payload
+        with self._cache_lock:
+            cache_key = self._cache_key(normalize_ticker(ticker), period, interval)
+            meta = self._history_fetch_meta.get(cache_key)
+            if meta is None:
+                return None
+            payload = {"source": meta.source, "status": meta.status}
+            if meta.reason is not None:
+                payload["reason"] = meta.reason
+            return payload
 
     def get_cached_analysis(self, cache_key: str, force: bool = False) -> Any | None:
         if force:
@@ -1044,35 +1049,36 @@ class BISTDataFetcher:
         interval: str | None = None,
     ) -> None:
         """Clear cached entries selectively instead of dropping every cache bucket."""
-        normalized_ticker = normalize_ticker(ticker) if ticker else None
+        with self._cache_lock:
+            normalized_ticker = normalize_ticker(ticker) if ticker else None
 
-        if scope in {"all", "history", "intraday_fetch"}:
-            history_keys = [
-                history_key
-                for history_key in list(self._history_cache)
-                if (normalized_ticker is None or history_key[0] == normalized_ticker)
-                and (period is None or history_key[1] == period)
-                and (interval is None or history_key[2] == interval)
-                and (scope != "intraday_fetch" or self._is_intraday_interval(history_key[2]))
-            ]
-            for history_key in history_keys:
-                self._history_cache.pop(history_key, None)
-                self._history_fetch_meta.pop(history_key, None)
+            if scope in {"all", "history", "intraday_fetch"}:
+                history_keys = [
+                    history_key
+                    for history_key in list(self._history_cache)
+                    if (normalized_ticker is None or history_key[0] == normalized_ticker)
+                    and (period is None or history_key[1] == period)
+                    and (interval is None or history_key[2] == interval)
+                    and (scope != "intraday_fetch" or self._is_intraday_interval(history_key[2]))
+                ]
+                for history_key in history_keys:
+                    self._history_cache.pop(history_key, None)
+                    self._history_fetch_meta.pop(history_key, None)
 
-        if scope in {"all", "analysis"}:
-            analysis_keys: list[str] = [
-                analysis_key
-                for analysis_key in list(self._analysis_cache)
-                if normalized_ticker is None or analysis_key.startswith(f"{normalized_ticker}|")
-            ]
-            for analysis_key in analysis_keys:
-                self._analysis_cache.pop(analysis_key, None)
+            if scope in {"all", "analysis"}:
+                analysis_keys: list[str] = [
+                    analysis_key
+                    for analysis_key in list(self._analysis_cache)
+                    if normalized_ticker is None or analysis_key.startswith(f"{normalized_ticker}|")
+                ]
+                for analysis_key in analysis_keys:
+                    self._analysis_cache.pop(analysis_key, None)
 
-        if scope in {"all", "quote_fallback"}:
-            if normalized_ticker is None:
-                self._quote_cache.clear()
-            else:
-                self._quote_cache.pop(normalized_ticker, None)
+            if scope in {"all", "quote_fallback"}:
+                if normalized_ticker is None:
+                    self._quote_cache.clear()
+                else:
+                    self._quote_cache.pop(normalized_ticker, None)
 
         logger.info("cache_cleared", scope=scope)
 
@@ -1094,12 +1100,26 @@ class BISTDataFetcher:
         trigger_period = trigger_period or getattr(settings, "MTF_TRIGGER_PERIOD", "1mo")
         trigger_interval = trigger_interval or getattr(settings, "MTF_TRIGGER_INTERVAL", "15m")
 
-        trend_data = self.fetch_all(
-            period=trend_period, interval=trend_interval, force=force_refresh, validate=validate
-        )
-        trigger_data = self.fetch_all(
-            period=trigger_period, interval=trigger_interval, force=force_refresh, validate=validate
-        )
+        # Trend ve trigger dönemleri bağımsızdır; ağ + normalize maliyetini
+        # ikiye bölmek için paralel çalıştırılır. Cache/meta yazımını
+        # _cache_lock korur (fallback ThreadPoolExecutor yarışı da dahil).
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            trend_future = executor.submit(
+                self.fetch_all,
+                period=trend_period,
+                interval=trend_interval,
+                force=force_refresh,
+                validate=validate,
+            )
+            trigger_future = executor.submit(
+                self.fetch_all,
+                period=trigger_period,
+                interval=trigger_interval,
+                force=force_refresh,
+                validate=validate,
+            )
+            trend_data = trend_future.result()
+            trigger_data = trigger_future.result()
 
         combined: dict[str, dict[str, pd.DataFrame]] = {}
         for ticker in self.watchlist:

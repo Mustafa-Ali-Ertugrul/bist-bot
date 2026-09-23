@@ -312,6 +312,80 @@ def test_update_outcome_signal_not_found(signals_repo):
     # If we get here without exception, the test passed
 
 
+def test_update_outcomes_batch(signals_repo, sample_signal):
+    """Test batch updating signal outcomes in a single session."""
+    signals_repo.save_signal(sample_signal)
+    signals = signals_repo.get_signals(limit=1, ticker="THYAO.IS")
+    signal_id = signals[0]["id"]
+
+    # Also add a second signal
+    from bist_bot.strategy.signal_models import Signal, SignalType
+
+    short_signal = Signal(
+        ticker="KUYAS.IS",
+        signal_type=SignalType.SELL,
+        score=-20.0,
+        price=100.0,
+        reasons=["Sell setup"],
+        stop_loss=105.0,
+        target_price=90.0,
+        timestamp=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
+    )
+    signals_repo.save_signal(short_signal)
+    signals2 = signals_repo.get_signals(limit=1, ticker="KUYAS.IS")
+    signal_id2 = signals2[0]["id"]
+
+    # Batch update both signals
+    signals_repo.update_outcomes(
+        [
+            (signal_id, "TP_HIT", 110.0, "test"),
+            (signal_id2, "STOP_HIT", 95.0, "test"),
+        ]
+    )
+
+    # Check both were updated
+    updated1 = signals_repo.get_latest_signal("THYAO.IS")
+    updated2 = signals_repo.get_latest_signal("KUYAS.IS")
+    assert updated1 is not None
+    assert updated1["outcome"] == "TP_HIT"
+    assert updated1["outcome_price"] == 110.0
+    # Long: (110-100)/100 * 100 = 10.0
+    assert updated1["profit_pct"] == 10.0
+
+    assert updated2 is not None
+    # Short: (100-95)/100 * 100 = 5.0
+    assert updated2["profit_pct"] == 5.0
+    assert updated2["outcome"] == "STOP_HIT"
+    assert updated2["outcome_price"] == 95.0
+
+
+def test_update_outcomes_empty_list_noop(signals_repo):
+    """Test that update_outcomes([]) does not raise."""
+    signals_repo.update_outcomes([])
+
+
+def test_update_outcomes_skips_unknown_id(signals_repo, sample_signal):
+    """Test that unknown signal_id is skipped without exception; valid rows still updated."""
+    signals_repo.save_signal(sample_signal)
+    signals = signals_repo.get_signals(limit=1, ticker="THYAO.IS")
+    signal_id = signals[0]["id"]
+
+    # Include a non-existent id (999) along with the valid one
+    signals_repo.update_outcomes(
+        [
+            (signal_id, "TP_HIT", 110.0, "test"),
+            (999, "STOP_HIT", 95.0, "test"),
+        ]
+    )
+
+    # The valid signal should still be updated
+    updated = signals_repo.get_latest_signal("THYAO.IS")
+    assert updated is not None
+    assert updated["outcome"] == "TP_HIT"
+    assert updated["outcome_price"] == 110.0
+    assert updated["profit_pct"] == 10.0
+
+
 def test_update_outcome_short_signal_profit_is_inverted(signals_repo):
     """Direction-aware profit: for SELL-family signals the realized move is
     (entry - exit), so profit_pct must be computed short-side."""

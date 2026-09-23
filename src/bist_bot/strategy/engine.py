@@ -58,6 +58,7 @@ from bist_bot.strategy.scoring import (
     score_volume,
 )
 from bist_bot.strategy.session_metrics import (
+    SessionStats,
     apply_session_adjustment,
     sector_medians,
     session_stats,
@@ -178,6 +179,7 @@ class StrategyEngine:
         self._market_context: MarketContext | None = None
         # Tarama-bazlı seans evreni (breadth + sektör medyanları).
         self._session_day_changes: dict[str, float] = {}
+        self._session_stats_cache: dict[str, SessionStats] = {}
         self._session_sector_medians: dict[str, float] = {}
         self._session_breadth: dict[str, float] = {}
 
@@ -704,12 +706,16 @@ class StrategyEngine:
         # Gun-ici seans ayarlamasi (2026-09-17 gozlemi: tepki gunleri, taban
         # kilitleri, sektor liderligi). Flag kapaliysa no-op; cap'li additif.
         if score > 0 and self.params.session_adj_enabled:
-            sess_stats = session_stats(
-                trigger_df,
-                trend_df,
-                datetime.now(TR),
-                limit_pct=self.params.session_limit_pct,
-            )
+            sess_stats = self._session_stats_cache.get(ticker)
+            if sess_stats is None:
+                # Ticker not in universe cache (e.g. analyze() called standalone
+                # outside scan_all). Fall back to a one-off computation.
+                sess_stats = session_stats(
+                    trigger_df,
+                    trend_df,
+                    datetime.now(TR),
+                    limit_pct=self.params.session_limit_pct,
+                )
             sector_map = getattr(settings, "SECTOR_MAP", {}) or {}
             sector = sector_map.get(ticker)
             day_ch = sess_stats.day_change_pct
@@ -758,7 +764,13 @@ class StrategyEngine:
         )
 
         signal_type, confidence = self._classify_signal(score, _agreement)
-        risk_levels = self.risk_manager.calculate(df)
+        # Non-buy signals (HOLD/RADAR/SELL) discard the full risk calculation
+        # output in _apply_buy_side_risk (which builds a short plan via
+        # _build_non_buy_levels). Skip the expensive calculate() pass for them.
+        if is_buy_signal(signal_type):
+            risk_levels = self.risk_manager.calculate(df)
+        else:
+            risk_levels = RiskLevels()
         adjusted_risk_levels = self._apply_buy_side_risk(
             ticker,
             df,
@@ -938,6 +950,7 @@ class StrategyEngine:
         """
         now = datetime.now(TR)
         changes: dict[str, float] = {}
+        stats_cache: dict[str, SessionStats] = {}
         for t, frames in data.items():
             try:
                 if isinstance(frames, dict):
@@ -946,11 +959,13 @@ class StrategyEngine:
                 else:
                     trend_f = trig_f = frames
                 st = session_stats(trig_f, trend_f, now, limit_pct=self.params.session_limit_pct)
+                stats_cache[t] = st
                 if st.day_change_pct is not None:
                     changes[t] = st.day_change_pct
             except Exception:
                 continue
         self._session_day_changes = changes
+        self._session_stats_cache = stats_cache
         self._session_sector_medians = sector_medians(
             changes, getattr(settings, "SECTOR_MAP", {}) or {}
         )
@@ -997,6 +1012,7 @@ class StrategyEngine:
             self._current_scan_id = None
             self._market_context = None
             self._session_day_changes = {}
+            self._session_stats_cache = {}
             self._session_sector_medians = {}
             self._session_breadth = {}
         return signals
