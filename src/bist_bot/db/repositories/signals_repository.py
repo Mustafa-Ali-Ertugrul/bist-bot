@@ -493,9 +493,13 @@ class SignalsRepository:
                 is_short = False
             if original_price > 0:
                 if is_short:
-                    row.profit_pct = round((original_price - outcome_price) / original_price * 100, 2)
+                    row.profit_pct = round(
+                        (original_price - outcome_price) / original_price * 100, 2
+                    )
                 else:
-                    row.profit_pct = round((outcome_price - original_price) / original_price * 100, 2)
+                    row.profit_pct = round(
+                        (outcome_price - original_price) / original_price * 100, 2
+                    )
             else:
                 # price=0 kayitlarinda ZeroDivisionError outcome'u tamamen
                 # kaybetir; parity: portfolio._gross_profit_pct guard'i.
