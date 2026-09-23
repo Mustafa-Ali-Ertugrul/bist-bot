@@ -279,6 +279,9 @@ class TradingAgent:
         Failures degrade per ticker: the ticker is simply missing from the
         maps and the exit check runs with the stored (original) stop.
         """
+        import math
+        from collections import OrderedDict
+
         from bist_bot.indicators import TechnicalIndicators
 
         prices: dict[str, float] = {}
@@ -286,6 +289,15 @@ class TradingAgent:
         closes_map: dict[str, list[tuple[str, float]]] = {}
         if not self.data_fetcher:
             return prices, atr_map, closes_map
+        # Content-keyed ATR-only memo: exit checks re-fetch the same 3mo
+        # window for open positions on every scheduler tick. Key is the
+        # same D4 discipline as cached_add_all (ticker, len, endpoint closes).
+        atr_cache: OrderedDict[tuple[str, int, float, float], float] = getattr(
+            self, "_atr_last_cache", None
+        )
+        if atr_cache is None:
+            atr_cache = OrderedDict()
+            self._atr_last_cache = atr_cache
         for ticker in tickers:
             try:
                 df = self.data_fetcher.fetch_single(ticker, period="3mo")
@@ -294,12 +306,35 @@ class TradingAgent:
                 closes = df["close"]
                 prices[ticker] = float(closes.iloc[-1])
                 try:
-                    atr_df = TechnicalIndicators.add_atr(df.copy())
-                    atr_series = atr_df.get("atr")
-                    if atr_series is not None and len(atr_series) > 0:
-                        atr_val = float(atr_series.iloc[-1])
-                        if pd.notna(atr_val) and atr_val > 0:
-                            atr_map[ticker] = atr_val
+                    atr_key: tuple[str, int, float, float] | None = None
+                    try:
+                        first_close = float(closes.iloc[0])
+                        last_close = float(closes.iloc[-1])
+                        if math.isfinite(first_close) and math.isfinite(last_close):
+                            atr_key = (ticker, len(df), first_close, last_close)
+                    except Exception:
+                        atr_key = None
+                    atr_val: float | None = None
+                    if atr_key is not None:
+                        cached_atr = atr_cache.get(atr_key)
+                        if cached_atr is not None:
+                            atr_cache.move_to_end(atr_key)
+                            atr_val = cached_atr
+                    if atr_val is None:
+                        # add_atr (in_place=False) already copies; avoid a second copy.
+                        atr_df = TechnicalIndicators.add_atr(df)
+                        atr_series = atr_df.get("atr")
+                        if atr_series is not None and len(atr_series) > 0:
+                            raw_atr = float(atr_series.iloc[-1])
+                            if pd.notna(raw_atr) and raw_atr > 0:
+                                atr_val = raw_atr
+                                if atr_key is not None:
+                                    atr_cache[atr_key] = raw_atr
+                                    atr_cache.move_to_end(atr_key)
+                                    while len(atr_cache) > 64:
+                                        atr_cache.popitem(last=False)
+                    if atr_val is not None and atr_val > 0:
+                        atr_map[ticker] = atr_val
                 except Exception:
                     logger.exception("atr_compute_failed", ticker=ticker)
                 if "date" in df.columns:

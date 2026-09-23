@@ -92,7 +92,7 @@ class EngineSpy:
         self.analyze_calls = 0
         self.scan_signals = scan_signals or []
 
-    def scan_all(self, data):
+    def scan_all(self, data, **_kw):
         _ = data
         return list(self.scan_signals)
 

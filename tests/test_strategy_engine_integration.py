@@ -391,8 +391,11 @@ def test_analyze_weak_penalized_sideways_low_adx_pipeline_order() -> None:
     - raw component total before regime ≈ 52.0
     - after sideways (×0.6) ≈ 31.2
     - after ADX penalty (−5) ≈ 26.2  → BUY threshold (>=20)
+
+    Seans ayarlamasi bu kilitli goruntude kapali tutulur (session_adj_enabled
+    ayri testlerde kapsanir); boylece boru-hatti aritmetigi izole kalir.
     """
-    params = StrategyParams()
+    params = StrategyParams(session_adj_enabled=False)
     engine = _engine(params)
     frame = weak_penalized_frame()
     signal = engine.analyze("SIDE.IS", frame)

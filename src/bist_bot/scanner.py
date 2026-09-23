@@ -28,6 +28,7 @@ from bist_bot.services.paper_trade_service import PaperTradeService
 from bist_bot.services.shadow_trade_service import ShadowTradeService
 from bist_bot.services.signal_change_service import SignalChangeService
 from bist_bot.services.signal_outcome_tracker import SignalOutcomeTracker
+from bist_bot.strategy.market_context import MarketContext
 from bist_bot.strategy.params import StrategyParams
 from bist_bot.strategy.signal_models import (
     Signal,
@@ -379,7 +380,8 @@ class ScanService:
                 logger.warning("scan_aborted_after_fetch", reason="timeout_or_cancellation")
                 raise ScanAbortedError("Scan aborted after data fetch")
 
-            signals = self.engine.scan_all(all_data)
+            market_context = self._build_market_context()
+            signals = self.engine.scan_all(all_data, market_context=market_context)
             breakdown_getter = getattr(self.engine, "get_last_rejection_breakdown", None)
             breakdown = (
                 breakdown_getter()
@@ -504,6 +506,49 @@ class ScanService:
     def update_paper_trades(self, signals: list["Signal"] | None = None) -> None:
         """Refresh open paper trades and close only triggered positions."""
         self.paper_trade_service.update_open_trades(signals=signals)
+
+    # ------------------------------------------------------------------
+    # Makro bağlam (USD/TRY, XU100) — tarama başına tek fetch
+    # ------------------------------------------------------------------
+    def _fetch_benchmark_frame(self, ticker: str) -> pd.DataFrame | None:
+        """Fetch one benchmark frame; None on any failure (graceful no-op)."""
+        try:
+            fetch_single = getattr(self.fetcher, "fetch_single", None)
+            if not callable(fetch_single):
+                return None
+            df = fetch_single(ticker, period="6mo", interval="1d")
+            if df is None or getattr(df, "empty", True):
+                return None
+            return df
+        except Exception as exc:
+            logger.warning(
+                "market_context_fetch_failed",
+                ticker=ticker,
+                error_type=type(exc).__name__,
+            )
+            return None
+
+    def _build_market_context(self) -> MarketContext | None:
+        """Build the per-scan macro context; None when all flags are off.
+
+        Bayat/eksik benchmark verisi freshness-gate'e takılmaz — makro
+        filtreler eksik veride no-op olur (ceza yok, gate yok).
+        """
+        forex_enabled = bool(getattr(self.settings, "FOREX_FILTER_ENABLED", False))
+        xu100_enabled = bool(getattr(self.settings, "XU100_VOTER_ENABLED", False))
+        if not (forex_enabled or xu100_enabled):
+            return None
+        usdtry_df = None
+        xu100_df = None
+        if forex_enabled:
+            usdtry_df = self._fetch_benchmark_frame(
+                str(getattr(self.settings, "USDTRY_TICKER", "USDTRY=X"))
+            )
+        if xu100_enabled:
+            xu100_df = self._fetch_benchmark_frame(
+                str(getattr(self.settings, "XU100_TICKER", "XU100.IS"))
+            )
+        return MarketContext(usdtry_df=usdtry_df, xu100_df=xu100_df)
 
     # ------------------------------------------------------------------
     # B4 — candle freshness gate

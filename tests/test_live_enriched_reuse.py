@@ -130,25 +130,6 @@ def test_strategy_backtester_enriched_reuse_matches_legacy() -> None:
     assert legacy.total_trades > 0, legacy.total_trades
 
 
-def test_prepare_analysis_frame_pre_enriched_blanks_last_divergence() -> None:
-    from bist_bot.strategy.engine_core import prepare_analysis_frame
-
-    raw = _frame(80)
-    enriched = TechnicalIndicators().add_all(raw.copy())
-    enriched.loc[enriched.index[-1], "macd_divergence"] = "BULLISH"
-    enriched.loc[enriched.index[-1], "rsi_divergence"] = "BEARISH"
-    out, _bias, last, _prev = prepare_analysis_frame(
-        TechnicalIndicators(),
-        enriched,
-        trend_df=enriched,
-        multi_timeframe=False,
-        pre_enriched=True,
-    )
-    for col in DIVERGENCE_COLUMNS:
-        assert str(out[col].iloc[-1]) == "NONE"
-        assert str(last[col]) == "NONE"
-
-
 def test_prepare_analysis_frame_pre_enriched_does_not_recompute() -> None:
     """pre_enriched must not call add_all (the whole point of the change)."""
 

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import html
+import math
+from collections import OrderedDict
 from collections.abc import MutableMapping
 from typing import cast
 
@@ -8,7 +10,7 @@ import pandas as pd
 import streamlit as st
 
 from bist_bot.config.settings import settings
-from bist_bot.indicators import TechnicalIndicators
+from bist_bot.indicators import cached_add_all
 from bist_bot.ui.components.app_shell import (
     render_html_panel,
     render_page_hero,
@@ -24,6 +26,52 @@ from bist_bot.ui.components.chart_widget import (
 from bist_bot.ui.components.metric_block import render_metric_block
 from bist_bot.ui.runtime import api_request
 from bist_bot.ui.session_cooldown import consume_cooldown
+
+#: Analyze-page indicator cache cap. The page re-renders on every Streamlit
+#: interaction with the same session-state price history, so a small FIFO
+#: keyed on content avoids recomputing ``add_all`` on each rerun.
+_ANALYZE_INDICATORS_CACHE_MAX = 128
+
+#: ``(ticker, len(df), first close, last close)`` -> computed indicator frame.
+_analyze_indicators_cache: OrderedDict[tuple[str, int, float, float], pd.DataFrame] = OrderedDict()
+
+
+def _clear_analyze_indicators_cache() -> None:
+    """Drop every cached analyze indicator frame (test isolation / manual reset)."""
+    _analyze_indicators_cache.clear()
+
+
+def _cached_add_all(df: pd.DataFrame, ticker: str) -> pd.DataFrame:
+    """``TechnicalIndicators().add_all`` with a content-keyed FIFO cache.
+
+    Keyed on ``(ticker, len, first close, last close)`` so a Streamlit rerun
+    that re-reads the same session-state history hits the cache, while any
+    change in length or endpoint closes misses. Non-finite endpoint closes
+    bypass the cache. Returns the cached frame directly — callers treat the
+    result as read-only (plotting / ``iloc`` reads only), matching the
+    production paths below.
+    """
+    key = None
+    try:
+        if df is not None and not getattr(df, "empty", True):
+            first_close = float(df["close"].iloc[0])
+            last_close = float(df["close"].iloc[-1])
+            if math.isfinite(first_close) and math.isfinite(last_close):
+                key = (ticker, len(df), first_close, last_close)
+    except Exception:
+        key = None
+    if key is not None:
+        cached = _analyze_indicators_cache.get(key)
+        if cached is not None:
+            _analyze_indicators_cache.move_to_end(key)
+            return cached
+    result = cached_add_all(df, ticker)
+    if key is not None and result is not None and not getattr(result, "empty", True):
+        _analyze_indicators_cache[key] = result
+        _analyze_indicators_cache.move_to_end(key)
+        while len(_analyze_indicators_cache) > _ANALYZE_INDICATORS_CACHE_MAX:
+            _analyze_indicators_cache.popitem(last=False)
+    return result
 
 
 def _signal_tone(score: float, buy_threshold: float = 20.0) -> str:
@@ -312,7 +360,7 @@ def render_analyze_page() -> None:
         df = pd.DataFrame(price_data)
         df["date"] = pd.to_datetime(df["date"])
         df = df.set_index("date")
-        df_ind = TechnicalIndicators().add_all(df.copy())
+        df_ind = _cached_add_all(df, ticker_input)
         latest_indicator = df_ind.iloc[-1]
 
         ohlc = df.iloc[-1]

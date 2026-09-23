@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections import Counter
+import math
+from collections import Counter, OrderedDict
 from collections.abc import Mapping
 from enum import Enum
 from pathlib import Path
@@ -10,7 +11,29 @@ from pathlib import Path
 import pandas as pd
 
 from bist_bot.config.settings import settings
+from bist_bot.indicators import TechnicalIndicators, cached_add_all
 from bist_bot.strategy.signal_models import SignalType
+
+_TREND_BIAS_ENRICH_MAX = 256
+_trend_bias_enrich_cache: OrderedDict[tuple, pd.DataFrame] = OrderedDict()
+
+
+def _clear_trend_bias_enrich_cache() -> None:
+    """Drop the trend-bias enriched-frame memo (tests / force refresh)."""
+    _trend_bias_enrich_cache.clear()
+
+
+def _trend_bias_content_key(frame: pd.DataFrame) -> tuple | None:
+    """Content key ``(len, first close, last close)`` with finite-close checks."""
+    try:
+        if len(frame) > 0 and "close" in frame.columns:
+            first = float(frame["close"].iloc[0])
+            last = float(frame["close"].iloc[-1])
+            if math.isfinite(first) and math.isfinite(last):
+                return (len(frame), first, last)
+    except Exception:
+        return None
+    return None
 
 
 class MarketRegime(Enum):
@@ -139,7 +162,40 @@ def get_trend_bias(indicators, df: pd.DataFrame, params=None) -> TrendBias:
     if df is None or len(df) < 30:
         return TrendBias.NEUTRAL
 
-    enriched = indicators.add_all(df.copy())
+    # Prod: minimal alt küme (ATR→ADX sırası zorunlu: add_adx, atr yoksa
+    # ADX_PERIOD ile yeniden hesaplar; ATR_PERIOD doğru olanı korur).
+    # Mock/test yolları (add_atr/add_adx/add_sma/add_ema yoksa) add_all'e
+    # düşer — cached_add_all mock bypass ile davranışı korur.
+    # Content-keyed FIFO memo: yalnız gerçek TechnicalIndicators metot
+    # kimlikleri cache'lenir; monkeypatch/mock her zaman yeniden hesaplar.
+    if hasattr(indicators, "add_atr"):
+        real = (
+            indicators.add_atr is TechnicalIndicators.add_atr
+            and indicators.add_adx is TechnicalIndicators.add_adx
+            and indicators.add_sma is TechnicalIndicators.add_sma
+            and indicators.add_ema is TechnicalIndicators.add_ema
+        )
+        key = _trend_bias_content_key(df) if real else None
+        hit: pd.DataFrame | None = None
+        if key is not None:
+            hit = _trend_bias_enrich_cache.get(key)
+            if hit is not None:
+                _trend_bias_enrich_cache.move_to_end(key)
+        if hit is not None:
+            enriched = hit
+        else:
+            enriched = df.copy()
+            enriched = indicators.add_atr(enriched, in_place=True)
+            enriched = indicators.add_adx(enriched, in_place=True)
+            enriched = indicators.add_sma(enriched, in_place=True)
+            enriched = indicators.add_ema(enriched, in_place=True)
+            if key is not None:
+                _trend_bias_enrich_cache[key] = enriched
+                _trend_bias_enrich_cache.move_to_end(key)
+                while len(_trend_bias_enrich_cache) > _TREND_BIAS_ENRICH_MAX:
+                    _trend_bias_enrich_cache.popitem(last=False)
+    else:
+        enriched = cached_add_all(df, indicators=indicators)
     regime = detect_regime(enriched)
     last = enriched.iloc[-1]
     close = float(last["close"])
@@ -413,7 +469,7 @@ def build_macro_regime_series(
                 f"macro regime: benchmark {ticker} has {len(frame)} rows "
                 f"(< {MACRO_REGIME_MIN_BARS}) after clean-up"
             )
-        enriched = indicators.add_all(frame.copy())
+        enriched = cached_add_all(frame, ticker, indicators=indicators)
         # Valid votes only from the row where the benchmark first reaches
         # MACRO_REGIME_MIN_BARS rows; earlier rows carry UNKNOWN but the
         # live gate skips such benchmarks, so we model "no vote" as NaN.

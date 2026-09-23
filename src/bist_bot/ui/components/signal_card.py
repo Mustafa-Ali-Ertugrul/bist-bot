@@ -1,17 +1,64 @@
 from __future__ import annotations
 
 import html
+import math
+from collections import OrderedDict
 
 import streamlit as st
 
 from bist_bot.config.settings import settings
-from bist_bot.indicators import TechnicalIndicators
+from bist_bot.indicators import cached_add_all
 from bist_bot.locales import get_message
 from bist_bot.ui.components.chart_widget import render_chart
 
 _STRONG_BUY = int(settings.STRONG_BUY_THRESHOLD)
 _WEAK_BUY = int(settings.WEAK_BUY_THRESHOLD)
 _WEAK_SELL = int(settings.WEAK_SELL_THRESHOLD)
+
+#: Signal-card chart cache cap. The signals grid re-renders every card on each
+#: Streamlit interaction; 60-bar indicator frames are tiny, so 512 entries
+#: cover a full BIST100 board with headroom.
+_SIGNAL_CHART_CACHE_MAX = 512
+
+#: ``(ticker, len(window), first close, last close)`` -> 60-bar indicator frame.
+_signal_chart_cache: OrderedDict[tuple[str, int, float, float], object] = OrderedDict()
+
+
+def _clear_signal_chart_cache() -> None:
+    """Drop every cached signal chart frame (test isolation / manual reset)."""
+    _signal_chart_cache.clear()
+
+
+def _cached_signal_indicators(df, ticker: str):
+    """``add_all`` on an already-sliced window with a content-keyed FIFO cache.
+
+    ``df`` is the ``df_data.tail(60)`` window from the caller. Keyed on
+    ``(ticker, len, first close, last close)`` so a Streamlit rerun over the
+    same bars hits the cache while a sliding window (new bar) misses.
+    Non-finite endpoint closes bypass the cache. Returns the cached frame
+    directly — chart factories only read columns.
+    """
+    key = None
+    try:
+        if df is not None and not getattr(df, "empty", True):
+            first_close = float(df["close"].iloc[0])
+            last_close = float(df["close"].iloc[-1])
+            if math.isfinite(first_close) and math.isfinite(last_close):
+                key = (ticker, len(df), first_close, last_close)
+    except Exception:
+        key = None
+    if key is not None:
+        cached = _signal_chart_cache.get(key)
+        if cached is not None:
+            _signal_chart_cache.move_to_end(key)
+            return cached
+    result = cached_add_all(df, ticker)
+    if key is not None and result is not None and not getattr(result, "empty", True):
+        _signal_chart_cache[key] = result
+        _signal_chart_cache.move_to_end(key)
+        while len(_signal_chart_cache) > _SIGNAL_CHART_CACHE_MAX:
+            _signal_chart_cache.popitem(last=False)
+    return result
 
 
 def _accent(score: float) -> tuple[str, str, str]:
@@ -102,7 +149,7 @@ def render_signal_card(signal, df_data=None, chart_factory=None) -> None:
             )
         with right:
             try:
-                df_chart = TechnicalIndicators().add_all(df_data.tail(60).copy())
+                df_chart = _cached_signal_indicators(df_data.tail(60), ticker)
                 render_chart(
                     chart_factory(df_chart, ticker),
                     key=f"signal_chart_{ticker}",

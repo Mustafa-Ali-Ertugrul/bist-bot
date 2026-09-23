@@ -1,6 +1,9 @@
 """Signal scoring and classification orchestration for BIST trading ideas."""
 
+import math
+from collections import OrderedDict
 from contextlib import AbstractContextManager
+from datetime import datetime
 from typing import Any, cast
 from uuid import uuid4
 
@@ -8,7 +11,8 @@ import pandas as pd
 
 from bist_bot.app_logging import get_logger
 from bist_bot.config.settings import settings
-from bist_bot.indicators import TechnicalIndicators
+from bist_bot.indicators import TechnicalIndicators, cached_add_all
+from bist_bot.market_calendar import TR
 from bist_bot.risk import RiskLevels, RiskManager
 from bist_bot.strategy.base import BaseStrategy
 from bist_bot.strategy.engine_core import (
@@ -32,9 +36,11 @@ from bist_bot.strategy.engine_meta import (
     apply_buy_side_risk,
     build_meta_features,
 )
+from bist_bot.strategy.market_context import MarketContext, forex_penalty
 from bist_bot.strategy.params import StrategyParams
 from bist_bot.strategy.regime import (
     MACRO_BENCHMARK_TICKERS,
+    MACRO_REGIME_MIN_BARS,
     MarketRegime,
     TrendBias,
     apply_confluence,
@@ -49,6 +55,12 @@ from bist_bot.strategy.scoring import (
     score_structure,
     score_trend,
     score_volume,
+)
+from bist_bot.strategy.session_metrics import (
+    apply_session_adjustment,
+    sector_medians,
+    session_stats,
+    universe_breadth,
 )
 from bist_bot.strategy.signal_models import Signal, SignalType
 
@@ -89,6 +101,28 @@ def _coerce_int(value: object, default: int = 0) -> int:
     return default
 
 
+_MACRO_BENCH_ENRICH_MAX = 256
+_macro_bench_enrich_cache: OrderedDict[tuple, pd.DataFrame] = OrderedDict()
+
+
+def _clear_macro_benchmark_enrich_cache() -> None:
+    """Drop the macro-benchmark enriched-frame memo (tests / force refresh)."""
+    _macro_bench_enrich_cache.clear()
+
+
+def _macro_bench_content_key(frame: pd.DataFrame) -> tuple | None:
+    """Content key ``(len, first close, last close)`` with finite-close checks."""
+    try:
+        if len(frame) > 0 and "close" in frame.columns:
+            first = float(frame["close"].iloc[0])
+            last = float(frame["close"].iloc[-1])
+            if math.isfinite(first) and math.isfinite(last):
+                return (len(frame), first, last)
+    except Exception:
+        return None
+    return None
+
+
 class StrategyEngine:
     def __init__(
         self,
@@ -118,6 +152,16 @@ class StrategyEngine:
         self._current_rejection_counts: dict[str, dict[str, int]] = {"reason": {}, "stage": {}}
         self._last_rejection_breakdown: dict[str, object] = _empty_rejection_breakdown()
         self.last_macro_regime: MarketRegime = MarketRegime.UNKNOWN
+        # Skor bileşenleri: calculate_score_and_reasons tarafından doldurulur;
+        # _build_score_breakdown bu önbelleği okuyarak tekrar skorlamayı atlar.
+        self._last_score_components: dict[str, float] | None = None
+        # Tarama-bazlı makro bağlam (USD/TRY, XU100). scan_all tarafından
+        # set/reset edilir; None = makro filtreler no-op (varsayılan).
+        self._market_context: MarketContext | None = None
+        # Tarama-bazlı seans evreni (breadth + sektör medyanları).
+        self._session_day_changes: dict[str, float] = {}
+        self._session_sector_medians: dict[str, float] = {}
+        self._session_breadth: dict[str, float] = {}
 
     def _reset_rejection_aggregation(self) -> None:
         self._current_rejection_counts = {"reason": {}, "stage": {}}
@@ -291,18 +335,19 @@ class StrategyEngine:
         trend_df: pd.DataFrame,
         multi_timeframe: bool,
         pre_enriched: bool = False,
+        ticker: str = "",
     ) -> tuple[pd.DataFrame, TrendBias, pd.Series, pd.Series]:
         if multi_timeframe and getattr(settings, "MTF_ENABLED", True):
             if pre_enriched:
-                analysis_df = trigger_df.copy()
-                last_label = analysis_df.index[-1]
-                for col in DIVERGENCE_COLUMNS:
-                    if col in analysis_df.columns:
-                        analysis_df.loc[last_label, col] = "NONE"
+                analysis_df = trigger_df
             else:
-                analysis_df = self.indicators.add_all(trigger_df.copy())
+                analysis_df = cached_add_all(trigger_df, ticker, indicators=self.indicators)
             trend_bias = self._get_trend_bias(trend_df)
             last = analysis_df.iloc[-1].copy()
+            if pre_enriched:
+                for col in DIVERGENCE_COLUMNS:
+                    if col in analysis_df.columns:
+                        last[col] = "NONE"
             prev = analysis_df.iloc[-2]
             last["_prev_close_for_scoring"] = prev["close"]
             return analysis_df, trend_bias, last, prev
@@ -313,6 +358,7 @@ class StrategyEngine:
             multi_timeframe=multi_timeframe,
             params=self.params,
             pre_enriched=pre_enriched,
+            ticker=ticker,
         )
 
     def _passes_adx_filter(self, ticker: str, last: pd.Series) -> bool:
@@ -327,6 +373,7 @@ class StrategyEngine:
         prev: pd.Series,
         multi_timeframe: bool,
     ) -> tuple[float, list[str], float | None] | None:
+        components_out: dict[str, float] = {}
         result = calculate_score_and_reasons(
             self.params,
             ticker,
@@ -344,7 +391,9 @@ class StrategyEngine:
                 trigger_candle_count=len(df),
                 **fields,
             ),
+            components_out=components_out,
         )
+        self._last_score_components = components_out if result is not None else None
         return result
 
     def _build_score_breakdown(
@@ -354,6 +403,7 @@ class StrategyEngine:
         df: pd.DataFrame | None = None,
         *,
         final_score: float | None = None,
+        components: dict[str, float] | None = None,
     ) -> dict[str, float]:
         """Compute a per-component score breakdown for explainability.
 
@@ -362,11 +412,24 @@ class StrategyEngine:
         the effective weighted contributions and, when ``final_score`` is
         provided, an ``adjustments`` entry so the rounded breakdown sums to
         the final score after later filters/caps/low-ADX penalty.
+
+        If ``components`` is provided (from the concurrent scoring pass) the
+        four scorers are NOT re-run — the cached raw values are used instead.
+        Falls back to ``self._last_score_components`` when called independently,
+        and re-runs the scorers when neither source is available.
         """
-        s_momentum, _ = self._score_momentum(last, prev)
-        s_trend, _ = self._score_trend(last, prev, df)
-        s_volume, _ = self._score_volume(last, prev)
-        s_structure, _ = self._score_structure(last)
+        if components is None:
+            components = self._last_score_components
+        if components is not None:
+            s_momentum = components["momentum"]
+            s_trend = components["trend"]
+            s_volume = components["volume"]
+            s_structure = components["structure"]
+        else:
+            s_momentum, _ = self._score_momentum(last, prev)
+            s_trend, _ = self._score_trend(last, prev, df)
+            s_volume, _ = self._score_volume(last, prev)
+            s_structure, _ = self._score_structure(last)
 
         if not getattr(self.params, "normalized_component_scoring", False):
             return {
@@ -560,6 +623,7 @@ class StrategyEngine:
             trend_df=trend_df,
             multi_timeframe=multi_timeframe,
             pre_enriched=pre_enriched,
+            ticker=ticker,
         )
         if not self._passes_adx_filter(ticker, last):
             self._log_candidate_rejected(
@@ -599,8 +663,81 @@ class StrategyEngine:
                 )
                 return None
 
+        # USD/TRY döviz-riski cezası (flag kapalıysa no-op; yalnız long adaylar).
+        # Sabit puan cezası — çarpan değil, eşik kalibrasyonu bozulmaz.
+        if score > 0 and self.params.forex_filter_enabled:
+            penalty, forex_reason = forex_penalty(
+                params=self.params,
+                ticker=ticker,
+                sector_map=getattr(settings, "SECTOR_MAP", {}),
+                usdtry_df=(self._market_context.usdtry_df if self._market_context else None),
+            )
+            if penalty > 0 and forex_reason is not None:
+                score -= penalty
+                reasons.append(forex_reason)
+                logger.info(
+                    "forex_penalty_applied",
+                    ticker=ticker,
+                    penalty=penalty,
+                    score=round(float(score), 2),
+                    scan_id=self._resolve_scan_id(),
+                )
+
+        # Gun-ici seans ayarlamasi (2026-09-17 gozlemi: tepki gunleri, taban
+        # kilitleri, sektor liderligi). Flag kapaliysa no-op; cap'li additif.
+        if score > 0 and self.params.session_adj_enabled:
+            sess_stats = session_stats(
+                trigger_df,
+                trend_df,
+                datetime.now(TR),
+                limit_pct=self.params.session_limit_pct,
+            )
+            sector_map = getattr(settings, "SECTOR_MAP", {}) or {}
+            sector = sector_map.get(ticker)
+            day_ch = sess_stats.day_change_pct
+            rel = (
+                (day_ch - self._session_sector_medians[sector])
+                if (day_ch is not None and sector in self._session_sector_medians)
+                else None
+            )
+            breadth = self._session_breadth.get("adv_pct")
+            adj, sess_reasons, sess_blocked = apply_session_adjustment(
+                params=self.params,
+                ticker=ticker,
+                stats=sess_stats,
+                sector_rel=rel,
+                breadth_adv_pct=breadth,
+                score=score,
+            )
+            if sess_blocked:
+                self._log_candidate_rejected(
+                    ticker,
+                    stage="scoring",
+                    reason_code="session_limit_down_blocked",
+                    multi_timeframe=multi_timeframe,
+                    trigger_candle_count=len(df),
+                    score=score,
+                    reason_detail="; ".join(sess_reasons),
+                )
+                return None
+            if adj != 0:
+                score += adj
+                # Motor kontrati: |skor| <= 100 (calculate_score_and_reasons
+                # clamp'ler; seans ayari sonrasi da korunur).
+                score = max(-100.0, min(100.0, score))
+                reasons.extend(sess_reasons)
+                logger.info(
+                    "session_adjustment_applied",
+                    ticker=ticker,
+                    adjustment=round(float(adj), 2),
+                    score=round(float(score), 2),
+                    scan_id=self._resolve_scan_id(),
+                )
+
         # Capture per-component breakdown once scoring is finalized.
-        score_breakdown = self._build_score_breakdown(last, prev, df, final_score=score)
+        score_breakdown = self._build_score_breakdown(
+            last, prev, df, final_score=score, components=self._last_score_components
+        )
 
         signal_type, confidence = self._classify_signal(score, _agreement)
         risk_levels = self.risk_manager.calculate(df)
@@ -671,9 +808,10 @@ class StrategyEngine:
     ) -> MarketRegime:
         """Aggregate per-benchmark regimes from trend frames present in the scan.
 
-        Benchmark trend frames are enriched with indicators and fed to
-        ``detect_macro_regime``. Missing or too-short benchmark data degrades
-        gracefully to ``UNKNOWN`` (no gate applied).
+        Benchmark trend frames are enriched with the minimal indicator subset
+        needed for ``detect_regime`` (ATR + ADX → adx/plus_di/minus_di) and
+        fed to ``detect_macro_regime``. Missing or too-short benchmark data
+        degrades gracefully to ``UNKNOWN`` (no gate applied).
         """
         benchmark_dfs: dict[str, pd.DataFrame] = {}
         for ticker in MACRO_BENCHMARK_TICKERS:
@@ -688,14 +826,51 @@ class StrategyEngine:
             if trend_df is None or len(trend_df) < 50:
                 continue
             try:
-                benchmark_dfs[ticker] = self.indicators.add_all(trend_df.copy())
+                benchmark_dfs[ticker] = self._enrich_macro_benchmark(trend_df)
             except Exception as exc:
                 logger.debug(
                     "macro_regime_enrichment_failed",
                     ticker=ticker,
                     error_type=type(exc).__name__,
                 )
+        # XU100 doğrudan voter (opt-in): tarama verisinde olmasa bile
+        # market_context üzerinden gelen endeks çerçevesi oy verir.
+        # Flag kapalıysa mevcut 3-proxy davranışı birebir korunur.
+        ctx = self._market_context
+        if ctx is not None and self.params.xu100_voter_enabled:
+            xu100_df = ctx.xu100_df
+            if xu100_df is not None and len(xu100_df) >= MACRO_REGIME_MIN_BARS:
+                try:
+                    benchmark_dfs[self.params.xu100_ticker] = self._enrich_macro_benchmark(xu100_df)
+                except Exception as exc:
+                    logger.debug(
+                        "macro_regime_xu100_enrichment_failed",
+                        error_type=type(exc).__name__,
+                    )
         return detect_macro_regime(benchmark_dfs)
+
+    @staticmethod
+    def _enrich_macro_benchmark(frame: pd.DataFrame) -> pd.DataFrame:
+        """Add only the indicators ``detect_regime`` needs (ATR + ADX).
+
+        Content-keyed FIFO memo (same frame content → same enriched result;
+        no ticker in the key).
+        """
+        key = _macro_bench_content_key(frame)
+        if key is not None:
+            cached = _macro_bench_enrich_cache.get(key)
+            if cached is not None:
+                _macro_bench_enrich_cache.move_to_end(key)
+                return cached
+        enriched = frame.copy()
+        enriched = TechnicalIndicators.add_atr(enriched, in_place=True)
+        enriched = TechnicalIndicators.add_adx(enriched, in_place=True)
+        if key is not None:
+            _macro_bench_enrich_cache[key] = enriched
+            _macro_bench_enrich_cache.move_to_end(key)
+            while len(_macro_bench_enrich_cache) > _MACRO_BENCH_ENRICH_MAX:
+                _macro_bench_enrich_cache.popitem(last=False)
+        return enriched
 
     def _apply_macro_regime_gate(
         self,
@@ -733,14 +908,51 @@ class StrategyEngine:
                 macro_regime=str(self.last_macro_regime.value),
             )
 
-    def scan_all(
+    def _build_session_universe(
         self, data: dict[str, pd.DataFrame] | dict[str, dict[str, pd.DataFrame]]
+    ) -> None:
+        """Taramadaki tum hisseler icin gunluk degisim + breadth + sektor medyan.
+
+        analyze() icindeki seans ayarlamasinin evren-baglamini hazirlar.
+        Hata/izole: tek hisse patlarsa atlanir, tarama durmaz.
+        """
+        now = datetime.now(TR)
+        changes: dict[str, float] = {}
+        for t, frames in data.items():
+            try:
+                if isinstance(frames, dict):
+                    trend_f = frames.get("trend")
+                    trig_f = frames.get("trigger")
+                else:
+                    trend_f = trig_f = frames
+                st = session_stats(trig_f, trend_f, now, limit_pct=self.params.session_limit_pct)
+                if st.day_change_pct is not None:
+                    changes[t] = st.day_change_pct
+            except Exception:
+                continue
+        self._session_day_changes = changes
+        self._session_sector_medians = sector_medians(
+            changes, getattr(settings, "SECTOR_MAP", {}) or {}
+        )
+        self._session_breadth = universe_breadth(changes)
+
+    def scan_all(
+        self,
+        data: dict[str, pd.DataFrame] | dict[str, dict[str, pd.DataFrame]],
+        *,
+        market_context: MarketContext | None = None,
     ) -> list[Signal]:
-        """Analyze all fetched ticker data and return sorted signals."""
+        """Analyze all fetched ticker data and return sorted signals.
+
+        ``market_context`` (opsiyonel): tarama başına bir kez hazırlanan
+        USD/TRY + XU100 çerçeveleri. None = makro filtreler no-op.
+        """
         signals = []
         self._current_scan_id = f"scan-{uuid4().hex[:12]}"
+        self._market_context = market_context
         self._reset_rejection_aggregation()
         try:
+            self._build_session_universe(data)
             self.risk_manager.reset_portfolio()
             self.risk_manager.build_global_correlation_cache(data)
 
@@ -763,6 +975,10 @@ class StrategyEngine:
         finally:
             self._finalize_rejection_breakdown(self._current_scan_id or "")
             self._current_scan_id = None
+            self._market_context = None
+            self._session_day_changes = {}
+            self._session_sector_medians = {}
+            self._session_breadth = {}
         return signals
 
     def is_trade_actionable(self, signal: Signal) -> bool:
