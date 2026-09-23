@@ -12,6 +12,7 @@ import streamlit as st
 
 from bist_bot.app_logging import get_logger
 from bist_bot.config.settings import settings
+from bist_bot.indicators import clear_force_refresh_caches
 from bist_bot.strategy.signal_models import SignalType
 from bist_bot.ui.runtime_types import ScanResult, ScanStats
 from bist_bot.ui.session_cooldown import consume_cooldown
@@ -101,6 +102,7 @@ def collect_scan_result(
         _set_scan_phase("Cache temizleniyor")
         fetcher.clear_cache(scope="intraday_fetch")
         fetcher.clear_cache(scope="analysis")
+        clear_force_refresh_caches()
 
     if limited_tickers:
         _set_scan_phase(f"{len(limited_tickers)} hisse için veri alınıyor")
