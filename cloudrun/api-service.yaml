@@ -49,6 +49,11 @@ spec:
             # For local development, set JWT_SECRET_KEY via environment variable or .env file
             - name: RATE_LIMIT_STORAGE_URI
               value: "memory://"
+            # AppSec finding #21: keep 0 until a live Cloud Run request confirms
+            # the X-Forwarded-For chain (docs/security/phase0_phase1_report.md),
+            # then set to 1 to derive the real client IP for rate limiting.
+            - name: TRUSTED_PROXY_HOPS
+              value: "0"
             - name: EXPECTED_INSTANCE_COUNT
               value: "1"
             - name: WATCHLIST_SOURCE

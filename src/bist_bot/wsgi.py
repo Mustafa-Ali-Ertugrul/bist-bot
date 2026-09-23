@@ -56,7 +56,7 @@ def build_wsgi_app(
     degraded_max_seconds: int | None = None,
 ) -> Flask:
     try:
-        return factory()
+        app = factory()
     except DatabaseInitializationError:
         logger.exception("database_unavailable_starting_degraded_liveness")
         degraded = Flask(__name__)
@@ -90,6 +90,21 @@ def build_wsgi_app(
             return jsonify({"status": "not_ready", "reason": "database_unavailable"}), 503
 
         return degraded
+
+    # AppSec finding #21: opt-in proxy trust. TRUSTED_PROXY_HOPS=0 (default)
+    # leaves REMOTE_ADDR as the TCP peer — never trust XFF from unverified
+    # clients. On Cloud Run (single managed proxy hop, after the live XFF
+    # chain is confirmed per the security report runbook) set
+    # TRUSTED_PROXY_HOPS=1 so remote_addr/rate-limit keys reflect the real
+    # client. x_for only: gunicorn --forwarded-allow-ips already handles the
+    # forwarded scheme on Cloud Run.
+    hops = int(getattr(settings, "TRUSTED_PROXY_HOPS", 0) or 0)
+    if hops > 0:
+        from werkzeug.middleware.proxy_fix import ProxyFix
+
+        logger.info("proxy_fix_enabled", trusted_proxy_hops=hops)
+        app = ProxyFix(app, x_for=hops)  # type: ignore[assignment]
+    return app
 
 
 # When imported as a module (e.g. by tests), app is lazily instantiated or instantiated on demand.
