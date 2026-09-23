@@ -207,3 +207,30 @@ def test_validate_dataframe_with_inf_values():
     result = validate_dataframe(df, validate=True)
     assert result is not None
     assert len(result) == 3
+
+
+def test_validate_dataframe_tz_aware_index_converted_to_utc_naive():
+    """tz-aware index must become UTC-naive, not wall-clock naive."""
+    idx = pd.date_range("2025-01-01 09:00", periods=3, freq="h", tz="Europe/Istanbul")
+    df = _make_df_with_index()
+    df = df.iloc[:3]
+    df.index = idx
+    result = validate_dataframe(df, validate=False)
+    assert result is not None
+    assert result.index.tz is None
+    # Istanbul 09:00 == UTC 06:00 on 2025-01-01
+    assert result.index[0] == pd.Timestamp("2025-01-01 06:00")
+    # Both strict and fast paths agree on the normalized index
+    strict = validate_dataframe(df.copy(), validate=True)
+    assert strict is not None
+    assert strict.index.equals(result.index)
+
+
+def test_validate_dataframe_naive_index_unchanged():
+    """Naive index must pass through without conversion."""
+    df = _make_df_with_index()
+    expected = df.index.copy()
+    result = validate_dataframe(df, validate=False)
+    assert result is not None
+    assert result.index.tz is None
+    assert result.index.equals(expected)
