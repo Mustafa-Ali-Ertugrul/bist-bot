@@ -58,11 +58,23 @@ def load_fundamentals() -> dict[str, pd.DataFrame]:
         recs = []
         for key, items in raw.items():
             y, m = (int(x) for x in key.split("/"))
-            recs.append({"y": y, "m": m, "eq": items.get("2O"), "ytd": items.get("3Z")})
-        f = pd.DataFrame(recs).set_index(["y", "m"]).sort_index()
+            recs.append(
+                {
+                    "y": y,
+                    "m": m,
+                    "eq": items.get("2O"),
+                    "ytd": items.get("3Z"),
+                    "sales_ytd": items.get("3C"),
+                }
+            )
+        f = pd.DataFrame(recs).set_index(["y", "m"]).sort_index().astype(float)
 
-        def ytd(y, m, f=f):
-            return f["ytd"].get((y, m), np.nan)
+        def ytd(y, m, f=f, col="ytd"):
+            return f[col].get((y, m), np.nan)
+
+        def quarter(y, m, col):
+            # Single-quarter value from year-to-date figures (Q1 = YTD).
+            return ytd(y, m, col=col) - (ytd(y, m - 3, col=col) if m > 3 else 0.0)
 
         rows = []
         for y, m in f.index:
@@ -72,7 +84,15 @@ def load_fundamentals() -> dict[str, pd.DataFrame]:
                 ttm = ytd(y, m) + ytd(y - 1, 12) - ytd(y - 1, m)
             lm, ld, ly = LAG[m]
             rows.append(
-                {"avail": pd.Timestamp(date(y + ly, lm, ld)), "equity": f.loc[(y, m), "eq"], "ttm": ttm}
+                {
+                    "avail": pd.Timestamp(date(y + ly, lm, ld)),
+                    "equity": f.loc[(y, m), "eq"],
+                    "ttm": ttm,
+                    "ni_q": quarter(y, m, "ytd"),
+                    "ni_q_ly": quarter(y - 1, m, "ytd"),
+                    "sales_q": quarter(y, m, "sales_ytd"),
+                    "sales_q_ly": quarter(y - 1, m, "sales_ytd"),
+                }
             )
         code = path.name.removesuffix("_fin.json") + ".IS"
         out[code] = pd.DataFrame(rows).set_index("avail").sort_index()
@@ -118,7 +138,7 @@ def main() -> None:
             if f.empty:
                 continue
             last = f.iloc[-1]
-            rows[t] = {"equity": last["equity"], "ttm": last["ttm"], "mcap": mcap.loc[d, t]}
+            rows[t] = {**last.to_dict(), "mcap": mcap.loc[d, t]}
         return pd.DataFrame(rows).T.astype(float)
 
     def mom(d, tickers):
@@ -150,6 +170,15 @@ def main() -> None:
                 return top((bm.rank(pct=True) + m.rank(pct=True)) / 2)
             if name == "C2":
                 return top((ep.rank(pct=True) + roe.rank(pct=True)) / 2)
+            surprise = (f["ni_q"] - f["ni_q_ly"]) / mc
+            if name == "E1":
+                return top(surprise)
+            if name == "E2":
+                ok = (f["sales_q"] > 0) & (f["sales_q_ly"] > 0)
+                return top((f["sales_q"] / f["sales_q_ly"] - 1).where(ok))
+            if name == "E3":
+                m = mom(d, list(f.index))
+                return top((surprise.rank(pct=True) + m.rank(pct=True)) / 2)
             raise ValueError(name)
 
         return w
@@ -168,6 +197,9 @@ def main() -> None:
         "Q1 ROE": (signal("Q1"), px, COST),
         "C1 Deger+Momentum": (signal("C1"), px, COST),
         "C2 Deger+Kalite": (signal("C2"), px, COST),
+        "E1 Kar surprizi": (signal("E1"), px, COST),
+        "E2 Satis buyumesi": (signal("E2"), px, COST),
+        "E3 Surpriz+Momentum": (signal("E3"), px, COST),
     }
     curves = {n: pr.run(fn, p, cash_ret, c, rebals, execs) for n, (fn, p, c) in strategies.items()}
     pd.DataFrame(curves).to_csv(Path(pr.OUT) / "factor_equity.csv")
@@ -187,7 +219,7 @@ def main() -> None:
 
     m = pd.DataFrame(curves).pct_change().dropna()
     print("\n=== Aylik XU100 ustu getiri t-istatistigi (tum donem) ===")
-    for n in [k for k in curves if k[:2] in ("V1", "V2", "Q1", "C1", "C2")]:
+    for n in [k for k in curves if k[:2] in ("V1", "V2", "Q1", "C1", "C2", "E1", "E2", "E3")]:
         dlt = m[n] - m["XU100 al-tut"]
         print(f"{n:22s} ort {dlt.mean() * 100:+.2f}%/ay  t={dlt.mean() / dlt.std() * np.sqrt(len(dlt)):+.2f}")
 

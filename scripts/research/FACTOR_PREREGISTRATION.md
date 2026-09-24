@@ -63,3 +63,18 @@ Aynı veri, evren, gecikme kuralları, maliyet, ilk-10 eşit ağırlık ve döne
 
 Kabul kriteri parti 1 ile aynı; ancak saklı dönem artık toplam 8 hipotezde
 kullanıldığı için 3. kriter **t ≥ 2.7** (Bonferroni, 8 test).
+
+## Parti 2 sonucu (tek çalıştırma; tek düzeltme: boş satış kalemleri float'a çevrildi)
+
+| Kural | Geliştirme yıllık | Saklı test yıllık | Tüm dönem t | Karar |
+|---|---|---|---|---|
+| E1 Kâr sürprizi | %50.2 | %22.0 | +1.51 | RED |
+| E2 Satış büyümesi | %57.5 | %13.9 | +1.80 | RED |
+| E3 Sürpriz+Momentum | %51.1 | %17.4 | +1.38 | RED |
+
+Gözlem: 2023-01 sonrası hiçbir hisse seçim kuralı (8/8) XU100'ü ve fonu
+geçemedi; likit-50 eşit ağırlık bile XU100'ün yılda ~8 puan altında. Rejim
+kırılması (yüksek reel faiz, 2023 sonu enflasyon muhasebesi/UMS 29, az sayıda
+büyük hissenin endeksi taşıması) 2016-2022 kanıtının bugüne taşınmadığını
+gösteriyor. Aynı saklı dönemde yeni hipotez denemek artık veri madenciliği
+olur; sıradaki hakem canlı ileri testtir.
