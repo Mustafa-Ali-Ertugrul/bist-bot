@@ -301,6 +301,11 @@ class TradingSettings:
     PAPER_MODE: bool = _get_bool_env("PAPER_MODE", False)
     PAPER_TRADES_TABLE: str = _get_table_name_env("PAPER_TRADES_TABLE", "paper_trades")
     OUTCOME_TRACKING_ENABLED: bool = _get_bool_env("OUTCOME_TRACKING_ENABLED", True)
+    # Safety-net time-stop for outcome-tracker positions (calendar days).
+    # Normal daily exit is EOD_CLOSE via close_positions_at_eod; this only
+    # fires when the EOD pass was missed for multiple sessions (observed:
+    # TRALT held 6.2 days after a missed EOD). 0 disables the guard.
+    OUTCOME_MAX_HOLD_DAYS: int = _get_int_env("OUTCOME_MAX_HOLD_DAYS", 5)
     SHADOW_ENABLED: bool = _get_bool_env("SHADOW_ENABLED", True)
     SHADOW_HOLDING_DAYS: int = _get_int_env("SHADOW_HOLDING_DAYS", 5)
     SHADOW_ONLY_ROBUST: bool = _get_bool_env("SHADOW_ONLY_ROBUST", False)
@@ -346,6 +351,9 @@ class RiskSettings:
 
 @dataclass(frozen=True)
 class DataSettings:
+    # BIST ±10% circuit makes any single-bar |close move| > this pct a
+    # split/adjustment data artifact; fetcher skips that history cycle.
+    SPLIT_ANOMALY_MAX_PCT: float = _get_float_env("SPLIT_ANOMALY_MAX_PCT", 15.0)
     DATA_PERIOD: str = _get_str_env("DATA_PERIOD", "3mo")
     DATA_INTERVAL: str = _get_str_env("DATA_INTERVAL", "1d")
     DATA_PROVIDER: str = _get_str_env("DATA_PROVIDER", "yfinance").lower()

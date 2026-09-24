@@ -216,8 +216,19 @@ class SignalOutcomeTracker:
             if hit is None and self._is_eod(now):
                 hit = "EOD_CLOSE"
             if hit is None:
+                max_hold_days = int(getattr(self.settings, "OUTCOME_MAX_HOLD_DAYS", 5) or 0)
+                if max_hold_days > 0:
+                    if now >= entry_time + timedelta(days=max_hold_days):
+                        hit = "MAX_HOLD"
+            if hit is None:
                 continue
-            exit_price = float(price)
+            # Exit price: stop/target fills at/beyond level on gap-through or intra-bar touch.
+            if hit == "STOP_HIT" and stop > 0:
+                exit_price = min(float(price), stop)
+            elif hit == "TARGET_HIT" and target > 0:
+                exit_price = max(float(price), target)
+            else:
+                exit_price = float(price)
             holding_min = int((now - entry_time).total_seconds() // 60)
             # MFE/MAE at exit are already updated
             mfe = float(pos.get("mfe_pct", 0.0))

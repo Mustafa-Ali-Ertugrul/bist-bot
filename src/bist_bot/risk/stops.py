@@ -196,13 +196,14 @@ def determine_final_levels(
     # When final target fell back to fixed percent and ATR is valid, replace
     # with max(ATR*ATR_TARGET_MULT, risk*FALLBACK_TARGET_RR) clamped to
     # [price*(1+ATR_TARGET_FLOOR_PCT), price*1.10] — converges with backtest's
-    # close+risk*2.0 contract and removes the +8% clustering on low-vol names.
+    # close+risk*0.5 (champion RR) contract and removes the +8% clustering
+    # on low-vol names.
     if target_method == "Yüzdelik" and levels.target_atr > price and levels.stop_atr > 0:
         try:
             from bist_bot.config.settings import settings as _z2_settings
 
             _atr_mult = float(getattr(_z2_settings, "ATR_TARGET_MULT", 1.5))
-            _fallback_rr = float(getattr(_z2_settings, "FALLBACK_TARGET_RR", 2.0))
+            _fallback_rr = float(getattr(_z2_settings, "FALLBACK_TARGET_RR", 0.5))
             _floor_pct = float(getattr(_z2_settings, "ATR_TARGET_FLOOR_PCT", 2.0))
             _atr_est = (levels.target_atr - price) / _atr_mult if _atr_mult != 0 else 0.0
             _risk = price - levels.final_stop

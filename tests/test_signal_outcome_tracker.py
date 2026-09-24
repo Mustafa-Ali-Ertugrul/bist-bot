@@ -41,6 +41,7 @@ def _al_signal(
 def _tracker(tmp_path: Path, **overrides):
     settings = MagicMock()
     settings.OUTCOME_TRACKING_ENABLED = overrides.get("OUTCOME_TRACKING_ENABLED", True)
+    settings.OUTCOME_MAX_HOLD_DAYS = overrides.get("OUTCOME_MAX_HOLD_DAYS", 5)
     settings.INITIAL_CAPITAL = 100000.0
     settings.MAX_TOTAL_RISK_PCT = 2.0
     for k, v in overrides.items():
@@ -258,3 +259,49 @@ def test_scanner_wiring(tmp_path):
     scanner = ScanService(fetcher, engine, notifier, db, settings=settings, broker=MagicMock())
     result = scanner.scan_once()
     assert sig in result
+
+
+def test_max_hold_time_stop(tmp_path):
+    """Position held beyond OUTCOME_MAX_HOLD_DAYS (default 5) → MAX_HOLD."""
+    tracker, db = _tracker(tmp_path)
+    sig = _al_signal()
+    tracker.process_scan([sig], _market_data("THYAO.IS", 100.0), now=ENTRY_TIME)
+    # 6 calendar days later, price still between stop and target
+    closed = tracker.process_scan(
+        [], _market_data("THYAO.IS", 100.0), now=ENTRY_TIME + timedelta(days=6)
+    )
+    assert len(closed) == 1
+    assert closed[0]["outcome"] == "MAX_HOLD"
+    assert closed[0]["exit_price"] == 100.0
+
+
+def test_stop_exit_price_capped_at_stop_on_recovery(tmp_path):
+    """Intra-bar touch below stop but close recovers above stop → exit at stop."""
+    tracker, db = _tracker(tmp_path)
+    sig = _al_signal(price=100.0, stop=95.0, target=110.0)
+    tracker.process_scan([sig], _market_data("THYAO.IS", 100.0), now=ENTRY_TIME)
+    # low touches stop, high reaches target, close recovers to 100
+    closed = tracker.process_scan(
+        [],
+        _market_data("THYAO.IS", 100.0, high=106.0, low=94.0),
+        now=ENTRY_TIME + timedelta(hours=1),
+    )
+    assert len(closed) == 1
+    assert closed[0]["outcome"] == "STOP_HIT"
+    assert closed[0]["exit_price"] == 95.0
+
+
+def test_target_exit_price_floored_on_fade(tmp_path):
+    """Intra-bar touch above target but close fades below target → exit at target."""
+    tracker, db = _tracker(tmp_path)
+    sig = _al_signal(price=100.0, stop=95.0, target=110.0)
+    tracker.process_scan([sig], _market_data("THYAO.IS", 100.0), now=ENTRY_TIME)
+    # high reaches 111 (> target), low is 101, close fades to 105
+    closed = tracker.process_scan(
+        [],
+        _market_data("THYAO.IS", 105.0, high=111.0, low=101.0),
+        now=ENTRY_TIME + timedelta(hours=1),
+    )
+    assert len(closed) == 1
+    assert closed[0]["outcome"] == "TARGET_HIT"
+    assert closed[0]["exit_price"] == 110.0
