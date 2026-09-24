@@ -111,13 +111,30 @@ class PaperTradeService:
         if not getattr(self.settings, "PAPER_MODE", False):
             return False
 
+        # One open position per ticker: scans run every 15 min and the same
+        # actionable signal would otherwise re-open (stack) the position.
+        try:
+            open_tickers = {trade.ticker for trade in self.db.get_open_paper_trades()}
+        except Exception:
+            # Fail closed: without the open-position view we cannot rule out stacking.
+            logger.exception("paper_open_positions_check_failed")
+            return False
+        shorts_enabled = bool(getattr(self.settings, "PAPER_SHORTS_ENABLED", False))
+
         processed = 0
         failed = 0
         for signal in signals:
+            if signal.ticker in open_tickers:
+                logger.info("paper_trade_skipped_already_open", ticker=signal.ticker)
+                continue
+            if signal.signal_type.is_sell and not shorts_enabled:
+                logger.info("paper_trade_skipped_short_disabled", ticker=signal.ticker)
+                continue
             # B3: tek bozuk hisse taramanin kalanini durdurmasin — izole +
             # sayaclanir (processed/failed ozeti logda).
             try:
                 self._queue_single_signal(signal)
+                open_tickers.add(signal.ticker)
                 processed += 1
             except Exception as exc:
                 failed += 1

@@ -299,6 +299,9 @@ class TradingSettings:
     SECTOR_LIMIT: int = _get_int_env("SECTOR_LIMIT", 2)
     INITIAL_CAPITAL: float = _get_float_env("INITIAL_CAPITAL", 100000.0)
     PAPER_MODE: bool = _get_bool_env("PAPER_MODE", False)
+    # Short paper trades are off until the sell side is validated: every
+    # backtest/recalibration run so far is long-only.
+    PAPER_SHORTS_ENABLED: bool = _get_bool_env("PAPER_SHORTS_ENABLED", False)
     PAPER_TRADES_TABLE: str = _get_table_name_env("PAPER_TRADES_TABLE", "paper_trades")
     OUTCOME_TRACKING_ENABLED: bool = _get_bool_env("OUTCOME_TRACKING_ENABLED", True)
     # Safety-net time-stop for outcome-tracker positions (calendar days).
@@ -339,9 +342,9 @@ class RiskSettings:
     DAILY_LOSS_CAP_PCT: float = _get_float_env("DAILY_LOSS_CAP_PCT", 3.0)
     MIN_STOP_LOSS_PCT: float = _get_float_env("MIN_STOP_LOSS_PCT", 1.8)
     ATR_TARGET_FLOOR_PCT: float = _get_float_env("ATR_TARGET_FLOOR_PCT", 2.0)
-    # Champion profili RR 0.5 ile doğrulandı (küçük hedef, yüksek isabet).
-    # Varsayılan, champion canlı konfigürasyonuyla aynı tutulur.
-    FALLBACK_TARGET_RR: float = _get_float_env("FALLBACK_TARGET_RR", 0.5)
+    # RR 0.5 gerçekçi maliyetle PF 0.66 (recalibrate_universe_report.md,
+    # 2026-09-17); RR 1.0 aynı süpürmede PF 1.04 — varsayılan 1.0.
+    FALLBACK_TARGET_RR: float = _get_float_env("FALLBACK_TARGET_RR", 1.0)
     MAX_SIGNAL_SCORE: float = _get_float_env("MAX_SIGNAL_SCORE", 33.0)
     # Aşama 1: pairwise korelasyon fallback'i için minimum örtüşen bar sayısı
     # (risk/correlation.get_correlated_positions). Default kodda doğrulanan 10.

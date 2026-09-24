@@ -393,7 +393,9 @@ def test_queue_actionable_sell_signal_records_short_direction(monkeypatch):
         paper_trade_module, "detect_regime", lambda _df: SimpleNamespace(value="TRENDING")
     )
     fetcher.fetch_single.return_value = pd.DataFrame({"close": [100.0, 99.0]})
-    service = PaperTradeService(fetcher, db, settings=settings.replace(PAPER_MODE=True))
+    service = PaperTradeService(
+        fetcher, db, settings=settings.replace(PAPER_MODE=True, PAPER_SHORTS_ENABLED=True)
+    )
     signal = Signal(
         ticker="THYAO.IS",
         signal_type=SignalType.SELL,
@@ -408,6 +410,71 @@ def test_queue_actionable_sell_signal_records_short_direction(monkeypatch):
 
     _, kwargs = db.add_paper_trade.call_args
     assert kwargs["direction"] == "short"
+
+
+def _queue_service(monkeypatch, db, **overrides):
+    fetcher = MagicMock()
+    monkeypatch.setattr(
+        paper_trade_module, "detect_regime", lambda _df: SimpleNamespace(value="TRENDING")
+    )
+    fetcher.fetch_single.return_value = pd.DataFrame({"close": [100.0, 101.0]})
+    return PaperTradeService(fetcher, db, settings=settings.replace(PAPER_MODE=True, **overrides))
+
+
+def _signal(ticker: str = "THYAO.IS", signal_type: SignalType = SignalType.BUY) -> Signal:
+    is_sell = signal_type.is_sell
+    return Signal(
+        ticker=ticker,
+        signal_type=signal_type,
+        score=-30.0 if is_sell else 30.0,
+        price=100.0,
+        stop_loss=105.0 if is_sell else 95.0,
+        target_price=90.0 if is_sell else 110.0,
+        timestamp=datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC),
+    )
+
+
+def test_queue_skips_ticker_with_open_paper_trade(monkeypatch):
+    db = MagicMock()
+    db.get_open_paper_trades.return_value = [_make_trade(ticker="THYAO.IS")]
+    db.get_recent_closed_trades.return_value = []
+    service = _queue_service(monkeypatch, db)
+
+    service.queue_actionable_signals([_signal("THYAO.IS"), _signal("GARAN.IS")])
+
+    opened = [c.kwargs["ticker"] for c in db.add_paper_trade.call_args_list]
+    assert opened == ["GARAN.IS"]
+
+
+def test_queue_opens_same_ticker_only_once_per_batch(monkeypatch):
+    db = MagicMock()
+    db.get_open_paper_trades.return_value = []
+    db.get_recent_closed_trades.return_value = []
+    service = _queue_service(monkeypatch, db)
+
+    service.queue_actionable_signals([_signal("THYAO.IS"), _signal("THYAO.IS")])
+
+    assert db.add_paper_trade.call_count == 1
+
+
+def test_queue_skips_short_when_disabled(monkeypatch):
+    db = MagicMock()
+    db.get_open_paper_trades.return_value = []
+    db.get_recent_closed_trades.return_value = []
+    service = _queue_service(monkeypatch, db, PAPER_SHORTS_ENABLED=False)
+
+    service.queue_actionable_signals([_signal("THYAO.IS", SignalType.SELL)])
+
+    db.add_paper_trade.assert_not_called()
+
+
+def test_queue_fails_closed_when_open_positions_unreadable(monkeypatch):
+    db = MagicMock()
+    db.get_open_paper_trades.side_effect = RuntimeError("db down")
+    service = _queue_service(monkeypatch, db)
+
+    assert service.queue_actionable_signals([_signal("THYAO.IS")]) is False
+    db.add_paper_trade.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

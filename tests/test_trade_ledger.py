@@ -213,9 +213,13 @@ def test_paper_service_without_ledger_facade(app_repo):
     class _BareDb:
         def __init__(self, repository: AppRepository) -> None:
             self._add_paper_trade = repository.add_paper_trade
+            self._get_open_paper_trades = repository.get_open_paper_trades
 
         def add_paper_trade(self, *args, **kwargs):
             return self._add_paper_trade(*args, **kwargs)
+
+        def get_open_paper_trades(self):
+            return self._get_open_paper_trades()
 
     service = PaperTradeService(
         _StubFetcher(), _BareDb(app_repo), settings=settings.replace(PAPER_MODE=True)
