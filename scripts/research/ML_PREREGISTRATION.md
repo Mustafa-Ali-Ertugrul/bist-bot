@@ -35,3 +35,21 @@ aylar (1 ay boşluk). İlk tahmin 2019-01 (eğitim 2016-04 … 2018-11).
 Not: 2023-2026 dönemi önceki testlerde görüldü; bu yüzden sonuç ne olursa olsun
 D1 ve D2 canlı lige "D grubu" olarak eklenir ve nihai karar canlı veriyle verilir
 (LEAGUE_PREREGISTRATION.md kriterleri).
+
+## Sonuç (tek çalıştırma; tek düzeltme: sonraki ay getirisi olmayan satırlar eğitimden çıkarıldı)
+
+| | Değer | Kriter |
+|---|---|---|
+| Bilgi katsayısı 2019-2026 | +0.0235, t = 1.24 (2019-22: t 0.47, 2023-26: t 1.23) | ❌ (t ≥ 2) |
+| D1 ML10 vs likit-50 | 2019-22: %64.8 vs %62.4 · 2023-26: %20.3 vs %20.5 | ❌ |
+| D2 R+ML10 2023-26 | %23.7 vs XU100 %28.5, fon %30.6 | ❌ |
+
+Karar: RED. Sinyal pozitif ama zayıf. D2'nin tek belirgin katkısı risk
+(2019-22 maks. düşüş −%14, pozitif ay %83).
+
+## Değişiklik (canlı başlamadan önce): donmuş model
+Canlıda her ay yeniden eğitim tüm geçmiş verinin her ay yeniden çekilmesini
+gerektirdiği için D1/D2 canlıda, 2026-09 sonuna kadarki tüm aylarla **bir kez
+eğitilip dondurulmuş** modeli kullanır (`src/bist_bot/data/models/ml_d_2026_09.json`,
+`scripts/research/train_ml_final.py`). Model, parametreler ve girdiler değişmez;
+canlı test önceden sabitlenmiş bir modelin ileri testidir.
