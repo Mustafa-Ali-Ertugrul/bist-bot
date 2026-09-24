@@ -13,7 +13,8 @@ import pytest
 
 from bist_bot.market_calendar import TR, is_last_bist_session_of_month
 from bist_bot.scheduler import MarketScheduler
-from bist_bot.services.monthly_portfolio_service import COST_PER_SIDE, MonthlyPortfolioService
+from bist_bot.services.monthly_portfolio_service import MonthlyPortfolioService
+from bist_bot.services.paper_ledger import COST_PER_SIDE
 from bist_bot.strategy import monthly_portfolio as mp
 
 DAYS = pd.bdate_range("2025-01-01", periods=300)

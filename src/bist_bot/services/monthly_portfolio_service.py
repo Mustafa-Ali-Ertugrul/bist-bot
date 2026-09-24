@@ -22,13 +22,13 @@ import pandas as pd
 from bist_bot.app_logging import get_logger
 from bist_bot.config.settings import settings as default_settings
 from bist_bot.market_calendar import is_last_bist_session_of_month
+from bist_bot.services.paper_ledger import mark_to_market
 from bist_bot.strategy.monthly_portfolio import MonthlyPortfolioDecision, decide, pit_members
 
 logger = get_logger(__name__, component="monthly_portfolio")
 
 INDEX_TICKER = "XU100.IS"
 HISTORY_PERIOD = "2y"
-COST_PER_SIDE = 0.0035  # research cost model: commission + BSMV + spread/slippage
 MIN_MEMBER_FRAMES = 50
 HISTORY_FIELDS = [
     "date",
@@ -80,9 +80,8 @@ class MonthlyPortfolioService:
         decision = decide(
             close, volume, index_frame["close"], members, cash_pct / 100.0, as_of=as_of
         )
-        prices = close.loc[: pd.Timestamp(as_of)].ffill().iloc[-1]
-        index_price = float(index_frame["close"].loc[: pd.Timestamp(as_of)].iloc[-1])
-        row = self._update_ledger(decision, prices, index_price, cash_pct)
+        panel = close.join(index_frame["close"].rename(INDEX_TICKER), how="outer")
+        row = self._update_ledger(decision, panel, cash_pct)
         logger.info(
             "monthly_portfolio_rebalanced",
             as_of=decision.as_of.isoformat(),
@@ -123,58 +122,17 @@ class MonthlyPortfolioService:
     def _update_ledger(
         self,
         decision: MonthlyPortfolioDecision,
-        prices: pd.Series,
-        index_price: float,
+        panel: pd.DataFrame,
         cash_pct: float,
     ) -> dict[str, Any]:
-        state = self._load_state()
-        nav = float(state.get("nav", 1.0))
-        index_nav = float(state.get("index_nav", 1.0))
-        cash_nav = float(state.get("cash_nav", 1.0))
-        drifted: dict[str, float] = {}
-        period_growth = 1.0
-        if state:
-            days = (decision.as_of - date.fromisoformat(state["last_rebalance"])).days
-            cash_growth = (1 + float(state["cash_rate_pct"]) / 100.0) ** (days / 365.0)
-            holdings = state.get("holdings", {})
-            growth = {}
-            for ticker, pos in holdings.items():
-                price = prices.get(ticker)
-                growth[ticker] = float(price) / pos["price"] if pd.notna(price) else 1.0
-            invested = sum(pos["weight"] for pos in holdings.values())
-            period_growth = (
-                sum(pos["weight"] * growth[t] for t, pos in holdings.items())
-                + (1 - invested) * cash_growth
-            )
-            drifted = {t: pos["weight"] * growth[t] / period_growth for t, pos in holdings.items()}
-            index_nav *= index_price / float(state["index_price"])
-            cash_nav *= cash_growth
-        tickers = set(drifted) | set(decision.weights)
-        turnover = sum(abs(decision.weights.get(t, 0.0) - drifted.get(t, 0.0)) for t in tickers)
-        nav *= period_growth * (1 - turnover * COST_PER_SIDE)
-
-        new_state = {
-            "last_rebalance": decision.as_of.isoformat(),
-            "nav": nav,
-            "index_nav": index_nav,
-            "cash_nav": cash_nav,
-            "index_price": index_price,
-            "cash_rate_pct": cash_pct,
-            "holdings": {
-                t: {"weight": w, "price": float(prices[t])} for t, w in decision.weights.items()
-            },
-        }
+        new_state, ledger_row = mark_to_market(
+            self._load_state(), decision.weights, panel, INDEX_TICKER, decision.as_of, cash_pct
+        )
         row = {
-            "date": decision.as_of.isoformat(),
+            **ledger_row,
             "regime_on": decision.regime_on,
             "index_12m_return": decision.index_12m_return,
             "cash_12m_return": decision.cash_12m_return,
-            "holdings": " ".join(decision.weights),
-            "period_return": period_growth - 1,
-            "turnover": turnover,
-            "nav": nav,
-            "index_nav": index_nav,
-            "cash_nav": cash_nav,
         }
         self.results_dir.mkdir(parents=True, exist_ok=True)
         write_header = not self.history_path.exists()
