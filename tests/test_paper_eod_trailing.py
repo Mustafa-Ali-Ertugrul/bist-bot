@@ -362,3 +362,67 @@ def test_scanner_close_positions_at_eod_closes_with_fetch_price(tmp_path):
 
     # Open ledger is now empty -> next morning's pass cannot double-close.
     assert tracker._load_json(tracker.open_path, {}) == {}
+
+
+def test_scanner_eod_ignores_daily_low_before_intraday_entry(tmp_path):
+    """The daily bar's low spans pre-entry prices; EOD must decide on close only.
+
+    Regression: TKFEN 2026-09-23 entered 10:44 at 258 with stop 251; the session
+    low 245 printed at 10:00 (before entry) and the EOD pass booked STOP_HIT.
+    """
+    import csv
+
+    from bist_bot.scanner import ScanService
+    from bist_bot.services.signal_outcome_tracker import SignalOutcomeTracker
+
+    db = MagicMock()
+    db.get_open_paper_trades.return_value = []
+    fetcher = MagicMock()
+    fetcher.fetch_all.return_value = {
+        "TKFEN.IS": pd.DataFrame({"high": [268.75], "low": [245.0], "close": [268.0]})
+    }
+    cfg = SimpleNamespace(
+        PAPER_MODE=True,
+        TRAILING_STOP_ENABLED=False,
+        TRAILING_STOP_PCT=2.0,
+        PAPER_COOLDOWN_DAYS=0,
+        OUTCOME_TRACKING_ENABLED=True,
+    )
+    tracker = SignalOutcomeTracker(settings=cfg, results_dir=tmp_path)
+    tracker._write_json(
+        tracker.open_path,
+        {
+            "TKFEN.IS": {
+                "signal_id": 8,
+                "ticker": "TKFEN.IS",
+                "score": 29.0,
+                "entry_ts": "2026-09-23T07:44:02+00:00",
+                "side": "long",
+                "entry_price": 258.0,
+                "stop": 251.0,
+                "target": 268.6,
+                "quantity": 38.0,
+                "mfe_pct": 0.0,
+                "mae_pct": 0.0,
+                "max_high": 258.0,
+                "min_low": 258.0,
+            }
+        },
+    )
+    service = ScanService(
+        fetcher=fetcher,
+        engine=MagicMock(),
+        notifier=MagicMock(),
+        db=db,
+        paper_trade_service=PaperTradeService(fetcher, db, settings=cfg),
+        signal_outcome_tracker=tracker,
+        settings=cfg,
+    )
+
+    service.close_positions_at_eod(now=datetime(2026, 9, 23, 15, 12, tzinfo=UTC))
+
+    with tracker.csv_path.open(encoding="utf-8", newline="") as fh:
+        rows = list(csv.DictReader(fh))
+    assert rows[0]["outcome"] == "EOD_CLOSE"
+    assert float(rows[0]["exit_price"]) == 268.0
+    assert float(rows[0]["mae_pct"]) == 0.0  # pre-entry low must not leak into MAE

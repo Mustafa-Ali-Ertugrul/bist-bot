@@ -715,8 +715,16 @@ class ScanService:
             failures.append("paper_close")
             logger.exception("eod_paper_close_failed", error=exc)
 
+        # The daily bar's high/low spans the whole session, including prices
+        # before an intraday entry (false STOP_HIT / MAE). Intraday touches are
+        # checked by the 15m scans, so the EOD pass decides on the close only.
+        close_only = {
+            ticker: frame[["close"]]
+            for ticker, frame in market_data.items()
+            if hasattr(frame, "columns") and "close" in frame.columns
+        }
         try:
-            self.signal_outcome_tracker.process_scan([], market_data, now=effective_now)
+            self.signal_outcome_tracker.process_scan([], close_only, now=effective_now)
         except Exception as exc:
             failures.append("outcome_close")
             logger.exception("eod_outcome_close_failed", error=exc)
