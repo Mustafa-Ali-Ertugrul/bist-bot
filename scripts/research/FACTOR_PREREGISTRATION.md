@@ -50,3 +50,16 @@ Tek düzeltme: `f.eq` pandas metoduyla çakışıyordu (kolon adı `equity` yap�
 
 Hiçbir kural kabul edilmedi. Geliştirme döneminde en iyi görünen iki
 kombinasyon (C1, C2) saklı testte hem endeksin hem fonun altında kaldı.
+
+---
+
+# Parti 2 — kâr/satış momentumu (ön kayıt, 2026-09-24, sonuçlar görülmeden)
+
+Aynı veri, evren, gecikme kuralları, maliyet, ilk-10 eşit ağırlık ve dönemler.
+Çeyreklik değer = YTD(q) − YTD(q−1) (aynı yıl; Q1 = YTD).
+- **E1 Kâr sürprizi vekili:** en yüksek (son çeyrek net kâr − bir yıl önceki aynı çeyrek) / PD.
+- **E2 Satış büyümesi:** en yüksek son çeyrek satış / bir yıl önceki aynı çeyrek − 1 (ikisi de > 0).
+- **E3 Kâr sürprizi + momentum:** E1 ve 12-1 ay momentum yüzdelik sıralarının ortalaması.
+
+Kabul kriteri parti 1 ile aynı; ancak saklı dönem artık toplam 8 hipotezde
+kullanıldığı için 3. kriter **t ≥ 2.7** (Bonferroni, 8 test).
