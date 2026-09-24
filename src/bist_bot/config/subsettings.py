@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -63,6 +64,13 @@ def _get_str_env(name: str, default: str = "") -> str:
         except OSError:
             return default
     return value.strip()
+
+
+def _get_table_name_env(name: str, default: str = "paper_trades") -> str:
+    value = _get_str_env(name, default)
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,63}", value):
+        raise ValueError(f"Invalid SQL table name configured for {name}: {value!r}")
+    return value
 
 
 def _get_csv_env(name: str) -> tuple[str, ...]:
@@ -291,7 +299,7 @@ class TradingSettings:
     SECTOR_LIMIT: int = _get_int_env("SECTOR_LIMIT", 2)
     INITIAL_CAPITAL: float = _get_float_env("INITIAL_CAPITAL", 100000.0)
     PAPER_MODE: bool = _get_bool_env("PAPER_MODE", False)
-    PAPER_TRADES_TABLE: str = _get_str_env("PAPER_TRADES_TABLE", "paper_trades")
+    PAPER_TRADES_TABLE: str = _get_table_name_env("PAPER_TRADES_TABLE", "paper_trades")
     OUTCOME_TRACKING_ENABLED: bool = _get_bool_env("OUTCOME_TRACKING_ENABLED", True)
     SHADOW_ENABLED: bool = _get_bool_env("SHADOW_ENABLED", True)
     SHADOW_HOLDING_DAYS: int = _get_int_env("SHADOW_HOLDING_DAYS", 5)

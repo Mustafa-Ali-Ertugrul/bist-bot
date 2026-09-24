@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import text
@@ -383,10 +383,15 @@ class PositionManager:
     def get_daily_trade_count(self) -> int:
         today = datetime.now(UTC).date()
         try:
+            day_start = datetime(today.year, today.month, today.day)
+            day_end = day_start + timedelta(days=1)
             with self.db.manager.engine.connect() as conn:
                 count = conn.execute(
-                    text("SELECT COUNT(*) FROM live_positions WHERE date(entry_time) = :today"),
-                    {"today": today.isoformat()},
+                    text(
+                        "SELECT COUNT(*) FROM live_positions "
+                        "WHERE entry_time >= :start AND entry_time < :end"
+                    ),
+                    {"start": day_start, "end": day_end},
                 ).scalar_one()
             return int(count)
         except Exception:

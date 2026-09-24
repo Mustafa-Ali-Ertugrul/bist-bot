@@ -339,7 +339,7 @@ class LivePositionRecord(Base):
     entry_price: Mapped[float] = mapped_column(Float, nullable=False)
     quantity: Mapped[float] = mapped_column(Float, nullable=False)
     entry_time: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+        DateTime, nullable=False, default=lambda: datetime.now(UTC), index=True
     )
     stop_loss: Mapped[float] = mapped_column(Float, nullable=False)
     target_price: Mapped[float] = mapped_column(Float, nullable=False)
@@ -598,8 +598,6 @@ class DatabaseManager:
         indexes = [
             "CREATE INDEX IF NOT EXISTS idx_signals_created_at ON signals(created_at DESC)",
             "CREATE INDEX IF NOT EXISTS idx_signals_ticker_created_at ON signals(ticker, created_at DESC)",
-            "CREATE INDEX IF NOT EXISTS idx_orders_state ON orders(state)",
-            "CREATE INDEX IF NOT EXISTS idx_scan_log_scan_id ON scan_log(scan_id)",
         ]
         for sql in indexes:
             conn.execute(text(sql))
@@ -617,14 +615,26 @@ class DatabaseManager:
         for column, sql in order_migrations:
             if column not in order_columns:
                 conn.execute(text(sql))
-        agent_indexes = [
-            "CREATE INDEX IF NOT EXISTS idx_live_positions_state ON live_positions(state)",
-            "CREATE INDEX IF NOT EXISTS idx_live_positions_ticker ON live_positions(ticker)",
-            "CREATE INDEX IF NOT EXISTS idx_audit_trail_event_type ON audit_trail(event_type)",
-            "CREATE INDEX IF NOT EXISTS idx_audit_trail_timestamp ON audit_trail(timestamp DESC)",
-            "CREATE INDEX IF NOT EXISTS idx_orders_position_id ON orders(position_id)",
+        # Ensure the entry_time index exists on pre-existing tables where
+        # create_all did not fire (e.g. databases bootstrapped before this change).
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_live_positions_entry_time "
+                "ON live_positions(entry_time)"
+            )
+        )
+        # Drop redundant runtime-created idx_* names whose ix_* counterparts
+        # were already emitted by Base.metadata.create_all above.
+        legacy_drops = [
+            "DROP INDEX IF EXISTS idx_orders_state",
+            "DROP INDEX IF EXISTS idx_scan_log_scan_id",
+            "DROP INDEX IF EXISTS idx_live_positions_state",
+            "DROP INDEX IF EXISTS idx_live_positions_ticker",
+            "DROP INDEX IF EXISTS idx_audit_trail_event_type",
+            "DROP INDEX IF EXISTS idx_audit_trail_timestamp",
+            "DROP INDEX IF EXISTS idx_orders_position_id",
         ]
-        for sql in agent_indexes:
+        for sql in legacy_drops:
             conn.execute(text(sql))
 
     def _migrate_legacy_schema(self) -> None:
