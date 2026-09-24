@@ -32,3 +32,21 @@ raporlanır.
 5 hipotez test edildiği için 3. kriterde Bonferroni notu ayrıca verilir (t ≥ 2.6).
 
 Rejim filtresi (T2) yalnızca kabul edilen kurallara ikinci varyant olarak uygulanır.
+
+## Sonuç (2026-09-24, tek çalıştırma — kurallar değiştirilmedi)
+
+Tek düzeltme: `f.eq` pandas metoduyla çakışıyordu (kolon adı `equity` yapıldı).
+
+| Kural | Geliştirme yıllık | Saklı test yıllık | Tüm dönem t (XU100 üstü) | Karar |
+|---|---|---|---|---|
+| XU100 | %31.4 | %28.5 | — | — |
+| Para piyasası | %12.2 | %30.6 | — | — |
+| Likit50 eşit | %37.2 | %20.5 | — | — |
+| V1 Defter/Piyasa | %35.2 | %32.0 | +1.01 | RED (kriter 2, 3) |
+| V2 Kâr getirisi | %32.1 | %25.3 | +0.38 | RED |
+| Q1 ROE | %37.0 | %19.0 | −0.15 | RED |
+| C1 Değer+Momentum | %43.6 | %24.9 | +1.36 | RED (kriter 1, 3) |
+| C2 Değer+Kalite | %42.5 | %21.4 | +1.17 | RED (kriter 1, 3) |
+
+Hiçbir kural kabul edilmedi. Geliştirme döneminde en iyi görünen iki
+kombinasyon (C1, C2) saklı testte hem endeksin hem fonun altında kaldı.

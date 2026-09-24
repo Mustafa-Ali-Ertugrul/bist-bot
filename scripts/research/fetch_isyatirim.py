@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from pathlib import Path
 
@@ -49,6 +50,11 @@ def _get(url: str, params: dict) -> list[dict]:
     return []
 
 
+def _published(year: int, month: int) -> bool:
+    avail_month, avail_year = {3: (6, year), 6: (9, year), 9: (12, year), 12: (4, year + 1)}[month]
+    return date(avail_year, avail_month, 15) <= date.today()
+
+
 def fetch_daily(code: str) -> list[dict]:
     today = date.today().strftime("%d-%m-%Y")
     return _get(
@@ -57,12 +63,18 @@ def fetch_daily(code: str) -> list[dict]:
 
 
 def fetch_statements(code: str) -> dict[str, dict[str, float]]:
+    # Only quarters whose statements are published: a chunk containing an
+    # unpublished period comes back empty for the whole request.
     quarters = [(y, m) for y in range(2014, date.today().year + 1) for m in (3, 6, 9, 12)]
-    quarters = [q for q in quarters if date(q[0], q[1], 1) < date.today()]
+    quarters = [q for q in quarters if _published(*q)]
+    # The endpoint rejects requests with fewer than 4 periods: chunk from the
+    # newest quarter backward and pad the oldest chunk by repeating its first.
+    newest_first = quarters[::-1]
+    chunks = [newest_first[i : i + 4] for i in range(0, len(newest_first), 4)]
+    chunks[-1] = (chunks[-1] * 4)[:4]
     out: dict[str, dict[str, float]] = {}
     for group in ("XI_29", "UFRS"):
-        for i in range(0, len(quarters), 4):
-            chunk = quarters[i : i + 4]
+        for chunk in chunks:
             params = {"companyCode": code, "exchange": "TRY", "financialGroup": group}
             for j, (y, m) in enumerate(chunk, start=1):
                 params[f"year{j}"], params[f"period{j}"] = y, m
@@ -85,14 +97,18 @@ def main() -> None:
     quarters = json.loads(PIT_FILE.read_text(encoding="utf-8"))["quarters"]
     codes = sorted({t.removesuffix(".IS") for t in set().union(*quarters.values())})
     print(f"{len(codes)} codes", flush=True)
-    for code in codes:
+
+    def one(code: str) -> str:
         daily_path, fin_path = OUT / f"{code}_daily.json", OUT / f"{code}_fin.json"
         if not daily_path.exists():
             daily_path.write_text(json.dumps(fetch_daily(code)), encoding="utf-8")
-            time.sleep(0.3)
         if not fin_path.exists():
             fin_path.write_text(json.dumps(fetch_statements(code)), encoding="utf-8")
-        print("ok", code, flush=True)
+        return code
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        for code in pool.map(one, codes):
+            print("ok", code, flush=True)
     print("done", flush=True)
 
 
