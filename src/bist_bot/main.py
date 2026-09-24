@@ -30,11 +30,17 @@ def main():
 
     container = get_default_container()
     scanner = build_scan_service(container)
+    monthly_portfolio = None
+    if settings.MONTHLY_PORTFOLIO_ENABLED:
+        from bist_bot.services.monthly_portfolio_service import MonthlyPortfolioService
+
+        monthly_portfolio = MonthlyPortfolioService(container.fetcher, container.notifier, settings)
     scheduler = MarketScheduler(
         scanner,
         container.notifier,
         settings=settings,
         trading_agent=container.trading_agent,
+        monthly_portfolio=monthly_portfolio,
     )
     order_tracker = OrderTracker(container.broker, container.db)
 

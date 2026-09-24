@@ -1,0 +1,98 @@
+{
+ "11867": {
+  "added": [
+   "TUKAS",
+   "ADESE",
+   "KONYA",
+   "AVOD",
+   "AGHOL"
+  ],
+  "removed": [
+   "TATGD",
+   "GOODY",
+   "TSPOR",
+   "KARTN",
+   "GLYHO"
+  ]
+ },
+ "12771": {
+  "added": [
+   "ADESE",
+   "BASGZ",
+   "BRYAT",
+   "CEMAS",
+   "GENIL",
+   "GESAN",
+   "IPEKE",
+   "NTHOL",
+   "RTALB"
+  ],
+  "removed": [
+   "AKCNS",
+   "ALBRK",
+   "AYGAZ",
+   "CEMTS",
+   "HLGYO",
+   "MPARK",
+   "NETAS",
+   "TMSN",
+   "TRILC"
+  ]
+ },
+ "14347": {
+  "added": [
+   "ARASE",
+   "GSDHO",
+   "GWIND",
+   "JANTS",
+   "KONTR",
+   "KUTPO",
+   "KZBGY",
+   "NUGYO",
+   "SNGYO",
+   "TRILC"
+  ],
+  "removed": [
+   "ADESE",
+   "CEMAS",
+   "GESAN",
+   "IZMDC",
+   "KERVT",
+   "KRVGD",
+   "RTALB",
+   "SARKY",
+   "VERUS",
+   "YATAS"
+  ]
+ },
+ "14899": {
+  "start": "2025-01-01",
+  "source": "bloomberght.com 2025 ilk ceyrek haberi; kodlar yfinance longName ile dogrulandi",
+  "added": [
+   "ANHYT",
+   "BSOKE",
+   "CVKMD",
+   "IEYHO",
+   "LIDER",
+   "MAGEN",
+   "NTHOL",
+   "PASEU",
+   "SDTTR",
+   "SELEC",
+   "TSPOR"
+  ],
+  "removed": [
+   "BJKAS",
+   "VESBE",
+   "ADEL",
+   "AKFGY",
+   "BINHO",
+   "KTLEV",
+   "LMKDC",
+   "OBAMS",
+   "PAPIL",
+   "PEKGY",
+   "RGYAS"
+  ]
+ }
+}

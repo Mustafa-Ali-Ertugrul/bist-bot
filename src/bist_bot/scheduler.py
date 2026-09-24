@@ -37,11 +37,19 @@ GAUGE_LAST_SCAN_TS = "bist_last_scan_success_timestamp"
 
 
 class MarketScheduler:
-    def __init__(self, scan_service, notifier, settings=default_settings, trading_agent=None):
+    def __init__(
+        self,
+        scan_service,
+        notifier,
+        settings=default_settings,
+        trading_agent=None,
+        monthly_portfolio=None,
+    ):
         self.scanner = scan_service
         self.notifier = notifier
         self.settings = settings
         self.trading_agent = trading_agent
+        self.monthly_portfolio = monthly_portfolio
         self.running = False
         # Faz 3 P1.1: post-close position pass fires once per trading day.
         self._eod_close_done_date: date | None = None
@@ -153,6 +161,20 @@ class MarketScheduler:
             logger.info("scheduler_eod_close_recovered_after_retry")
         logger.info("scheduler_eod_close_completed")
 
+    def _run_monthly_portfolio(self, now: datetime) -> None:
+        """Month-end M2 paper rebalance; isolated so it never blocks the EOD pass."""
+        if self.monthly_portfolio is None:
+            return
+        try:
+            self.monthly_portfolio.run_if_due(now)
+        except Exception as exc:
+            logger.error(
+                "scheduler_monthly_portfolio_failed",
+                error_type=type(exc).__name__,
+                error=str(exc),
+            )
+            self._notify(f"⚠️ Aylık portföy hesaplanamadı: {type(exc).__name__}")
+
     # ------------------------------------------------------------------
     # Watchdog (C3)
     # ------------------------------------------------------------------
@@ -232,6 +254,7 @@ class MarketScheduler:
                 # straight to tomorrow and the EOD contract could never fire.
                 if self._pending_eod_close(now):
                     self._run_eod_close(now)
+                    self._run_monthly_portfolio(now)
                     continue
 
                 if not is_bist_open(now):

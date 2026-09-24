@@ -309,6 +309,13 @@ class TradingSettings:
     # fires when the EOD pass was missed for multiple sessions (observed:
     # TRALT held 6.2 days after a missed EOD). 0 disables the guard.
     OUTCOME_MAX_HOLD_DAYS: int = _get_int_env("OUTCOME_MAX_HOLD_DAYS", 5)
+    # Monthly portfolio (M2) paper track record — strategy/monthly_portfolio.py.
+    MONTHLY_PORTFOLIO_ENABLED: bool = _get_bool_env("MONTHLY_PORTFOLIO_ENABLED", False)
+    # Trailing 12-month net money-market fund return (%) used by the regime
+    # filter; no live feed exists, update it from TEFAS para piyasası fonları.
+    MONTHLY_PORTFOLIO_CASH_12M_RETURN_PCT: float = _get_float_env(
+        "MONTHLY_PORTFOLIO_CASH_12M_RETURN_PCT", 32.0
+    )
     SHADOW_ENABLED: bool = _get_bool_env("SHADOW_ENABLED", True)
     SHADOW_HOLDING_DAYS: int = _get_int_env("SHADOW_HOLDING_DAYS", 5)
     SHADOW_ONLY_ROBUST: bool = _get_bool_env("SHADOW_ONLY_ROBUST", False)

@@ -82,6 +82,16 @@ def is_bist_half_day(d: date) -> bool:
     return d in _HALF_DAY_DATES
 
 
+def is_last_bist_session_of_month(d: date) -> bool:
+    """True when ``d`` is a trading day and the next trading day is in another month."""
+    if is_bist_holiday(d):
+        return False
+    nxt = d + timedelta(days=1)
+    while is_bist_holiday(nxt):
+        nxt += timedelta(days=1)
+    return nxt.month != d.month
+
+
 def is_bist_open(dt: datetime | None = None) -> bool:
     """True inside the continuous trading window (scanner operates here)."""
     if dt is None:

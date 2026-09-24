@@ -82,6 +82,7 @@ results/shadow_summary_state.json
 results/shadow_pnl.csv
 results/signal_outcome_open.json
 results/signal_outcomes.csv
+results/monthly_portfolio_state.json
 results/daily_report_*.md
 
 # Temp and generated files

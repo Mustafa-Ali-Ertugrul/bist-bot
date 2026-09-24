@@ -1,0 +1,1006 @@
+[
+ {
+  "announcement_id": "11596",
+  "period_start": "2016-04-01",
+  "added": [
+   "SKBNK",
+   "AYEN"
+  ],
+  "removed": [
+   "SNGYO",
+   "SAFGY"
+  ]
+ },
+ {
+  "announcement_id": "11564",
+  "period_start": "2016-07-01",
+  "added": [
+   "TSPOR",
+   "TRCAS",
+   "NUGYO"
+  ],
+  "removed": [
+   "IHLAS",
+   "PARSN",
+   "ALKIM"
+  ]
+ },
+ {
+  "announcement_id": "11532",
+  "period_start": "2016-10-01",
+  "added": [
+   "IHLAS",
+   "HURGZ"
+  ],
+  "removed": [
+   "ADEL",
+   "TKNSA"
+  ]
+ },
+ {
+  "announcement_id": "11511",
+  "period_start": "2017-01-01",
+  "added": [
+   "SELEC",
+   "VERUS",
+   "ALKIM",
+   "CEMTS",
+   "POLHO"
+  ],
+  "removed": [
+   "SKBNK",
+   "GLYHO",
+   "TRCAS",
+   "HURGZ",
+   "ALCTL"
+  ]
+ },
+ {
+  "announcement_id": "11492",
+  "period_start": "2017-04-01",
+  "added": [
+   "BANVT",
+   "SASA",
+   "YATAS",
+   "GLYHO",
+   "ERBOS"
+  ],
+  "removed": [
+   "BRSAN",
+   "ECZYT",
+   "YAZIC",
+   "VERUS",
+   "CIMSA"
+  ]
+ },
+ {
+  "announcement_id": "11503",
+  "period_start": "2017-07-01",
+  "added": [
+   "YAZIC",
+   "TRCAS",
+   "TKNSA",
+   "ALCTL",
+   "KRONT"
+  ],
+  "removed": [
+   "SELEC",
+   "DOCO",
+   "POLHO",
+   "NUGYO",
+   "ALBRK"
+  ]
+ },
+ {
+  "announcement_id": "11473",
+  "period_start": "2017-10-01",
+  "added": [
+   "SKBNK",
+   "KLGYO",
+   "ANELE",
+   "ICBCT"
+  ],
+  "removed": [
+   "LOGO",
+   "TRGYO",
+   "KRONT",
+   "VESBE"
+  ]
+ },
+ {
+  "announcement_id": "11466",
+  "period_start": "2018-01-01",
+  "added": [
+   "NTHOL",
+   "BERA",
+   "DGKLB",
+   "IEYHO",
+   "BRSAN",
+   "SNGYO",
+   "IHLGM"
+  ],
+  "removed": [
+   "CLEBI",
+   "YAZIC",
+   "IZMDC",
+   "ALKIM",
+   "KONYA",
+   "ALCTL",
+   "TSPOR"
+  ]
+ },
+ {
+  "announcement_id": "11443",
+  "period_start": "2018-04-01",
+  "added": [
+   "ALBRK",
+   "FLAP",
+   "CEMAS",
+   "DGATE",
+   "AYEN"
+  ],
+  "removed": [
+   "BIZIM",
+   "BAGFS",
+   "AYGAZ",
+   "ERBOS",
+   "HURGZ"
+  ]
+ },
+ {
+  "announcement_id": "12512",
+  "period_start": "2018-07-01",
+  "added": [
+   "ISFIN",
+   "OZGYO",
+   "GEREL",
+   "HURGZ",
+   "ISDMR",
+   "OZKGY"
+  ],
+  "removed": [
+   "BRISA",
+   "AYEN",
+   "HLGYO",
+   "BANVT",
+   "TKNSA",
+   "VKGYO"
+  ]
+ },
+ {
+  "announcement_id": "12465",
+  "period_start": "2018-10-01",
+  "added": [
+   "POLHO",
+   "ECZYT",
+   "HEKTS",
+   "GENTS"
+  ],
+  "removed": [
+   "OZGYO",
+   "AKENR",
+   "SNGYO",
+   "TRCAS"
+  ]
+ },
+ {
+  "announcement_id": "12304",
+  "period_start": "2019-01-01",
+  "added": [
+   "VERUS",
+   "PARSN",
+   "KERVT",
+   "INDES",
+   "CLEBI"
+  ],
+  "removed": [
+   "OZKGY",
+   "BRSAN",
+   "IEYHO",
+   "DOAS",
+   "ISFIN"
+  ]
+ },
+ {
+  "announcement_id": "12070",
+  "period_start": "2019-04-01",
+  "added": [
+   "OZGYO",
+   "ISFIN",
+   "TSPOR",
+   "IEYHO"
+  ],
+  "removed": [
+   "ECZYT",
+   "DEVA",
+   "FLAP",
+   "ANELE"
+  ]
+ },
+ {
+  "announcement_id": "11867",
+  "period_start": "2019-07-01",
+  "added": [
+   "TUKAS",
+   "ADESE",
+   "KONYA",
+   "AVOD",
+   "AGHOL"
+  ],
+  "removed": [
+   "TATGD",
+   "GOODY",
+   "TSPOR",
+   "KARTN",
+   "GLYHO"
+  ]
+ },
+ {
+  "announcement_id": "11632",
+  "period_start": "2019-10-01",
+  "added": [
+   "GLYHO",
+   "DOAS",
+   "TRGYO",
+   "HLGYO",
+   "DEVA",
+   "GUSGR"
+  ],
+  "removed": [
+   "GENTS",
+   "INDES",
+   "HURGZ",
+   "ADESE",
+   "ISGYO",
+   "OZGYO"
+  ]
+ },
+ {
+  "announcement_id": "11428",
+  "period_start": "2020-01-01",
+  "added": [
+   "ADANA",
+   "AKGRT",
+   "ALKIM",
+   "ANHYT",
+   "AYGAZ",
+   "BIZIM",
+   "BRISA",
+   "BRSAN",
+   "BTCIM",
+   "BUCIM",
+   "CIMSA",
+   "ECZYT",
+   "ERBOS",
+   "GOODY",
+   "INDES",
+   "ISGYO",
+   "ISMEN",
+   "KAREL",
+   "KARTN",
+   "KLMSN",
+   "LOGO",
+   "TATGD",
+   "TRCAS"
+  ],
+  "removed": [
+   "AFYON",
+   "AVOD",
+   "BERA",
+   "BJKAS",
+   "CEMAS",
+   "DGKLB",
+   "FENER",
+   "GEREL",
+   "GLYHO",
+   "GOLTS",
+   "GSRAY",
+   "ICBCT",
+   "IEYHO",
+   "IHLAS",
+   "IHLGM",
+   "ITTFH",
+   "KONYA",
+   "METRO",
+   "PARSN",
+   "POLHO",
+   "PRKME",
+   "TUKAS",
+   "VERUS"
+  ]
+ },
+ {
+  "announcement_id": "12557",
+  "period_start": "2020-04-01",
+  "added": [
+   "AKCNS",
+   "GLYHO",
+   "OZKGY",
+   "RYGYO",
+   "SELEC"
+  ],
+  "removed": [
+   "BTCIM",
+   "ERBOS",
+   "GSDHO",
+   "INDES",
+   "TRCAS"
+  ]
+ },
+ {
+  "announcement_id": "12559",
+  "period_start": "2020-07-01",
+  "added": [
+   "BAGFS",
+   "DOCO",
+   "GSDHO",
+   "OYAKC"
+  ],
+  "removed": [
+   "ANHYT",
+   "ECZYT",
+   "RYGYO",
+   "SARKY"
+  ]
+ },
+ {
+  "announcement_id": "14118",
+  "period_start": "2020-10-01",
+  "added": [
+   "AKSGY",
+   "ALCTL",
+   "ARDYZ",
+   "INDES",
+   "PETUN",
+   "PNSUT"
+  ],
+  "removed": [
+   "ANACM",
+   "GLYHO",
+   "KARSN",
+   "KLMSN",
+   "SODA",
+   "TRKCM"
+  ]
+ },
+ {
+  "announcement_id": "14132",
+  "period_start": "2021-01-01",
+  "added": [
+   "BERA",
+   "EGGUB",
+   "IHLGM",
+   "KARSN",
+   "KONYA",
+   "VERUS"
+  ],
+  "removed": [
+   "ARDYZ",
+   "CLEBI",
+   "DOCO",
+   "KAREL",
+   "PETUN",
+   "TMSN"
+  ]
+ },
+ {
+  "announcement_id": "14147",
+  "period_start": "2021-04-01",
+  "added": [
+   "CEMAS",
+   "ESEN",
+   "FENER",
+   "IHLAS",
+   "JANTS",
+   "KRVGD",
+   "NUHCM",
+   "PARSN",
+   "POLHO",
+   "TKNSA",
+   "TUKAS"
+  ],
+  "removed": [
+   "AGHOL",
+   "AKCNS",
+   "AKGRT",
+   "ALCTL",
+   "AYGAZ",
+   "BIZIM",
+   "ENKAI",
+   "ISDMR",
+   "LOGO",
+   "OZKGY",
+   "PNSUT"
+  ]
+ },
+ {
+  "announcement_id": "12664",
+  "period_start": "2021-07-01",
+  "added": [
+   "AFYON",
+   "BRYAT",
+   "ENKAI",
+   "ERBOS",
+   "GLYHO",
+   "GSRAY",
+   "HDFGS",
+   "LOGO",
+   "RTALB",
+   "VESBE"
+  ],
+  "removed": [
+   "AKSGY",
+   "BUCIM",
+   "GOODY",
+   "GSDHO",
+   "HLGYO",
+   "MAVI",
+   "POLHO",
+   "TATGD",
+   "TUKAS",
+   "YATAS"
+  ]
+ },
+ {
+  "announcement_id": "14213",
+  "period_start": "2021-10-01",
+  "added": [
+   "AGHOL",
+   "AKCNS",
+   "ARDYZ",
+   "AYDEM",
+   "AYGAZ",
+   "BIOEN",
+   "CANTE",
+   "HLGYO",
+   "ISDMR",
+   "IZMDC",
+   "MAVI",
+   "QUAGR",
+   "SARKY",
+   "TMSN",
+   "TRILC",
+   "YATAS",
+   "ZRGYO"
+  ],
+  "removed": [
+   "AFYON",
+   "BRSAN",
+   "BRYAT",
+   "CEMAS",
+   "ECZYT",
+   "EGGUB",
+   "FENER",
+   "GSRAY",
+   "HDFGS",
+   "IHLAS",
+   "IHLGM",
+   "IPEKE",
+   "JANTS",
+   "KONYA",
+   "NTHOL",
+   "NUHCM",
+   "RTALB"
+  ]
+ },
+ {
+  "announcement_id": "12771",
+  "period_start": "2022-01-01",
+  "added": [
+   "ADESE",
+   "BASGZ",
+   "BRYAT",
+   "CEMAS",
+   "GENIL",
+   "GESAN",
+   "IPEKE",
+   "NTHOL",
+   "RTALB"
+  ],
+  "removed": [
+   "AKCNS",
+   "ALBRK",
+   "AYGAZ",
+   "CEMTS",
+   "HLGYO",
+   "MPARK",
+   "NETAS",
+   "TMSN",
+   "TRILC"
+  ]
+ },
+ {
+  "announcement_id": "14347",
+  "period_start": "2022-04-01",
+  "added": [
+   "ARASE",
+   "GSDHO",
+   "GWIND",
+   "JANTS",
+   "KONTR",
+   "KUTPO",
+   "KZBGY",
+   "NUGYO",
+   "SNGYO",
+   "TRILC"
+  ],
+  "removed": [
+   "ADESE",
+   "CEMAS",
+   "GESAN",
+   "IZMDC",
+   "KERVT",
+   "KRVGD",
+   "RTALB",
+   "SARKY",
+   "VERUS",
+   "YATAS"
+  ]
+ },
+ {
+  "announcement_id": "14401",
+  "period_start": "2022-07-01",
+  "added": [
+   "AKFGY",
+   "ALBRK",
+   "BAGFS",
+   "BUCIM",
+   "CEMTS",
+   "INVES",
+   "PSGYO",
+   "YATAS"
+  ],
+  "removed": [
+   "ARASE",
+   "BIOEN",
+   "BRISA",
+   "CANTE",
+   "ESEN",
+   "KARTN",
+   "KUTPO",
+   "KZBGY"
+  ]
+ },
+ {
+  "announcement_id": "12960",
+  "period_start": "2022-10-01",
+  "added": [
+   "GESAN",
+   "KARTN",
+   "PRKAB",
+   "SMRTG",
+   "TMSN",
+   "TSPOR",
+   "TUKAS",
+   "YYLGD"
+  ],
+  "removed": [
+   "ARDYZ",
+   "INDES",
+   "INVES",
+   "PARSN",
+   "TKNSA",
+   "TRILC",
+   "ZOREN",
+   "ZRGYO"
+  ]
+ },
+ {
+  "announcement_id": "14476",
+  "period_start": "2023-01-01",
+  "added": [
+   "ASUZU",
+   "BIOEN",
+   "EUREN",
+   "FENER",
+   "KCAER",
+   "KERVT",
+   "KLRHO",
+   "KMPUR",
+   "KZBGY",
+   "TKNSA",
+   "ZOREN"
+  ],
+  "removed": [
+   "GOZDE",
+   "DEVA",
+   "GENIL",
+   "ISMEN",
+   "KARTN",
+   "LOGO",
+   "NUGYO",
+   "PRKAB",
+   "QUAGR",
+   "TRGYO",
+   "YATAS"
+  ]
+ },
+ {
+  "announcement_id": "14516",
+  "period_start": "2023-04-01",
+  "added": [
+   "ALFAS",
+   "GENIL",
+   "IZMDC",
+   "KONYA",
+   "ULUUN"
+  ],
+  "removed": [
+   "ALGYO",
+   "ISFIN",
+   "JANTS",
+   "NTHOL",
+   "TSPOR"
+  ]
+ },
+ {
+  "announcement_id": "14545",
+  "period_start": "2023-07-01",
+  "added": [
+   "AHGAZ",
+   "AKCNS",
+   "ASTOR",
+   "BRSAN",
+   "CANTE",
+   "ECZYT",
+   "ISMEN",
+   "PENTA",
+   "QUAGR"
+  ],
+  "removed": [
+   "ALKIM",
+   "BASGZ",
+   "ERBOS",
+   "FENER",
+   "KERVT",
+   "KLRHO",
+   "TMSN",
+   "TURSG",
+   "ULUUN"
+  ]
+ },
+ {
+  "announcement_id": "13125",
+  "period_start": "2023-10-01",
+  "added": [
+   "AKFYE",
+   "BIENY",
+   "CWENE",
+   "EUPWR",
+   "IMASM",
+   "KAYSE",
+   "MIATK",
+   "YEOTK"
+  ],
+  "removed": [
+   "ASUZU",
+   "AYDEM",
+   "BAGFS",
+   "BIOEN",
+   "CEMTS",
+   "GSDHO",
+   "SELEC",
+   "TKNSA"
+  ]
+ },
+ {
+  "announcement_id": "14627",
+  "period_start": "2024-01-01",
+  "added": [
+   "ASGYO",
+   "BIOEN",
+   "BOBET",
+   "ENERY",
+   "IZENR",
+   "KLSER",
+   "SDTTR",
+   "TATEN"
+  ],
+  "removed": [
+   "AKFGY",
+   "GENIL",
+   "GLYHO",
+   "IMASM",
+   "KZBGY",
+   "PSGYO",
+   "SNGYO",
+   "VESBE"
+  ]
+ },
+ {
+  "announcement_id": "13200",
+  "period_start": "2024-04-01",
+  "added": [
+   "AGROT",
+   "AKFGY",
+   "ANSGR",
+   "BFREN",
+   "BTCIM",
+   "REEDR",
+   "SAYAS",
+   "TABGD",
+   "TURSG",
+   "VESBE"
+  ],
+  "removed": [
+   "AGHOL",
+   "ASGYO",
+   "BUCIM",
+   "ISDMR",
+   "IZMDC",
+   "KARSN",
+   "KMPUR",
+   "KORDS",
+   "PENTA",
+   "TATEN"
+  ]
+ },
+ {
+  "announcement_id": "14682",
+  "period_start": "2024-07-01",
+  "added": [
+   "AGHOL",
+   "ARDYZ",
+   "BINHO",
+   "GOLTS",
+   "KTLEV",
+   "LMKDC",
+   "OBAMS",
+   "PEKGY",
+   "TKNSA",
+   "TMSN"
+  ],
+  "removed": [
+   "AHGAZ",
+   "AKCNS",
+   "ALBRK",
+   "ANSGR",
+   "BIENY",
+   "BIOEN",
+   "BOBET",
+   "GWIND",
+   "IPEKE",
+   "SAYAS"
+  ]
+ },
+ {
+  "announcement_id": "14707",
+  "period_start": "2024-10-01",
+  "added": [
+   "ADEL",
+   "ALTNY",
+   "ANSGR",
+   "BJKAS",
+   "CLEBI",
+   "FENER",
+   "KARSN",
+   "MPARK",
+   "PAPIL",
+   "RGYAS"
+  ],
+  "removed": [
+   "BFREN",
+   "ECZYT",
+   "EUREN",
+   "ISGYO",
+   "IZENR",
+   "KAYSE",
+   "QUAGR",
+   "SDTTR",
+   "TKNSA",
+   "YYLGD"
+  ]
+ },
+ {
+  "announcement_id": "14899",
+  "period_start": "2025-01-01",
+  "added": [
+   "ANHYT",
+   "BSOKE",
+   "CVKMD",
+   "IEYHO",
+   "LIDER",
+   "MAGEN",
+   "NTHOL",
+   "PASEU",
+   "SDTTR",
+   "SELEC",
+   "TSPOR"
+  ],
+  "removed": [
+   "BJKAS",
+   "VESBE",
+   "ADEL",
+   "AKFGY",
+   "BINHO",
+   "KTLEV",
+   "LMKDC",
+   "OBAMS",
+   "PAPIL",
+   "PEKGY",
+   "RGYAS"
+  ]
+ },
+ {
+  "announcement_id": "14784",
+  "period_start": "2025-04-01",
+  "added": [
+   "AHGAZ",
+   "AVPGY",
+   "EFORC",
+   "GRTHO",
+   "GSRAY",
+   "KTLEV",
+   "LMKDC",
+   "OBAMS",
+   "RALYH",
+   "RYGYO"
+  ],
+  "removed": [
+   "AKFYE",
+   "CVKMD",
+   "FENER",
+   "KLSER",
+   "LIDER",
+   "NTHOL",
+   "SDTTR",
+   "TMSN",
+   "TSPOR",
+   "TUKAS"
+  ]
+ },
+ {
+  "announcement_id": "15121",
+  "period_start": "2025-07-01",
+  "added": [
+   "BALSU",
+   "BINHO",
+   "DSTKF",
+   "FENER",
+   "GENIL",
+   "GLRMK",
+   "GRSEL",
+   "IPEKE",
+   "KUYAS",
+   "TUREX"
+  ],
+  "removed": [
+   "AGROT",
+   "AHGAZ",
+   "ANHYT",
+   "ARDYZ",
+   "ECILC",
+   "GOLTS",
+   "KARSN",
+   "KONYA",
+   "RYGYO",
+   "SELEC"
+  ]
+ },
+ {
+  "announcement_id": "15220",
+  "period_start": "2025-10-01",
+  "added": [
+   "DAPGM",
+   "ECILC",
+   "PATEK",
+   "TSPOR",
+   "TUKAS"
+  ],
+  "removed": [
+   "ALFAS",
+   "AVPGY",
+   "BERA",
+   "LMKDC",
+   "SMRTG"
+  ]
+ },
+ {
+  "announcement_id": "15293",
+  "period_start": "2026-01-01",
+  "added": [
+   "IZENR",
+   "KLRHO",
+   "QUAGR"
+  ],
+  "removed": [
+   "BINHO",
+   "CLEBI",
+   "IEYHO"
+  ]
+ },
+ {
+  "announcement_id": "15391",
+  "period_start": "2026-04-01",
+  "added": [
+   "CVKMD",
+   "EUREN",
+   "PAHOL",
+   "PSGYO",
+   "SARKY"
+  ],
+  "removed": [
+   "EGEEN",
+   "KCAER",
+   "TSPOR",
+   "TTRAK",
+   "YEOTK"
+  ]
+ },
+ {
+  "announcement_id": "15483",
+  "period_start": "2026-07-01",
+  "added": [
+   "ESEN",
+   "IEYHO",
+   "ODINE"
+  ],
+  "removed": [
+   "AGHOL",
+   "TABGD",
+   "TUREX"
+  ]
+ },
+ {
+  "announcement_id": "15598",
+  "period_start": "2026-10-01",
+  "added": [
+   "AGHOL",
+   "AHGAZ",
+   "AKCNS",
+   "AKFYE",
+   "ALBRK",
+   "ANHYT",
+   "AYGAZ",
+   "BINHO",
+   "ECZYT",
+   "EGEEN",
+   "EGGUB",
+   "ENTRA",
+   "GLYHO",
+   "GWIND",
+   "ISDMR",
+   "KARSN",
+   "KATMR",
+   "KCAER",
+   "KORDS",
+   "LMKDC",
+   "RGYAS",
+   "RYSAS",
+   "SNGYO",
+   "TABGD",
+   "TCKRC",
+   "TRGYO",
+   "TTRAK"
+  ],
+  "removed": [
+   "BALSU",
+   "BSOKE",
+   "DAPGM",
+   "DSTKF",
+   "EFOR",
+   "ESEN",
+   "EUPWR",
+   "GENIL",
+   "GESAN",
+   "GRTHO",
+   "GSRAY",
+   "IEYHO",
+   "IZENR",
+   "KLRHO",
+   "KTLEV",
+   "KUYAS",
+   "MAGEN",
+   "MIATK",
+   "ODINE",
+   "PASEU",
+   "PATEK",
+   "PSGYO",
+   "QUAGR",
+   "RALYH",
+   "REEDR",
+   "SARKY",
+   "SKBNK"
+  ]
+ }
+]
