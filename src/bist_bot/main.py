@@ -35,12 +35,18 @@ def main():
         from bist_bot.services.monthly_portfolio_service import MonthlyPortfolioService
 
         monthly_portfolio = MonthlyPortfolioService(container.fetcher, container.notifier, settings)
+    league = None
+    if settings.LEAGUE_ENABLED:
+        from bist_bot.services.league_service import LeagueService
+
+        league = LeagueService(container.fetcher, container.notifier, settings)
     scheduler = MarketScheduler(
         scanner,
         container.notifier,
         settings=settings,
         trading_agent=container.trading_agent,
         monthly_portfolio=monthly_portfolio,
+        league=league,
     )
     order_tracker = OrderTracker(container.broker, container.db)
 

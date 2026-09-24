@@ -57,9 +57,7 @@ def _published(year: int, month: int) -> bool:
 
 def fetch_daily(code: str) -> list[dict]:
     today = date.today().strftime("%d-%m-%Y")
-    return _get(
-        f"{BASE}/HisseTekil", {"hisse": code, "startdate": "01-01-2014", "enddate": today}
-    )
+    return _get(f"{BASE}/HisseTekil", {"hisse": code, "startdate": "01-01-2014", "enddate": today})
 
 
 def fetch_statements(code: str) -> dict[str, dict[str, float]]:

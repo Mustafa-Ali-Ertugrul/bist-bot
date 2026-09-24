@@ -13,7 +13,6 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-
 import portfolio_research as pr
 
 ISY = Path(pr.OUT) / "isy"
@@ -221,7 +220,9 @@ def main() -> None:
     print("\n=== Aylik XU100 ustu getiri t-istatistigi (tum donem) ===")
     for n in [k for k in curves if k[:2] in ("V1", "V2", "Q1", "C1", "C2", "E1", "E2", "E3")]:
         dlt = m[n] - m["XU100 al-tut"]
-        print(f"{n:22s} ort {dlt.mean() * 100:+.2f}%/ay  t={dlt.mean() / dlt.std() * np.sqrt(len(dlt)):+.2f}")
+        print(
+            f"{n:22s} ort {dlt.mean() * 100:+.2f}%/ay  t={dlt.mean() / dlt.std() * np.sqrt(len(dlt)):+.2f}"
+        )
 
 
 if __name__ == "__main__":

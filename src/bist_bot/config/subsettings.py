@@ -316,6 +316,8 @@ class TradingSettings:
     MONTHLY_PORTFOLIO_CASH_12M_RETURN_PCT: float = _get_float_env(
         "MONTHLY_PORTFOLIO_CASH_12M_RETURN_PCT", 32.0
     )
+    # 18-strategy paper league (strategy/league.py), operator chat only.
+    LEAGUE_ENABLED: bool = _get_bool_env("LEAGUE_ENABLED", False)
     SHADOW_ENABLED: bool = _get_bool_env("SHADOW_ENABLED", True)
     SHADOW_HOLDING_DAYS: int = _get_int_env("SHADOW_HOLDING_DAYS", 5)
     SHADOW_ONLY_ROBUST: bool = _get_bool_env("SHADOW_ONLY_ROBUST", False)
