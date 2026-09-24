@@ -44,3 +44,9 @@ Kıyaslar: XU100 al-tut, para piyasası.
 Ara raporlar her ay verilir ama karar değildir. 6. ayda para piyasasının
 10 puandan fazla gerisinde kalan strateji "zayıf" olarak işaretlenir (izlenmeye devam eder).
 18 strateji yarıştığı için tek bir ayın ya da çeyreğin liderliği anlamsızdır.
+
+## Ek (2026-09-24, lig başlamadan önce): D grubu
+`ML_PREREGISTRATION.md` gereği iki strateji eklendi, başlangıç yine 2026-09-30:
+D1 ML10 (donmuş model, tahmini en iyi 10) ve D2 R+ML10 (aynısı, rejim filtreli).
+Kazanan kriteri aynı; 3. kriterde backtest olarak `ml_backtest.py` walk-forward
+sonuçları kullanılır.

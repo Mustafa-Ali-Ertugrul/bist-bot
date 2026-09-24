@@ -2,7 +2,7 @@
 
 After the EOD pass of the last BIST session of the month: fetches İş Yatırım
 daily data + recent statements for the current BIST100 members, decides all
-18 strategies, marks each paper portfolio to market and posts a league table
+league strategies, marks each paper portfolio to market and posts a league table
 to the operator chat (not the customer group).
 """
 
@@ -29,6 +29,7 @@ from bist_bot.strategy.league import (
     LeagueInputs,
     build_fundamentals,
     decide_league,
+    load_ml_model,
 )
 from bist_bot.strategy.monthly_portfolio import pit_members
 
@@ -58,6 +59,8 @@ class LeagueService:
         settings: Any = default_settings,
         results_dir: str | Path = "results",
         member_loader: Any = None,
+        usd_loader: Any = None,
+        ml_model: Any = None,
     ) -> None:
         self.index_fetcher = index_fetcher
         self.notifier = notifier
@@ -66,6 +69,8 @@ class LeagueService:
         self.state_path = self.results_dir / "league_state.json"
         self.history_path = self.results_dir / "league_history.csv"
         self._member_loader = member_loader or self._load_members
+        self._usd_loader = usd_loader or self._load_usdtry
+        self._ml_model = ml_model
 
     def run_if_due(self, now: datetime) -> dict[str, dict[str, float]] | None:
         if not getattr(self.settings, "LEAGUE_ENABLED", False):
@@ -88,8 +93,26 @@ class LeagueService:
         index_close = index_close[~index_close.index.duplicated(keep="last")]
         cash_pct = float(getattr(self.settings, "MONTHLY_PORTFOLIO_CASH_12M_RETURN_PCT", 32.0))
 
+        usd, model = None, self._ml_model
+        try:
+            usd = self._usd_loader(as_of)
+            model = model if model is not None else load_ml_model()
+        except Exception as exc:  # ML strategies stay in cash; the rule-based ones still run
+            logger.error(
+                "league_ml_inputs_unavailable", error_type=type(exc).__name__, error=str(exc)
+            )
         regime_on, weights = decide_league(
-            LeagueInputs(adj, mcap, volume, fundamentals, index_close, members, cash_pct / 100.0),
+            LeagueInputs(
+                adj,
+                mcap,
+                volume,
+                fundamentals,
+                index_close,
+                members,
+                cash_pct / 100.0,
+                usd=usd,
+                ml_model=model,
+            ),
             as_of,
         )
         panel = adj.join(index_close.rename(INDEX_TICKER), how="outer")
@@ -142,6 +165,19 @@ class LeagueService:
         if len(adj) < MIN_MEMBER_FRAMES:
             raise RuntimeError(f"only {len(adj)}/{len(members)} member histories fetched")
         return pd.DataFrame(adj), pd.DataFrame(mcap), pd.DataFrame(vol), fund
+
+    @staticmethod
+    def _load_usdtry(as_of: date) -> pd.Series:
+        import yfinance as yf
+
+        hist = yf.Ticker("TRY=X").history(
+            start=as_of - timedelta(days=HISTORY_DAYS), end=as_of + timedelta(days=1)
+        )
+        if hist.empty:
+            raise RuntimeError("USD/TRY history unavailable")
+        close = hist["Close"]
+        close.index = pd.to_datetime(close.index).tz_localize(None).normalize()
+        return close[~close.index.duplicated(keep="last")]
 
     def _load_state(self) -> dict[str, Any]:
         if not self.state_path.exists():

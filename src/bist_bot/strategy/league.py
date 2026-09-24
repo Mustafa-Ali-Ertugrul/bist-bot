@@ -1,6 +1,7 @@
 """Live paper strategy league (scripts/research/LEAGUE_PREREGISTRATION.md).
 
-18 pre-registered monthly rules in three groups of six. Definitions match
+18 pre-registered monthly rules in three groups of six, plus group D (the
+frozen ML model of ML_PREREGISTRATION.md). Definitions match
 scripts/research/factor_backtest.py; do not change a rule once the league has
 started — add a new, separately pre-registered strategy instead.
 """
@@ -9,6 +10,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -24,12 +27,13 @@ from bist_bot.strategy.monthly_portfolio import (
 )
 
 INDEX_TICKER = "XU100.IS"
+ML_MODEL_FILE = Path(__file__).resolve().parents[1] / "data" / "models" / "ml_d_2026_09.json"
 
 
 @dataclass(frozen=True)
 class Spec:
     name: str
-    family: str  # MOM, INDEX, E1, E2, V1, C1, Q1, C2, EW
+    family: str  # MOM, INDEX, E1, E2, V1, C1, Q1, C2, EW, ML
     top_n: int = 10
     regime: bool = False
 
@@ -53,7 +57,18 @@ SPECS: tuple[Spec, ...] = (
     Spec("C4 E2-20", "E2", top_n=20),
     Spec("C5 V1-20", "V1", top_n=20),
     Spec("C6 EW50", "EW"),
+    # Group D (ML_PREREGISTRATION.md): frozen conditional multi-factor model.
+    Spec("D1 ML10", "ML"),
+    Spec("D2 R+ML10", "ML", regime=True),
 )
+
+
+def load_ml_model(path: Path = ML_MODEL_FILE) -> Any:
+    from xgboost import XGBRegressor
+
+    model = XGBRegressor()
+    model.load_model(path)
+    return model
 
 
 def build_fundamentals(raw: dict[str, dict[str, float]]) -> pd.DataFrame:
@@ -106,6 +121,8 @@ class LeagueInputs:
     index_close: pd.Series
     members: list[str]
     cash_12m_return: float
+    usd: pd.Series | None = None  # USD/TRY closes, for the ML strategies
+    ml_model: Any = None
 
 
 def _top(score: pd.Series, n: int) -> dict[str, float]:
@@ -162,6 +179,15 @@ def decide_league(inputs: LeagueInputs, as_of: date) -> tuple[bool, dict[str, di
             }
         )
 
+    if inputs.ml_model is not None and inputs.usd is not None and universe:
+        from bist_bot.strategy import ml_model as ml
+
+        usd = inputs.usd.reindex(idx.union(inputs.usd.index)).ffill().reindex(idx)
+        panel = ml.Panel(px, mcap, inputs.volume_tl.reindex(idx), xu, usd, inputs.fundamentals)
+        x = ml.features_at(panel, i, universe, inputs.cash_12m_return)
+        pred = pd.Series(inputs.ml_model.predict(x[ml.FEATURES]), index=x.index)
+        scores["ML"] = pred
+
     out: dict[str, dict[str, float]] = {}
     for spec in SPECS:
         if spec.regime and not regime_on:
@@ -177,4 +203,13 @@ def decide_league(inputs: LeagueInputs, as_of: date) -> tuple[bool, dict[str, di
     return regime_on, out
 
 
-__all__ = ["INDEX_TICKER", "SPECS", "LeagueInputs", "Spec", "build_fundamentals", "decide_league"]
+__all__ = [
+    "INDEX_TICKER",
+    "ML_MODEL_FILE",
+    "SPECS",
+    "LeagueInputs",
+    "Spec",
+    "build_fundamentals",
+    "decide_league",
+    "load_ml_model",
+]

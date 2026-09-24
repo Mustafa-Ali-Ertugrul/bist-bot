@@ -9,22 +9,22 @@ import json
 import sys
 from pathlib import Path
 
+import factor_backtest as fb
 import numpy as np
 import pandas as pd
+import portfolio_research as pr
 from scipy.stats import spearmanr
 
-import factor_backtest as fb
-import portfolio_research as pr
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
-from bist_bot.strategy import league as lg  # noqa: E402
-from bist_bot.strategy import ml_model as ml  # noqa: E402
-from bist_bot.strategy.monthly_portfolio import pit_members  # noqa: E402
+from bist_bot.strategy import league as lg
+from bist_bot.strategy import ml_model as ml
+from bist_bot.strategy.monthly_portfolio import pit_members
 
 FIRST_PREDICTION = pd.Timestamp("2019-01-01")
 
 
-def main() -> None:
+def build_months():
+    """Panel + per-month (features, target) exactly as used by the backtest."""
     adj, mcap, vol = fb.load_daily()
     raw = {
         p.name.removesuffix("_fin.json") + ".IS": json.loads(p.read_text(encoding="utf-8"))
@@ -51,7 +51,9 @@ def main() -> None:
     cash_ret = pr.cash_daily(idx)
     cash_eq = (1 + cash_ret).cumprod()
     pos = {d: i for i, d in enumerate(idx)}
-    rebals = [d for d in pr.month_ends(idx) if d >= pd.Timestamp("2016-04-01") and pos[d] + 1 < len(idx)]
+    rebals = [
+        d for d in pr.month_ends(idx) if d >= pd.Timestamp("2016-04-01") and pos[d] + 1 < len(idx)
+    ]
     execs = [idx[pos[d] + 1] for d in rebals]
 
     months = []
@@ -68,8 +70,21 @@ def main() -> None:
             fwd = px.loc[execs[k + 1], uni] / px.loc[execs[k], uni] - 1
             y = fwd.rank(pct=True)
         regime = bool(panel.xu.iloc[i] / panel.xu.iloc[i - 252] - 1 > c12)
-        months.append({"date": d, "x": x, "y": y, "fwd": fwd if y is not None else None, "regime": regime, "uni": uni})
+        months.append(
+            {
+                "date": d,
+                "x": x,
+                "y": y,
+                "fwd": fwd if y is not None else None,
+                "regime": regime,
+                "uni": uni,
+            }
+        )
+    return months, rebals, execs, px, panel, cash_ret, cash_eq
 
+
+def main() -> None:
+    months, rebals, execs, px, panel, cash_ret, cash_eq = build_months()
     d1, d2, ics = {}, {}, []
     for k, m in enumerate(months):
         if m["date"] < FIRST_PREDICTION:
@@ -87,12 +102,14 @@ def main() -> None:
             ics.append((m["date"], spearmanr(both.iloc[:, 0], both.iloc[:, 1]).statistic))
 
     ic = pd.Series(dict(ics))
-    print(f"Bilgi katsayisi: ort {ic.mean():+.4f}  t={ic.mean() / ic.std() * np.sqrt(len(ic)):+.2f}  n={len(ic)}")
+    print(
+        f"Bilgi katsayisi: ort {ic.mean():+.4f}  t={ic.mean() / ic.std() * np.sqrt(len(ic)):+.2f}  n={len(ic)}"
+    )
     for label, a, b in [("2019-2022", "2019", "2022"), ("2023-2026", "2023", "2026")]:
         s = ic.loc[a:b]
         print(f"  {label}: ort {s.mean():+.4f}  t={s.mean() / s.std() * np.sqrt(len(s)):+.2f}")
 
-    start = [k for k, d in enumerate(rebals) if d >= FIRST_PREDICTION][0]
+    start = next(k for k, d in enumerate(rebals) if d >= FIRST_PREDICTION)
     rb, ex = rebals[start:], execs[start:]
     px_all = px.copy()
     px_all["XU100.IS"] = panel.xu
@@ -100,13 +117,20 @@ def main() -> None:
     strategies = {
         "XU100 al-tut": (lambda d: pd.Series({"XU100.IS": 1.0}), pr.COST_INDEX),
         "Para piyasasi": (lambda d: pd.Series(dtype=float), 0.0),
-        "Likit50 esit": (lambda d: pd.Series(1 / len(uni_by_date[d]), index=uni_by_date[d]), pr.COST_STOCK),
+        "Likit50 esit": (
+            lambda d: pd.Series(1 / len(uni_by_date[d]), index=uni_by_date[d]),
+            pr.COST_STOCK,
+        ),
         "D1 ML10": (lambda d: pd.Series(d1[d], dtype=float), pr.COST_STOCK),
         "D2 R+ML10": (lambda d: pd.Series(d2[d], dtype=float), pr.COST_STOCK),
     }
     curves = {n: pr.run(fn, px_all, cash_ret, c, rb, ex) for n, (fn, c) in strategies.items()}
     pd.set_option("display.width", 250)
-    for label, a, b in [("2019-2022", None, "2022-12-31"), ("2023-2026", "2023-01-01", None), ("2019-2026", None, None)]:
+    for label, a, b in [
+        ("2019-2022", None, "2022-12-31"),
+        ("2023-2026", "2023-01-01", None),
+        ("2019-2026", None, None),
+    ]:
         rows = {}
         for n, eq in curves.items():
             e = eq.loc[a:b]

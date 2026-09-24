@@ -82,7 +82,28 @@ def test_decide_league_regime_off_moves_regime_strategies_to_cash():
     regime, w = decide_league(_inputs(0.10), DAYS[-1].date())
     assert regime is False
     for spec in SPECS:
-        assert (w[spec.name] == {}) == spec.regime
+        if spec.family != "ML":  # no model in these inputs -> ML always empty
+            assert (w[spec.name] == {}) == spec.regime
+
+
+class _StubModel:
+    """Predicts the ticker number: S59 best."""
+
+    def predict(self, x):
+        return np.array([int(t[1:3]) for t in x.index], dtype=float)
+
+
+def test_ml_group_uses_model_predictions_and_regime():
+    base = _inputs(0.5)
+    usd = pd.Series(np.linspace(30, 40, len(DAYS)), index=DAYS)
+    inp = LeagueInputs(**{**base.__dict__, "usd": usd, "ml_model": _StubModel()})
+    _, w = decide_league(inp, DAYS[-1].date())
+    universe = set(w["C6 EW50"])
+    expected = sorted(universe, key=lambda t: int(t[1:3]), reverse=True)[:10]
+    assert set(w["D1 ML10"]) == set(expected) == set(w["D2 R+ML10"])
+    off = LeagueInputs(**{**_inputs(0.10).__dict__, "usd": usd, "ml_model": _StubModel()})
+    _, w_off = decide_league(off, DAYS[-1].date())
+    assert w_off["D2 R+ML10"] == {} and len(w_off["D1 ML10"]) == 10
 
 
 def test_league_service_writes_ledgers_once(tmp_path, monkeypatch):
@@ -102,6 +123,8 @@ def test_league_service_writes_ledgers_once(tmp_path, monkeypatch):
         SimpleNamespace(LEAGUE_ENABLED=True, MONTHLY_PORTFOLIO_CASH_12M_RETURN_PCT=30.0),
         results_dir=tmp_path,
         member_loader=loader,
+        usd_loader=lambda _d: pd.Series(35.0, index=DAYS),
+        ml_model=_StubModel(),
     )
     now = datetime.combine(DAYS[-1].date(), datetime.min.time(), TR)
     assert svc.run_if_due(now) is not None
@@ -127,3 +150,12 @@ def test_fetch_statements_pads_to_four_periods():
         "period4",
     }
     assert out == {"2026/06": {"2O": 5.0}, "2026/03": {"2O": 6.0}}
+
+
+def test_frozen_ml_model_loads_and_predicts():
+    from bist_bot.strategy.league import load_ml_model
+    from bist_bot.strategy.ml_model import FEATURES
+
+    model = load_ml_model()
+    x = pd.DataFrame(0.5, index=["A.IS", "B.IS"], columns=FEATURES)
+    assert model.predict(x[FEATURES]).shape == (2,)
