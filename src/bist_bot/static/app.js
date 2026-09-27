@@ -344,11 +344,6 @@
       if (buy !== null) setText('btn-tab-buy', `Alış Sinyalleri (${buy})`);
       if (sell !== null) setText('btn-tab-sell', `Satış Sinyalleri (${sell})`);
 
-      // Hydrate Algoritma Güven Skoru (win_rate from stats)
-      const winRate = Number(stats.win_rate);
-      if (Number.isFinite(winRate) && winRate > 0) {
-        setText('macro-win-rate', `%${winRate.toFixed(1)}`);
-      }
 
       // Hydrate Market Breadth (Average RSI, Volume Ratio, Actionable Tickers)
       const breadth = (data && data.breadth) || {};
