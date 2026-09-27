@@ -4,6 +4,7 @@
 
 
 <link rel="stylesheet" href="/static/tailwind.css"/>
+<link rel="stylesheet" href="/static/app.css"/>
 <style>
 .material-symbols-outlined {
   font-family: 'Material Symbols Outlined' !important;
@@ -21,7 +22,7 @@
   -webkit-font-smoothing: antialiased;
 }
 </style>
-</head><body class="bg-background font-body-md text-body-md text-on-surface antialiased selection:bg-primary-container selection:text-on-primary"><header class="fixed top-0 left-0 w-full z-50 bg-surface-container-lowest/90 backdrop-blur-xl shadow-[0_4px_20px_rgba(0,0,0,0.4)]"><div class="h-24 w-full px-terminal-margin flex flex-col justify-between pt-space-xs pb-space-2xs"><div class="flex items-center justify-between w-full"><div class="flex items-center gap-space-lg"><div class="flex items-center gap-space-xs"><div class="relative flex items-center justify-center"><span class="w-2.5 h-2.5 rounded-full bg-primary animate-ping absolute opacity-75"></span><span class="w-2.5 h-2.5 rounded-full bg-primary relative"></span></div><span class="font-headline-md text-headline-md tracking-tight text-on-surface font-extrabold">Bist<span class="text-primary">-Bot</span></span><span class="bg-surface-container-high px-space-xs py-space-3xs rounded text-secondary font-label-caps text-label-caps uppercase tracking-wider">v2.4 Algo</span></div><div class="hidden xl:flex items-center gap-space-2xs bg-surface-container px-space-xs py-space-3xs rounded-full shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"><span class="w-1.5 h-1.5 rounded-full bg-primary"></span><span class="font-label-caps text-label-caps text-primary uppercase">BIST 100 CANLI</span></div><nav class="hidden lg:flex items-center gap-space-2xs bg-surface-container-low p-space-3xs rounded-lg" data-active-classes="bg-surface-container-high text-primary font-bold"><a class="px-space-sm py-space-2xs rounded text-on-surface-variant hover:bg-surface-container hover:text-on-surface font-body-md text-body-md transition-all" data-path="dashboard" href="/ui/dashboard">Dashboard</a><a class="px-space-sm py-space-2xs rounded text-on-surface-variant hover:bg-surface-container hover:text-on-surface font-body-md text-body-md transition-all" data-path="canli-sinyaller" href="/ui/signals">Canlı Sinyaller</a><a class="px-space-sm py-space-2xs rounded text-on-surface-variant hover:bg-surface-container hover:text-on-surface font-body-md text-body-md transition-all" data-path="varlik-analiz" href="/ui/analysis">Varlık Analiz</a><a class="px-space-sm py-space-2xs rounded text-on-surface-variant hover:bg-surface-container hover:text-on-surface font-body-md text-body-md transition-all" data-path="terminal-ayarlari" href="/ui/settings">Terminal Ayarları</a></nav></div><div class="flex items-center gap-space-md"><div class="hidden md:flex items-center gap-space-xs bg-surface-container px-space-sm py-space-2xs rounded-full shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"><span class="w-2 h-2 rounded-full bg-primary"></span><span class="font-label-code text-label-code text-on-surface-variant">Sistem Aktif <span class="text-outline">•</span> <span class="text-primary">100 Varlık Taranıyor</span></span></div><div class="flex items-center gap-space-xs pl-space-xs bg-surface-container-low p-space-3xs rounded-full"><span class="hidden sm:inline-block font-label-code text-label-code text-on-surface-variant px-space-xs">admin@bistbot.com</span><span id="sub-countdown-badge" class="hidden font-label-code text-label-code px-space-xs py-space-3xs rounded-full bg-surface-container-high text-on-surface-variant"></span><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center shadow-[0_0_12px_rgba(78,222,163,0.35)]"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div><div class="flex items-center gap-space-3xs"><button class="w-8 h-8 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors" title="Yenile" type="button"><span class="material-symbols-outlined text-[18px]">refresh</span></button><button class="relative w-8 h-8 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors" title="Bildirimler" type="button"><span class="material-symbols-outlined text-[18px]">notifications</span><span class="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-primary"></span></button><button class="w-8 h-8 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-error flex items-center justify-center transition-colors" title="Çıkış" type="button"><span class="material-symbols-outlined text-[18px]">logout</span></button></div></div></div><div class="w-full overflow-x-auto flex items-center gap-space-lg py-space-3xs bg-surface-container-low/70 px-space-sm rounded shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"><div class="flex items-center gap-space-2xs shrink-0"><span class="font-label-caps text-label-caps text-outline">BIST ENDEKSLER:</span></div><div class="flex items-center gap-space-xs shrink-0"><span class="font-label-code text-label-code text-on-surface font-semibold">XU100</span><span class="font-metric-value text-metric-value text-on-surface" id="header-xu100-val">14,531.31</span><span class="font-label-code text-label-code text-primary flex items-center" id="header-xu100-chg"><span class="material-symbols-outlined text-[14px]">arrow_drop_up</span>+0.87%</span></div><span class="text-outline text-[10px] shrink-0">|</span><div class="flex items-center gap-space-xs shrink-0"><span class="font-label-code text-label-code text-on-surface font-semibold">XU030</span><span class="font-metric-value text-metric-value text-on-surface" id="header-xu030-val">17,344.75</span><span class="font-label-code text-label-code text-primary flex items-center" id="header-xu030-chg"><span class="material-symbols-outlined text-[14px]">arrow_drop_up</span>+1.41%</span></div><span class="text-outline text-[10px] shrink-0">|</span><div class="flex items-center gap-space-xs shrink-0"><span class="font-label-code text-label-code text-on-surface font-semibold">USD/TRY</span><span class="font-metric-value text-metric-value text-on-surface" id="header-usdtry-val">48.47</span><span class="font-label-code text-label-code text-primary flex items-center" id="header-usdtry-chg"><span class="material-symbols-outlined text-[14px]">arrow_drop_up</span>+0.05%</span></div><span class="text-outline text-[10px] shrink-0">|</span><div class="flex items-center gap-space-xs shrink-0"><span class="font-label-code text-label-code text-outline">BIST HACİM</span><span class="font-metric-value text-metric-value text-tertiary" id="header-bist-vol">118.6B TL</span></div></div></div></header><main class="w-full pt-24 bg-background min-h-screen"><div class="flex flex-col w-full">
+</head><body class="bg-background font-body-md text-body-md text-on-surface antialiased selection:bg-primary-container selection:text-on-primary"><header class="fixed top-0 left-0 w-full z-50 bg-surface-container-lowest/90 backdrop-blur-xl shadow-[0_4px_20px_rgba(0,0,0,0.4)]"><div class="h-24 w-full px-terminal-margin flex flex-col justify-between pt-space-xs pb-space-2xs"><div class="flex items-center justify-between w-full"><div class="flex items-center gap-space-lg"><div class="flex items-center gap-space-xs"><div class="relative flex items-center justify-center"><span class="w-2.5 h-2.5 rounded-full bg-primary animate-ping absolute opacity-75"></span><span class="w-2.5 h-2.5 rounded-full bg-primary relative"></span></div><span class="font-headline-md text-headline-md tracking-tight text-on-surface font-extrabold">Bist<span class="text-primary">-Bot</span></span><span class="bg-surface-container-high px-space-xs py-space-3xs rounded text-secondary font-label-caps text-label-caps uppercase tracking-wider">v2.4 Algo</span></div><div class="hidden xl:flex items-center gap-space-2xs bg-surface-container px-space-xs py-space-3xs rounded-full shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"><span class="w-1.5 h-1.5 rounded-full bg-primary"></span><span class="font-label-caps text-label-caps text-primary uppercase">BIST 100 · GECİKMELİ</span></div><nav class="hidden lg:flex items-center gap-space-2xs bg-surface-container-low p-space-3xs rounded-lg" data-active-classes="bg-surface-container-high text-primary font-bold"><a class="px-space-sm py-space-2xs rounded text-on-surface-variant hover:bg-surface-container hover:text-on-surface font-body-md text-body-md transition-all" data-path="dashboard" href="/ui/dashboard">Dashboard</a><a class="px-space-sm py-space-2xs rounded text-on-surface-variant hover:bg-surface-container hover:text-on-surface font-body-md text-body-md transition-all" data-path="canli-sinyaller" href="/ui/signals">Canlı Sinyaller</a><a class="px-space-sm py-space-2xs rounded text-on-surface-variant hover:bg-surface-container hover:text-on-surface font-body-md text-body-md transition-all" data-path="varlik-analiz" href="/ui/analysis">Varlık Analiz</a><a class="px-space-sm py-space-2xs rounded text-on-surface-variant hover:bg-surface-container hover:text-on-surface font-body-md text-body-md transition-all" data-path="terminal-ayarlari" href="/ui/settings">Terminal Ayarları</a></nav></div><div class="flex items-center gap-space-md"><div class="hidden md:flex items-center gap-space-xs bg-surface-container px-space-sm py-space-2xs rounded-full shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"><span class="w-2 h-2 rounded-full bg-primary"></span><span class="font-label-code text-label-code text-on-surface-variant" id="header-scan-status">Tarama —</span></div><div class="flex items-center gap-space-xs pl-space-xs bg-surface-container-low p-space-3xs rounded-full"><span class="hidden sm:inline-block font-label-code text-label-code text-on-surface-variant px-space-xs">admin@bistbot.com</span><span id="sub-countdown-badge" class="hidden font-label-code text-label-code px-space-xs py-space-3xs rounded-full bg-surface-container-high text-on-surface-variant"></span><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center shadow-[0_0_12px_rgba(78,222,163,0.35)]"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div><div class="flex items-center gap-space-3xs"><button class="w-8 h-8 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors" title="Yenile" type="button"><span class="material-symbols-outlined text-[18px]">refresh</span></button><button class="relative w-8 h-8 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors" title="Bildirimler" type="button"><span class="material-symbols-outlined text-[18px]">notifications</span></button><button class="w-8 h-8 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-error flex items-center justify-center transition-colors" title="Çıkış" type="button"><span class="material-symbols-outlined text-[18px]">logout</span></button></div></div></div><div class="w-full overflow-x-auto flex items-center gap-space-lg py-space-3xs bg-surface-container-low/70 px-space-sm rounded shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"><div class="flex items-center gap-space-2xs shrink-0"><span class="font-label-caps text-label-caps text-outline">BIST ENDEKSLER:</span></div><div class="flex items-center gap-space-xs shrink-0"><span class="font-label-code text-label-code text-on-surface font-semibold">XU100</span><span class="font-metric-value text-metric-value text-on-surface" id="header-xu100-val">—</span><span class="font-label-code text-label-code text-primary flex items-center" id="header-xu100-chg"></span></div><span class="text-outline text-[10px] shrink-0">|</span><div class="flex items-center gap-space-xs shrink-0"><span class="font-label-code text-label-code text-on-surface font-semibold">XU030</span><span class="font-metric-value text-metric-value text-on-surface" id="header-xu030-val">—</span><span class="font-label-code text-label-code text-primary flex items-center" id="header-xu030-chg"></span></div><span class="text-outline text-[10px] shrink-0">|</span><div class="flex items-center gap-space-xs shrink-0"><span class="font-label-code text-label-code text-on-surface font-semibold">USD/TRY</span><span class="font-metric-value text-metric-value text-on-surface" id="header-usdtry-val">—</span><span class="font-label-code text-label-code text-primary flex items-center" id="header-usdtry-chg"></span></div><span class="text-outline text-[10px] shrink-0">|</span><div class="flex items-center gap-space-xs shrink-0"><span class="font-label-code text-label-code text-outline">XU100 HACİM</span><span class="font-metric-value text-metric-value text-tertiary" id="header-bist-vol">—</span></div></div></div></header><main class="w-full pt-24 bg-background min-h-screen"><div class="flex flex-col w-full">
 <!-- Asset Search Bar & Command Header -->
 <section class="w-full px-terminal-margin py-space-md">
 <div class="bg-surface-container-low/90 backdrop-blur-xl p-space-md rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.5)] flex flex-col gap-space-md">
@@ -40,12 +41,12 @@
 <!-- Timeframe Selector -->
 <div class="flex flex-col">
 <label class="block font-label-caps text-label-caps text-outline uppercase tracking-wider mb-space-3xs">Periyot</label>
-<div class="flex items-center gap-space-3xs bg-surface-container-highest p-1 rounded-lg">
-<button class="px-space-sm py-1.5 rounded font-label-code text-label-code text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors">15D</button>
-<button class="px-space-sm py-1.5 rounded font-label-code text-label-code text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors">1S</button>
-<button class="px-space-sm py-1.5 rounded font-label-code text-label-code bg-surface-container-high text-primary font-semibold shadow-sm">4S</button>
-<button class="px-space-sm py-1.5 rounded font-label-code text-label-code text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors">1G</button>
-<button class="px-space-sm py-1.5 rounded font-label-code text-label-code text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors">1H</button>
+<div class="flex items-center gap-space-3xs bg-surface-container-highest p-1 rounded-lg" id="analysis-tf-group">
+<button class="analysis-tf-btn px-space-sm py-1.5 rounded font-label-code text-label-code text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors" data-tf="15m">15dk</button>
+<button class="analysis-tf-btn px-space-sm py-1.5 rounded font-label-code text-label-code text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors" data-tf="1h">1sa</button>
+<button class="analysis-tf-btn px-space-sm py-1.5 rounded font-label-code text-label-code text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors" data-tf="4h">4sa</button>
+<button class="analysis-tf-btn px-space-sm py-1.5 rounded font-label-code text-label-code bg-surface-container-high text-primary font-semibold shadow-sm" data-tf="1d">Günlük</button>
+<button class="analysis-tf-btn px-space-sm py-1.5 rounded font-label-code text-label-code text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors" data-tf="1wk">Haftalık</button>
 </div>
 </div>
 <!-- Action Button -->
@@ -78,58 +79,51 @@
 <!-- Stock Title & Basic Status -->
 <div class="flex flex-col md:flex-row md:items-center gap-space-lg">
 <div class="flex items-center gap-space-md">
-<div class="w-14 h-14 rounded-xl bg-surface-container-high flex items-center justify-center text-primary font-headline-lg text-headline-lg font-black shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]" id="asset-avatar">
-              THY
-            </div>
+<div class="w-14 h-14 rounded-xl bg-surface-container-high flex items-center justify-center text-primary font-headline-lg text-headline-lg font-black shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]" id="asset-avatar">—</div>
 <div>
 <div class="flex items-center gap-space-xs">
-<h1 class="font-headline-lg text-headline-lg text-on-surface font-extrabold tracking-tight" id="asset-ticker-title">THYAO.IS</h1>
-<span class="px-space-xs py-0.5 rounded-full bg-primary/10 text-primary font-label-code text-label-code font-bold flex items-center gap-1" id="asset-signal-badge">
-<span class="w-1.5 h-1.5 rounded-full bg-primary animate-ping"></span>
-<span id="asset-signal-text">CANLI ANALİZ</span>
-</span>
-<span class="px-space-xs py-0.5 rounded bg-surface-container-high text-tertiary font-label-code text-label-code font-semibold">BIST 100</span>
+<h1 class="font-headline-lg text-headline-lg text-on-surface font-extrabold tracking-tight" id="asset-ticker-title">—</h1>
+<span class="px-space-xs py-0.5 rounded-full bg-primary/10 text-primary font-label-code text-label-code font-bold flex items-center gap-1" id="asset-signal-badge"><span id="asset-signal-text">—</span></span>
 </div>
-<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5" id="asset-company-name">Türk Hava Yolları Anonim Ortaklığı</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5" id="asset-company-name">—</p>
 </div>
 </div>
 <div class="flex items-center gap-space-md border-l-0 md:pl-space-lg">
 <div>
-<div class="font-label-caps text-label-caps text-outline uppercase">Son İşlem Fiyatı</div>
+<div class="font-label-caps text-label-caps text-outline uppercase">Son Fiyat</div>
 <div class="flex items-baseline gap-space-xs mt-0.5">
-<span class="font-metric-display text-metric-display text-on-surface" id="asset-current-price">₺—</span>
-<span class="font-metric-value text-metric-value text-primary flex items-center" id="asset-price-change">
-<span class="material-symbols-outlined text-[16px]">sync</span>Canlı
-</span>
+<span class="font-metric-display text-metric-display text-on-surface" id="asset-current-price">—</span>
+<span class="font-metric-value text-metric-value text-on-surface-variant flex items-center" id="asset-price-change"></span>
 </div>
+<div class="font-label-code text-label-code text-outline" id="asset-last-bar">—</div>
 </div>
 <div class="hidden sm:block">
-<div class="font-label-caps text-label-caps text-outline uppercase">Gün İçi Aralık</div>
-<div class="font-metric-value text-metric-value text-on-surface-variant mt-1.5" id="asset-day-range">₺— - ₺—</div>
+<div class="font-label-caps text-label-caps text-outline uppercase" id="asset-range-label">Gün İçi Aralık</div>
+<div class="font-metric-value text-metric-value text-on-surface-variant mt-1.5" id="asset-day-range">—</div>
 </div>
 </div>
 </div>
 <!-- Metric Badges Strip -->
 <div class="grid grid-cols-2 sm:grid-cols-4 gap-space-sm">
 <div class="bg-surface-container/70 p-space-sm rounded-lg">
-<div class="font-label-caps text-label-caps text-outline uppercase">Algo Skoru</div>
-<div class="font-metric-display text-metric-display text-primary mt-1" id="asset-algo-score">—<span class="font-body-sm text-body-sm text-outline">/100</span></div>
-<div class="font-label-code text-label-code text-primary mt-0.5" id="asset-conf-label">Hesaplanıyor</div>
+<div class="font-label-caps text-label-caps text-outline uppercase">Anlık Skor</div>
+<div class="font-metric-display text-metric-display text-primary mt-1" id="asset-algo-score">—</div>
+<div class="font-label-code text-label-code text-primary mt-0.5" id="asset-conf-label">—</div>
 </div>
 <div class="bg-surface-container/70 p-space-sm rounded-lg">
 <div class="font-label-caps text-label-caps text-outline uppercase">Zarar Durdur</div>
-<div class="font-metric-display text-metric-display text-error mt-1" id="asset-stop-loss">₺—</div>
-<div class="font-label-code text-label-code text-error mt-0.5" id="asset-stop-pct">Risk Analizi</div>
+<div class="font-metric-display text-metric-display text-error mt-1" id="asset-stop-loss">—</div>
+<div class="font-label-code text-label-code text-error mt-0.5" id="asset-stop-pct">—</div>
 </div>
 <div class="bg-surface-container/70 p-space-sm rounded-lg">
 <div class="font-label-caps text-label-caps text-outline uppercase">Kâr Hedefi</div>
-<div class="font-metric-display text-metric-display text-secondary mt-1" id="asset-target-price">₺—</div>
-<div class="font-label-code text-label-code text-secondary mt-0.5" id="asset-target-pct">Hedef Analizi</div>
+<div class="font-metric-display text-metric-display text-secondary mt-1" id="asset-target-price">—</div>
+<div class="font-label-code text-label-code text-secondary mt-0.5" id="asset-target-pct">—</div>
 </div>
 <div class="bg-surface-container/70 p-space-sm rounded-lg">
-<div class="font-label-caps text-label-caps text-outline uppercase">RSI (14)</div>
-<div class="font-metric-display text-metric-display text-tertiary mt-1" id="asset-rsi-val">58.4</div>
-<div class="font-label-code text-label-code text-tertiary mt-0.5" id="asset-rsi-label">Pozitif Bölge</div>
+<div class="font-label-caps text-label-caps text-outline uppercase">RSI (<span id="asset-rsi-period">14</span>)</div>
+<div class="font-metric-display text-metric-display text-tertiary mt-1" id="asset-rsi-val">—</div>
+<div class="font-label-code text-label-code text-tertiary mt-0.5" id="asset-rsi-label">—</div>
 </div>
 </div>
 </div>
@@ -143,22 +137,21 @@
 <div class="bg-surface-container-low/80 backdrop-blur-xl p-space-md rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.4)] flex flex-col" id="analysis-chart-shell">
 <!-- Chart Controls Subheader -->
 <div class="flex flex-wrap items-center justify-between gap-space-sm pb-space-sm mb-space-sm bg-surface-container-lowest/50 p-space-xs rounded-lg">
-<div class="flex items-center gap-space-xs">
+<div class="flex flex-wrap items-center gap-space-xs">
 <span class="font-label-code text-label-code text-on-surface font-semibold flex items-center gap-1" id="asset-chart-title">
-<span class="w-2 h-2 rounded-full bg-primary"></span>
-              THYAO [4S]
+<span class="w-2 h-2 rounded-full bg-primary"></span> —
             </span>
 <span class="text-outline text-body-sm">•</span>
-<span class="font-label-code text-label-code text-on-surface-variant">EMA(20): <span class="text-tertiary">308.10</span></span>
-<span class="font-label-code text-label-code text-on-surface-variant hidden md:inline">EMA(50): <span class="text-secondary">301.40</span></span>
-<span class="font-label-code text-label-code text-on-surface-variant hidden md:inline">EMA(200): <span class="text-outline">284.90</span></span>
+<span class="font-label-code text-label-code text-on-surface-variant" id="asset-sma-fast">SMA: —</span>
+<span class="font-label-code text-label-code text-on-surface-variant" id="asset-sma-slow">SMA: —</span>
+<span class="font-label-code text-label-code text-on-surface-variant hidden md:inline" id="asset-ema-long">EMA: —</span>
 </div>
 <div class="flex items-center gap-space-xs">
 <button class="px-space-xs py-1 rounded text-primary font-label-code text-label-code bg-surface-container-high flex items-center gap-1" id="chart-btn-candles">
 <span class="material-symbols-outlined text-[14px]">candlestick_chart</span> Mum Grafiği
             </button>
 <button class="px-space-xs py-1 rounded text-on-surface-variant hover:text-on-surface font-label-code text-label-code bg-surface-container flex items-center gap-1" id="chart-btn-ema">
-<span class="material-symbols-outlined text-[14px]">stacked_line_chart</span> EMA
+<span class="material-symbols-outlined text-[14px]">stacked_line_chart</span> SMA
             </button>
 <button class="px-space-xs py-1 rounded text-on-surface-variant hover:text-on-surface font-label-code text-label-code bg-surface-container flex items-center gap-1" id="chart-btn-bollinger">
 <span class="material-symbols-outlined text-[14px]">tune</span> Bollinger
@@ -178,291 +171,114 @@
 <div class="flex justify-between text-outline font-label-code text-label-code"><span id="grid-p1">₺305.00</span><span class="w-full border-b border-dashed border-outline mx-2 my-auto"></span><span id="grid-p1-r">305.00</span></div>
 <div class="flex justify-between text-outline font-label-code text-label-code"><span id="grid-p0">₺300.00</span><span class="w-full border-b border-dashed border-outline mx-2 my-auto"></span><span id="grid-p0-r">300.00</span></div>
 </div>
-<!-- Dynamic SVG Chart Elements -->
-<svg class="w-full h-full relative z-10" id="candlestickSvg" preserveaspectratio="none" viewbox="0 0 800 320">
-<defs>
-<lineargradient id="primaryAreaGrad" x1="0" x2="0" y1="0" y2="1">
-<stop offset="0%" stop-color="#4edea3" stop-opacity="0.25"></stop>
-<stop offset="100%" stop-color="#4edea3" stop-opacity="0.0"></stop>
-</lineargradient>
-</defs>
-<!-- EMA Lines -->
-<path d="M 20 230 Q 150 220, 260 190 T 480 150 T 680 115 T 780 85" fill="none" stroke="#7bd0ff" stroke-linecap="round" stroke-width="2"></path>
-<path d="M 20 260 Q 160 250, 300 230 T 520 185 T 700 155 T 780 130" fill="none" stroke="#dcfdff" stroke-dasharray="4,4" stroke-width="1.5"></path>
-<!-- Candlesticks (Simulated sequence with wicks & bodies) -->
-<!-- Bar 1 (Green) -->
-<line stroke="#4edea3" stroke-width="1.5" x1="45" x2="45" y1="215" y2="255"></line>
-<rect fill="#4edea3" height="22" rx="1" width="10" x="40" y="225"></rect>
-<!-- Bar 2 (Red) -->
-<line stroke="#ffb4ab" stroke-width="1.5" x1="85" x2="85" y1="220" y2="250"></line>
-<rect fill="#ffb4ab" height="15" rx="1" width="10" x="80" y="228"></rect>
-<!-- Bar 3 (Green) -->
-<line stroke="#4edea3" stroke-width="1.5" x1="125" x2="125" y1="200" y2="245"></line>
-<rect fill="#4edea3" height="28" rx="1" width="10" x="120" y="208"></rect>
-<!-- Bar 4 (Green) -->
-<line stroke="#4edea3" stroke-width="1.5" x1="165" x2="165" y1="180" y2="230"></line>
-<rect fill="#4edea3" height="30" rx="1" width="10" x="160" y="190"></rect>
-<!-- Bar 5 (Red pullback) -->
-<line stroke="#ffb4ab" stroke-width="1.5" x1="205" x2="205" y1="190" y2="235"></line>
-<rect fill="#ffb4ab" height="24" rx="1" width="10" x="200" y="195"></rect>
-<!-- Bar 6 (Green) -->
-<line stroke="#4edea3" stroke-width="1.5" x1="245" x2="245" y1="175" y2="215"></line>
-<rect fill="#4edea3" height="26" rx="1" width="10" x="240" y="180"></rect>
-<!-- Bar 7 (Green) -->
-<line stroke="#4edea3" stroke-width="1.5" x1="285" x2="285" y1="150" y2="195"></line>
-<rect fill="#4edea3" height="30" rx="1" width="10" x="280" y="158"></rect>
-<!-- Bar 8 (Red) -->
-<line stroke="#ffb4ab" stroke-width="1.5" x1="325" x2="325" y1="155" y2="190"></line>
-<rect fill="#ffb4ab" height="18" rx="1" width="10" x="320" y="162"></rect>
-<!-- Bar 9 (Green breakthrough) -->
-<line stroke="#4edea3" stroke-width="1.5" x1="365" x2="365" y1="125" y2="175"></line>
-<rect fill="#4edea3" height="34" rx="1" width="10" x="360" y="132"></rect>
-<!-- Bar 10 (Green) -->
-<line stroke="#4edea3" stroke-width="1.5" x1="405" x2="405" y1="110" y2="160"></line>
-<rect fill="#4edea3" height="32" rx="1" width="10" x="400" y="118"></rect>
-<!-- Bar 11 (Red consolidation) -->
-<line stroke="#ffb4ab" stroke-width="1.5" x1="445" x2="445" y1="115" y2="155"></line>
-<rect fill="#ffb4ab" height="20" rx="1" width="10" x="440" y="122"></rect>
-<!-- Bar 12 (Red) -->
-<line stroke="#ffb4ab" stroke-width="1.5" x1="485" x2="485" y1="120" y2="160"></line>
-<rect fill="#ffb4ab" height="22" rx="1" width="10" x="480" y="128"></rect>
-<!-- Bar 13 (Green spring) -->
-<line stroke="#4edea3" stroke-width="1.5" x1="525" x2="525" y1="95" y2="150"></line>
-<rect fill="#4edea3" height="38" rx="1" width="10" x="520" y="105"></rect>
-<!-- Bar 14 (Green) -->
-<line stroke="#4edea3" stroke-width="1.5" x1="565" x2="565" y1="80" y2="135"></line>
-<rect fill="#4edea3" height="35" rx="1" width="10" x="560" y="90"></rect>
-<!-- Bar 15 (Red wick test) -->
-<line stroke="#ffb4ab" stroke-width="1.5" x1="605" x2="605" y1="75" y2="125"></line>
-<rect fill="#ffb4ab" height="25" rx="1" width="10" x="600" y="85"></rect>
-<!-- Bar 16 (Green impulse) -->
-<line stroke="#4edea3" stroke-width="1.5" x1="645" x2="645" y1="60" y2="115"></line>
-<rect fill="#4edea3" height="36" rx="1" width="10" x="640" y="70"></rect>
-<!-- Bar 17 (Green surge) -->
-<line stroke="#4edea3" stroke-width="1.5" x1="685" x2="685" y1="45" y2="98"></line>
-<rect fill="#4edea3" height="38" rx="1" width="10" x="680" y="52"></rect>
-<!-- Bar 18 (Current Active Live Candle) -->
-<line stroke="#4edea3" stroke-width="2" x1="725" x2="725" y1="40" y2="92"></line>
-<rect fill="#4edea3" height="35" rx="1" width="12" x="719" y="46"></rect>
-<!-- Current price pinpoint horizontal beacon -->
-<line opacity="0.6" stroke="#4edea3" stroke-dasharray="3,3" stroke-width="1" x1="20" x2="780" y1="52" y2="52"></line>
-<rect fill="#4edea3" height="20" rx="3" width="55" x="735" y="42"></rect>
-<text fill="#003824" font-family="JetBrains Mono" font-size="11" font-weight="700" text-anchor="middle" x="762" y="56">314.25</text>
-</svg>
-<!-- Timeline Axis Bottom -->
-<div class="flex justify-between items-center px-space-sm pt-space-2xs text-outline font-label-code text-label-code">
-<span>28 Şub</span>
-<span>01 Mar</span>
-<span>02 Mar</span>
-<span>03 Mar</span>
-<span>04 Mar (Canlı)</span>
+<!-- Dynamic SVG Chart Elements (rendered from /api/analyze price_data) -->
+<svg class="w-full h-full relative z-10" id="candlestickSvg" preserveaspectratio="none" viewbox="0 0 800 320"></svg>
+<!-- Timeline Axis Bottom: labels come from the bar timestamps (Istanbul time) -->
+<div class="flex justify-between items-center px-space-sm pt-space-2xs text-outline font-label-code text-label-code" id="analysis-x-axis">
+<span>—</span>
 </div>
 </div>
-<!-- Secondary Sub-Chart: RSI Oscillators Bar -->
+<!-- Secondary Sub-Chart: RSI (from price_data.rsi) -->
 <div class="mt-space-sm bg-surface-container-lowest/60 p-space-sm rounded-lg flex flex-col gap-space-2xs">
 <div class="flex items-center justify-between font-label-code text-label-code">
 <div class="flex items-center gap-space-xs">
-<span class="text-on-surface font-semibold">RSI(14):</span>
-<span class="text-primary font-bold">63.4</span>
-<span class="text-on-surface-variant font-normal">(Pozitif İvme / Aşırı Alım Öncesi)</span>
+<span class="text-on-surface font-semibold" id="analysis-rsi-title">RSI:</span>
+<span class="text-primary font-bold" id="analysis-rsi-val">—</span>
+<span class="text-on-surface-variant font-normal" id="analysis-rsi-status"></span>
 </div>
 <div class="flex items-center gap-space-sm text-outline">
-<span>Aşırı Satım: 30</span>
-<span>•</span>
-<span>Aşırı Alım: 70</span>
+<span id="analysis-rsi-bounds">—</span>
 </div>
 </div>
-<!-- RSI Vector Plot -->
 <div class="relative w-full h-12">
-<svg class="w-full h-full" preserveaspectratio="none" viewbox="0 0 600 48">
-<line stroke="#3c4a42" stroke-dasharray="2,4" x1="0" x2="600" y1="12" y2="12"></line>
-<line stroke="#3c4a42" stroke-dasharray="2,4" x1="0" x2="600" y1="36" y2="36"></line>
-<path d="M 0 38 Q 80 35, 140 28 T 260 22 T 380 30 T 480 18 T 600 15" fill="none" stroke="#4edea3" stroke-width="2"></path>
-</svg>
+<svg class="w-full h-full" id="analysis-rsi-svg" preserveaspectratio="none" viewbox="0 0 600 48"></svg>
 </div>
 </div>
 </div>
-<!-- Technical Signal Triggers & Drivers List -->
+<!-- Signal reasons for the selected timeframe -->
 <div class="bg-surface-container-low/80 backdrop-blur-xl p-space-md rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.4)]">
 <div class="flex items-center justify-between mb-space-sm">
 <div class="flex items-center gap-space-xs">
 <span class="material-symbols-outlined text-primary text-[20px]">bolt</span>
-<h3 class="font-headline-md text-headline-md text-on-surface">Algoritmik Sinyal Tetikleyicileri &amp; Dayanaklar</h3>
+<h3 class="font-headline-md text-headline-md text-on-surface">Sinyal Gerekçeleri</h3>
 </div>
-<span class="font-label-code text-label-code text-outline">6 Kriter Karşılandı</span>
+<span class="font-label-code text-label-code text-outline" id="analysis-reasons-count">—</span>
 </div>
-<div class="grid grid-cols-1 md:grid-cols-2 gap-space-sm">
-<!-- Trigger Item 1 -->
-<div class="bg-surface-container p-space-sm rounded-lg flex items-start gap-space-sm">
-<div class="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-primary mt-0.5 shrink-0">
-<span class="material-symbols-outlined text-[14px]">check</span>
-</div>
-<div>
-<div class="font-body-md text-body-md text-on-surface font-semibold">EMA 20 / EMA 50 Altın Kesişim (Golden Cross)</div>
-<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Kısa vadeli hareketli ortalama, orta vadeli trendi yukarı yönlü keserek taze yükseliş trendi başlattı.</p>
-</div>
-</div>
-<!-- Trigger Item 2 -->
-<div class="bg-surface-container p-space-sm rounded-lg flex items-start gap-space-sm">
-<div class="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-primary mt-0.5 shrink-0">
-<span class="material-symbols-outlined text-[14px]">check</span>
-</div>
-<div>
-<div class="font-body-md text-body-md text-on-surface font-semibold">Hacim Patlaması &amp; Kurumsal Para Girişi</div>
-<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Son 4 saatlik hacim, 20 periyotluk hacim ortalamasının %142 üzerinde seyrediyor.</p>
-</div>
-</div>
-<!-- Trigger Item 3 -->
-<div class="bg-surface-container p-space-sm rounded-lg flex items-start gap-space-sm">
-<div class="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-primary mt-0.5 shrink-0">
-<span class="material-symbols-outlined text-[14px]">check</span>
-</div>
-<div>
-<div class="font-body-md text-body-md text-on-surface font-semibold">MACD Histogramı Pozitif Bölgede</div>
-<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Sinyal çizgisini 0 seviyesinin üzerinde yukarı yönlü teyit etti; momentum ivmeleniyor.</p>
-</div>
-</div>
-<!-- Trigger Item 4 -->
-<div class="bg-surface-container p-space-sm rounded-lg flex items-start gap-space-sm">
-<div class="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-primary mt-0.5 shrink-0">
-<span class="material-symbols-outlined text-[14px]">check</span>
-</div>
-<div>
-<div class="font-body-md text-body-md text-on-surface font-semibold">Direnç Üzeri Kapanış Onayı</div>
-<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Kritik ₺310.00 direnç bandı kırıldı ve üzerinde saatlik tutunma teyit edildi.</p>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-space-sm" id="analysis-reasons-list">
+<div class="font-label-code text-label-code text-outline">Analiz yükleniyor...</div>
 </div>
 </div>
 </div>
-</div>
-</div>
-<!-- Right: Multi-factor Score Breakdown & Simulator (4 cols) -->
+<!-- Right: live indicators, classic pivots and the engine's position proposal (4 cols) -->
 <div class="xl:col-span-4 flex flex-col gap-space-md">
-<!-- Algorithmic Factor Radar / Breakdown Card -->
-<div class="bg-surface-container-low/80 backdrop-blur-xl p-space-md rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.4)] flex flex-col gap-space-md">
+<div class="bg-surface-container-low/80 backdrop-blur-xl p-space-md rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.4)] flex flex-col gap-space-sm">
 <div class="flex items-center justify-between">
-<h3 class="font-headline-md text-headline-md text-on-surface">Skor Katkı Dağılımı</h3>
-<span class="px-space-xs py-0.5 bg-primary/10 text-primary font-label-code text-label-code rounded">NET: +84</span>
+<h3 class="font-headline-md text-headline-md text-on-surface">Teknik Göstergeler</h3>
+<span class="font-label-code text-label-code text-outline" id="analysis-indicators-tf">—</span>
 </div>
-<!-- Factor Bars -->
-<div class="flex flex-col gap-space-sm">
-<!-- Factor 1 -->
-<div class="bg-surface-container p-space-sm rounded-lg flex flex-col gap-space-2xs">
-<div class="flex justify-between items-center font-label-code text-label-code">
-<span class="text-on-surface flex items-center gap-1 font-semibold">
-<span class="material-symbols-outlined text-primary text-[14px]">trending_up</span> Trend Gücü
-              </span>
-<span class="text-primary font-bold">+38 / 40 (%95)</span>
-</div>
-<div class="w-full h-1.5 bg-surface-container-highest rounded-full overflow-hidden">
-<div class="h-full bg-primary rounded-full" style="width: 95%"></div>
-</div>
-<span class="font-body-sm text-body-sm text-outline">Süpertrend ve hareketli ortalama uyumu tam pozitif.</span>
-</div>
-<!-- Factor 2 -->
-<div class="bg-surface-container p-space-sm rounded-lg flex flex-col gap-space-2xs">
-<div class="flex justify-between items-center font-label-code text-label-code">
-<span class="text-on-surface flex items-center gap-1 font-semibold">
-<span class="material-symbols-outlined text-secondary text-[14px]">bar_chart</span> Hacim &amp; Para Girişi
-              </span>
-<span class="text-secondary font-bold">+24 / 30 (%80)</span>
-</div>
-<div class="w-full h-1.5 bg-surface-container-highest rounded-full overflow-hidden">
-<div class="h-full bg-secondary-container rounded-full" style="width: 80%"></div>
-</div>
-<span class="font-body-sm text-body-sm text-outline">BIST 100 net para girişinde 2. sırada yer alıyor.</span>
-</div>
-<!-- Factor 3 -->
-<div class="bg-surface-container p-space-sm rounded-lg flex flex-col gap-space-2xs">
-<div class="flex justify-between items-center font-label-code text-label-code">
-<span class="text-on-surface flex items-center gap-1 font-semibold">
-<span class="material-symbols-outlined text-tertiary text-[14px]">account_balance</span> Temel Değerleme &amp; F/K
-              </span>
-<span class="text-tertiary font-bold">+14 / 20 (%70)</span>
-</div>
-<div class="w-full h-1.5 bg-surface-container-highest rounded-full overflow-hidden">
-<div class="h-full bg-tertiary rounded-full" style="width: 70%"></div>
-</div>
-<span class="font-body-sm text-body-sm text-outline">F/K: 4.8, PD/DD: 0.94 ile sektör iskontosu sürüyor.</span>
-</div>
-<!-- Factor 4 -->
-<div class="bg-surface-container p-space-sm rounded-lg flex flex-col gap-space-2xs">
-<div class="flex justify-between items-center font-label-code text-label-code">
-<span class="text-on-surface flex items-center gap-1 font-semibold">
-<span class="material-symbols-outlined text-error text-[14px]">warning</span> Volatilite &amp; Risk Kesintisi
-              </span>
-<span class="text-error font-bold">-8 / 10 (Düşük Risk)</span>
-</div>
-<div class="w-full h-1.5 bg-surface-container-highest rounded-full overflow-hidden">
-<div class="h-full bg-error rounded-full" style="width: 20%"></div>
-</div>
-<span class="font-body-sm text-body-sm text-outline">ATR(14) kontrollü, ani volatilite şoku tespit edilmedi.</span>
+<div class="font-label-code text-label-code" id="analysis-indicators">
+<div class="text-outline">Analiz yükleniyor...</div>
 </div>
 </div>
-</div>
-<!-- Key Fibonacci & Support/Resistance Levels Table -->
 <div class="bg-surface-container-low/80 backdrop-blur-xl p-space-md rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.4)]">
 <div class="flex items-center justify-between mb-space-sm">
-<h3 class="font-headline-md text-headline-md text-on-surface">Destek &amp; Direnç Tablosu</h3>
-<span class="font-label-code text-label-code text-outline">Otomatik Pivot</span>
+<h3 class="font-headline-md text-headline-md text-on-surface">Destek &amp; Direnç</h3>
+<span class="font-label-code text-label-code text-outline" id="pivot-basis">Klasik pivot</span>
 </div>
 <div class="flex flex-col gap-space-2xs">
 <div class="flex justify-between items-center p-space-xs rounded bg-surface-container font-label-code text-label-code">
 <span class="text-error font-semibold">Direnç 2 (R2)</span>
-<span class="font-metric-value text-metric-value text-error">₺328.50</span>
-<span class="text-on-surface-variant font-body-sm text-body-sm">+4.53%</span>
+<span class="font-metric-value text-metric-value text-error" id="pivot-r2-val">—</span>
+<span class="text-on-surface-variant font-body-sm text-body-sm" id="pivot-r2-pct"></span>
 </div>
 <div class="flex justify-between items-center p-space-xs rounded bg-surface-container font-label-code text-label-code">
 <span class="text-on-error-container font-semibold">Direnç 1 (R1)</span>
-<span class="font-metric-value text-metric-value text-on-surface">₺318.20</span>
-<span class="text-on-surface-variant font-body-sm text-body-sm">+1.25%</span>
+<span class="font-metric-value text-metric-value text-on-surface" id="pivot-r1-val">—</span>
+<span class="text-on-surface-variant font-body-sm text-body-sm" id="pivot-r1-pct"></span>
 </div>
 <div class="flex justify-between items-center p-space-xs rounded bg-surface-container-high font-label-code text-label-code">
-<span class="text-primary font-bold">Pivot Noktası (PP)</span>
-<span class="font-metric-value text-metric-value text-primary font-bold">₺310.00</span>
-<span class="text-primary font-body-sm text-body-sm">Aktif Taban</span>
+<span class="text-primary font-semibold">Pivot (PP)</span>
+<span class="font-metric-value text-metric-value text-primary font-bold" id="pivot-pp-val">—</span>
+<span class="text-on-surface-variant font-body-sm text-body-sm" id="pivot-pp-pct"></span>
 </div>
 <div class="flex justify-between items-center p-space-xs rounded bg-surface-container font-label-code text-label-code">
 <span class="text-outline font-semibold">Destek 1 (S1)</span>
-<span class="font-metric-value text-metric-value text-on-surface">₺304.50</span>
-<span class="text-on-surface-variant font-body-sm text-body-sm">-3.10%</span>
+<span class="font-metric-value text-metric-value text-on-surface" id="pivot-s1-val">—</span>
+<span class="text-on-surface-variant font-body-sm text-body-sm" id="pivot-s1-pct"></span>
 </div>
 <div class="flex justify-between items-center p-space-xs rounded bg-surface-container font-label-code text-label-code">
 <span class="text-outline font-semibold">Destek 2 (S2)</span>
-<span class="font-metric-value text-metric-value text-on-surface">₺298.00</span>
-<span class="text-on-surface-variant font-body-sm text-body-sm">-5.17%</span>
+<span class="font-metric-value text-metric-value text-on-surface" id="pivot-s2-val">—</span>
+<span class="text-on-surface-variant font-body-sm text-body-sm" id="pivot-s2-pct"></span>
 </div>
 </div>
 </div>
-<!-- Strategy & Execution Calculator Box -->
 <div class="bg-surface-container-low/80 backdrop-blur-xl p-space-md rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.4)] flex flex-col gap-space-sm">
 <div class="flex items-center justify-between">
-<h3 class="font-headline-md text-headline-md text-on-surface">Pozisyon Simülatörü</h3>
-<span class="px-space-xs py-0.5 rounded bg-surface-container-high text-secondary font-label-code text-label-code font-bold">R:R = 1:2.78</span>
+<h3 class="font-headline-md text-headline-md text-on-surface">Pozisyon Önerisi</h3>
+<span class="px-space-xs py-0.5 rounded bg-surface-container-high text-secondary font-label-code text-label-code font-bold" id="pos-rr">R:R —</span>
 </div>
 <div class="bg-surface-container p-space-sm rounded-lg flex flex-col gap-space-xs">
 <div class="flex justify-between text-body-sm font-body-sm text-on-surface-variant">
-<span>Önerilen Pozisyon Boyutu:</span>
-<span class="font-metric-value text-metric-value text-on-surface">350 Adet (₺109,987)</span>
+<span>Önerilen pozisyon:</span>
+<span class="font-metric-value text-metric-value text-on-surface" id="pos-size">—</span>
 </div>
 <div class="flex justify-between text-body-sm font-body-sm text-on-surface-variant">
-<span>Maksimum Portföy Riski:</span>
-<span class="font-metric-value text-metric-value text-error">₺4,112 (%1.50)</span>
+<span>Stop'a kadar risk:</span>
+<span class="font-metric-value text-metric-value text-error" id="pos-risk">—</span>
 </div>
 <div class="flex justify-between text-body-sm font-body-sm text-on-surface-variant">
-<span>Beklenen Net Kâr:</span>
-<span class="font-metric-value text-metric-value text-primary">₺11,462 (%10.42)</span>
+<span>Hedefe kadar kazanç:</span>
+<span class="font-metric-value text-metric-value text-primary" id="pos-reward">—</span>
 </div>
 </div>
-<button class="w-full py-2.5 rounded-lg bg-surface-container-high text-primary hover:bg-primary hover:text-on-primary font-body-md text-body-md font-bold transition-all flex items-center justify-center gap-space-xs shadow-md">
-<span class="material-symbols-outlined text-[18px]">add_task</span>
-<span>İzleme Listeme &amp; Alarma Ekle</span>
-</button>
+<p class="font-body-sm text-body-sm text-outline" id="pos-note">Motorun bu periyottaki sinyaline göre hesaplanır; yatırım tavsiyesi değildir.</p>
 </div>
 </div>
 </section>
 <!-- Bottom Floating Navigation Segmented Bar (Exact parity with terminal look) -->
 <!-- Docked Segmented Fast Navigation (Persistent Modern Toolbar) -->
-<aside class="fixed bottom-12 inset-x-0 z-40 w-full px-terminal-margin flex justify-center pointer-events-none">
+<aside class="bb-bottom-nav fixed bottom-12 inset-x-0 z-40 w-full px-terminal-margin flex justify-center pointer-events-none">
 <nav class="pointer-events-auto flex items-center gap-space-xs p-space-2xs rounded-full bg-surface-container-low/95 backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.6)] border border-surface-container-high/40">
 <a href="/ui/dashboard" class="flex items-center gap-space-2xs px-space-md py-space-xs rounded-full text-on-surface-variant hover:text-on-surface hover:bg-surface-container font-body-md text-body-md transition-all">
 <span class="material-symbols-outlined text-[18px]">dashboard</span>

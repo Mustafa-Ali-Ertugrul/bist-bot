@@ -82,3 +82,29 @@ def test_gzip_files_are_valid_and_not_bombs():
         # Decompressed size must stay within a sane ratio (<200x) of the
         # compressed size; JavaScript/CSS text rarely exceeds 20x.
         assert len(data) < max(200 * compressed, 1024 * 1024), f"suspect ratio: {gz}"
+
+
+def test_shipped_gzip_assets_match_their_source():
+    """A stale app.js.gz would ship old code to every gzip-capable browser.
+
+    Regenerate after editing an asset:
+    python -c "import gzip,shutil;shutil.copyfileobj(open('app.js','rb'),gzip.open('app.js.gz','wb',9))"
+    """
+    for gz in STATIC_DIR.rglob("*.gz"):
+        source = gz.with_suffix("")
+        with gzip.open(gz, "rb") as fh:
+            assert fh.read() == source.read_bytes(), f"stale pre-compressed asset: {gz.name}"
+
+
+def test_stale_gzip_asset_is_not_served(tmp_path):
+    from bist_bot.dashboard import _fresh_gzip_assets
+
+    (tmp_path / "fresh.js").write_bytes(b"console.log('new');")
+    with gzip.open(tmp_path / "fresh.js.gz", "wb") as fh:
+        fh.write(b"console.log('new');")
+    (tmp_path / "stale.js").write_bytes(b"console.log('new');")
+    with gzip.open(tmp_path / "stale.js.gz", "wb") as fh:
+        fh.write(b"console.log('old');")
+    fresh = _fresh_gzip_assets(str(tmp_path))
+    assert os.path.abspath(tmp_path / "fresh.js.gz") in fresh
+    assert os.path.abspath(tmp_path / "stale.js.gz") not in fresh

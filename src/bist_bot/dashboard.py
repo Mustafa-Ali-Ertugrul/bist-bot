@@ -16,15 +16,28 @@ from datetime import UTC, datetime, timedelta, timezone
 from functools import wraps
 from typing import Any, cast
 
-from flask import Flask, g, has_request_context, jsonify, redirect, render_template, request
+import pandas as pd
+from flask import (
+    Flask,
+    g,
+    has_request_context,
+    jsonify,
+    make_response,
+    redirect,
+    render_template,
+    request,
+)
 from flask_cors import CORS
 from flask_jwt_extended import (
     JWTManager,
     create_access_token,
+    create_refresh_token,
+    decode_token,
     get_jwt,
     get_jwt_identity,
     jwt_required,
     set_access_cookies,
+    set_refresh_cookies,
     unset_jwt_cookies,
     verify_jwt_in_request,
 )
@@ -54,6 +67,7 @@ from bist_bot.indicators import (
 from bist_bot.locales import get_message
 from bist_bot.risk.circuit_breaker import CircuitBreaker
 from bist_bot.scanner import ScanService
+from bist_bot.strategy.params import StrategyParams
 from bist_bot.subscription import (
     PAID_PLANS,
     VALID_PLANS,
@@ -80,6 +94,35 @@ def safe_join_static(directory: str, *untrusted: str) -> str | None:
     """
     normalized = [str(part).replace("\\", "/") for part in untrusted]
     return safe_join(directory, *normalized)
+
+
+def _fresh_gzip_assets(static_folder: str | None) -> set[str]:
+    """Absolute paths of ``*.gz`` files whose content matches their source.
+
+    A pre-compressed copy that lags behind its source (edited app.js, stale
+    app.js.gz) would silently ship old code to every gzip-capable browser,
+    so stale copies are skipped and the plain file is served instead.
+    """
+    import gzip
+
+    fresh: set[str] = set()
+    if not static_folder or not os.path.isdir(static_folder):
+        return fresh
+    for root, _dirs, files in os.walk(static_folder):
+        for name in files:
+            if not name.endswith(".gz"):
+                continue
+            gz_path = os.path.join(root, name)
+            src_path = gz_path[: -len(".gz")]
+            try:
+                with open(src_path, "rb") as src, gzip.open(gz_path, "rb") as gz:
+                    if src.read() == gz.read():
+                        fresh.add(os.path.abspath(gz_path))
+                        continue
+            except OSError:
+                pass
+            logger.warning("static_gzip_stale_skipped", asset=name)
+    return fresh
 
 
 def _round_value(value: Any) -> float | None:
@@ -109,6 +152,8 @@ _DUMMY_HASH = hash_password(_DUMMY_PASSWORD)
 # have already rejected unauthenticated / lapsed callers before a hit is
 # possible — the cache never bypasses an auth gate.
 _API_STATS_CACHE_TTL_S = 30.0
+_REMEMBER_ME_REFRESH_TTL = timedelta(days=30)
+_SESSION_REFRESH_TTL = timedelta(hours=12)
 _api_stats_cache_lock = threading.Lock()
 _api_stats_cache: dict[str, Any] = {}
 
@@ -342,24 +387,33 @@ def _safe_json_payload() -> dict[str, Any]:
     return raw if isinstance(raw, dict) else {}
 
 
-_COMPACT_SNAPSHOT_KEYS = ("close", "low", "high", "rsi")
+_COMPACT_SNAPSHOT_KEYS = (
+    "close",
+    "low",
+    "high",
+    "rsi",
+    "change_pct",
+    "adx",
+    "atr",
+    "volume_ratio",
+    "macd_cross",
+    "sma_cross",
+    "ema_cross",
+    "bb_position",
+    "stoch_k",
+    "support",
+    "resistance",
+)
 
 
 def _compact_analyze_payload(payload: dict[str, Any]) -> dict[str, Any]:
     """Trim analyze response to what the UI renders (opt-in via ?compact=1).
 
-    Charts use price_data; header uses snapshot close/low/high/rsi; detail
-    uses signal score/stop/target. Full reasons list and auxiliary snapshot
-    indicators are never read client-side.
+    Charts use price_data; header and indicator panel use the snapshot keys
+    above; detail uses signal score/stop/target/reasons. Auxiliary snapshot
+    indicators outside that list are never read client-side.
     """
     out = dict(payload)
-    sig = out.get("signal")
-    if isinstance(sig, dict):
-        sig = dict(sig)
-        reasons = sig.get("reasons")
-        if isinstance(reasons, list):
-            sig["reasons"] = reasons[:1]
-        out["signal"] = sig
     snap = out.get("snapshot")
     if isinstance(snap, dict):
         out["snapshot"] = {k: snap[k] for k in _COMPACT_SNAPSHOT_KEYS if k in snap}
@@ -382,6 +436,166 @@ def _apply_bars_limit(payload: dict[str, Any]) -> dict[str, Any]:
         payload = dict(payload)
         payload["price_data"] = bars[-n:]
     return payload
+
+
+_RSI_REASON_RE = re.compile(r"RSI[^()]*\((\d+(?:\.\d+)?)\)")
+_VOLUME_CONFIRM_MARKERS = ("Hacim artıyor", "Fiyat-Hacim")
+_LATEST_SCAN_WINDOW = timedelta(minutes=15)
+
+
+def _parse_utc(value: Any) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+
+
+def _signal_texts(sig: dict[str, Any]) -> list[str]:
+    texts: list[str] = []
+    for key in ("reasons", "conditions"):
+        value = sig.get(key)
+        if isinstance(value, list):
+            texts.extend(str(v) for v in value)
+        elif isinstance(value, str) and value:
+            texts.extend(part.strip() for part in value.split("|"))
+    return texts
+
+
+def _latest_signal_batch_breadth(recent_signals: list[dict[str, Any]]) -> dict[str, Any]:
+    """Summary of the most recent persisted signal batch (no invented defaults).
+
+    Dedupe means many scans persist nothing, so the batch is anchored on the
+    newest signal: every signal stamped within 15 minutes before it.
+    """
+    stamped = [
+        (sig_at, sig)
+        for sig in recent_signals
+        if (sig_at := _parse_utc(sig.get("timestamp") or sig.get("created_at"))) is not None
+    ]
+    batch_at = max((at for at, _ in stamped), default=None)
+    window = (
+        [sig for at, sig in stamped if batch_at - _LATEST_SCAN_WINDOW <= at]
+        if batch_at is not None
+        else []
+    )
+
+    buy_tickers: list[str] = []
+    rsi_vals: list[float] = []
+    volume_confirmed = 0
+    for sig in window:
+        st = str(sig.get("signal_type", "")).upper()
+        ticker = str(sig.get("ticker", "")).replace(".IS", "")
+        if "AL" in st and "SAT" not in st and ticker not in buy_tickers:
+            buy_tickers.append(ticker)
+        texts = _signal_texts(sig)
+        if any(marker in t for t in texts for marker in _VOLUME_CONFIRM_MARKERS):
+            volume_confirmed += 1
+        for t in texts:
+            m = _RSI_REASON_RE.search(t)
+            if m:
+                rsi_vals.append(float(m.group(1)))
+                break
+
+    avg_rsi = round(sum(rsi_vals) / len(rsi_vals), 1) if rsi_vals else None
+    return {
+        "batch_at": batch_at.isoformat() if batch_at is not None else None,
+        "signal_count": len(window),
+        "avg_rsi": avg_rsi,
+        "volume_confirmed": volume_confirmed,
+        "buy_tickers": buy_tickers[:5],
+        "buy_count": len(buy_tickers),
+    }
+
+
+_OHLCV_AGG = {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}
+
+
+def _tr_local_index(index: Any) -> pd.DatetimeIndex:
+    """Fetcher bars are UTC-naive; return the same instants in Istanbul time."""
+    idx = pd.DatetimeIndex(index)
+    if idx.tz is None:
+        idx = idx.tz_localize("UTC")
+    return idx.tz_convert(TR)
+
+
+def _resample_session_4h(df: Any) -> Any:
+    """Merge 60m bars into two 4-hour bars per BIST session (10-14, 14-18 TR).
+
+    The closing-auction print (18:00 TR) joins the afternoon bar instead of
+    forming a flat stub bar of its own.
+    """
+    if df is None or len(df) == 0:
+        return df
+    cols = [c for c in _OHLCV_AGG if c in df.columns]
+    local = _tr_local_index(df.index)
+    start_hour = [10 if ts.hour < 14 else 14 for ts in local]
+    keys = local.normalize() + pd.to_timedelta(start_hour, unit="h")
+    grouped = df[cols].groupby(keys).agg({c: _OHLCV_AGG[c] for c in cols})
+    grouped.index = grouped.index.tz_convert("UTC").tz_localize(None)
+    return grouped.dropna(subset=["close"])
+
+
+def _bar_label(ts: Any, intraday: bool) -> str:
+    local = _tr_local_index([ts])[0]
+    return local.strftime("%Y-%m-%d %H:%M") if intraday else local.strftime("%Y-%m-%d")
+
+
+def _session_frames(df: Any, intraday: bool) -> list[tuple[str, Any]]:
+    """[(date, frame)] per trading session (intraday) or per bar (daily+)."""
+    if intraday:
+        local_dates = [ts.strftime("%Y-%m-%d") for ts in _tr_local_index(df.index)]
+        return [(day, frame) for day, frame in df.groupby(local_dates, sort=True)]
+    return [(_bar_label(ts, False), df.loc[[ts]]) for ts in df.index]
+
+
+def _session_summary(df: Any, intraday: bool) -> dict[str, Any] | None:
+    """High/low of the latest session (intraday) or latest bar (daily+)."""
+    frames = _session_frames(df, intraday) if df is not None and len(df) else []
+    if not frames:
+        return None
+    day, frame = frames[-1]
+    return {
+        "date": day,
+        "high": _round_value(frame["high"].max()),
+        "low": _round_value(frame["low"].min()),
+    }
+
+
+def _previous_period_pivots(df: Any, intraday: bool, now: datetime) -> dict[str, Any] | None:
+    """Classic floor pivots from the last *completed* session/bar.
+
+    While today's session is still running its bars are excluded, so levels
+    never move intraday (standard pivot convention).
+    """
+    frames = _session_frames(df, intraday) if df is not None and len(df) else []
+    if not frames:
+        return None
+    today = now.astimezone(TR).strftime("%Y-%m-%d")
+    session_open = now.astimezone(TR).hour < 18 or (
+        now.astimezone(TR).hour == 18 and now.astimezone(TR).minute < 10
+    )
+    if frames[-1][0] == today and session_open:
+        frames = frames[:-1]
+    if not frames:
+        return None
+    day, frame = frames[-1]
+    high = float(frame["high"].max())
+    low = float(frame["low"].min())
+    close = float(frame["close"].iloc[-1])
+    if not all(math.isfinite(v) for v in (high, low, close)):
+        return None
+    pivot = (high + low + close) / 3
+    return {
+        "basis_date": day,
+        "r2": _round_value(pivot + (high - low)),
+        "r1": _round_value(2 * pivot - low),
+        "pp": _round_value(pivot),
+        "s1": _round_value(2 * pivot - high),
+        "s2": _round_value(pivot - (high - low)),
+    }
 
 
 def _auth_rate_limit_key() -> str:
@@ -454,6 +668,7 @@ def create_dashboard_app(
         template_folder=str(base_dir / "templates"),
         static_folder=str(base_dir / "static"),
     )
+    fresh_gzip_assets = _fresh_gzip_assets(app.static_folder)
     app.config["fetcher"] = fetcher
     app.config["engine"] = engine
     app.config["db"] = db
@@ -468,6 +683,10 @@ def create_dashboard_app(
     app.config["JWT_DECODE_ALGORITHMS"] = ["HS256"]
     access_token_minutes = max(1, min(int(settings.JWT_ACCESS_TOKEN_MINUTES), 15))
     app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(minutes=access_token_minutes)
+    # Refresh token (HttpOnly cookie) silently re-mints the 15-minute access
+    # token. "Remember me" keeps it 30 days in a persistent cookie; otherwise
+    # it lives 12 hours in a browser-session cookie.
+    app.config["JWT_REFRESH_TOKEN_EXPIRES"] = _REMEMBER_ME_REFRESH_TTL
     # HttpOnly UI cookie is the server-side authority for /ui/* page renders.
     # /api/* accepts either Authorization Bearer header OR HttpOnly cookie.
     # AppSec (Round 20): JWT_TOKEN_LOCATION includes both "headers" and "cookies".
@@ -504,13 +723,58 @@ def create_dashboard_app(
                 _REVOKED_JTIS.pop(k, None)
             _REVOKED_JTIS[jti] = exp
 
+    def _persist_revoked_refresh_jti(jti: str, exp: float) -> None:
+        """Durable revocation for refresh tokens (they outlive a restart)."""
+        manager = getattr(get_db(), "manager", None)
+        if manager is None:
+            return
+        now = datetime.now(UTC).replace(tzinfo=None)
+        expires_at = datetime.fromtimestamp(exp, UTC).replace(tzinfo=None)
+        try:
+            with manager.engine.begin() as conn:
+                conn.execute(
+                    text("DELETE FROM revoked_tokens WHERE expires_at <= :now"), {"now": now}
+                )
+                exists = conn.execute(
+                    text("SELECT 1 FROM revoked_tokens WHERE jti = :jti"), {"jti": jti}
+                ).first()
+                if exists is None:
+                    conn.execute(
+                        text(
+                            "INSERT INTO revoked_tokens (jti, expires_at, created_at) "
+                            "VALUES (:jti, :expires_at, :created_at)"
+                        ),
+                        {"jti": jti, "expires_at": expires_at, "created_at": now},
+                    )
+        except SQLAlchemyError:
+            logger.exception("refresh_token_revoke_persist_failed")
+
+    def _is_refresh_jti_revoked(jti: str) -> bool:
+        manager = getattr(get_db(), "manager", None)
+        if manager is None:
+            return False
+        try:
+            with manager.engine.connect() as conn:
+                row = conn.execute(
+                    text("SELECT 1 FROM revoked_tokens WHERE jti = :jti"), {"jti": jti}
+                ).first()
+        except SQLAlchemyError:
+            # Fail closed: an unreadable blocklist must not resurrect sessions.
+            logger.exception("refresh_token_revoke_lookup_failed")
+            return True
+        return row is not None
+
     @jwt.token_in_blocklist_loader
     def check_if_token_revoked(_jwt_header: Any, jwt_payload: dict[str, Any]) -> bool:
         jti = jwt_payload.get("jti")
         if not jti:
             return False
         with _REVOKED_LOCK:
-            return jti in _REVOKED_JTIS
+            if jti in _REVOKED_JTIS:
+                return True
+        if jwt_payload.get("type") == "refresh":
+            return _is_refresh_jti_revoked(str(jti))
+        return False
 
     @jwt.revoked_token_loader
     def _custom_jwt_revoked(_jwt_header: Any, _jwt_payload: Any):
@@ -836,12 +1100,9 @@ def create_dashboard_app(
 
     _benchmark_cache: dict[str, Any] = {
         "timestamp": 0.0,
-        "data": {
-            "USDTRY": {"val": 48.47, "chg": 0.05},
-            "XU100": {"val": 14531.31, "chg": 0.87},
-            "XU030": {"val": 17344.75, "chg": 1.41},
-            "BIST_VOL": "118.6B TL",
-        },
+        # Empty until the first live fetch lands: the UI shows "—" rather
+        # than invented index levels.
+        "data": {},
     }
     _benchmark_updating = threading.Event()
 
@@ -859,18 +1120,20 @@ def create_dashboard_app(
                 for k, sym in tickers.items():
                     try:
                         h = yf.Ticker(sym).history(period="5d", interval="1d")
+                        as_of = str(h.index[-1])[:10] if h is not None and not h.empty else None
                         if h is not None and not h.empty and len(h) >= 2:
                             last = float(h["Close"].iloc[-1])
                             prev = float(h["Close"].iloc[-2])
                             pct = ((last - prev) / prev) * 100
-                            res[k] = {"val": round(last, 2), "chg": round(pct, 2)}
+                            res[k] = {"val": round(last, 2), "chg": round(pct, 2), "as_of": as_of}
                         elif h is not None and not h.empty:
                             last = float(h["Close"].iloc[-1])
-                            res[k] = {"val": round(last, 2), "chg": 0.0}
+                            res[k] = {"val": round(last, 2), "chg": None, "as_of": as_of}
                         if sym == "XU100.IS" and h is not None and not h.empty:
+                            # Yahoo reports index volume as a share count, not TL.
                             vols = [float(v) for v in h["Volume"] if float(v) > 0]
                             if vols and vols[-1] > 0:
-                                res["BIST_VOL"] = f"{vols[-1] / 1e9:.1f}B TL"
+                                res["BIST_VOL"] = f"{vols[-1] / 1e9:.1f} mlr adet"
                     except Exception:
                         pass
                 if res:
@@ -1054,7 +1317,7 @@ def create_dashboard_app(
             if static_folder:
                 rel_path = request.path[len("/static/") :].lstrip("/")
                 safe_path = safe_join_static(static_folder, rel_path + ".gz")
-                if safe_path and os.path.isfile(safe_path):
+                if safe_path and os.path.abspath(safe_path) in fresh_gzip_assets:
                     try:
                         with open(safe_path, "rb") as f:
                             gz_bytes = f.read()
@@ -1340,6 +1603,14 @@ def create_dashboard_app(
             methods=["GET"],
         )
 
+    def _set_refresh_cookie(response: Any, user: dict[str, Any], remember: bool) -> None:
+        """Attach the HttpOnly refresh cookie that keeps the UI signed in."""
+        ttl = _REMEMBER_ME_REFRESH_TTL if remember else _SESSION_REFRESH_TTL
+        refresh_token = create_refresh_token(identity=str(user["id"]), expires_delta=ttl)
+        # max_age=None -> browser-session cookie (JWT_SESSION_COOKIE default).
+        max_age = int(ttl.total_seconds()) if remember else None
+        set_refresh_cookies(response, refresh_token, max_age=max_age)
+
     @app.route("/api/auth/login", methods=["POST"])
     @limiter.limit("5 per minute", key_func=_auth_rate_limit_key)
     def api_auth_login():
@@ -1382,6 +1653,7 @@ def create_dashboard_app(
         # HttpOnly cookie is the server-side authority for /ui/* page renders.
         # /api/* keeps using the Authorization header (see _ui_auth_required).
         set_access_cookies(response, token)
+        _set_refresh_cookie(response, user, remember=_coerce_bool(payload.get("remember")))
         return response
 
     @app.route("/api/auth/register", methods=["POST"])
@@ -1413,6 +1685,7 @@ def create_dashboard_app(
             }
         )
         set_access_cookies(response, token)
+        _set_refresh_cookie(response, user, remember=False)
         return response, 201
 
     @app.route("/api/auth/verify", methods=["GET"])
@@ -1459,9 +1732,63 @@ def create_dashboard_app(
         set_access_cookies(response, cookie_token)
         return response, 200
 
+    def _mint_access_token_for(identity: str) -> str | None:
+        """Fresh access token from the DB row, so role changes and deleted
+        users take effect on the next refresh instead of lingering 30 days."""
+        manager = getattr(get_db(), "manager", None)
+        if manager is None:
+            return None
+        try:
+            user_id = int(identity)
+        except (TypeError, ValueError):
+            return None
+        try:
+            with manager.engine.connect() as conn:
+                row = (
+                    conn.execute(
+                        text("SELECT id, email, role FROM users WHERE id = :id LIMIT 1"),
+                        {"id": user_id},
+                    )
+                    .mappings()
+                    .first()
+                )
+        except SQLAlchemyError:
+            logger.exception("refresh_user_lookup_failed", user_id=user_id)
+            return None
+        if row is None:
+            return None
+        return create_access_token(
+            identity=str(row["id"]),
+            additional_claims={"role": str(row["role"]), "email": str(row["email"])},
+        )
+
+    @app.route("/api/auth/refresh", methods=["POST"])
+    @jwt_required(refresh=True, locations=["cookies"])
+    @limiter.limit("30 per minute")
+    def api_auth_refresh():
+        """Re-mint the 15-minute access token from the HttpOnly refresh cookie.
+
+        Cookie-authenticated POST: Flask-JWT-Extended enforces the
+        X-CSRF-TOKEN header against the csrf_refresh_token cookie.
+        """
+        token = _mint_access_token_for(str(get_jwt_identity() or ""))
+        if token is None:
+            response = jsonify({"status": "error", "message": "Oturum doğrulanmadı."})
+            unset_jwt_cookies(response)
+            return response, 401
+        response = jsonify(
+            {
+                "status": "ok",
+                "access_token": token,
+                "expires_in_seconds": access_token_minutes * 60,
+            }
+        )
+        set_access_cookies(response, token)
+        return response, 200
+
     @app.route("/api/auth/logout", methods=["POST", "GET"])
     def api_auth_logout():
-        """Revoke the current JWT (jti) and clear client session cookies."""
+        """Revoke the current JWTs (access + refresh) and clear session cookies."""
         try:
             verify_jwt_in_request(optional=True)
             claims = get_jwt()
@@ -1470,6 +1797,18 @@ def create_dashboard_app(
                 _revoke_jti(str(claims["jti"]), exp)
         except Exception:
             pass
+        # Decode the refresh cookie directly: revoking needs no CSRF proof,
+        # and logout must work even when the access token already expired.
+        raw_refresh = request.cookies.get("refresh_token_cookie")
+        if raw_refresh:
+            try:
+                refresh_claims = decode_token(raw_refresh, allow_expired=True)
+                if refresh_claims.get("type") == "refresh" and refresh_claims.get("jti"):
+                    _persist_revoked_refresh_jti(
+                        str(refresh_claims["jti"]), float(refresh_claims.get("exp", time.time()))
+                    )
+            except Exception:
+                pass
 
         response = jsonify({"status": "ok", "message": "Oturum başarıyla kapatıldı."})
         unset_jwt_cookies(response)
@@ -2263,6 +2602,16 @@ def create_dashboard_app(
                 target_period, target_interval = req_period, req_interval
             else:
                 target_period, target_interval = "6mo", settings.DATA_INTERVAL
+            # Yahoo has no 4h bars: fetch 60m and merge into session halves.
+            resample_4h = req_interval in ("4h", "4s")
+            display_interval = "4h" if resample_4h else target_interval
+            intraday = display_interval.endswith(("m", "h"))
+            timeframe_meta = {
+                "period": target_period,
+                "interval": display_interval,
+                "source_interval": target_interval,
+                "intraday": intraday,
+            }
 
             if use_mtf_analysis and fetch_mtf is not None:
                 cache_key = (
@@ -2271,14 +2620,14 @@ def create_dashboard_app(
                     f"{settings.MTF_TRIGGER_PERIOD}:{settings.MTF_TRIGGER_INTERVAL}"
                 )
             else:
-                cache_key = f"{normalized_ticker}|analyze|single|{target_period}:{target_interval}"
+                cache_key = f"{normalized_ticker}|analyze|single|{target_period}:{display_interval}"
 
             cached_response = runtime_fetcher.get_cached_analysis(cache_key, force=force_refresh)
             if cached_response is not None:
                 payload = dict(cached_response)
                 payload["duration_ms"] = round((time.time() - start_time) * 1000, 2)
                 payload["force_refresh"] = force_refresh
-                payload["timeframe"] = {"period": target_period, "interval": target_interval}
+                payload["timeframe"] = timeframe_meta
                 payload = _apply_bars_limit(payload)
                 if _coerce_bool(request.args.get("compact")):
                     payload = _compact_analyze_payload(payload)
@@ -2342,6 +2691,10 @@ def create_dashboard_app(
                     {"status": "error", "message": get_message("api.data_not_found")}
                 ), 404
 
+            if resample_4h and not use_mtf_analysis:
+                chart_df = _resample_session_4h(chart_df)
+                analysis_input = chart_df
+
             indicator_engine = TechnicalIndicators()
             enriched = _cached_analyze_add_all(chart_df, normalized_ticker)
             snapshot = indicator_engine.get_snapshot(enriched)
@@ -2350,8 +2703,19 @@ def create_dashboard_app(
             tail = enriched.tail(60)
             fast_key = f"sma_{settings.SMA_FAST}"
             slow_key = f"sma_{settings.SMA_SLOW}"
+            ema_long_key = f"ema_{settings.EMA_LONG}"
+            ema_long_val = (
+                _round_value(enriched[ema_long_key].iloc[-1])
+                if ema_long_key in enriched.columns and len(enriched) >= int(settings.EMA_LONG)
+                else None
+            )
+            now_tr = datetime.now(TR)
+            pivot_df = chart_df
+            if display_interval == "1wk" and len(chart_df) > 1:
+                pivot_df = chart_df.iloc[:-1]  # the last weekly bar is still forming
             price_data = [
                 {
+                    "label": _bar_label(d_val, intraday),
                     "date": str(d_val)[:19],
                     "open": _round_value(o_val),
                     "high": _round_value(h_val),
@@ -2388,9 +2752,22 @@ def create_dashboard_app(
                     "stop_loss": signal.stop_loss if signal else 0,
                     "target": signal.target_price if signal else 0,
                     "position_size": signal.position_size if signal else None,
+                    "price": signal.price if signal else None,
+                    "confidence": signal.confidence if signal else None,
                 },
+                "indicators": {
+                    "sma_fast_period": int(settings.SMA_FAST),
+                    "sma_slow_period": int(settings.SMA_SLOW),
+                    "rsi_period": int(settings.RSI_PERIOD),
+                    "rsi_oversold": int(settings.RSI_OVERSOLD),
+                    "rsi_overbought": int(settings.RSI_OVERBOUGHT),
+                    "ema_long_period": int(settings.EMA_LONG),
+                    "ema_long": ema_long_val,
+                },
+                "session": _session_summary(chart_df, intraday),
+                "pivots": _previous_period_pivots(pivot_df, intraday, now_tr),
                 "price_data": price_data,
-                "timeframe": {"period": target_period, "interval": target_interval},
+                "timeframe": timeframe_meta,
             }
             runtime_fetcher.store_analysis(cache_key, response_payload)
             response_payload["force_refresh"] = force_refresh
@@ -2427,16 +2804,13 @@ def create_dashboard_app(
         compact = _coerce_bool(request.args.get("compact"))
         signals = get_db().get_recent_signals(limit=limit, ticker=ticker)
         if compact:
-            # UI renders only reasons[0]; conditions are never read client-side.
-            # Strip them to cut ~70% of payload (opt-in, default unchanged).
+            # conditions duplicate reasons and score_breakdown is never read
+            # client-side; the signals page lists every reason, so keep those.
             trimmed = []
             for sig in signals:
                 s = dict(sig)
                 s.pop("conditions", None)
                 s.pop("score_breakdown", None)
-                reasons = s.get("reasons")
-                if isinstance(reasons, list):
-                    s["reasons"] = reasons[:1]
                 trimmed.append(s)
             signals = trimmed
         return jsonify({"status": "ok", "signals": signals})
@@ -2530,56 +2904,7 @@ def create_dashboard_app(
         stats["latest_scan"] = latest_scan
         stats["rejection_breakdown"] = latest_scan["rejection_breakdown"]
 
-        # Market breadth calculation from recent signals
-        rsi_vals: list[float] = []
-        actionable_symbols: list[str] = []
-        vol_up_count = 0
-
-        for sig in recent_signals:
-            st = str(sig.get("signal_type", "")).upper()
-            ticker = str(sig.get("ticker", "")).replace(".IS", "")
-            if (
-                "AL" in st or "SAT" in st or "BUY" in st or "SELL" in st
-            ) and ticker not in actionable_symbols:
-                actionable_symbols.append(ticker)
-            for cond in sig.get("conditions", []):
-                cond_str = str(cond)
-                if "Hacim artıyor" in cond_str or "Fiyat-Hacim" in cond_str:
-                    vol_up_count += 1
-                m = re.search(r"RSI.*?\((\d+\.?\d*)\)", cond_str)
-                if m:
-                    try:
-                        rsi_vals.append(float(m.group(1)))
-                    except ValueError:
-                        pass
-
-        avg_rsi = round(sum(rsi_vals) / len(rsi_vals), 1) if rsi_vals else 54.2
-        if avg_rsi >= 65:
-            rsi_status = "Aşırı Alım Bölgesi"
-        elif avg_rsi >= 55:
-            rsi_status = "Dinamik Nötr-Alış"
-        elif avg_rsi >= 45:
-            rsi_status = "Dengeli Nötr"
-        elif avg_rsi >= 35:
-            rsi_status = "Dinamik Nötr-Satış"
-        else:
-            rsi_status = "Aşırı Satım Bölgesi"
-
-        vol_ratio = round(1.0 + (vol_up_count / max(1, len(recent_signals))), 2)
-        actionable_summary = (
-            ", ".join(actionable_symbols[:3])
-            + (f" +{len(actionable_symbols) - 3}" if len(actionable_symbols) > 3 else "")
-            if actionable_symbols
-            else "Beklemede"
-        )
-
-        breadth = {
-            "avg_rsi": avg_rsi,
-            "rsi_status": rsi_status,
-            "vol_ratio": f"{vol_ratio:.2f}x",
-            "actionable_tickers": actionable_symbols[:5],
-            "actionable_summary": actionable_summary,
-        }
+        breadth = _latest_signal_batch_breadth(recent_signals)
 
         with _api_stats_cache_lock:
             _api_stats_cache.clear()
@@ -2593,6 +2918,43 @@ def create_dashboard_app(
                 }
             )
         return _finish_api_stats(stats, latest_scan, recent_signals, breadth)
+
+    @app.route("/api/config")
+    @jwt_required()
+    @require_active_subscription()
+    def api_config():
+        """Read-only snapshot of the parameters the live scanner runs with."""
+        runtime_params = getattr(get_engine(), "params", None)
+        params = runtime_params if runtime_params is not None else StrategyParams.from_settings()
+        return jsonify(
+            {
+                "status": "ok",
+                "strategy_profile": str(settings.STRATEGY_PROFILE),
+                "buy_threshold": float(params.buy_threshold),
+                "sell_threshold": float(params.sell_threshold),
+                "max_actionable_score": float(params.max_actionable_score),
+                "adx_threshold": float(params.adx_threshold),
+                "scan_interval_minutes": int(settings.SCAN_INTERVAL_MINUTES),
+                "market_open_hour": int(settings.MARKET_OPEN_HOUR),
+                "market_close_hour": int(settings.MARKET_CLOSE_HOUR),
+                "rsi_period": int(settings.RSI_PERIOD),
+                "rsi_oversold": int(settings.RSI_OVERSOLD),
+                "rsi_overbought": int(settings.RSI_OVERBOUGHT),
+                "sma_fast": int(settings.SMA_FAST),
+                "sma_slow": int(settings.SMA_SLOW),
+                "ema_fast": int(settings.EMA_FAST),
+                "ema_slow": int(settings.EMA_SLOW),
+                "ema_long": int(settings.EMA_LONG),
+                "volume_spike_multiplier": float(settings.VOLUME_SPIKE_MULTIPLIER),
+                "volume_confirm_multiplier": float(settings.VOLUME_CONFIRM_MULTIPLIER),
+                "trend_interval": str(settings.MTF_TREND_INTERVAL),
+                "trigger_interval": str(settings.MTF_TRIGGER_INTERVAL),
+                "watchlist_source": str(settings.WATCHLIST_SOURCE),
+                "watchlist_size": len(list(getattr(settings, "WATCHLIST", []) or [])),
+                "data_provider": str(settings.DATA_PROVIDER),
+                "paper_mode": bool(settings.PAPER_MODE),
+            }
+        )
 
     @app.route("/api/scans/history")
     @jwt_required()
@@ -2613,7 +2975,8 @@ def create_dashboard_app(
         so no CSRF token is needed on this path. INVARIANT (Round 11): keep it
         that way — a cookie-authenticated unsafe method MUST require
         X-CSRF-TOKEN (see the JWT config comment in create_dashboard_app).
-        Missing/invalid cookie -> 302 to /login.
+        Missing/invalid cookie -> 302 to /login. An expired access cookie is
+        re-minted from a valid refresh cookie (GET only, so no CSRF needed).
         """
 
         @wraps(view)
@@ -2621,12 +2984,23 @@ def create_dashboard_app(
             try:
                 verify_jwt_in_request(locations=["cookies"])
             except Exception:
-                # Fail closed: missing, malformed (raw PyJWT errors escape
-                # Flask-JWT-Extended's own hierarchy on the cookie path),
-                # expired, or wrong-type tokens all bounce to /login.
-                logger.info("ui_auth_redirect_login", route=request.path)
-                resp = redirect("/login", code=302)
-                resp.delete_cookie("access_token_cookie", path="/")
+                fresh_token = None
+                try:
+                    verify_jwt_in_request(refresh=True, locations=["cookies"])
+                    fresh_token = _mint_access_token_for(str(get_jwt_identity() or ""))
+                except Exception:
+                    fresh_token = None
+                if fresh_token is None:
+                    # Fail closed: missing, malformed (raw PyJWT errors escape
+                    # Flask-JWT-Extended's own hierarchy on the cookie path),
+                    # expired, revoked or wrong-type tokens all bounce to /login.
+                    logger.info("ui_auth_redirect_login", route=request.path)
+                    resp = redirect("/login", code=302)
+                    unset_jwt_cookies(resp)
+                    resp.delete_cookie("access_token_cookie", path="/")
+                    return resp
+                resp = make_response(view(*args, **kwargs))
+                set_access_cookies(resp, fresh_token)
                 return resp
             return view(*args, **kwargs)
 

@@ -56,7 +56,17 @@
         return infoRes.json().then(function (info) {
           billingInfo = info;
           var iban = document.getElementById('billing-iban');
-          if (iban && billingInfo.iban) iban.textContent = billingInfo.iban;
+          if (iban) iban.textContent = billingInfo.iban || 'Henüz tanımlanmadı';
+          if (!billingInfo.enrollment_enabled) {
+            // Server rejects claims while enrollment is closed (403): say so
+            // up front instead of letting the user "pay" into a dead end.
+            document.querySelectorAll('[data-plan], #billing-claim-btn').forEach(function (b) {
+              b.disabled = true;
+              b.classList.add('opacity-50', 'cursor-not-allowed');
+            });
+            var st = document.getElementById('billing-status');
+            if (st) st.textContent = 'Ödeme kabulü şu an kapalı. Abonelik için yöneticiyle iletişime geçin.';
+          }
           var pp = document.getElementById('price-pro');
           if (pp && billingInfo.pro_price_try) pp.textContent = billingInfo.pro_price_try;
           var ppp = document.getElementById('price-pro-plus');
@@ -71,11 +81,19 @@
           var labels = { trial: 'Deneme', pro: 'Pro', pro_plus: 'Pro+' };
           var name = document.getElementById('billing-plan-name');
           var detail = document.getElementById('billing-plan-detail');
-          if (name) name.textContent = labels[sub.plan] || sub.plan;
+          if (name) name.textContent = sub.unlimited ? 'Yönetici' : (labels[sub.plan] || sub.plan);
           if (detail) {
-            detail.textContent = sub.status === 'active'
-              ? 'Planınız aktif. Kalan süre dolmadan yenileyebilirsiniz.'
-              : 'Planınızın süresi dolmuş. Devam etmek için yukarıdan bir plan seçip ödemenizi bildirin.';
+            if (sub.unlimited) {
+              detail.textContent = 'Yönetici hesabı: süresiz erişim.';
+            } else if (sub.status === 'active') {
+              var until = sub.expires_at
+                ? new Date(sub.expires_at).toLocaleDateString('tr-TR', { timeZone: 'Europe/Istanbul' })
+                : '';
+              detail.textContent = 'Planınız aktif' + (until ? ' (bitiş: ' + until + ', ' + sub.remaining_days + ' gün kaldı)' : '') +
+                '. Kalan süre dolmadan yenileyebilirsiniz.';
+            } else {
+              detail.textContent = 'Planınızın süresi dolmuş. Devam etmek için yukarıdan bir plan seçip ödemenizi bildirin.';
+            }
           }
         });
       }

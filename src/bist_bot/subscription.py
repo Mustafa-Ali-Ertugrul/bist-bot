@@ -86,6 +86,9 @@ def subscription_status(user: dict[str, Any] | None, now: datetime | None = None
         "expires_at": expires_at.isoformat() if expires_at is not None else None,
         "remaining_seconds": remaining_seconds,
         "remaining_days": remaining_seconds // 86400,
+        # Admin access never expires (see is_subscription_active); the UI
+        # must not show a "0 days left" countdown for it.
+        "unlimited": str((user or {}).get("role") or "").lower() == "admin",
     }
 
 

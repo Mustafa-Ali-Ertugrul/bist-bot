@@ -375,6 +375,23 @@ class BootstrapStateRecord(Base):
     )
 
 
+class RevokedTokenRecord(Base):
+    """Refresh-token JTIs revoked at logout (outlive a process restart).
+
+    Access tokens live at most 15 minutes and stay in the in-memory
+    blocklist; refresh tokens live up to 30 days, so their revocation
+    must be durable.
+    """
+
+    __tablename__ = "revoked_tokens"
+
+    jti: Mapped[str] = mapped_column(String, primary_key=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+
 class AuditRecord(Base):
     __tablename__ = "audit_trail"
 

@@ -1,0 +1,65 @@
+/* Rules the prebuilt tailwind.css cannot express (it only ships used classes). */
+
+/* Header nav labels ("Canlı Sinyaller") must not wrap onto two lines. */
+header nav a,
+#header-scan-status {
+  white-space: nowrap;
+}
+
+/* tailwind.css ships no opacity-50 / cursor-not-allowed utilities. */
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* The floating bottom toolbar is a phone/tablet affordance; on desktop the
+   header nav is visible and the toolbar would cover page content. */
+@media (min-width: 1024px) {
+  .bb-bottom-nav {
+    display: none !important;
+  }
+}
+
+/* Phones: four labelled pills overflow a 390px screen; keep the icons only. */
+@media (max-width: 520px) {
+  .bb-bottom-nav nav a > span:not(.material-symbols-outlined) {
+    display: none;
+  }
+  .bb-bottom-nav nav a {
+    padding: 8px 18px;
+  }
+}
+
+/* Signal reason list inside cards/detail panels. */
+.bb-reason-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Horizontal bar used by the rejection-reason breakdown. */
+.bb-bar-track {
+  width: 100%;
+  height: 6px;
+  border-radius: 9999px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.06);
+}
+.bb-bar-fill {
+  height: 100%;
+  border-radius: 9999px;
+  background: #4edea3;
+}
+
+/* Read-only settings rows. */
+.bb-setting-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+.bb-setting-row:last-child {
+  border-bottom: 0;
+}

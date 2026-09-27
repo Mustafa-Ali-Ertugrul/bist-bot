@@ -87,6 +87,8 @@
     var btn = document.getElementById('submit-btn');
     var email = document.getElementById('operator-email').value.trim();
     var password = document.getElementById('operator-password').value;
+    var rememberBox = document.getElementById('remember-device');
+    var remember = !!(rememberBox && rememberBox.checked);
     var errDiv = document.getElementById('login-error-msg');
     if (errDiv) errDiv.remove();
 
@@ -97,7 +99,7 @@
     fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: email, password: password })
+      body: JSON.stringify({ email: email, password: password, remember: remember })
     }).then(function (res) {
       return res.json().then(function (data) {
         if (res.ok && data.status === 'ok') {
@@ -182,7 +184,8 @@
       if (act === 'toggle-reg-pass') { toggleRegPasswordVisibility(); return; }
       if (act === 'password-reset') {
         e.preventDefault();
-        alert('Şifre sıfırlama yönergesi kayıtlı operatör e-postasına iletildi.');
+        // No e-mail delivery exists yet: never claim a reset mail was sent.
+        alert('Otomatik şifre sıfırlama henüz yok. Şifrenizi sıfırlatmak için yöneticiyle iletişime geçin.');
         return;
       }
     });
