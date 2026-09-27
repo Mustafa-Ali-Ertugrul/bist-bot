@@ -57,6 +57,6 @@ dependencies {
     implementation("androidx.activity:activity-ktx:1.9.2")
     
     // API and JSON
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okhttp3:okhttp:5.5.0")
     implementation("com.google.code.gson:gson:2.14.0")
 }
