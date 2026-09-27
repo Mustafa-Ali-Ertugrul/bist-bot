@@ -52,3 +52,19 @@ O1, O2, O3 ikişer çıkışla (açılış seansı fiyatı; 10:30 fiyatı) canl�
 izlenir. Canlı liste 17:45'teki fiyatla hesaplanır (işlem yapılabilir olsun diye),
 paper alış resmi kapanış fiyatından kaydedilir. Karar: en az 60 işlem günü sonunda
 net − para piyasası ortalaması > 0 ve t ≥ 2.6 (6 varyant, Bonferroni).
+
+## Sonuç (2026-09-27, tek çalıştırma — kurallar değiştirilmedi)
+
+`overnight_backtest.py`, 181/182 tarihli BIST100 üyesi (KERVT Yahoo'da yok).
+Temel maliyet (yön başına %0.05); "net−fon" = gece başına net getiri − para piyasası vekili.
+
+| Kural | Geliştirme net−fon, t | Saklı test net−fon, t | Saklı yıllık net / fon | Saklı maks. düşüş | Stres (yön %0.10) saklı t | Karar |
+|---|---|---|---|---|---|---|
+| O1 Tümü | +0.030%, +0.81 | −0.097%, −2.23 | %2.2 / %31.6 | −%19.1 | −4.52 | RED |
+| O2 Gün içi kaybedenler | +0.001%, +0.02 | −0.260%, −4.40 | −%32.6 / %31.6 | −%43.0 | −6.10 | RED |
+| O3 Güçlü kapanış | +0.068%, +1.71 | +0.062%, +1.57 | %52.1 / %31.6 | −%5.9 | −0.97 | RED (t < 2.4) |
+
+Hiçbir kural kabul kriterini geçmedi. O3 her iki dönemde ve her yıl fonun üstünde
+(2023 +0.26, 2024 +0.07, 2025 +0.02, 2026 +0.03 %/gece) ama istatistiksel olarak
+anlamlı değil ve maliyete çok duyarlı: yön başına %0.10 kaymada fonun altına düşüyor.
+Koşulsuz gece getirisi (O1) 2025'ten beri fonu geçmiyor. Karar canlı paper'a kalır.
