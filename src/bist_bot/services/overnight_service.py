@@ -26,7 +26,7 @@ import pandas as pd
 
 from bist_bot.app_logging import get_logger
 from bist_bot.config.settings import settings as default_settings
-from bist_bot.market_calendar import bist_close_time, is_bist_holiday, session_eod_datetime
+from bist_bot.market_calendar import bist_close_time, bist_eod_time, is_bist_holiday
 from bist_bot.notifier import TR
 from bist_bot.strategy import overnight as rules
 from bist_bot.strategy.monthly_portfolio import pit_members
@@ -81,7 +81,8 @@ class OvernightService:
         key = today.isoformat()
         close_at = datetime.combine(today, bist_close_time(today), tzinfo=TR)
         if key not in nights and now >= close_at - LIST_LEAD:
-            source = "eod" if now >= session_eod_datetime(today) else "list"
+            eod_at = datetime.combine(today, bist_eod_time(today), tzinfo=TR)
+            source = "eod" if now >= eod_at else "list"
             picks = self._pick(today)
             if picks:
                 nights[key] = {"picks": picks, "source": source}
