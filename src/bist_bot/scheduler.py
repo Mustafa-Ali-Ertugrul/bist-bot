@@ -45,6 +45,7 @@ class MarketScheduler:
         trading_agent=None,
         monthly_portfolio=None,
         league=None,
+        overnight=None,
     ):
         self.scanner = scan_service
         self.notifier = notifier
@@ -52,6 +53,7 @@ class MarketScheduler:
         self.trading_agent = trading_agent
         self.monthly_portfolio = monthly_portfolio
         self.league = league
+        self.overnight = overnight
         self.running = False
         # Faz 3 P1.1: post-close position pass fires once per trading day.
         self._eod_close_done_date: date | None = None
@@ -164,10 +166,11 @@ class MarketScheduler:
         logger.info("scheduler_eod_close_completed")
 
     def _run_monthly_portfolio(self, now: datetime) -> None:
-        """Month-end paper jobs (M2, league); each isolated so none blocks the EOD pass."""
+        """Post-close paper jobs (M2, league, overnight); each isolated so none blocks the EOD pass."""
         for label, job in (
             ("Aylık portföy", self.monthly_portfolio),
             ("Strateji ligi", self.league),
+            ("Gece stratejisi", self.overnight),
         ):
             if job is None:
                 continue
@@ -181,6 +184,17 @@ class MarketScheduler:
                     error=str(exc),
                 )
                 self._notify(f"⚠️ {label} hesaplanamadı: {type(exc).__name__}")
+
+    def _run_overnight(self, now: datetime) -> None:
+        """In-session overnight steps (evening list, morning exits); never breaks the scan loop."""
+        if self.overnight is None:
+            return
+        try:
+            self.overnight.run_if_due(now)
+        except Exception as exc:
+            logger.error(
+                "scheduler_overnight_failed", error_type=type(exc).__name__, error=str(exc)
+            )
 
     # ------------------------------------------------------------------
     # Watchdog (C3)
@@ -285,6 +299,7 @@ class MarketScheduler:
                 try:
                     self._scan_once()
                     self._mark_scan_success(self._now())
+                    self._run_overnight(self._now())
                 except Exception as e:
                     logger.error(
                         "scheduler_scan_failed",

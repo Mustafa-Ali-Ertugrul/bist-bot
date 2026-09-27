@@ -40,6 +40,11 @@ def main():
         from bist_bot.services.league_service import LeagueService
 
         league = LeagueService(container.fetcher, container.notifier, settings)
+    overnight = None
+    if settings.OVERNIGHT_ENABLED:
+        from bist_bot.services.overnight_service import OvernightService
+
+        overnight = OvernightService(container.fetcher, container.notifier, settings)
     scheduler = MarketScheduler(
         scanner,
         container.notifier,
@@ -47,6 +52,7 @@ def main():
         trading_agent=container.trading_agent,
         monthly_portfolio=monthly_portfolio,
         league=league,
+        overnight=overnight,
     )
     order_tracker = OrderTracker(container.broker, container.db)
 

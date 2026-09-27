@@ -318,6 +318,8 @@ class TradingSettings:
     )
     # 18-strategy paper league (strategy/league.py), operator chat only.
     LEAGUE_ENABLED: bool = _get_bool_env("LEAGUE_ENABLED", False)
+    # Overnight close->open paper rules O1-O3 (strategy/overnight.py), operator chat only.
+    OVERNIGHT_ENABLED: bool = _get_bool_env("OVERNIGHT_ENABLED", False)
     SHADOW_ENABLED: bool = _get_bool_env("SHADOW_ENABLED", True)
     SHADOW_HOLDING_DAYS: int = _get_int_env("SHADOW_HOLDING_DAYS", 5)
     SHADOW_ONLY_ROBUST: bool = _get_bool_env("SHADOW_ONLY_ROBUST", False)
