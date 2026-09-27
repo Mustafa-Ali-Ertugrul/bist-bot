@@ -282,6 +282,30 @@ def test_stop_and_target_close_shadow_position(tmp_path, close, expected_hit):
     closed = service.process_scan([], _market_close(close), now=ENTRY_TIME + timedelta(hours=1))
 
     assert closed[0]["hit"] == expected_hit
+    with service.csv_path.open(encoding="utf-8", newline="") as handle:
+        row = next(csv.DictReader(handle))
+    assert (float(row["stop"]), float(row["target"])) == (95.0, 110.0)
+
+
+def test_legacy_csv_header_is_migrated_on_append(tmp_path):
+    service = _service(tmp_path, SHADOW_MIN_SCORE=15)
+    legacy_fields = CSV_FIELDS[: CSV_FIELDS.index("stop")]
+    with service.csv_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=legacy_fields)
+        writer.writeheader()
+        writer.writerow(
+            {field: "" for field in legacy_fields} | {"ticker": "OLD.IS", "hit": "stop"}
+        )
+    service.process_scan([_signal()], now=ENTRY_TIME)
+
+    service.process_scan([], _market_close(111.0), now=ENTRY_TIME + timedelta(hours=1))
+
+    with service.csv_path.open(encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        rows = list(reader)
+    assert tuple(reader.fieldnames or ()) == CSV_FIELDS
+    assert [r["ticker"] for r in rows] == ["OLD.IS", ROBUST]
+    assert rows[0]["stop"] == "" and float(rows[1]["target"]) == 110.0
 
 
 def test_duplicate_radar_does_not_create_second_open_position(tmp_path):

@@ -29,6 +29,8 @@ CSV_FIELDS = (
     "pnl_tl",
     "hit",
     "reasons",
+    "stop",
+    "target",
 )
 
 
@@ -317,6 +319,8 @@ class ShadowTradeService:
                 "pnl_tl": round(pnl_tl, 2),
                 "hit": hit,
                 "reasons": position.get("reasons", ""),
+                "stop": stop,
+                "target": target,
             }
             closed.append(row)
             del positions[ticker]
@@ -353,10 +357,24 @@ class ShadowTradeService:
     def _append_closed(self, rows: list[dict[str, Any]]) -> None:
         self.results_dir.mkdir(parents=True, exist_ok=True)
         write_header = not self.csv_path.exists() or self.csv_path.stat().st_size == 0
+        if not write_header:
+            self._migrate_csv_header()
         with self.csv_path.open("a", encoding="utf-8", newline="") as handle:
             writer = csv.DictWriter(handle, fieldnames=CSV_FIELDS)
             if write_header:
                 writer.writeheader()
+            writer.writerows(rows)
+
+    def _migrate_csv_header(self) -> None:
+        """Rewrite a CSV written with an older column set; missing columns stay empty."""
+        with self.csv_path.open(encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle)
+            if tuple(reader.fieldnames or ()) == CSV_FIELDS:
+                return
+            rows = list(reader)
+        with self.csv_path.open("w", encoding="utf-8", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=CSV_FIELDS, extrasaction="ignore")
+            writer.writeheader()
             writer.writerows(rows)
 
     def _recent_closed(self, cutoff: datetime) -> list[dict[str, str]]:
