@@ -136,23 +136,27 @@ def test_register_assigns_24h_trial(client: FlaskClient):
 # ---------------------------------------------------------------------------
 
 
-def test_gate_trial_active_allows_stats(client: FlaskClient):
+def test_gate_trial_active_denied_signal_stats(client: FlaskClient, app: Flask):
+    """Faz 0b: signal payload APIs are admin-only, even for an active trial."""
     _register(client, "gate1@example.com")
     token = _login(client, "gate1@example.com")
     res = client.get("/api/stats", headers=_auth_headers(token))
-    assert res.status_code == 200
-
-
-def test_gate_expired_returns_402(client: FlaskClient, app: Flask):
-    _register(client, "gate2@example.com")
-    token = _login(client, "gate2@example.com")
-    _set_expiry(app, "gate2@example.com", datetime.now(UTC) - timedelta(seconds=1))
-    res = client.get("/api/stats", headers=_auth_headers(token))
-    assert res.status_code == 402
-    body = res.get_json()
-    assert body["code"] == "sub_expired"
+    assert res.status_code == 403
     res2 = client.get("/api/signals/history?limit=5", headers=_auth_headers(token))
-    assert res2.status_code == 402
+    assert res2.status_code == 403
+    res3 = client.get("/api/scans/history", headers=_auth_headers(token))
+    assert res3.status_code == 403
+
+
+def test_gate_expired_member_still_reaches_beta_and_billing(client: FlaskClient, app: Flask):
+    _register(client, "gate2@example.com")
+    _login(client, "gate2@example.com")
+    _set_expiry(app, "gate2@example.com", datetime.now(UTC) - timedelta(seconds=1))
+    res = client.get("/ui/dashboard")
+    assert res.status_code == 302
+    assert res.headers["Location"].endswith("/ui/beta")
+    assert client.get("/ui/beta").status_code == 200
+    assert client.get("/ui/billing").status_code == 200
 
 
 def test_gate_admin_bypass_without_plan(client: FlaskClient, app: Flask):
@@ -179,13 +183,13 @@ def test_me_subscription_shapes(client: FlaskClient, app: Flask):
     assert expired["remaining_seconds"] == 0
 
 
-def test_ui_expired_redirects_to_billing(client: FlaskClient, app: Flask):
+def test_ui_expired_redirects_to_beta(client: FlaskClient, app: Flask):
     _register(client, "ui1@example.com")
     _login(client, "ui1@example.com")  # stores HttpOnly cookie in the test client
     _set_expiry(app, "ui1@example.com", datetime.now(UTC) - timedelta(seconds=1))
     res = client.get("/ui/dashboard")
     assert res.status_code == 302
-    assert res.headers["Location"].endswith("/ui/billing")
+    assert res.headers["Location"].endswith("/ui/beta")
     billing = client.get("/ui/billing")
     assert billing.status_code == 200
 
@@ -195,7 +199,7 @@ def test_ui_admin_gating(client: FlaskClient, app: Flask):
     _login(client, "plain@example.com")
     res = client.get("/ui/admin")
     assert res.status_code == 302
-    assert res.headers["Location"].endswith("/ui/dashboard")
+    assert res.headers["Location"].endswith("/ui/beta")
     admin_client = app.test_client()
     _make_admin(app, "rooter@example.com")
     admin_login = admin_client.post(
@@ -262,7 +266,7 @@ def test_billing_enrollment_paused_blocks_claim_and_approve(client: FlaskClient,
         token = _login(client, "paused1@example.com")
         res = client.post("/api/billing/claim", headers=_auth_headers(token), json={"plan": "pro"})
         assert res.status_code == 403
-        assert "duraklatıldı" in res.get_json()["message"]
+        assert "kapalı" in res.get_json()["message"]
 
         # 2) önceki talepler olsa bile onay reddedilir
         with settings.override(BILLING_ENROLLMENT_ENABLED=True):
@@ -274,7 +278,7 @@ def test_billing_enrollment_paused_blocks_claim_and_approve(client: FlaskClient,
         admin_c, atoken = _admin_client(app)
         res2 = admin_c.post(f"/api/admin/requests/{rid}/approve", headers=_auth_headers(atoken))
         assert res2.status_code == 403
-        assert "duraklatıldı" in res2.get_json()["message"]
+        assert "kapalı" in res2.get_json()["message"]
 
         # 3) info endpoint pause durumunu dışarı yansıtır
         info = client.get("/api/billing/info", headers=_auth_headers(token))

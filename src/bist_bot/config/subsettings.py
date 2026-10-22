@@ -309,6 +309,15 @@ class TradingSettings:
     # fires when the EOD pass was missed for multiple sessions (observed:
     # TRALT held 6.2 days after a missed EOD). 0 disables the guard.
     OUTCOME_MAX_HOLD_DAYS: int = _get_int_env("OUTCOME_MAX_HOLD_DAYS", 5)
+    # Startup reconciliation: machine was off → EOD pass never ran → positions
+    # kept aging. On startup, replay missed sessions with historical daily bars
+    # and close at that session's EOD (exit price/timestamp from the bar, never
+    # invented). Bars unavailable → position stays open for the normal flow.
+    # 0 disables; MAX bounds the replay window.
+    MISSED_SESSION_RECONCILE: bool = _get_bool_env("MISSED_SESSION_RECONCILE", True)
+    MISSED_SESSION_RECONCILE_MAX_DAYS: int = _get_int_env(
+        "MISSED_SESSION_RECONCILE_MAX_DAYS", 10
+    )
     # Monthly portfolio (M2) paper track record — strategy/monthly_portfolio.py.
     MONTHLY_PORTFOLIO_ENABLED: bool = _get_bool_env("MONTHLY_PORTFOLIO_ENABLED", False)
     # Trailing 12-month net money-market fund return (%) used by the regime
@@ -368,6 +377,78 @@ class DataSettings:
     # BIST ±10% circuit makes any single-bar |close move| > this pct a
     # split/adjustment data artifact; fetcher skips that history cycle.
     SPLIT_ANOMALY_MAX_PCT: float = _get_float_env("SPLIT_ANOMALY_MAX_PCT", 15.0)
+    # --- Faz 1: stored end-of-day market data (screener foundation) ---------
+    # Kept off until the local backfill report is reviewed: the vendor is an
+    # undocumented research endpoint, not a licensed commercial feed.
+    DAILY_BARS_ENABLED: bool = _get_bool_env("DAILY_BARS_ENABLED", False)
+    DAILY_BARS_SOURCE: str = _get_str_env("DAILY_BARS_SOURCE", "isyatirim").lower()
+    DAILY_BARS_START_DATE: str = _get_str_env("DAILY_BARS_START_DATE", "2016-01-01")
+    # First scheduled run without stored history only looks back this far;
+    # the full window is filled by scripts/backfill_market_data.py.
+    DAILY_BARS_INITIAL_LOOKBACK_DAYS: int = _get_int_env("DAILY_BARS_INITIAL_LOOKBACK_DAYS", 30)
+    DAILY_BARS_REQUEST_DELAY_SECONDS: float = _get_float_env(
+        "DAILY_BARS_REQUEST_DELAY_SECONDS", 0.2
+    )
+    DAILY_BARS_MAX_WORKERS: int = _get_int_env("DAILY_BARS_MAX_WORKERS", 2)
+    DAILY_BARS_UNIVERSE_REFRESH_DAYS: int = _get_int_env("DAILY_BARS_UNIVERSE_REFRESH_DAYS", 7)
+    DAILY_FUNDAMENTALS_ENABLED: bool = _get_bool_env("DAILY_FUNDAMENTALS_ENABLED", False)
+    DAILY_FUNDAMENTALS_QUARTERS: int = _get_int_env("DAILY_FUNDAMENTALS_QUARTERS", 12)
+    # --- Faz 2: end-of-day screens over daily_bars (no customer messages) ---
+    SCREEN_SCANS_ENABLED: bool = _get_bool_env("SCREEN_SCANS_ENABLED", False)
+    SCREEN_FUNDAMENTAL_SCANS_ENABLED: bool = _get_bool_env(
+        "SCREEN_FUNDAMENTAL_SCANS_ENABLED", True
+    )
+    # 400 sessions covers the 252-bar high rule plus the 120-bar squeeze window.
+    SCREEN_SCANS_BARS_LIMIT: int = _get_int_env("SCREEN_SCANS_BARS_LIMIT", 400)
+    # --- Faz 3: stock detail page ---
+    # Off = admin-only. Public pages expose stored vendor data to members, which
+    # is redistribution; flip only with a licensed feed or an explicit decision.
+    STOCK_PAGES_PUBLIC: bool = _get_bool_env("STOCK_PAGES_PUBLIC", False)
+    STOCK_BARS_MAX: int = _get_int_env("STOCK_BARS_MAX", 2700)
+    # Faz 4: non-paying members see only this many screener rows (server-side).
+    SCREENER_FREE_LIMIT: int = _get_int_env("SCREENER_FREE_LIMIT", 5)
+    # --- Faz 5: personal portfolio benchmarks ---
+    # XU100 is read from the index column of this liquid symbol's daily rows.
+    BENCHMARK_PROXY_TICKER: str = _get_str_env("BENCHMARK_PROXY_TICKER", "THYAO")
+    # Used only when no MMF series is stored; the UI labels it as an assumption.
+    MONEY_MARKET_ANNUAL_RATE_PCT: float = _get_float_env(
+        "MONEY_MARKET_ANNUAL_RATE_PCT", 0.0
+    )
+    # --- Faz 6: per-user alerts and the evening Telegram digest ---
+    # Customer-facing bot; falls back to TELEGRAM_BOT_TOKEN when unset.
+    TELEGRAM_USER_BOT_TOKEN: str = _get_str_env("TELEGRAM_USER_BOT_TOKEN")
+    TELEGRAM_USER_BOT_USERNAME: str = _get_str_env("TELEGRAM_USER_BOT_USERNAME")
+    # Reads /start and /stop from users; keep off until the bot exists.
+    TELEGRAM_LINK_POLLING_ENABLED: bool = _get_bool_env("TELEGRAM_LINK_POLLING_ENABLED", False)
+    USER_DIGEST_ENABLED: bool = _get_bool_env("USER_DIGEST_ENABLED", False)
+    USER_DIGEST_HOUR_TR: int = _get_int_env("USER_DIGEST_HOUR_TR", 18)
+    PUBLIC_BASE_URL: str = _get_str_env("PUBLIC_BASE_URL")
+    ALERT_MAX_PER_USER: int = _get_int_env("ALERT_MAX_PER_USER", 20)
+    SAVED_SCREENS_MAX_PER_USER: int = _get_int_env("SAVED_SCREENS_MAX_PER_USER", 10)
+    # --- Faz 7: commercial readiness ---
+    LEGAL_CONSENT_REQUIRED: bool = _get_bool_env("LEGAL_CONSENT_REQUIRED", False)
+    LEGAL_TEXTS_DRAFT: bool = _get_bool_env("LEGAL_TEXTS_DRAFT", True)
+    # Development source is isyatirim; a licensed adapter must be added before sales.
+    MARKET_DATA_SOURCE: str = _get_str_env("MARKET_DATA_SOURCE", "isyatirim").lower()
+    # Licensed vendor credit shown on data pages (empty = no line).
+    DATA_ATTRIBUTION: str = _get_str_env("DATA_ATTRIBUTION", "")
+    # Kill switch for serving stored vendor data to non-admins.
+    DATA_PUBLIC_SERVING_ENABLED: bool = _get_bool_env("DATA_PUBLIC_SERVING_ENABLED", True)
+    FREE_SAVED_SCREENS: int = _get_int_env("FREE_SAVED_SCREENS", 1)
+    FREE_ALERTS: int = _get_int_env("FREE_ALERTS", 3)
+    FREE_WATCHLISTS: int = _get_int_env("FREE_WATCHLISTS", 1)
+    FREE_WATCHLIST_ITEMS: int = _get_int_env("FREE_WATCHLIST_ITEMS", 20)
+    FREE_PORTFOLIOS: int = _get_int_env("FREE_PORTFOLIOS", 1)
+    FREE_TRANSACTIONS: int = _get_int_env("FREE_TRANSACTIONS", 50)
+    FREE_HISTORY_DAYS: int = _get_int_env("FREE_HISTORY_DAYS", 90)
+    PAID_SCREENER_ROWS: int = _get_int_env("PAID_SCREENER_ROWS", 200)
+    PAID_SAVED_SCREENS: int = _get_int_env("PAID_SAVED_SCREENS", 10)
+    PAID_ALERTS: int = _get_int_env("PAID_ALERTS", 20)
+    PAID_WATCHLISTS: int = _get_int_env("PAID_WATCHLISTS", 5)
+    PAID_WATCHLIST_ITEMS: int = _get_int_env("PAID_WATCHLIST_ITEMS", 100)
+    PAID_PORTFOLIOS: int = _get_int_env("PAID_PORTFOLIOS", 3)
+    PAID_TRANSACTIONS: int = _get_int_env("PAID_TRANSACTIONS", 500)
+    PAID_HISTORY_DAYS: int = _get_int_env("PAID_HISTORY_DAYS", 730)
     DATA_PERIOD: str = _get_str_env("DATA_PERIOD", "3mo")
     DATA_INTERVAL: str = _get_str_env("DATA_INTERVAL", "1d")
     DATA_PROVIDER: str = _get_str_env("DATA_PROVIDER", "yfinance").lower()
@@ -640,17 +721,15 @@ class NotificationSettings:
         "TELEGRAM_MIN_SCORE", _get_int_env("STRONG_BUY_THRESHOLD", 48)
     )
     TELEGRAM_GROUP_CHAT_ID: str = _get_str_env("TELEGRAM_GROUP_CHAT_ID")
-    # Master switch for group mirroring. Historically a non-empty chat id alone
-    # enabled dispatch; this flag now gates it (default True keeps old behavior
-    # for deployments that only set the chat id).
-    TELEGRAM_GROUP_ENABLED: bool = _get_bool_env("TELEGRAM_GROUP_ENABLED", True)
+    # Customer-group dispatch is disabled: signals are internal research and the
+    # group must not receive buy/sell levels (Faz 0b, 2026-10-21). A per-user
+    # digest will opt in separately; keep this False until then.
+    TELEGRAM_GROUP_ENABLED: bool = _get_bool_env("TELEGRAM_GROUP_ENABLED", False)
     TELEGRAM_GROUP_MIN_SCORE: int = _get_int_env(
         "TELEGRAM_GROUP_MIN_SCORE", _get_int_env("STRONG_BUY_THRESHOLD", 48)
     )
-    # Deprecated: score-based group threshold is no longer used for dispatch.
-    # Group routing now uses robust-watchlist membership (load_watchlist("robust")).
-    # Kept for backward compatibility only.
     NOTIFICATION_MAX_RETRIES: int = _get_int_env("NOTIFICATION_MAX_RETRIES", 3)
+    # Deprecated: unused since group mirroring was removed (Faz 0b).
     TELEGRAM_GROUP_BATCH_THRESHOLD: int = _get_int_env("TELEGRAM_GROUP_BATCH_THRESHOLD", 5)
     NOTIFICATION_RETRY_DELAY: int = _get_int_env("NOTIFICATION_RETRY_DELAY", 5)
     # Global Telegram send-rate safety budget (messages per minute) enforced by a

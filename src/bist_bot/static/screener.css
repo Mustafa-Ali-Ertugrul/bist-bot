@@ -1,0 +1,117 @@
+/* Faz 4 screener layout. Colors come from the compiled Tailwind classes. */
+.screen-layout {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: 280px 1fr;
+}
+
+.screen-filters {
+  grid-column: 1 / -1;
+}
+
+.screen-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.screen-list button {
+  text-align: left;
+  padding: 0.5rem 0.65rem;
+  border-radius: 0.5rem;
+  border: 1px solid transparent;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.screen-list button:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.screen-list button[aria-pressed="true"] {
+  background: rgba(78, 222, 163, 0.12);
+  border-color: rgba(78, 222, 163, 0.4);
+  color: #4edea3;
+}
+
+.screen-list .screen-count {
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+}
+
+.screen-control {
+  padding: 0.35rem 0.55rem;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(20, 24, 22, 0.9);
+  color: inherit;
+  font-size: 0.85rem;
+}
+
+.screen-control-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.65;
+}
+
+.screen-table th,
+.screen-table td {
+  padding: 0.4rem 0.35rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  white-space: nowrap;
+}
+
+.screen-table a {
+  color: #4edea3;
+  font-weight: 600;
+}
+
+.screen-conditions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.screen-condition {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.screen-button {
+  padding: 0.4rem 0.8rem;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.screen-button-primary {
+  background: #4edea3;
+  border-color: #4edea3;
+  color: #06231a;
+  font-weight: 700;
+}
+
+.screen-button-remove {
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.4rem;
+  border: 1px solid rgba(255, 138, 128, 0.5);
+  background: transparent;
+  color: #ff8a80;
+  cursor: pointer;
+}
+
+@media (max-width: 900px) {
+  .screen-layout {
+    grid-template-columns: 1fr;
+  }
+}

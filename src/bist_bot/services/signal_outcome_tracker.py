@@ -5,13 +5,18 @@ from __future__ import annotations
 import csv
 import json
 import threading
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 from bist_bot.app_logging import get_logger
 from bist_bot.config.settings import settings as default_settings
-from bist_bot.market_calendar import bist_close_time, is_bist_holiday
+from bist_bot.market_calendar import (
+    bist_close_time,
+    is_bist_holiday,
+    missed_session_days,
+    session_eod_datetime,
+)
 from bist_bot.risk.costs import TradingCosts
 from bist_bot.strategy.signal_models import Signal, SignalCategory, categorize_signal
 
@@ -61,7 +66,15 @@ class SignalOutcomeTracker:
         market_data: dict[str, Any] | None = None,
         *,
         now: datetime | None = None,
+        eod_pass: bool = False,
     ) -> list[dict[str, Any]]:
+        """Scan positions for exits.
+
+        ``eod_pass=True`` yalnızca ``close_positions_at_eod``'dan gelir: günlük
+        barın low/high'ı dünden eski pozisyonlar için geçerlidir; aynı gün
+        girişlerde giriş-öncesi low sahte stop üretir, o yüzden o pozisyonlar
+        kapanışa göre değerlendirilir.
+        """
         if not bool(getattr(self.settings, "OUTCOME_TRACKING_ENABLED", True)):
             return []
         current_time = self._aware_utc(now or datetime.now(UTC))
@@ -71,9 +84,24 @@ class SignalOutcomeTracker:
             if not isinstance(positions, dict):
                 positions = {}
             before = json.dumps(positions, sort_keys=True, default=str)
+            if eod_pass:
+                # EOD guard: aynı seansta açılan pozisyonlar günlük barın
+                # low/high'ını görmez (giriş-öncesi fiyatlar sahte STOP_HIT ve
+                # MAE üretir — TKFEN 2026-09-23 regresyonu). Dünden eski
+                # pozisyonlarda günlük bar tamamen giriş-sonrasıdır.
+                market_data = self._eod_filter_market_data(
+                    positions, market_data, current_time
+                )
             # Update MFE/MAE for open positions from intraday high/low
             self._update_mfe_mae(positions, market_data, current_time)
             prices = self._current_prices(signals, market_data)
+            # Son görülen fiyatı sakla: fiyat gelmeyen scan'lerde zaman stopu
+            # (MAX_HOLD) bu fiyatla çalışır, pozisyon ölü kalmaz.
+            for ticker, pos in positions.items():
+                px = prices.get(ticker)
+                if px is not None and px > 0:
+                    pos["last_price"] = float(px)
+                    pos["last_seen_ts"] = current_time.isoformat()
             closed = self._close_due_positions(
                 positions, prices, current_time, market_data, signals
             )
@@ -129,6 +157,127 @@ class SignalOutcomeTracker:
             )
             return closed
 
+    def reconcile_missed_sessions(
+        self, fetcher: Any | None = None, *, now: datetime | None = None
+    ) -> dict[str, int]:
+        """Bilgisayar kapalıyken kaçırılan seansları tarihsel günlük barla kapat.
+
+        Açılışta bir kez çağrılır: EOD'u geçmiş ama hâlâ açık her pozisyon
+        için kaçırılan seanslar sırayla replay edilir; barı bulunan ilk seans
+        pozisyonu kapatır (STOP_HIT / TARGET_HIT / EOD_CLOSE — çıkış zaman
+        damgası o seansın EOD'udur, bugünün değil). Bar bulunamayan günler
+        atlanır; hiç bar yoksa pozisyon açık kalır (günün normal akışı kapatır).
+        Asla fiyat uydurulmaz.
+        """
+        current_time = self._aware_utc(now or datetime.now(UTC))
+        summary = {"stale": 0, "closed": 0, "skipped_no_bars": 0, "errors": 0}
+        if not bool(getattr(self.settings, "MISSED_SESSION_RECONCILE", True)):
+            return summary
+        if fetcher is None:
+            return summary
+        max_days = int(getattr(self.settings, "MISSED_SESSION_RECONCILE_MAX_DAYS", 10) or 0)
+        with self._lock:
+            positions = self._load_json(self.open_path, {})
+            if not isinstance(positions, dict) or not positions:
+                return summary
+            all_closed: list[dict[str, Any]] = []
+            for ticker, pos in list(positions.items()):
+                try:
+                    entry = self._aware_utc(datetime.fromisoformat(pos["entry_ts"]))
+                except (KeyError, ValueError, TypeError):
+                    summary["errors"] += 1
+                    continue
+                days = missed_session_days(entry, current_time)
+                if max_days > 0:
+                    days = days[-max_days:]
+                if not days:
+                    continue
+                summary["stale"] += 1
+                try:
+                    bars = fetcher.fetch_single(ticker, period="3mo")
+                except Exception as exc:
+                    logger.warning(
+                        "reconcile_fetch_failed", ticker=ticker, error=str(exc)
+                    )
+                    bars = None
+                row = self._replay_position_days(ticker, pos, days, bars)
+                if row is None:
+                    summary["skipped_no_bars"] += 1
+                    continue
+                all_closed.append(row)
+                del positions[ticker]
+                summary["closed"] += 1
+                logger.info(
+                    "outcome_reconciled_close",
+                    ticker=ticker,
+                    outcome=row["outcome"],
+                    exit_ts=row["exit_ts"],
+                )
+            if all_closed:
+                self._append_closed(all_closed)
+                if self.db is not None:
+                    updates = [
+                        (
+                            int(r["signal_id"]),
+                            str(r["outcome"]),
+                            float(r["exit_price"]),
+                            "reconciled_eod",
+                        )
+                        for r in all_closed
+                        if r.get("signal_id") is not None
+                    ]
+                    if updates:
+                        try:
+                            self.db.update_outcomes(updates)
+                        except Exception as exc:
+                            logger.warning(
+                                "outcome_db_batch_update_failed",
+                                update_count=len(updates),
+                                error=str(exc),
+                            )
+            self._write_json(self.open_path, positions)
+        logger.info("outcome_reconcile_completed", **summary)
+        return summary
+
+    def _replay_position_days(
+        self,
+        ticker: str,
+        pos: dict[str, Any],
+        days: list[date],
+        bars: Any | None,
+    ) -> dict[str, Any] | None:
+        """Kaçırılan seansları sırayla değerlendir; barı bulunan ilk seans kapatır."""
+        if bars is None or getattr(bars, "empty", True):
+            return None
+        try:
+            bar_dates = [d.date() for d in bars.index]
+        except (AttributeError, TypeError, ValueError):
+            return None
+        for day in days:
+            eod_now = session_eod_datetime(day).astimezone(UTC)
+            idx = [i for i, d in enumerate(bar_dates) if d == day]
+            if not idx:
+                continue
+            frame = bars.iloc[[idx[-1]]]
+            try:
+                close = float(frame["close"].iloc[0])
+            except (KeyError, IndexError, TypeError, ValueError):
+                try:
+                    close = float(frame["Close"].iloc[0])
+                except (KeyError, IndexError, TypeError, ValueError):
+                    continue
+            if close <= 0:
+                continue
+            work = {ticker: pos}
+            md = self._eod_filter_market_data(work, {ticker: frame}, eod_now)
+            self._update_mfe_mae(work, md, eod_now)
+            closed = self._close_due_positions(
+                work, {ticker: close}, eod_now, md, None
+            )
+            if closed:
+                return closed[0]
+        return None
+
     def _entry_from_signal(self, signal: Signal, now: datetime) -> dict[str, Any]:
         entry_time = self._aware_utc(signal.timestamp)
         entry_price = float(signal.price)
@@ -172,6 +321,51 @@ class SignalOutcomeTracker:
             pos["mfe_pct"] = round((max_high - entry) / entry * 100, 2) if entry > 0 else 0.0
             pos["mae_pct"] = round((min_low - entry) / entry * 100, 2) if entry > 0 else 0.0
 
+    def _eod_filter_market_data(
+        self,
+        positions: dict[str, dict[str, Any]],
+        market_data: dict[str, Any],
+        now: datetime,
+    ) -> dict[str, Any]:
+        """EOD pass guard: aynı seansta açılan pozisyonların frame'ini close-only
+        yapar. Günlük low giriş-öncesi fiyatları içerir; filtrelenmezse hem
+        sahte STOP_HIT hem sahte MAE üretir (TKFEN 2026-09-23 regresyonu).
+        Dünden eski pozisyonlarda günlük bar tamamen giriş-sonrasıdır."""
+        now_day = now.astimezone(TR).date()
+        filtered: dict[str, Any] = {}
+        for ticker, payload in market_data.items():
+            pos = positions.get(ticker)
+            if pos is None:
+                filtered[ticker] = payload
+                continue
+            try:
+                entry_day = self._aware_utc(
+                    datetime.fromisoformat(pos["entry_ts"])
+                ).astimezone(TR).date()
+            except (KeyError, ValueError, TypeError):
+                filtered[ticker] = payload
+                continue
+            if entry_day >= now_day:
+                filtered[ticker] = self._close_only_frame(payload)
+            else:
+                filtered[ticker] = payload
+        return filtered
+
+    @staticmethod
+    def _close_only_frame(payload: Any) -> Any:
+        if isinstance(payload, dict):
+            return {
+                k: SignalOutcomeTracker._close_only_frame(v) for k, v in payload.items()
+            }
+        if hasattr(payload, "columns"):
+            for col in ("close", "Close"):
+                if col in payload.columns:
+                    try:
+                        return payload[[col]]
+                    except Exception:
+                        return payload
+        return payload
+
     def _close_due_positions(
         self,
         positions: dict[str, dict[str, Any]],
@@ -182,17 +376,45 @@ class SignalOutcomeTracker:
     ) -> list[dict[str, Any]]:
         closed: list[dict[str, Any]] = []
         for ticker, pos in list(positions.items()):
-            price = prices.get(ticker)
-            if price is None or price <= 0:
-                continue
             entry_time = self._aware_utc(datetime.fromisoformat(pos["entry_ts"]))
             stop = float(pos.get("stop") or 0.0)
             target = float(pos.get("target") or 0.0)
-            entry_price = float(pos["entry_price"])
-            quantity = float(pos.get("quantity") or 0.0)
+            price = prices.get(ticker)
+            if price is None or price <= 0:
+                # Fiyat yokken seviye kontrolleri yapılamaz; ama zaman stopu
+                # son bilinen fiyatla çalışır. Fiyat da yoksa pozisyonu açık
+                # bırakıp bir kez uyar (sessiz ölüm yok).
+                max_hold_days = int(getattr(self.settings, "OUTCOME_MAX_HOLD_DAYS", 5) or 0)
+                if max_hold_days > 0 and now >= entry_time + timedelta(days=max_hold_days):
+                    last = float(pos.get("last_price") or 0.0)
+                    if last > 0:
+                        logger.warning(
+                            "outcome_max_hold_stale_price",
+                            ticker=ticker,
+                            last_price=last,
+                            last_seen_ts=pos.get("last_seen_ts"),
+                        )
+                        closed.append(
+                            self._build_close_row(pos, ticker, last, "MAX_HOLD", now)
+                        )
+                        del positions[ticker]
+                        continue
+                    if not pos.get("stuck_warned"):
+                        logger.warning(
+                            "outcome_unpriced_stuck",
+                            ticker=ticker,
+                            entry_ts=pos.get("entry_ts"),
+                            hint="fiyat hiç gelmedi — pozisyon kapanamıyor",
+                        )
+                        pos["stuck_warned"] = True
+                continue
             # 1 dakikalık bar varsayımı: aynı bar içinde stop ve hedef tetiklenirse stop kazanır
             # Check via current close price (stop/target both crossed -> stop)
             # Also check high/low for intra-bar crossing (if high>=target and low<=stop -> stop wins)
+            #
+            # Not: EOD pass'te aynı-seans girişler process_scan'da close-only
+            # frame'e indirgenir (_eod_filter_market_data); buraya gelen low/high
+            # her zaman giriş-sonrasıdır.
             high, low = self._extract_high_low(market_data.get(ticker))
             # Determine hit
             hit = None
@@ -222,52 +444,72 @@ class SignalOutcomeTracker:
                         hit = "MAX_HOLD"
             if hit is None:
                 continue
-            # Exit price: stop/target fills at/beyond level on gap-through or intra-bar touch.
-            if hit == "STOP_HIT" and stop > 0:
-                exit_price = min(float(price), stop)
-            elif hit == "TARGET_HIT" and target > 0:
-                exit_price = max(float(price), target)
-            else:
-                exit_price = float(price)
-            holding_min = int((now - entry_time).total_seconds() // 60)
-            # MFE/MAE at exit are already updated
-            mfe = float(pos.get("mfe_pct", 0.0))
-            mae = float(pos.get("mae_pct", 0.0))
-            # Gross PnL: (exit-entry)*quantity with 1 lot notional 10k
-            # For long: gross = (exit - entry)*quantity
-            gross = (exit_price - entry_price) * quantity
-            # Net: gross - round_trip_cost
-            buy_notional = entry_price * quantity
-            sell_notional = exit_price * quantity
-            try:
-                cost = self._costs.round_trip_cost(buy_notional, sell_notional)
-            except Exception:
-                cost = 0.0
-            net = gross - cost
-            row = {
-                "signal_id": pos.get("signal_id"),
-                "ticker": ticker,
-                "score": float(pos.get("score", 0.0)),
-                "entry_ts": pos.get("entry_ts"),
-                "side": pos.get("side", "long"),
-                "entry_price": entry_price,
-                "stop": stop,
-                "target": target,
-                "exit_price": exit_price,
-                "exit_ts": now.isoformat(),
-                "outcome": hit,
-                "holding_min": holding_min,
-                "mfe_pct": mfe,
-                "mae_pct": mae,
-                "gross_pnl": round(gross, 2),
-                "net_pnl": round(net, 2),
-            }
-            closed.append(row)
+            closed.append(self._build_close_row(pos, ticker, float(price), hit, now))
             del positions[ticker]
             logger.info(
-                "outcome_position_closed", ticker=ticker, outcome=hit, exit_price=exit_price
+                "outcome_position_closed",
+                ticker=ticker,
+                outcome=hit,
+                exit_price=closed[-1]["exit_price"],
             )
         return closed
+
+    def _build_close_row(
+        self,
+        pos: dict[str, Any],
+        ticker: str,
+        price: float,
+        hit: str,
+        now: datetime,
+    ) -> dict[str, Any]:
+        """Kapanış satırı üretir (PnL dahil). Fiyat-yokken MAX_HOLD da bu yolu
+        kullanır; o durumda ``price`` son bilinen fiyattır."""
+        entry_time = self._aware_utc(datetime.fromisoformat(pos["entry_ts"]))
+        stop = float(pos.get("stop") or 0.0)
+        target = float(pos.get("target") or 0.0)
+        entry_price = float(pos["entry_price"])
+        quantity = float(pos.get("quantity") or 0.0)
+        # Exit price: stop/target fills at/beyond level on gap-through or intra-bar touch.
+        if hit == "STOP_HIT" and stop > 0:
+            exit_price = min(price, stop)
+        elif hit == "TARGET_HIT" and target > 0:
+            exit_price = max(price, target)
+        else:
+            exit_price = price
+        holding_min = int((now - entry_time).total_seconds() // 60)
+        # MFE/MAE at exit are already updated
+        mfe = float(pos.get("mfe_pct", 0.0))
+        mae = float(pos.get("mae_pct", 0.0))
+        # Gross PnL: (exit-entry)*quantity with 1 lot notional 10k
+        # For long: gross = (exit - entry)*quantity
+        gross = (exit_price - entry_price) * quantity
+        # Net: gross - round_trip_cost
+        buy_notional = entry_price * quantity
+        sell_notional = exit_price * quantity
+        try:
+            cost = self._costs.round_trip_cost(buy_notional, sell_notional)
+        except Exception:
+            cost = 0.0
+        net = gross - cost
+        row = {
+            "signal_id": pos.get("signal_id"),
+            "ticker": ticker,
+            "score": float(pos.get("score", 0.0)),
+            "entry_ts": pos.get("entry_ts"),
+            "side": pos.get("side", "long"),
+            "entry_price": entry_price,
+            "stop": stop,
+            "target": target,
+            "exit_price": exit_price,
+            "exit_ts": now.isoformat(),
+            "outcome": hit,
+            "holding_min": holding_min,
+            "mfe_pct": mfe,
+            "mae_pct": mae,
+            "gross_pnl": round(gross, 2),
+            "net_pnl": round(net, 2),
+        }
+        return row
 
     def _is_eod(self, now: datetime) -> bool:
         # Use market_calendar bist_close_time per spec

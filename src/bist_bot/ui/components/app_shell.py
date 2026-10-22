@@ -118,7 +118,7 @@ def render_shell(active_page: str, email: str = "") -> str | None:
             "<div>"
             "<div class='bb-topbar-title'>Bist-Bot</div>"
             "</div>"
-            "<span class='bb-live-pill'><i></i>BIST 100 CANLI</span>"
+            "<span class='bb-live-pill'><i></i>BIST 100 · 15 DK GECİKMELİ</span>"
             "</div>"
             f"<nav class='bb-topnav'>{links}</nav>"
             "<div class='bb-topbar-actions'>"

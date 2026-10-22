@@ -1,0 +1,7 @@
+
+.legal-doc h1 { font-size: 1.6rem; font-weight: 800; margin-bottom: 0.25rem; }
+.legal-doc h2 { font-size: 1.1rem; font-weight: 700; margin-top: 1.25rem; }
+.legal-doc p, .legal-doc li { opacity: 0.85; line-height: 1.6; margin-top: 0.35rem; }
+.legal-doc ul { padding-left: 1.2rem; list-style: disc; }
+.legal-version { font-size: 0.75rem; opacity: 0.55; }
+.legal-draft { border: 1px solid rgba(240, 180, 41, 0.5); background: rgba(240, 180, 41, 0.08); color: #f0b429; border-radius: 0.5rem; padding: 0.6rem 0.8rem; margin-bottom: 1rem; font-size: 0.85rem; }

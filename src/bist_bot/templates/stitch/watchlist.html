@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html class="dark" lang="tr">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Bist-Bot · İzleme Listesi</title>
+<link rel="stylesheet" href="/static/tailwind.css"/>
+<link rel="stylesheet" href="/static/stock.css?v=1"/>
+<link rel="stylesheet" href="/static/screener.css?v=1"/>
+<link rel="stylesheet" href="/static/personal.css?v=1"/>
+</head>
+<body class="bg-background font-body-md text-body-md text-on-surface antialiased">
+<header class="w-full px-terminal-margin py-space-md border-b border-surface-container-high/40">
+<div class="w-full max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-space-md">
+<div class="flex items-center gap-space-sm">
+<span class="font-headline-md text-headline-md tracking-tight font-extrabold">Bist<span class="text-primary">-Bot</span></span>
+<span class="bg-surface-container-high px-space-xs py-space-3xs rounded text-secondary font-label-caps text-label-caps uppercase tracking-wider">İzleme</span>
+</div>
+<nav class="flex flex-wrap items-center gap-space-sm">
+<a class="personal-nav" href="/ui/dashboard">Panel</a>
+<a class="personal-nav" href="/ui/screener">Tarayıcı</a>
+<a class="personal-nav" href="/ui/portfolio">Portföy</a>
+</nav>
+</div>
+</header>
+
+<main class="w-full max-w-7xl mx-auto px-terminal-margin py-space-lg flex flex-col gap-space-lg">
+<section class="bg-surface-container-low/90 rounded-xl p-space-md">
+<div class="flex flex-wrap items-center justify-between gap-space-sm">
+<h1 class="font-headline-md text-headline-md font-bold">İzleme Listeleri</h1>
+<div class="flex flex-wrap items-center gap-space-xs">
+<input id="list-name" class="screen-control" type="text" placeholder="Yeni liste adı" maxlength="60"/>
+<button id="create-list" class="screen-button screen-button-primary" type="button">Liste oluştur</button>
+</div>
+</div>
+<div id="lists" class="personal-tabs mt-space-sm"></div>
+</section>
+
+<section class="bg-surface-container-low/90 rounded-xl p-space-md">
+<div class="flex flex-wrap items-center justify-between gap-space-sm">
+<h2 class="font-headline-md text-headline-md font-bold" id="active-list-name">Liste seçin</h2>
+<div class="flex flex-wrap items-center gap-space-xs">
+<input id="add-ticker" class="screen-control" type="text" placeholder="Hisse kodu (THYAO)" maxlength="12"/>
+<button id="add-ticker-btn" class="screen-button" type="button">Ekle</button>
+<button id="delete-list" class="screen-button" type="button">Listeyi sil</button>
+</div>
+</div>
+<p class="font-body-sm text-body-sm text-outline mt-space-3xs" id="watch-status"></p>
+<div class="overflow-x-auto mt-space-sm">
+<table class="w-full font-body-sm text-body-sm screen-table">
+<thead>
+<tr class="text-outline font-label-caps text-label-caps uppercase">
+<th class="text-left">Kod</th><th class="text-left">Şirket</th><th class="text-left">Sektör</th>
+<th class="text-right">Kapanış</th><th class="text-right">Günlük</th><th class="text-right">1 Ay</th>
+<th class="text-right">RSI</th><th class="text-right">F/K</th><th></th>
+</tr>
+</thead>
+<tbody id="watch-body"><tr><td colspan="9" class="py-space-sm">Yükleniyor…</td></tr></tbody>
+</table>
+</div>
+</section>
+
+<p class="font-body-sm text-body-sm text-outline pb-space-lg">Bu sayfa bilgilendirme amaçlıdır; alım-satım tavsiyesi değildir.</p>
+</main>
+<script src="/static/watchlist.js?v=1"></script>
+</body>
+</html>

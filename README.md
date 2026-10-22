@@ -2,6 +2,8 @@
 
 BIST hisselerini teknik indikatörlerle tarayan, sinyal üreten, Telegram'a bildiren, paper trade kaydı tutan ve backtest yapabilen otonom bir bot.
 
+> **Ürün durumu (2026-10-21):** Sinyal botu müşteriye satılan bir ürün değil, iç araştırma aracıdır. Müşteri Telegram grubuna al/sat mesajı gönderilmez (`TELEGRAM_GROUP_ENABLED` varsayılan `false`); sinyal sayfaları ve API'leri yalnızca admin rolüne açıktır. Ücretli abonelik satışı kapalıdır. Yerine tarama, hisse analizi, izleme listesi ve alarmlar sunan bir analiz uygulaması geliştiriliyor.
+
 ## Özellikler
 
 - RSI, MACD, Bollinger, SMA, EMA, ADX, Stochastic, CCI, OBV ve divergence tabanlı analiz
@@ -245,6 +247,111 @@ export PYTHONPATH=src  # Windows'ta esdegeri: set PYTHONPATH=src
 pytest tests/ -v
 ruff check . --isolated
 ```
+
+## Gün Sonu Piyasa Verisi (Faz 1)
+
+Tarayıcı ve hisse sayfalarının temeli olan gün sonu veri deposu. Canlı 15 dakikalık tarama yolundan ayrıdır; bir veri kaynağı hatası pozisyon kapatmayı etkilemez.
+
+- `instruments`: BIST pay evreni (kod, ad, sektör). Liste koda gömülü değildir, sağlayıcıdan yenilenir.
+- `daily_bars`: `(ticker, date)` anahtarlı OHLCV. `close` bedelsiz/bölünme düzeltmeli (`HGDG_KAPANIS`), `close_raw` ham kapanış (`HG_KAPANIS`). Açılış fiyatı kaynakta yok, `open` boş kalır.
+- `fundamentals`: çeyreklik bilanço kalemleri (`2O`, `3Z`, `3C`).
+
+Varsayılan olarak kapalıdır (`DAILY_BARS_ENABLED=false`). Önce yerelde doldurup raporu inceleyin:
+
+```bash
+python scripts/backfill_market_data.py --limit 5 --start 2024-01-01
+python scripts/backfill_market_data.py --symbols THYAO,GARAN --fundamentals
+python scripts/backfill_market_data.py --refresh-universe
+python scripts/backfill_market_data.py --incremental
+```
+
+Rapor JSON'dur: `symbols`, `written`, `failed`, `empty`, `elapsed_seconds`, `errors`. Aynı pencere ikinci kez yazılınca satır sayısı artmaz (idempotent).
+
+Açıldığında worker, seans kapanışından sonra günde bir kez yalnızca eksik günleri çeker. İlk çalıştırmada geçmiş yoksa `DAILY_BARS_INITIAL_LOOKBACK_DAYS` kadar geriye bakar; tüm geçmişi doldurmak backfill script'inin işidir.
+
+## Gün Sonu Taramaları (Faz 2)
+
+`daily_bars` üzerinde çalışan tarama kütüphanesi (`strategy/scans.py`). Her tarama saftır: yalnızca `as_of` gününe kadarki barları ve o tarihte yayımlanmış çeyrekleri görür. Canlı 15 dakikalık `StrategyEngine` kullanılmaz.
+
+| Kod | Kural |
+|---|---|
+| `rsi_dip` | RSI(14) < 30 |
+| `sma_5_22` | SMA5, SMA22'yi yukarı keser |
+| `sma_50_200` | SMA50, SMA200'ü yukarı keser |
+| `hacim_sok` | Hacim, 20 günlük ortalamanın ≥2 katı |
+| `zirve_52h` | Kapanış, önceki 252 günün zirvesini geçer (bugün hariç) |
+| `bb_sikisma` | Bollinger genişliği son 120 günün en dar %10'unda |
+| `ucuz_karli` | Yayımlanmış son yıl net kârı > 0 ve F/K ≤ 10 |
+| `satis_buyume` | Son yayımlanmış çeyrekte satışlar yıllık ≥ %20 artmış |
+
+- Yetersiz geçmişte tarama ateşlemez (`MIN_BARS`): 5-22 için 23 bar, 50-200 için 201 bar.
+- Sonuçlar `scan_results` tablosuna yazılır: `(scan_id, as_of, ticker)` tekildir; aynı gün yeniden çalışmak satır çoğaltmaz, eski günler korunur.
+- Varsayılan kapalı: `SCREEN_SCANS_ENABLED=false`. Açıldığında worker, gün sonu veri eklendikten sonra günde bir kez çalışır. **Müşteriye mesaj göndermez.**
+- Temel taramalar `SCREEN_FUNDAMENTAL_SCANS_ENABLED` ile ayrıca kapatılabilir.
+
+## Hisse Sayfası (Faz 3)
+
+`/ui/stock/<kod>`: tek hissede fiyat grafiği, getiriler, teknik özet, temel oranlar, çeyreklik tablo ve son 30 günün tarama geçmişi. Tüm veri depodan gelir; sayfa dışarıya istek atmaz.
+
+- API: `GET /api/stocks/search?q=`, `/api/stocks/<kod>`, `/api/stocks/<kod>/bars?range=1m|3m|1y|5y|all`, `/api/stocks/<kod>/fundamentals`, `/api/stocks/<kod>/scans?days=30`.
+- Erişim varsayılan olarak yalnızca admin (`STOCK_PAGES_PUBLIC=false`). Açmak, lisanssız sağlayıcı verisini üyelere göstermek demektir; lisanslı veriye geçmeden açılmamalı.
+- Grafik: yerelleştirilmiş TradingView Lightweight Charts v5 (`static/vendor/`, Apache-2.0, atıf logosu açık). CSP satır içi script'e izin vermediği için CDN kullanılmaz.
+- Mum grafiği yok: kaynakta açılış fiyatı yok, uydurulmaz. Düzeltilmiş kapanış çizgisi ve hacim gösterilir.
+- Oranlar: F/K ve net marj son 12 ay (TTM) üzerinden; PD/DD son özkaynak; negatif kârda F/K boş.
+- Taramalardaki F/K yıllık Aralık kârıdır, sayfadaki F/K TTM'dir; etiketler bunu ayırır.
+- KAP, temettü ve sermaye artırımı verisi bu fazda yok; boş bölüm gösterilmez.
+
+## Tarayıcı (Faz 4)
+
+`/ui/screener`: hazır taramaların sonuçları, geçmiş seanslar ve kullanıcının kendi filtresi. Her satır hisse sayfasına bağlanır.
+
+- Hazır taramalar `scan_results` tablosundan gelir; her taramanın açıklaması ve o günkü sonuç sayısı gösterilir.
+- Kendi filtresi `screen_snapshots` tablosunu okur: her seansta hisse başına tek satır (getiriler, RSI, SMA uzaklıkları, 52 hafta zirvesi, hacim, piyasa değeri, F/K, PD/DD, marj, ROE, satış büyümesi).
+- Alanlar ve operatörler beyaz listededir; kullanıcı metni SQL'e girmez. En fazla 10 koşul; sektör ve tarama filtresi.
+- API: `GET /api/screens`, `/api/screens/fields`, `/api/screens/<kod>`, `POST /api/screener/query`.
+- Erişim hisse sayfasıyla aynı kapıyı kullanır (`STOCK_PAGES_PUBLIC`). Ücretli olmayan üyeler sunucuda `SCREENER_FREE_LIMIT` kadar satır görür; tam liste tarayıcıya hiç gitmez.
+- Filtre kaydetme ve CSV dışa aktarma yok; filtre kaydı Faz 6'daki alarmlarla gelecek.
+
+## İzleme Listesi ve Portföy (Faz 5)
+
+- `/ui/watchlist`: kişisel listeler (en fazla 5 liste × 100 hisse), tarayıcıdaki özet kolonlarıyla.
+- `/ui/portfolio`: elle girilen işlemler (en fazla 3 portföy × 500 işlem), pozisyonlar, ortalama maliyet, gerçekleşmiş/gerçekleşmemiş K/Z ve kıyas grafiği.
+- Tablolar botun kendi tablolarından ayrıdır: `user_watchlists`, `user_watchlist_items`, `user_portfolios`, `user_portfolio_transactions`. Kullanıcı silinince kayıtlar da silinir.
+- **Bedelsiz/bölünme:** adetler düzeltilmiş birimle tutulur (`adet × ham fiyat / düzeltilmiş fiyat`), böylece bedelsiz sahte zarar üretmez. Satışta da aynı dönüşüm kullanılır.
+- **Kıyas:** aynı nakit akışı XU100'e ve para piyasasına uygulanır. XU100, İş Yatırım satırlarındaki endeks kolonundan (`END_ENDEKS_KODU=01`) `benchmark_bars` tablosuna yazılır (`BENCHMARK_PROXY_TICKER=THYAO`).
+- Para piyasası: TEFAS uç noktası doğrulanamadığı için varsayılan olarak **tanımsızdır**. `MONEY_MARKET_ANNUAL_RATE_PCT` verilirse bileşik faiz varsayımıyla hesaplanır ve ekranda "varsayım" olarak etiketlenir.
+- API: `/api/watchlists`, `/api/portfolios`, `/api/portfolios/<id>/transactions`. Sahiplik ihlali 403 değil 404 döner.
+- Erişim hisse sayfasıyla aynı kapı (`STOCK_PAGES_PUBLIC`).
+
+## Alarmlar ve Akşam Özeti (Faz 6)
+
+- `/ui/alerts`: Telegram bağlantısı, alarm listesi, kayıtlı filtreler ve göndermeden önce özet önizlemesi.
+- **Bağlama:** Web'de tek kullanımlık, 15 dakikalık bir bağlantı üretilir; DB'de yalnızca SHA-256 özeti tutulur. Kullanıcı `t.me/<bot>?start=<jeton>` bağlantısına basınca worker'daki `getUpdates` döngüsü `/start` mesajını işler. Yalnızca özel sohbetler kabul edilir. `/stop` bağlantıyı kaldırır. Okuma konumu `app_settings` içinde tutulur.
+- **Alarmlar:** hazır tarama takibi (isteğe bağlı "sadece izleme listem"), kayıtlı filtreye yeni girenler, tek seferlik fiyat seviyesi ve günlük değişim eşiği. Hepsi kapanış verisiyle çalışır.
+- **Özet:** Taramalar bittikten sonra günde bir, kullanıcı başına tek mesaj. `user_digest_log` `(user_id, as_of)` ile çift gönderim engellenir. O gün tetiklenen bir şey yoksa mesaj gitmez. Mesaj 3.900 karaktere kısaltılır ve HTML'den kaçırılır.
+- **Kimlik:** `TELEGRAM_USER_BOT_TOKEN` / `TELEGRAM_USER_BOT_USERNAME`; token yoksa operatör token'ına düşer. Operatör uyarılarıyla karışmaması için ayrı bot önerilir.
+- Varsayılan kapalı: `TELEGRAM_LINK_POLLING_ENABLED=false`, `USER_DIGEST_ENABLED=false`. `USER_DIGEST_HOUR_TR` (varsayılan 18) özetin en erken saatidir; scheduler seans sonunda çalıştığı için 20:00 gibi geç bir saat özeti kaçırır.
+- Bu faz müşteriye kendiliğinden mesaj gönderen ilk parçadır; onaysız deploy edilmez.
+
+## Ticari Hazırlık (Faz 7)
+
+**Kod tarafı tamamlananlar**
+- Hukuk metinleri taslak olarak uygulamada: `/legal/kullanim-kosullari`, `/legal/gizlilik`, `/legal/kvkk-aydinlatma`, `/legal/mesafeli-satis`. `LEGAL_TEXTS_DRAFT=true` iken sayfada "TASLAK" bandı görünür.
+- Kayıt ekranında onay kutusu; kabul edilen her belgenin sürümü `legal_acceptances` tablosuna yazılır.
+- KVKK hakları: `GET /api/me/export` (şifre özeti hariç tüm kişisel veriler) ve `POST /api/me/delete` (şifre doğrulamalı, kişisel tabloları CASCADE ile siler, oturumu kapatır).
+- Paket hakları tek yerde: `services/entitlements.py` (ücretsiz/deneme ve ücretli limitleri; admin sınırsız).
+- Veri kaynağı soyutlaması: `data/market_source.py`. `MARKET_DATA_SOURCE` ile lisanslı adaptör takılır; bilinmeyen kaynak açık hata verir.
+- `DATA_PUBLIC_SERVING_ENABLED=false` veri yayınını admin dışına kapatır (lisans biterse kill switch). Sayfalarda `DATA_ATTRIBUTION` satırı gösterilir.
+
+**Kod tarafı bilerek açılmayanlar (dış hesap gerekiyor)**
+- Kartla ödeme ve tekrarlı abonelik: iyzico/PayTR hesabı, şirket/vergi levhası ve e-Arşiv fatura düzeni olmadan yazılan entegrasyon test edilemez. Bu yüzden ödeme kodu bu turda yazılmadı; mevcut elle EFT akışı kapalı kalıyor.
+- Lisanslı veri adaptörü: sağlayıcı sözleşmesi ve API dokümanı olmadan uç nokta tahmin edilmez.
+- Avukat onayı: metinler taslak; satış öncesi zorunlu.
+
+**Borsa İstanbul veri lisansı (araştırma notu)**
+- Dağıtıcı olmak için BIST ile Veri Dağıtım Sözleşmesi gerekir; tarifede ilk teknik bağlantı 25.000 TL, yıllık teknik bağlantı 112.500 TL ve ürün ücretleri var.
+- Alternatif: yetkili bir dağıtıcı (Matriks, Foreks, İdeal vb.) üzerinden alt dağıtıcı olmak.
+- BIST, veriden türetilen analizlerin de sözleşme kapsamında olduğunu belirtiyor. Kesin kapsam ve dönem sözleşme ekinde.
 
 ## Historical Universe
 

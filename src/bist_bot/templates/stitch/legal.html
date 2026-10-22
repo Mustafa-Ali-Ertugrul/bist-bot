@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html class="dark" lang="tr">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Bist-Bot · {{ document.title }}</title>
+<link rel="stylesheet" href="/static/tailwind.css"/>
+<link rel="stylesheet" href="/static/stock.css?v=1"/>
+<link rel="stylesheet" href="/static/legal.css?v=1"/>
+</head>
+<body class="bg-background font-body-md text-body-md text-on-surface antialiased">
+<header class="w-full px-terminal-margin py-space-md border-b border-surface-container-high/40">
+<div class="w-full max-w-3xl mx-auto flex flex-wrap items-center justify-between gap-space-sm">
+<div class="flex items-center gap-space-sm">
+<span class="font-headline-md text-headline-md tracking-tight font-extrabold">Bist<span class="text-primary">-Bot</span></span>
+</div>
+<nav class="flex flex-wrap items-center gap-space-sm">
+<a class="personal-nav" href="/legal/kullanim-kosullari">Kullanım</a>
+<a class="personal-nav" href="/legal/gizlilik">Gizlilik</a>
+<a class="personal-nav" href="/legal/kvkk-aydinlatma">KVKK</a>
+<a class="personal-nav" href="/legal/mesafeli-satis">Mesafeli Satış</a>
+</nav>
+</div>
+</header>
+
+<main class="w-full max-w-3xl mx-auto px-terminal-margin py-space-lg">
+{% if draft_notice %}
+<div class="legal-draft">{{ draft_notice }}</div>
+{% endif %}
+<article class="legal-doc">
+<h1>{{ document.title }}</h1>
+<p class="legal-version">Sürüm: {{ document.version }}</p>
+{{ document.body | safe }}
+</article>
+<p class="font-body-sm text-body-sm text-outline mt-space-lg"><a href="/login">Giriş sayfasına dön</a></p>
+</main>
+</body>
+</html>

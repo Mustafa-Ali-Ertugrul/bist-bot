@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html class="dark" lang="tr">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Bist-Bot · Tarayıcı</title>
+<link rel="stylesheet" href="/static/tailwind.css"/>
+<link rel="stylesheet" href="/static/stock.css?v=1"/>
+<link rel="stylesheet" href="/static/screener.css?v=1"/>
+</head>
+<body class="bg-background font-body-md text-body-md text-on-surface antialiased">
+<header class="w-full px-terminal-margin py-space-md border-b border-surface-container-high/40">
+<div class="w-full max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-space-md">
+<div class="flex items-center gap-space-sm">
+<span class="font-headline-md text-headline-md tracking-tight font-extrabold">Bist<span class="text-primary">-Bot</span></span>
+<span class="bg-surface-container-high px-space-xs py-space-3xs rounded text-secondary font-label-caps text-label-caps uppercase tracking-wider">Tarayıcı</span>
+</div>
+<div class="flex items-center gap-space-sm w-full sm:w-auto">
+<label class="sr-only" for="stock-search">Hisse ara</label>
+<input id="stock-search" class="stock-search" type="search" placeholder="Kod veya şirket adı" autocomplete="off"/>
+<a class="px-space-md py-space-xs rounded-lg bg-surface-container-high text-on-surface font-body-sm text-body-sm" href="/ui/dashboard">Panel</a>
+</div>
+</div>
+<div id="search-results" class="w-full max-w-7xl mx-auto stock-search-results hidden"></div>
+</header>
+
+<main class="w-full max-w-7xl mx-auto px-terminal-margin py-space-lg screen-layout">
+<aside class="bg-surface-container-low/90 rounded-xl p-space-md">
+<h1 class="font-headline-md text-headline-md font-bold">Hazır Taramalar</h1>
+<p class="font-body-sm text-body-sm text-outline mt-space-3xs" id="catalog-date">Yükleniyor…</p>
+<ul id="screen-list" class="screen-list mt-space-sm"></ul>
+</aside>
+
+<section class="bg-surface-container-low/90 rounded-xl p-space-md">
+<div class="flex flex-wrap items-start justify-between gap-space-sm">
+<div>
+<h2 class="font-headline-md text-headline-md font-bold" id="screen-title">Tarama seçin</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-space-3xs" id="screen-description"></p>
+</div>
+<div class="flex flex-wrap items-center gap-space-xs">
+<label class="screen-control-label" for="screen-date">Tarih</label>
+<select id="screen-date" class="screen-control"></select>
+<label class="screen-control-label" for="screen-sort">Sırala</label>
+<select id="screen-sort" class="screen-control"></select>
+</div>
+</div>
+<p class="font-body-sm text-body-sm text-outline mt-space-3xs" id="screen-meta"></p>
+<div class="overflow-x-auto mt-space-sm">
+<table class="w-full font-body-sm text-body-sm screen-table">
+<thead>
+<tr class="text-outline font-label-caps text-label-caps uppercase">
+<th class="text-left">Kod</th>
+<th class="text-left">Şirket</th>
+<th class="text-left">Sektör</th>
+<th class="text-right">Kapanış</th>
+<th class="text-right">Günlük</th>
+<th class="text-right">Değer</th>
+<th class="text-right">Piyasa Değeri</th>
+</tr>
+</thead>
+<tbody id="screen-body">
+<tr><td colspan="7" class="py-space-sm">Yükleniyor…</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+<section class="bg-surface-container-low/90 rounded-xl p-space-md screen-filters">
+<div class="flex flex-wrap items-center justify-between gap-space-sm">
+<h2 class="font-headline-md text-headline-md font-bold">Kendi Filtren</h2>
+<div class="flex flex-wrap items-center gap-space-xs">
+<label class="screen-control-label" for="filter-sector">Sektör</label>
+<select id="filter-sector" class="screen-control"><option value="">Tümü</option></select>
+<label class="screen-control-label" for="filter-screen">Tarama</label>
+<select id="filter-screen" class="screen-control"><option value="">Tümü</option></select>
+</div>
+</div>
+<div id="condition-rows" class="screen-conditions mt-space-sm"></div>
+<div class="flex flex-wrap items-center gap-space-sm mt-space-sm">
+<button id="add-condition" class="screen-button" type="button">Koşul ekle</button>
+<button id="apply-filter" class="screen-button screen-button-primary" type="button">Filtrele</button>
+<button id="reset-filter" class="screen-button" type="button">Sıfırla</button>
+<span class="font-body-sm text-body-sm text-outline" id="filter-status"></span>
+</div>
+</section>
+
+<p class="font-body-sm text-body-sm text-outline pb-space-lg">Bu sayfa bilgilendirme amaçlıdır; alım-satım tavsiyesi değildir. Taramalar gün sonu verisiyle çalışır.{% if attribution %}<br>{{ attribution }}{% endif %}</p>
+</main>
+<script src="/static/screener.js?v=2"></script>
+</body>
+</html>

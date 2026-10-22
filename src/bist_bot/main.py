@@ -45,6 +45,39 @@ def main():
         from bist_bot.services.overnight_service import OvernightService
 
         overnight = OvernightService(container.fetcher, container.notifier, settings)
+    daily_bars = None
+    if settings.DAILY_BARS_ENABLED:
+        from bist_bot.services.daily_bar_service import DailyBarService
+
+        daily_bars = DailyBarService(container.db.market_data, settings)
+    screen_scans = None
+    if settings.SCREEN_SCANS_ENABLED:
+        from bist_bot.services.scan_library_service import ScanLibraryService
+
+        screen_scans = ScanLibraryService(container.db.market_data, settings)
+    alerts = None
+    user_bot_token = settings.TELEGRAM_USER_BOT_TOKEN or settings.TELEGRAM_BOT_TOKEN
+    if settings.USER_DIGEST_ENABLED:
+        from bist_bot.notifier import TelegramNotifier
+        from bist_bot.services.alert_digest_service import AlertDigestService
+
+        alerts = AlertDigestService(
+            container.db.alerts,
+            container.db.market_data,
+            container.db.user_data,
+            TelegramNotifier(token=user_bot_token, chat_id=settings.TELEGRAM_CHAT_ID),
+            settings,
+        )
+    if settings.TELEGRAM_LINK_POLLING_ENABLED and user_bot_token:
+        from bist_bot.notifier import TelegramNotifier
+        from bist_bot.services.telegram_link_poller import TelegramLinkPoller
+        from bist_bot.services.telegram_link_service import TelegramLinkService
+
+        link_notifier = TelegramNotifier(token=user_bot_token, chat_id=settings.TELEGRAM_CHAT_ID)
+        link_service = TelegramLinkService(container.db.alerts, link_notifier, settings)
+        TelegramLinkPoller(
+            container.db.alerts, link_service, user_bot_token, settings=settings
+        ).start_thread()
     scheduler = MarketScheduler(
         scanner,
         container.notifier,
@@ -53,6 +86,9 @@ def main():
         monthly_portfolio=monthly_portfolio,
         league=league,
         overnight=overnight,
+        daily_bars=daily_bars,
+        screen_scans=screen_scans,
+        alerts=alerts,
     )
     order_tracker = OrderTracker(container.broker, container.db)
 

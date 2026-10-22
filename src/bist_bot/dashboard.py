@@ -12,32 +12,19 @@ import threading
 import time
 from collections import OrderedDict
 from collections.abc import Callable
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta, timezone
 from functools import wraps
 from typing import Any, cast
 
-import pandas as pd
-from flask import (
-    Flask,
-    g,
-    has_request_context,
-    jsonify,
-    make_response,
-    redirect,
-    render_template,
-    request,
-)
+from flask import Flask, g, has_request_context, jsonify, redirect, render_template, request
 from flask_cors import CORS
 from flask_jwt_extended import (
     JWTManager,
     create_access_token,
-    create_refresh_token,
-    decode_token,
     get_jwt,
     get_jwt_identity,
     jwt_required,
     set_access_cookies,
-    set_refresh_cookies,
     unset_jwt_cookies,
     verify_jwt_in_request,
 )
@@ -67,7 +54,6 @@ from bist_bot.indicators import (
 from bist_bot.locales import get_message
 from bist_bot.risk.circuit_breaker import CircuitBreaker
 from bist_bot.scanner import ScanService
-from bist_bot.strategy.params import StrategyParams
 from bist_bot.subscription import (
     PAID_PLANS,
     VALID_PLANS,
@@ -94,35 +80,6 @@ def safe_join_static(directory: str, *untrusted: str) -> str | None:
     """
     normalized = [str(part).replace("\\", "/") for part in untrusted]
     return safe_join(directory, *normalized)
-
-
-def _fresh_gzip_assets(static_folder: str | None) -> set[str]:
-    """Absolute paths of ``*.gz`` files whose content matches their source.
-
-    A pre-compressed copy that lags behind its source (edited app.js, stale
-    app.js.gz) would silently ship old code to every gzip-capable browser,
-    so stale copies are skipped and the plain file is served instead.
-    """
-    import gzip
-
-    fresh: set[str] = set()
-    if not static_folder or not os.path.isdir(static_folder):
-        return fresh
-    for root, _dirs, files in os.walk(static_folder):
-        for name in files:
-            if not name.endswith(".gz"):
-                continue
-            gz_path = os.path.join(root, name)
-            src_path = gz_path[: -len(".gz")]
-            try:
-                with open(src_path, "rb") as src, gzip.open(gz_path, "rb") as gz:
-                    if src.read() == gz.read():
-                        fresh.add(os.path.abspath(gz_path))
-                        continue
-            except OSError:
-                pass
-            logger.warning("static_gzip_stale_skipped", asset=name)
-    return fresh
 
 
 def _round_value(value: Any) -> float | None:
@@ -152,8 +109,6 @@ _DUMMY_HASH = hash_password(_DUMMY_PASSWORD)
 # have already rejected unauthenticated / lapsed callers before a hit is
 # possible — the cache never bypasses an auth gate.
 _API_STATS_CACHE_TTL_S = 30.0
-_REMEMBER_ME_REFRESH_TTL = timedelta(days=30)
-_SESSION_REFRESH_TTL = timedelta(hours=12)
 _api_stats_cache_lock = threading.Lock()
 _api_stats_cache: dict[str, Any] = {}
 
@@ -387,33 +342,24 @@ def _safe_json_payload() -> dict[str, Any]:
     return raw if isinstance(raw, dict) else {}
 
 
-_COMPACT_SNAPSHOT_KEYS = (
-    "close",
-    "low",
-    "high",
-    "rsi",
-    "change_pct",
-    "adx",
-    "atr",
-    "volume_ratio",
-    "macd_cross",
-    "sma_cross",
-    "ema_cross",
-    "bb_position",
-    "stoch_k",
-    "support",
-    "resistance",
-)
+_COMPACT_SNAPSHOT_KEYS = ("close", "low", "high", "rsi")
 
 
 def _compact_analyze_payload(payload: dict[str, Any]) -> dict[str, Any]:
     """Trim analyze response to what the UI renders (opt-in via ?compact=1).
 
-    Charts use price_data; header and indicator panel use the snapshot keys
-    above; detail uses signal score/stop/target/reasons. Auxiliary snapshot
-    indicators outside that list are never read client-side.
+    Charts use price_data; header uses snapshot close/low/high/rsi; detail
+    uses signal score/stop/target. Full reasons list and auxiliary snapshot
+    indicators are never read client-side.
     """
     out = dict(payload)
+    sig = out.get("signal")
+    if isinstance(sig, dict):
+        sig = dict(sig)
+        reasons = sig.get("reasons")
+        if isinstance(reasons, list):
+            sig["reasons"] = reasons[:1]
+        out["signal"] = sig
     snap = out.get("snapshot")
     if isinstance(snap, dict):
         out["snapshot"] = {k: snap[k] for k in _COMPACT_SNAPSHOT_KEYS if k in snap}
@@ -436,166 +382,6 @@ def _apply_bars_limit(payload: dict[str, Any]) -> dict[str, Any]:
         payload = dict(payload)
         payload["price_data"] = bars[-n:]
     return payload
-
-
-_RSI_REASON_RE = re.compile(r"RSI[^()]*\((\d+(?:\.\d+)?)\)")
-_VOLUME_CONFIRM_MARKERS = ("Hacim artıyor", "Fiyat-Hacim")
-_LATEST_SCAN_WINDOW = timedelta(minutes=15)
-
-
-def _parse_utc(value: Any) -> datetime | None:
-    if not value:
-        return None
-    try:
-        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
-
-
-def _signal_texts(sig: dict[str, Any]) -> list[str]:
-    texts: list[str] = []
-    for key in ("reasons", "conditions"):
-        value = sig.get(key)
-        if isinstance(value, list):
-            texts.extend(str(v) for v in value)
-        elif isinstance(value, str) and value:
-            texts.extend(part.strip() for part in value.split("|"))
-    return texts
-
-
-def _latest_signal_batch_breadth(recent_signals: list[dict[str, Any]]) -> dict[str, Any]:
-    """Summary of the most recent persisted signal batch (no invented defaults).
-
-    Dedupe means many scans persist nothing, so the batch is anchored on the
-    newest signal: every signal stamped within 15 minutes before it.
-    """
-    stamped = [
-        (sig_at, sig)
-        for sig in recent_signals
-        if (sig_at := _parse_utc(sig.get("timestamp") or sig.get("created_at"))) is not None
-    ]
-    batch_at = max((at for at, _ in stamped), default=None)
-    window = (
-        [sig for at, sig in stamped if batch_at - _LATEST_SCAN_WINDOW <= at]
-        if batch_at is not None
-        else []
-    )
-
-    buy_tickers: list[str] = []
-    rsi_vals: list[float] = []
-    volume_confirmed = 0
-    for sig in window:
-        st = str(sig.get("signal_type", "")).upper()
-        ticker = str(sig.get("ticker", "")).replace(".IS", "")
-        if "AL" in st and "SAT" not in st and ticker not in buy_tickers:
-            buy_tickers.append(ticker)
-        texts = _signal_texts(sig)
-        if any(marker in t for t in texts for marker in _VOLUME_CONFIRM_MARKERS):
-            volume_confirmed += 1
-        for t in texts:
-            m = _RSI_REASON_RE.search(t)
-            if m:
-                rsi_vals.append(float(m.group(1)))
-                break
-
-    avg_rsi = round(sum(rsi_vals) / len(rsi_vals), 1) if rsi_vals else None
-    return {
-        "batch_at": batch_at.isoformat() if batch_at is not None else None,
-        "signal_count": len(window),
-        "avg_rsi": avg_rsi,
-        "volume_confirmed": volume_confirmed,
-        "buy_tickers": buy_tickers[:5],
-        "buy_count": len(buy_tickers),
-    }
-
-
-_OHLCV_AGG = {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}
-
-
-def _tr_local_index(index: Any) -> pd.DatetimeIndex:
-    """Fetcher bars are UTC-naive; return the same instants in Istanbul time."""
-    idx = pd.DatetimeIndex(index)
-    if idx.tz is None:
-        idx = idx.tz_localize("UTC")
-    return idx.tz_convert(TR)
-
-
-def _resample_session_4h(df: Any) -> Any:
-    """Merge 60m bars into two 4-hour bars per BIST session (10-14, 14-18 TR).
-
-    The closing-auction print (18:00 TR) joins the afternoon bar instead of
-    forming a flat stub bar of its own.
-    """
-    if df is None or len(df) == 0:
-        return df
-    cols = [c for c in _OHLCV_AGG if c in df.columns]
-    local = _tr_local_index(df.index)
-    start_hour = [10 if ts.hour < 14 else 14 for ts in local]
-    keys = local.normalize() + pd.to_timedelta(start_hour, unit="h")
-    grouped = df[cols].groupby(keys).agg({c: _OHLCV_AGG[c] for c in cols})
-    grouped.index = grouped.index.tz_convert("UTC").tz_localize(None)
-    return grouped.dropna(subset=["close"])
-
-
-def _bar_label(ts: Any, intraday: bool) -> str:
-    local = _tr_local_index([ts])[0]
-    return local.strftime("%Y-%m-%d %H:%M") if intraday else local.strftime("%Y-%m-%d")
-
-
-def _session_frames(df: Any, intraday: bool) -> list[tuple[str, Any]]:
-    """[(date, frame)] per trading session (intraday) or per bar (daily+)."""
-    if intraday:
-        local_dates = [ts.strftime("%Y-%m-%d") for ts in _tr_local_index(df.index)]
-        return [(day, frame) for day, frame in df.groupby(local_dates, sort=True)]
-    return [(_bar_label(ts, False), df.loc[[ts]]) for ts in df.index]
-
-
-def _session_summary(df: Any, intraday: bool) -> dict[str, Any] | None:
-    """High/low of the latest session (intraday) or latest bar (daily+)."""
-    frames = _session_frames(df, intraday) if df is not None and len(df) else []
-    if not frames:
-        return None
-    day, frame = frames[-1]
-    return {
-        "date": day,
-        "high": _round_value(frame["high"].max()),
-        "low": _round_value(frame["low"].min()),
-    }
-
-
-def _previous_period_pivots(df: Any, intraday: bool, now: datetime) -> dict[str, Any] | None:
-    """Classic floor pivots from the last *completed* session/bar.
-
-    While today's session is still running its bars are excluded, so levels
-    never move intraday (standard pivot convention).
-    """
-    frames = _session_frames(df, intraday) if df is not None and len(df) else []
-    if not frames:
-        return None
-    today = now.astimezone(TR).strftime("%Y-%m-%d")
-    session_open = now.astimezone(TR).hour < 18 or (
-        now.astimezone(TR).hour == 18 and now.astimezone(TR).minute < 10
-    )
-    if frames[-1][0] == today and session_open:
-        frames = frames[:-1]
-    if not frames:
-        return None
-    day, frame = frames[-1]
-    high = float(frame["high"].max())
-    low = float(frame["low"].min())
-    close = float(frame["close"].iloc[-1])
-    if not all(math.isfinite(v) for v in (high, low, close)):
-        return None
-    pivot = (high + low + close) / 3
-    return {
-        "basis_date": day,
-        "r2": _round_value(pivot + (high - low)),
-        "r1": _round_value(2 * pivot - low),
-        "pp": _round_value(pivot),
-        "s1": _round_value(2 * pivot - high),
-        "s2": _round_value(pivot - (high - low)),
-    }
 
 
 def _auth_rate_limit_key() -> str:
@@ -668,7 +454,6 @@ def create_dashboard_app(
         template_folder=str(base_dir / "templates"),
         static_folder=str(base_dir / "static"),
     )
-    fresh_gzip_assets = _fresh_gzip_assets(app.static_folder)
     app.config["fetcher"] = fetcher
     app.config["engine"] = engine
     app.config["db"] = db
@@ -683,10 +468,6 @@ def create_dashboard_app(
     app.config["JWT_DECODE_ALGORITHMS"] = ["HS256"]
     access_token_minutes = max(1, min(int(settings.JWT_ACCESS_TOKEN_MINUTES), 15))
     app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(minutes=access_token_minutes)
-    # Refresh token (HttpOnly cookie) silently re-mints the 15-minute access
-    # token. "Remember me" keeps it 30 days in a persistent cookie; otherwise
-    # it lives 12 hours in a browser-session cookie.
-    app.config["JWT_REFRESH_TOKEN_EXPIRES"] = _REMEMBER_ME_REFRESH_TTL
     # HttpOnly UI cookie is the server-side authority for /ui/* page renders.
     # /api/* accepts either Authorization Bearer header OR HttpOnly cookie.
     # AppSec (Round 20): JWT_TOKEN_LOCATION includes both "headers" and "cookies".
@@ -723,58 +504,13 @@ def create_dashboard_app(
                 _REVOKED_JTIS.pop(k, None)
             _REVOKED_JTIS[jti] = exp
 
-    def _persist_revoked_refresh_jti(jti: str, exp: float) -> None:
-        """Durable revocation for refresh tokens (they outlive a restart)."""
-        manager = getattr(get_db(), "manager", None)
-        if manager is None:
-            return
-        now = datetime.now(UTC).replace(tzinfo=None)
-        expires_at = datetime.fromtimestamp(exp, UTC).replace(tzinfo=None)
-        try:
-            with manager.engine.begin() as conn:
-                conn.execute(
-                    text("DELETE FROM revoked_tokens WHERE expires_at <= :now"), {"now": now}
-                )
-                exists = conn.execute(
-                    text("SELECT 1 FROM revoked_tokens WHERE jti = :jti"), {"jti": jti}
-                ).first()
-                if exists is None:
-                    conn.execute(
-                        text(
-                            "INSERT INTO revoked_tokens (jti, expires_at, created_at) "
-                            "VALUES (:jti, :expires_at, :created_at)"
-                        ),
-                        {"jti": jti, "expires_at": expires_at, "created_at": now},
-                    )
-        except SQLAlchemyError:
-            logger.exception("refresh_token_revoke_persist_failed")
-
-    def _is_refresh_jti_revoked(jti: str) -> bool:
-        manager = getattr(get_db(), "manager", None)
-        if manager is None:
-            return False
-        try:
-            with manager.engine.connect() as conn:
-                row = conn.execute(
-                    text("SELECT 1 FROM revoked_tokens WHERE jti = :jti"), {"jti": jti}
-                ).first()
-        except SQLAlchemyError:
-            # Fail closed: an unreadable blocklist must not resurrect sessions.
-            logger.exception("refresh_token_revoke_lookup_failed")
-            return True
-        return row is not None
-
     @jwt.token_in_blocklist_loader
     def check_if_token_revoked(_jwt_header: Any, jwt_payload: dict[str, Any]) -> bool:
         jti = jwt_payload.get("jti")
         if not jti:
             return False
         with _REVOKED_LOCK:
-            if jti in _REVOKED_JTIS:
-                return True
-        if jwt_payload.get("type") == "refresh":
-            return _is_refresh_jti_revoked(str(jti))
-        return False
+            return jti in _REVOKED_JTIS
 
     @jwt.revoked_token_loader
     def _custom_jwt_revoked(_jwt_header: Any, _jwt_payload: Any):
@@ -1048,7 +784,7 @@ def create_dashboard_app(
         return wrapped
 
     def _admin_required_ui(view):
-        """Admin-only page gate: non-admins bounce to /ui/dashboard (302)."""
+        """Admin-only page gate: non-admins bounce to /ui/beta (302)."""
 
         @wraps(view)
         def wrapped(*args, **kwargs):
@@ -1059,7 +795,27 @@ def create_dashboard_app(
                 return resp
             if str(user.get("role") or "").lower() != "admin":
                 logger.warning("admin_ui_forbidden", route=request.path)
-                return redirect("/ui/dashboard", code=302)
+                return redirect("/ui/beta", code=302)
+            return view(*args, **kwargs)
+
+        return wrapped
+
+    def _admin_only_api(view):
+        """Hard admin-only API gate (independent of RBAC_MODE).
+
+        Signal payloads contain buy/sell levels and must never reach a
+        non-admin account, so this decorator denies with 403 even while
+        RBAC_MODE is the default "warn".
+        """
+
+        @wraps(view)
+        def wrapped(*args, **kwargs):
+            user = _get_request_user()
+            if user is None:
+                return jsonify({"status": "error", "message": "Authentication required"}), 401
+            if str(user.get("role") or "").lower() != "admin":
+                logger.warning("admin_api_forbidden", route=request.path)
+                return jsonify({"status": "error", "message": "Forbidden"}), 403
             return view(*args, **kwargs)
 
         return wrapped
@@ -1100,9 +856,12 @@ def create_dashboard_app(
 
     _benchmark_cache: dict[str, Any] = {
         "timestamp": 0.0,
-        # Empty until the first live fetch lands: the UI shows "—" rather
-        # than invented index levels.
-        "data": {},
+        "data": {
+            "USDTRY": {"val": 48.47, "chg": 0.05},
+            "XU100": {"val": 14531.31, "chg": 0.87},
+            "XU030": {"val": 17344.75, "chg": 1.41},
+            "BIST_VOL": "118.6B TL",
+        },
     }
     _benchmark_updating = threading.Event()
 
@@ -1120,20 +879,18 @@ def create_dashboard_app(
                 for k, sym in tickers.items():
                     try:
                         h = yf.Ticker(sym).history(period="5d", interval="1d")
-                        as_of = str(h.index[-1])[:10] if h is not None and not h.empty else None
                         if h is not None and not h.empty and len(h) >= 2:
                             last = float(h["Close"].iloc[-1])
                             prev = float(h["Close"].iloc[-2])
                             pct = ((last - prev) / prev) * 100
-                            res[k] = {"val": round(last, 2), "chg": round(pct, 2), "as_of": as_of}
+                            res[k] = {"val": round(last, 2), "chg": round(pct, 2)}
                         elif h is not None and not h.empty:
                             last = float(h["Close"].iloc[-1])
-                            res[k] = {"val": round(last, 2), "chg": None, "as_of": as_of}
+                            res[k] = {"val": round(last, 2), "chg": 0.0}
                         if sym == "XU100.IS" and h is not None and not h.empty:
-                            # Yahoo reports index volume as a share count, not TL.
                             vols = [float(v) for v in h["Volume"] if float(v) > 0]
                             if vols and vols[-1] > 0:
-                                res["BIST_VOL"] = f"{vols[-1] / 1e9:.1f} mlr adet"
+                                res["BIST_VOL"] = f"{vols[-1] / 1e9:.1f}B TL"
                     except Exception:
                         pass
                 if res:
@@ -1294,6 +1051,9 @@ def create_dashboard_app(
 
         if request.path.startswith("/static/"):
             response.headers["Cache-Control"] = "public, max-age=86400, stale-while-revalidate=3600"
+        elif request.path.startswith("/api/"):
+            # Personal data (alerts, links, portfolios) must never be cached.
+            response.headers["Cache-Control"] = "no-store"
         elif response.content_type and "text/html" in response.content_type:
             # Pages are per-user dynamic shells (plan badge, gated content):
             # never let browsers heuristically cache them, otherwise users
@@ -1317,7 +1077,7 @@ def create_dashboard_app(
             if static_folder:
                 rel_path = request.path[len("/static/") :].lstrip("/")
                 safe_path = safe_join_static(static_folder, rel_path + ".gz")
-                if safe_path and os.path.abspath(safe_path) in fresh_gzip_assets:
+                if safe_path and os.path.isfile(safe_path):
                     try:
                         with open(safe_path, "rb") as f:
                             gz_bytes = f.read()
@@ -1603,14 +1363,6 @@ def create_dashboard_app(
             methods=["GET"],
         )
 
-    def _set_refresh_cookie(response: Any, user: dict[str, Any], remember: bool) -> None:
-        """Attach the HttpOnly refresh cookie that keeps the UI signed in."""
-        ttl = _REMEMBER_ME_REFRESH_TTL if remember else _SESSION_REFRESH_TTL
-        refresh_token = create_refresh_token(identity=str(user["id"]), expires_delta=ttl)
-        # max_age=None -> browser-session cookie (JWT_SESSION_COOKIE default).
-        max_age = int(ttl.total_seconds()) if remember else None
-        set_refresh_cookies(response, refresh_token, max_age=max_age)
-
     @app.route("/api/auth/login", methods=["POST"])
     @limiter.limit("5 per minute", key_func=_auth_rate_limit_key)
     def api_auth_login():
@@ -1653,7 +1405,6 @@ def create_dashboard_app(
         # HttpOnly cookie is the server-side authority for /ui/* page renders.
         # /api/* keeps using the Authorization header (see _ui_auth_required).
         set_access_cookies(response, token)
-        _set_refresh_cookie(response, user, remember=_coerce_bool(payload.get("remember")))
         return response
 
     @app.route("/api/auth/register", methods=["POST"])
@@ -1667,11 +1418,29 @@ def create_dashboard_app(
         payload = _safe_json_payload()
         email = str(payload.get("email", "")).strip().lower()
         password = str(payload.get("password", ""))
+        accepted = bool(payload.get("accept_terms"))
+        if bool(getattr(settings, "LEGAL_CONSENT_REQUIRED", False)) and not accepted:
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": "Kullanım koşullarını ve KVKK aydınlatma metnini kabul etmelisiniz.",
+                    }
+                ),
+                400,
+            )
         success, message, user = create_user(email, password)
         if not success:
             return jsonify({"status": "error", "message": message}), 400
 
         assert user is not None
+        if accepted:
+            from bist_bot.legal import DOCUMENTS
+            from bist_bot.services.account_service import record_acceptances
+
+            manager = getattr(get_db(), "manager", None)
+            if manager is not None:
+                record_acceptances(manager, int(user["id"]), list(DOCUMENTS))
         token = create_access_token(
             identity=str(user["id"]),
             additional_claims={"role": user["role"], "email": user["email"]},
@@ -1685,7 +1454,6 @@ def create_dashboard_app(
             }
         )
         set_access_cookies(response, token)
-        _set_refresh_cookie(response, user, remember=False)
         return response, 201
 
     @app.route("/api/auth/verify", methods=["GET"])
@@ -1732,63 +1500,9 @@ def create_dashboard_app(
         set_access_cookies(response, cookie_token)
         return response, 200
 
-    def _mint_access_token_for(identity: str) -> str | None:
-        """Fresh access token from the DB row, so role changes and deleted
-        users take effect on the next refresh instead of lingering 30 days."""
-        manager = getattr(get_db(), "manager", None)
-        if manager is None:
-            return None
-        try:
-            user_id = int(identity)
-        except (TypeError, ValueError):
-            return None
-        try:
-            with manager.engine.connect() as conn:
-                row = (
-                    conn.execute(
-                        text("SELECT id, email, role FROM users WHERE id = :id LIMIT 1"),
-                        {"id": user_id},
-                    )
-                    .mappings()
-                    .first()
-                )
-        except SQLAlchemyError:
-            logger.exception("refresh_user_lookup_failed", user_id=user_id)
-            return None
-        if row is None:
-            return None
-        return create_access_token(
-            identity=str(row["id"]),
-            additional_claims={"role": str(row["role"]), "email": str(row["email"])},
-        )
-
-    @app.route("/api/auth/refresh", methods=["POST"])
-    @jwt_required(refresh=True, locations=["cookies"])
-    @limiter.limit("30 per minute")
-    def api_auth_refresh():
-        """Re-mint the 15-minute access token from the HttpOnly refresh cookie.
-
-        Cookie-authenticated POST: Flask-JWT-Extended enforces the
-        X-CSRF-TOKEN header against the csrf_refresh_token cookie.
-        """
-        token = _mint_access_token_for(str(get_jwt_identity() or ""))
-        if token is None:
-            response = jsonify({"status": "error", "message": "Oturum doğrulanmadı."})
-            unset_jwt_cookies(response)
-            return response, 401
-        response = jsonify(
-            {
-                "status": "ok",
-                "access_token": token,
-                "expires_in_seconds": access_token_minutes * 60,
-            }
-        )
-        set_access_cookies(response, token)
-        return response, 200
-
     @app.route("/api/auth/logout", methods=["POST", "GET"])
     def api_auth_logout():
-        """Revoke the current JWTs (access + refresh) and clear session cookies."""
+        """Revoke the current JWT (jti) and clear client session cookies."""
         try:
             verify_jwt_in_request(optional=True)
             claims = get_jwt()
@@ -1797,18 +1511,6 @@ def create_dashboard_app(
                 _revoke_jti(str(claims["jti"]), exp)
         except Exception:
             pass
-        # Decode the refresh cookie directly: revoking needs no CSRF proof,
-        # and logout must work even when the access token already expired.
-        raw_refresh = request.cookies.get("refresh_token_cookie")
-        if raw_refresh:
-            try:
-                refresh_claims = decode_token(raw_refresh, allow_expired=True)
-                if refresh_claims.get("type") == "refresh" and refresh_claims.get("jti"):
-                    _persist_revoked_refresh_jti(
-                        str(refresh_claims["jti"]), float(refresh_claims.get("exp", time.time()))
-                    )
-            except Exception:
-                pass
 
         response = jsonify({"status": "ok", "message": "Oturum başarıyla kapatıldı."})
         unset_jwt_cookies(response)
@@ -1890,9 +1592,9 @@ def create_dashboard_app(
                 {
                     "status": "error",
                     "message": (
-                        "Ücretli abonelik satışı geçici olarak duraklatıldı (beta). "
-                        "Sinyallerin canlı performans kanıtı birikene kadar yeni "
-                        "satış yapılmıyor; mevcut üyelikler etkilenmez."
+                        "Ücretli abonelik satışı kapalı. Yeni analiz uygulaması "
+                        "lisanslı veriyle açıldığında duyurulacak; mevcut "
+                        "üyelikler etkilenmez."
                     ),
                 }
             ), 403
@@ -2159,10 +1861,7 @@ def create_dashboard_app(
             return jsonify(
                 {
                     "status": "error",
-                    "message": (
-                        "Ücretli abonelik satışı duraklatıldı (beta); talepler "
-                        "geçici olarak onaylanmıyor."
-                    ),
+                    "message": ("Ücretli abonelik satışı kapalı; bekleyen talepler onaylanmıyor."),
                 }
             ), 403
         result, error = _decide_request(request_id, True, admin_id)
@@ -2533,7 +2232,7 @@ def create_dashboard_app(
 
     @app.route("/api/analyze/<ticker>")
     @jwt_required()
-    @require_active_subscription()
+    @_admin_only_api
     @limiter.limit("30 per minute")
     def api_analyze(ticker: str):
         start_time = time.time()
@@ -2602,16 +2301,6 @@ def create_dashboard_app(
                 target_period, target_interval = req_period, req_interval
             else:
                 target_period, target_interval = "6mo", settings.DATA_INTERVAL
-            # Yahoo has no 4h bars: fetch 60m and merge into session halves.
-            resample_4h = req_interval in ("4h", "4s")
-            display_interval = "4h" if resample_4h else target_interval
-            intraday = display_interval.endswith(("m", "h"))
-            timeframe_meta = {
-                "period": target_period,
-                "interval": display_interval,
-                "source_interval": target_interval,
-                "intraday": intraday,
-            }
 
             if use_mtf_analysis and fetch_mtf is not None:
                 cache_key = (
@@ -2620,14 +2309,14 @@ def create_dashboard_app(
                     f"{settings.MTF_TRIGGER_PERIOD}:{settings.MTF_TRIGGER_INTERVAL}"
                 )
             else:
-                cache_key = f"{normalized_ticker}|analyze|single|{target_period}:{display_interval}"
+                cache_key = f"{normalized_ticker}|analyze|single|{target_period}:{target_interval}"
 
             cached_response = runtime_fetcher.get_cached_analysis(cache_key, force=force_refresh)
             if cached_response is not None:
                 payload = dict(cached_response)
                 payload["duration_ms"] = round((time.time() - start_time) * 1000, 2)
                 payload["force_refresh"] = force_refresh
-                payload["timeframe"] = timeframe_meta
+                payload["timeframe"] = {"period": target_period, "interval": target_interval}
                 payload = _apply_bars_limit(payload)
                 if _coerce_bool(request.args.get("compact")):
                     payload = _compact_analyze_payload(payload)
@@ -2691,10 +2380,6 @@ def create_dashboard_app(
                     {"status": "error", "message": get_message("api.data_not_found")}
                 ), 404
 
-            if resample_4h and not use_mtf_analysis:
-                chart_df = _resample_session_4h(chart_df)
-                analysis_input = chart_df
-
             indicator_engine = TechnicalIndicators()
             enriched = _cached_analyze_add_all(chart_df, normalized_ticker)
             snapshot = indicator_engine.get_snapshot(enriched)
@@ -2703,19 +2388,8 @@ def create_dashboard_app(
             tail = enriched.tail(60)
             fast_key = f"sma_{settings.SMA_FAST}"
             slow_key = f"sma_{settings.SMA_SLOW}"
-            ema_long_key = f"ema_{settings.EMA_LONG}"
-            ema_long_val = (
-                _round_value(enriched[ema_long_key].iloc[-1])
-                if ema_long_key in enriched.columns and len(enriched) >= int(settings.EMA_LONG)
-                else None
-            )
-            now_tr = datetime.now(TR)
-            pivot_df = chart_df
-            if display_interval == "1wk" and len(chart_df) > 1:
-                pivot_df = chart_df.iloc[:-1]  # the last weekly bar is still forming
             price_data = [
                 {
-                    "label": _bar_label(d_val, intraday),
                     "date": str(d_val)[:19],
                     "open": _round_value(o_val),
                     "high": _round_value(h_val),
@@ -2752,22 +2426,9 @@ def create_dashboard_app(
                     "stop_loss": signal.stop_loss if signal else 0,
                     "target": signal.target_price if signal else 0,
                     "position_size": signal.position_size if signal else None,
-                    "price": signal.price if signal else None,
-                    "confidence": signal.confidence if signal else None,
                 },
-                "indicators": {
-                    "sma_fast_period": int(settings.SMA_FAST),
-                    "sma_slow_period": int(settings.SMA_SLOW),
-                    "rsi_period": int(settings.RSI_PERIOD),
-                    "rsi_oversold": int(settings.RSI_OVERSOLD),
-                    "rsi_overbought": int(settings.RSI_OVERBOUGHT),
-                    "ema_long_period": int(settings.EMA_LONG),
-                    "ema_long": ema_long_val,
-                },
-                "session": _session_summary(chart_df, intraday),
-                "pivots": _previous_period_pivots(pivot_df, intraday, now_tr),
                 "price_data": price_data,
-                "timeframe": timeframe_meta,
+                "timeframe": {"period": target_period, "interval": target_interval},
             }
             runtime_fetcher.store_analysis(cache_key, response_payload)
             response_payload["force_refresh"] = force_refresh
@@ -2795,7 +2456,7 @@ def create_dashboard_app(
 
     @app.route("/api/signals/history")
     @jwt_required()
-    @require_active_subscription()
+    @_admin_only_api
     @limiter.limit("60 per minute")
     def api_signal_history():
         raw_limit = request.args.get("limit", 50, type=int)
@@ -2803,14 +2464,18 @@ def create_dashboard_app(
         ticker = request.args.get("ticker")
         compact = _coerce_bool(request.args.get("compact"))
         signals = get_db().get_recent_signals(limit=limit, ticker=ticker)
+        signals = sorted(signals, key=lambda s: float(s.get("score") or 0), reverse=True)
         if compact:
-            # conditions duplicate reasons and score_breakdown is never read
-            # client-side; the signals page lists every reason, so keep those.
+            # UI renders only reasons[0]; conditions are never read client-side.
+            # Strip them to cut ~70% of payload (opt-in, default unchanged).
             trimmed = []
             for sig in signals:
                 s = dict(sig)
                 s.pop("conditions", None)
                 s.pop("score_breakdown", None)
+                reasons = s.get("reasons")
+                if isinstance(reasons, list):
+                    s["reasons"] = reasons[:1]
                 trimmed.append(s)
             signals = trimmed
         return jsonify({"status": "ok", "signals": signals})
@@ -2834,8 +2499,9 @@ def create_dashboard_app(
             # Dashboard boot piggy-backs the top-10 signals on this response
             # (reuses the recent_signals query above: zero extra DB hit) so
             # the UI can skip its second /api/signals/history round trip.
+            sorted_signals = sorted(recent_signals, key=lambda s: float(s.get("score") or 0), reverse=True)
             embedded = []
-            for sig in recent_signals[:10]:
+            for sig in sorted_signals[:10]:
                 s = dict(sig)
                 s.pop("conditions", None)
                 s.pop("score_breakdown", None)
@@ -2848,7 +2514,7 @@ def create_dashboard_app(
 
     @app.route("/api/stats")
     @jwt_required()
-    @require_active_subscription()
+    @_admin_only_api
     def api_stats():
         # The two decorators above have already enforced authentication and an
         # active subscription, so this body (cache hit included) is only ever
@@ -2904,7 +2570,56 @@ def create_dashboard_app(
         stats["latest_scan"] = latest_scan
         stats["rejection_breakdown"] = latest_scan["rejection_breakdown"]
 
-        breadth = _latest_signal_batch_breadth(recent_signals)
+        # Market breadth calculation from recent signals
+        rsi_vals: list[float] = []
+        actionable_symbols: list[str] = []
+        vol_up_count = 0
+
+        for sig in recent_signals:
+            st = str(sig.get("signal_type", "")).upper()
+            ticker = str(sig.get("ticker", "")).replace(".IS", "")
+            if (
+                "AL" in st or "SAT" in st or "BUY" in st or "SELL" in st
+            ) and ticker not in actionable_symbols:
+                actionable_symbols.append(ticker)
+            for cond in sig.get("conditions", []):
+                cond_str = str(cond)
+                if "Hacim artıyor" in cond_str or "Fiyat-Hacim" in cond_str:
+                    vol_up_count += 1
+                m = re.search(r"RSI.*?\((\d+\.?\d*)\)", cond_str)
+                if m:
+                    try:
+                        rsi_vals.append(float(m.group(1)))
+                    except ValueError:
+                        pass
+
+        avg_rsi = round(sum(rsi_vals) / len(rsi_vals), 1) if rsi_vals else 54.2
+        if avg_rsi >= 65:
+            rsi_status = "Aşırı Alım Bölgesi"
+        elif avg_rsi >= 55:
+            rsi_status = "Dinamik Nötr-Alış"
+        elif avg_rsi >= 45:
+            rsi_status = "Dengeli Nötr"
+        elif avg_rsi >= 35:
+            rsi_status = "Dinamik Nötr-Satış"
+        else:
+            rsi_status = "Aşırı Satım Bölgesi"
+
+        vol_ratio = round(1.0 + (vol_up_count / max(1, len(recent_signals))), 2)
+        actionable_summary = (
+            ", ".join(actionable_symbols[:3])
+            + (f" +{len(actionable_symbols) - 3}" if len(actionable_symbols) > 3 else "")
+            if actionable_symbols
+            else "Beklemede"
+        )
+
+        breadth = {
+            "avg_rsi": avg_rsi,
+            "rsi_status": rsi_status,
+            "vol_ratio": f"{vol_ratio:.2f}x",
+            "actionable_tickers": actionable_symbols[:5],
+            "actionable_summary": actionable_summary,
+        }
 
         with _api_stats_cache_lock:
             _api_stats_cache.clear()
@@ -2919,50 +2634,689 @@ def create_dashboard_app(
             )
         return _finish_api_stats(stats, latest_scan, recent_signals, breadth)
 
-    @app.route("/api/config")
-    @jwt_required()
-    @require_active_subscription()
-    def api_config():
-        """Read-only snapshot of the parameters the live scanner runs with."""
-        runtime_params = getattr(get_engine(), "params", None)
-        params = runtime_params if runtime_params is not None else StrategyParams.from_settings()
-        return jsonify(
-            {
-                "status": "ok",
-                "strategy_profile": str(settings.STRATEGY_PROFILE),
-                "buy_threshold": float(params.buy_threshold),
-                "sell_threshold": float(params.sell_threshold),
-                "max_actionable_score": float(params.max_actionable_score),
-                "adx_threshold": float(params.adx_threshold),
-                "scan_interval_minutes": int(settings.SCAN_INTERVAL_MINUTES),
-                "market_open_hour": int(settings.MARKET_OPEN_HOUR),
-                "market_close_hour": int(settings.MARKET_CLOSE_HOUR),
-                "rsi_period": int(settings.RSI_PERIOD),
-                "rsi_oversold": int(settings.RSI_OVERSOLD),
-                "rsi_overbought": int(settings.RSI_OVERBOUGHT),
-                "sma_fast": int(settings.SMA_FAST),
-                "sma_slow": int(settings.SMA_SLOW),
-                "ema_fast": int(settings.EMA_FAST),
-                "ema_slow": int(settings.EMA_SLOW),
-                "ema_long": int(settings.EMA_LONG),
-                "volume_spike_multiplier": float(settings.VOLUME_SPIKE_MULTIPLIER),
-                "volume_confirm_multiplier": float(settings.VOLUME_CONFIRM_MULTIPLIER),
-                "trend_interval": str(settings.MTF_TREND_INTERVAL),
-                "trigger_interval": str(settings.MTF_TRIGGER_INTERVAL),
-                "watchlist_source": str(settings.WATCHLIST_SOURCE),
-                "watchlist_size": len(list(getattr(settings, "WATCHLIST", []) or [])),
-                "data_provider": str(settings.DATA_PROVIDER),
-                "paper_mode": bool(settings.PAPER_MODE),
-            }
-        )
-
     @app.route("/api/scans/history")
     @jwt_required()
+    @_admin_only_api
     def api_scan_history():
         limit = max(1, min(request.args.get("limit", 20, type=int) or 20, 100))
         scan_rows = get_db().get_recent_scan_logs(limit=limit)
         history = _build_scan_history_payload(scan_rows, limit)
         return jsonify({"status": "ok", "history": history})
+
+    # -----------------------------------------------------------------------
+    # Faz 3: stock detail (page + JSON API). Admin-only by default; opening it
+    # to members requires STOCK_PAGES_PUBLIC and an active subscription.
+    # -----------------------------------------------------------------------
+    _STOCK_CODE_RE = re.compile(r"[A-Z0-9]{2,6}")
+
+    def _normalize_stock_code(raw: str) -> str | None:
+        code = (raw or "").strip().upper().removesuffix(".IS")
+        return code if _STOCK_CODE_RE.fullmatch(code) else None
+
+    def _stock_service():
+        from bist_bot.services.stock_profile_service import StockProfileService
+
+        return StockProfileService(get_db().market_data, settings)
+
+    def _stock_access_allowed() -> bool:
+        user = _get_request_user()
+        if user is None:
+            return False
+        if str(user.get("role") or "").lower() == "admin":
+            return True
+        if not bool(getattr(settings, "STOCK_PAGES_PUBLIC", False)):
+            return False
+        if not bool(getattr(settings, "DATA_PUBLIC_SERVING_ENABLED", True)):
+            return False
+        return is_subscription_active(user)
+
+    def _stock_page_required(view):
+        @wraps(view)
+        def wrapped(*args, **kwargs):
+            if not _stock_access_allowed():
+                logger.info("stock_page_forbidden", route=request.path)
+                return redirect("/ui/beta", code=302)
+            return view(*args, **kwargs)
+
+        return wrapped
+
+    def _stock_api_required(view):
+        @wraps(view)
+        def wrapped(*args, **kwargs):
+            user = _get_request_user()
+            if user is None:
+                return jsonify({"status": "error", "message": "Authentication required"}), 401
+            if not _stock_access_allowed():
+                return jsonify({"status": "error", "message": "Forbidden"}), 403
+            return view(*args, **kwargs)
+
+        return wrapped
+
+    @app.route("/api/stocks/search")
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("60 per minute")
+    def api_stock_search():
+        query = request.args.get("q", "")
+        limit = max(1, min(request.args.get("limit", 20, type=int) or 20, 50))
+        return jsonify({"status": "ok", "results": _stock_service().search(query, limit=limit)})
+
+    @app.route("/api/stocks/<code>")
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("60 per minute")
+    def api_stock_profile(code: str):
+        normalized = _normalize_stock_code(code)
+        if normalized is None:
+            return jsonify({"status": "error", "message": "Geçersiz hisse kodu."}), 400
+        profile = _stock_service().profile(normalized)
+        if profile is None:
+            return jsonify({"status": "error", "message": "Hisse bulunamadı."}), 404
+        return jsonify({"status": "ok", "profile": profile})
+
+    @app.route("/api/stocks/<code>/bars")
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("60 per minute")
+    def api_stock_bars(code: str):
+        normalized = _normalize_stock_code(code)
+        if normalized is None:
+            return jsonify({"status": "error", "message": "Geçersiz hisse kodu."}), 400
+        range_key = request.args.get("range", "1y")
+        if range_key not in {"1m", "3m", "1y", "5y", "all"}:
+            return jsonify({"status": "error", "message": "Geçersiz aralık."}), 400
+        bars = _stock_service().bars(normalized, range_key)
+        if bars is None:
+            return jsonify({"status": "error", "message": "Hisse bulunamadı."}), 404
+        return jsonify({"status": "ok", "range": range_key, "bars": bars})
+
+    @app.route("/api/stocks/<code>/fundamentals")
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("60 per minute")
+    def api_stock_fundamentals(code: str):
+        normalized = _normalize_stock_code(code)
+        if normalized is None:
+            return jsonify({"status": "error", "message": "Geçersiz hisse kodu."}), 400
+        payload = _stock_service().fundamentals(normalized)
+        if payload is None:
+            return jsonify({"status": "error", "message": "Hisse bulunamadı."}), 404
+        return jsonify({"status": "ok", "fundamentals": payload})
+
+    @app.route("/api/stocks/<code>/scans")
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("60 per minute")
+    def api_stock_scans(code: str):
+        normalized = _normalize_stock_code(code)
+        if normalized is None:
+            return jsonify({"status": "error", "message": "Geçersiz hisse kodu."}), 400
+        days = max(1, min(request.args.get("days", 30, type=int) or 30, 120))
+        hits = _stock_service().scans(normalized, days=days)
+        if hits is None:
+            return jsonify({"status": "error", "message": "Hisse bulunamadı."}), 404
+        return jsonify({"status": "ok", "scans": hits})
+
+    # -----------------------------------------------------------------------
+    # Faz 4: screener (ready-made screens + custom filter). Same access gate
+    # as the stock page; non-paying members only see the first N rows.
+    # -----------------------------------------------------------------------
+    def _screener_service():
+        from bist_bot.services.screener_service import ScreenerService
+
+        return ScreenerService(get_db().market_data, settings)
+
+    def _screen_row_limit(user: dict[str, Any] | None) -> int:
+        from bist_bot.services.entitlements import entitlements_for
+
+        return entitlements_for(user, settings).screener_rows
+
+    def _entitlements():
+        from bist_bot.services.entitlements import entitlements_for
+
+        return entitlements_for(_get_request_user(), settings)
+
+    def _parse_as_of(raw: str | None) -> date | None:
+        if not raw:
+            return None
+        try:
+            return date.fromisoformat(raw)
+        except ValueError as exc:
+            raise ValueError("Geçersiz tarih.") from exc
+
+    def _screener_response(payload: dict[str, Any], user, requested: int) -> Any:
+        allowed = _screen_row_limit(user)
+        rows = payload.get("rows", [])
+        if len(rows) > allowed:
+            rows = rows[:allowed]
+        truncated = len(rows) < int(payload.get("total", len(rows)))
+        return jsonify(
+            {
+                "status": "ok",
+                "as_of": payload.get("as_of"),
+                "total": payload.get("total", 0),
+                "returned": len(rows),
+                "truncated": truncated,
+                "limit": allowed if truncated else requested,
+                "rows": rows,
+            }
+        )
+
+    @app.route("/api/screens")
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("60 per minute")
+    def api_screens_catalog():
+        return jsonify({"status": "ok", **_screener_service().catalog()})
+
+    @app.route("/api/screens/fields")
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("60 per minute")
+    def api_screens_fields():
+        from bist_bot.services.screener_service import MAX_CONDITIONS, OPERATORS
+
+        service = _screener_service()
+        return jsonify(
+            {
+                "status": "ok",
+                "fields": service.field_list(),
+                "sectors": service.sectors(),
+                "operators": list(OPERATORS),
+                "max_conditions": MAX_CONDITIONS,
+            }
+        )
+
+    @app.route("/api/screens/<scan_id>")
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("60 per minute")
+    def api_screen_rows(scan_id: str):
+        from bist_bot.services.screener_service import ScreenerError
+
+        user = _get_request_user()
+        requested = max(1, min(request.args.get("limit", 50, type=int) or 50, 200))
+        try:
+            payload = _screener_service().screen_rows(
+                scan_id,
+                as_of=_parse_as_of(request.args.get("as_of")),
+                sort=request.args.get("sort", "market_cap_tl"),
+                order=request.args.get("order", "desc"),
+                limit=requested,
+                offset=max(0, request.args.get("offset", 0, type=int) or 0),
+            )
+        except (ScreenerError, ValueError) as exc:
+            return jsonify({"status": "error", "message": str(exc)}), 400
+        return _screener_response(payload, user, requested)
+
+    @app.route("/api/screener/query", methods=["POST"])
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("30 per minute")
+    def api_screener_query():
+        from bist_bot.services.screener_service import ScreenerError, parse_conditions
+
+        user = _get_request_user()
+        payload = _safe_json_payload()
+        requested = max(1, min(int(payload.get("limit") or 50), 200))
+        try:
+            conditions = parse_conditions(payload.get("conditions"))
+            result = _screener_service().query(
+                conditions=conditions,
+                sector=(str(payload.get("sector")).strip() if payload.get("sector") else None),
+                scan_id=(str(payload.get("scan_id")) if payload.get("scan_id") else None),
+                as_of=_parse_as_of(payload.get("as_of")),
+                sort=str(payload.get("sort") or "market_cap_tl"),
+                order=str(payload.get("order") or "desc"),
+                limit=requested,
+                offset=max(0, int(payload.get("offset") or 0)),
+            )
+        except (ScreenerError, ValueError) as exc:
+            return jsonify({"status": "error", "message": str(exc)}), 400
+        return _screener_response(result, user, requested)
+
+    # -----------------------------------------------------------------------
+    # Faz 5: personal watchlists and manual portfolios. Ownership misses always
+    # look like 404 so another user's record ids never leak.
+    # -----------------------------------------------------------------------
+    def _user_portfolio_service():
+        from bist_bot.services.user_portfolio_service import UserPortfolioService
+
+        db = get_db()
+        return UserPortfolioService(db.user_data, db.market_data, settings)
+
+    def _user_id() -> int:
+        user = _get_request_user()
+        return int(user["id"]) if user else 0
+
+    def _user_error(exc: Exception) -> Any:
+        from bist_bot.db.repositories.user_portfolio_repository import OwnershipError
+
+        if isinstance(exc, OwnershipError):
+            return jsonify({"status": "error", "message": "Kayıt bulunamadı."}), 404
+        return jsonify({"status": "error", "message": str(exc)}), 400
+
+    @app.route("/api/watchlists")
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("60 per minute")
+    def api_watchlists():
+        return jsonify(
+            {"status": "ok", "watchlists": _user_portfolio_service().watchlists(_user_id())}
+        )
+
+    @app.route("/api/watchlists", methods=["POST"])
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("30 per minute")
+    def api_watchlist_create():
+        payload = _safe_json_payload()
+        try:
+            watchlist_id = get_db().user_data.create_watchlist(
+                _user_id(),
+                str(payload.get("name") or ""),
+                limit=_entitlements().watchlists,
+            )
+        except Exception as exc:
+            return _user_error(exc)
+        return jsonify({"status": "ok", "id": watchlist_id}), 201
+
+    @app.route("/api/watchlists/<int:watchlist_id>", methods=["DELETE"])
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("30 per minute")
+    def api_watchlist_delete(watchlist_id: int):
+        try:
+            get_db().user_data.delete_watchlist(_user_id(), watchlist_id)
+        except Exception as exc:
+            return _user_error(exc)
+        return jsonify({"status": "ok"})
+
+    @app.route("/api/watchlists/<int:watchlist_id>/items", methods=["POST"])
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("60 per minute")
+    def api_watchlist_addItem(watchlist_id: int):
+        payload = _safe_json_payload()
+        code = str(payload.get("ticker") or "").strip().upper().removesuffix(".IS")
+        instrument = get_db().market_data.get_instrument(code)
+        if instrument is None:
+            return jsonify({"status": "error", "message": "Hisse bulunamadı."}), 404
+        try:
+            get_db().user_data.add_watchlist_item(
+                _user_id(),
+                watchlist_id,
+                instrument.ticker,
+                limit=_entitlements().watchlist_items,
+            )
+        except Exception as exc:
+            return _user_error(exc)
+        return jsonify({"status": "ok", "ticker": instrument.ticker})
+
+    @app.route("/api/watchlists/<int:watchlist_id>/items/<ticker>", methods=["DELETE"])
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("60 per minute")
+    def api_watchlist_removeItem(watchlist_id: int, ticker: str):
+        normalized = f"{ticker.upper().removesuffix('.IS')}.IS"
+        try:
+            get_db().user_data.remove_watchlist_item(_user_id(), watchlist_id, normalized)
+        except Exception as exc:
+            return _user_error(exc)
+        return jsonify({"status": "ok"})
+
+    @app.route("/api/portfolios")
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("60 per minute")
+    def api_portfolios():
+        return jsonify(
+            {"status": "ok", "portfolios": get_db().user_data.list_portfolios(_user_id())}
+        )
+
+    @app.route("/api/portfolios", methods=["POST"])
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("30 per minute")
+    def api_portfolio_create():
+        payload = _safe_json_payload()
+        try:
+            portfolio_id = get_db().user_data.create_portfolio(
+                _user_id(),
+                str(payload.get("name") or ""),
+                limit=_entitlements().portfolios,
+            )
+        except Exception as exc:
+            return _user_error(exc)
+        return jsonify({"status": "ok", "id": portfolio_id}), 201
+
+    @app.route("/api/portfolios/<int:portfolio_id>", methods=["DELETE"])
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("30 per minute")
+    def api_portfolio_delete(portfolio_id: int):
+        try:
+            get_db().user_data.delete_portfolio(_user_id(), portfolio_id)
+        except Exception as exc:
+            return _user_error(exc)
+        return jsonify({"status": "ok"})
+
+    @app.route("/api/portfolios/<int:portfolio_id>")
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("60 per minute")
+    def api_portfolio_summary(portfolio_id: int):
+        try:
+            summary = _user_portfolio_service().summary(_user_id(), portfolio_id)
+        except Exception as exc:
+            return _user_error(exc)
+        return jsonify({"status": "ok", **summary})
+
+    @app.route("/api/portfolios/<int:portfolio_id>/transactions", methods=["POST"])
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("60 per minute")
+    def api_portfolio_add_transaction(portfolio_id: int):
+        payload = _safe_json_payload()
+        try:
+            transaction_id = _user_portfolio_service().add_transaction(
+                _user_id(),
+                portfolio_id,
+                payload,
+                limit=_entitlements().transactions,
+            )
+        except Exception as exc:
+            return _user_error(exc)
+        return jsonify({"status": "ok", "id": transaction_id}), 201
+
+    @app.route(
+        "/api/portfolios/<int:portfolio_id>/transactions/<int:transaction_id>",
+        methods=["DELETE"],
+    )
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("60 per minute")
+    def api_portfolio_delete_transaction(portfolio_id: int, transaction_id: int):
+        try:
+            get_db().user_data.delete_transaction(_user_id(), portfolio_id, transaction_id)
+        except Exception as exc:
+            return _user_error(exc)
+        return jsonify({"status": "ok"})
+
+    # -----------------------------------------------------------------------
+    # Faz 6: Telegram linking, alerts, saved screens and digest preview.
+    # -----------------------------------------------------------------------
+    def _link_service():
+        from bist_bot.services.telegram_link_service import TelegramLinkService
+
+        return TelegramLinkService(get_db().alerts, None, settings)
+
+    def _digest_service():
+        from bist_bot.services.alert_digest_service import AlertDigestService
+
+        db = get_db()
+        return AlertDigestService(db.alerts, db.market_data, db.user_data, None, settings)
+
+    @app.route("/api/alerts/telegram")
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("60 per minute")
+    def api_telegram_status():
+        return jsonify({"status": "ok", **_link_service().status(_user_id())})
+
+    @app.route("/api/alerts/telegram/link", methods=["POST"])
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("10 per minute")
+    def api_telegram_link():
+        payload = _link_service().create_token(_user_id())
+        if payload is None:
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": "Telegram bot kullanıcı adı tanımlı değil (TELEGRAM_USER_BOT_USERNAME).",
+                    }
+                ),
+                503,
+            )
+        return jsonify({"status": "ok", **payload})
+
+    @app.route("/api/alerts/telegram", methods=["DELETE"])
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("30 per minute")
+    def api_telegram_unlink():
+        _link_service().unlink(_user_id())
+        return jsonify({"status": "ok"})
+
+    @app.route("/api/alerts")
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("60 per minute")
+    def api_alerts():
+        return jsonify({"status": "ok", "alerts": get_db().alerts.list_alerts(_user_id())})
+
+    @app.route("/api/alerts", methods=["POST"])
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("30 per minute")
+    def api_alert_create():
+        from bist_bot.strategy.scans import SCANS_BY_CODE
+
+        payload = _safe_json_payload()
+        kind = str(payload.get("kind") or "")
+        target = str(payload.get("target") or "").strip().upper()
+        if kind not in {"screen", "price", "change"}:
+            return jsonify({"status": "error", "message": "Geçersiz alarm türü."}), 400
+        if kind == "screen":
+            if target not in SCANS_BY_CODE:
+                return jsonify({"status": "error", "message": "Bilinmeyen tarama."}), 400
+            data = {"kind": kind, "target": target, "only_watchlist": payload.get("only_watchlist")}
+        else:
+            code = target.removesuffix(".IS")
+            instrument = get_db().market_data.get_instrument(code)
+            if instrument is None:
+                return jsonify({"status": "error", "message": "Hisse bulunamadı."}), 404
+            if kind == "price":
+                op = str(payload.get("op") or "")
+                if op not in {"above", "below"}:
+                    return jsonify(
+                        {"status": "error", "message": "Eşik yönü above/below olmalı."}
+                    ), 400
+                try:
+                    threshold = float(payload.get("threshold"))
+                except (TypeError, ValueError):
+                    return jsonify({"status": "error", "message": "Eşik sayı olmalı."}), 400
+                if threshold <= 0:
+                    return jsonify(
+                        {"status": "error", "message": "Eşik sıfırdan büyük olmalı."}
+                    ), 400
+                data = {"kind": kind, "target": instrument.ticker, "op": op, "threshold": threshold}
+            else:
+                try:
+                    threshold = abs(float(payload.get("threshold")))
+                except (TypeError, ValueError):
+                    return jsonify(
+                        {"status": "error", "message": "Değişim yüzdesi sayı olmalı."}
+                    ), 400
+                if threshold <= 0:
+                    return jsonify(
+                        {"status": "error", "message": "Değişim yüzdesi sıfırdan büyük olmalı."}
+                    ), 400
+                data = {"kind": kind, "target": instrument.ticker, "threshold": threshold}
+        try:
+            alert_id = get_db().alerts.add_alert(_user_id(), data, limit=_entitlements().alerts)
+        except Exception as exc:
+            return _user_error(exc)
+        return jsonify({"status": "ok", "id": alert_id}), 201
+
+    @app.route("/api/alerts/<int:alert_id>", methods=["DELETE"])
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("30 per minute")
+    def api_alert_delete(alert_id: int):
+        try:
+            get_db().alerts.delete_alert(_user_id(), alert_id)
+        except Exception as exc:
+            return _user_error(exc)
+        return jsonify({"status": "ok"})
+
+    @app.route("/api/saved-screens")
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("60 per minute")
+    def api_saved_screens():
+        return jsonify({"status": "ok", "screens": get_db().alerts.list_saved_screens(_user_id())})
+
+    @app.route("/api/saved-screens", methods=["POST"])
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("30 per minute")
+    def api_saved_screen_create():
+        from bist_bot.services.screener_service import ScreenerError, parse_conditions
+
+        payload = _safe_json_payload()
+        body = payload.get("payload") or {}
+        try:
+            parse_conditions(body.get("conditions"))
+        except ScreenerError as exc:
+            return jsonify({"status": "error", "message": str(exc)}), 400
+        try:
+            screen_id = get_db().alerts.add_saved_screen(
+                _user_id(),
+                str(payload.get("name") or ""),
+                body,
+                limit=_entitlements().saved_screens,
+            )
+        except Exception as exc:
+            return _user_error(exc)
+        return jsonify({"status": "ok", "id": screen_id}), 201
+
+    @app.route("/api/saved-screens/<int:screen_id>", methods=["DELETE"])
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("30 per minute")
+    def api_saved_screen_delete(screen_id: int):
+        try:
+            get_db().alerts.delete_saved_screen(_user_id(), screen_id)
+        except Exception as exc:
+            return _user_error(exc)
+        return jsonify({"status": "ok"})
+
+    @app.route("/api/alerts/preview")
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("20 per minute")
+    def api_alerts_preview():
+        from datetime import datetime as _dt
+
+        from bist_bot.notifier import TR
+
+        raw = request.args.get("as_of")
+        try:
+            if raw:
+                target = date.fromisoformat(raw)
+            else:
+                latest = get_db().market_data.list_snapshot_dates(limit=1)
+                target = date.fromisoformat(latest[0]["as_of"]) if latest else _dt.now(TR).date()
+        except ValueError:
+            return jsonify({"status": "error", "message": "Geçersiz tarih."}), 400
+        result = _digest_service().build(_user_id(), target)
+        plain = re.sub(r"<[^>]+>", "", result.message) if result.message else None
+        return jsonify(
+            {
+                "status": "ok",
+                "as_of": target.isoformat(),
+                "message": result.message,
+                "text": plain,
+                "sections": result.sections,
+            }
+        )
+
+    # -----------------------------------------------------------------------
+    # Faz 7: legal documents, consent and the user's KVKK rights.
+    # -----------------------------------------------------------------------
+    @app.route("/legal/<slug>")
+    def legal_page(slug: str):
+        from bist_bot.legal import DRAFT_NOTICE, get_document
+
+        document = get_document(slug)
+        if document is None:
+            return render_template("stitch/legal.html", document=None, draft_notice=""), 404
+        return render_template(
+            "stitch/legal.html",
+            document=document,
+            draft_notice=DRAFT_NOTICE if getattr(settings, "LEGAL_TEXTS_DRAFT", True) else "",
+        )
+
+    @app.route("/api/legal/documents")
+    def api_legal_documents():
+        from bist_bot.legal import document_list
+
+        return jsonify({"status": "ok", "documents": document_list()})
+
+    @app.route("/api/me/legal/accept", methods=["POST"])
+    @jwt_required()
+    def api_me_legal_accept():
+        from bist_bot.legal import DOCUMENTS
+        from bist_bot.services.account_service import record_acceptances
+
+        payload = _safe_json_payload()
+        requested = payload.get("documents")
+        documents = (
+            [str(item) for item in requested]
+            if isinstance(requested, list) and requested
+            else list(DOCUMENTS)
+        )
+        manager = getattr(get_db(), "manager", None)
+        if manager is None:
+            return jsonify({"status": "error", "message": "Veri deposu kullanılamıyor."}), 503
+        written = record_acceptances(manager, _user_id(), documents)
+        return jsonify({"status": "ok", "accepted": written})
+
+    @app.route("/api/me/export")
+    @jwt_required()
+    def api_me_export():
+        from bist_bot.services.account_service import export_user
+
+        manager = getattr(get_db(), "manager", None)
+        if manager is None:
+            return jsonify({"status": "error", "message": "Veri deposu kullanılamıyor."}), 503
+        payload = export_user(manager, _user_id())
+        if payload is None:
+            return jsonify({"status": "error", "message": "Hesap bulunamadı."}), 404
+        return jsonify({"status": "ok", **payload})
+
+    @app.route("/api/me/delete", methods=["POST"])
+    @jwt_required()
+    def api_me_delete():
+        from bist_bot.services.account_service import delete_user
+
+        payload = _safe_json_payload()
+        password = str(payload.get("password") or "")
+        if not password:
+            return jsonify({"status": "error", "message": "Şifre gerekli."}), 400
+        user = _get_request_user()
+        manager = getattr(get_db(), "manager", None)
+        if user is None or manager is None:
+            return jsonify({"status": "error", "message": "Hesap bulunamadı."}), 404
+        with manager.engine.connect() as conn:
+            row = conn.execute(
+                text("SELECT password_hash FROM users WHERE id = :id"),
+                {"id": int(user["id"])},
+            ).first()
+        if row is None:
+            return jsonify({"status": "error", "message": "Hesap bulunamadı."}), 404
+        verified, _upgraded = verify_and_rehash_password(password, str(row[0]))
+        if not verified:
+            return jsonify({"status": "error", "message": "Şifre doğrulanamadı."}), 401
+        if not delete_user(manager, int(user["id"])):
+            return jsonify({"status": "error", "message": "Hesap silinemedi."}), 503
+        response = jsonify({"status": "ok"})
+        unset_jwt_cookies(response)
+        response.delete_cookie("access_token_cookie", path="/")
+        return response
 
     # -----------------------------------------------------------------------
     # Stitch 1:1 Pixel-Exact UI Routes (Modern Web Sitesi Yenileme)
@@ -2975,8 +3329,7 @@ def create_dashboard_app(
         so no CSRF token is needed on this path. INVARIANT (Round 11): keep it
         that way — a cookie-authenticated unsafe method MUST require
         X-CSRF-TOKEN (see the JWT config comment in create_dashboard_app).
-        Missing/invalid cookie -> 302 to /login. An expired access cookie is
-        re-minted from a valid refresh cookie (GET only, so no CSRF needed).
+        Missing/invalid cookie -> 302 to /login.
         """
 
         @wraps(view)
@@ -2984,23 +3337,12 @@ def create_dashboard_app(
             try:
                 verify_jwt_in_request(locations=["cookies"])
             except Exception:
-                fresh_token = None
-                try:
-                    verify_jwt_in_request(refresh=True, locations=["cookies"])
-                    fresh_token = _mint_access_token_for(str(get_jwt_identity() or ""))
-                except Exception:
-                    fresh_token = None
-                if fresh_token is None:
-                    # Fail closed: missing, malformed (raw PyJWT errors escape
-                    # Flask-JWT-Extended's own hierarchy on the cookie path),
-                    # expired, revoked or wrong-type tokens all bounce to /login.
-                    logger.info("ui_auth_redirect_login", route=request.path)
-                    resp = redirect("/login", code=302)
-                    unset_jwt_cookies(resp)
-                    resp.delete_cookie("access_token_cookie", path="/")
-                    return resp
-                resp = make_response(view(*args, **kwargs))
-                set_access_cookies(resp, fresh_token)
+                # Fail closed: missing, malformed (raw PyJWT errors escape
+                # Flask-JWT-Extended's own hierarchy on the cookie path),
+                # expired, or wrong-type tokens all bounce to /login.
+                logger.info("ui_auth_redirect_login", route=request.path)
+                resp = redirect("/login", code=302)
+                resp.delete_cookie("access_token_cookie", path="/")
                 return resp
             return view(*args, **kwargs)
 
@@ -3015,27 +3357,72 @@ def create_dashboard_app(
     @app.route("/ui")
     @app.route("/ui/dashboard")
     @_ui_auth_required
-    @_subscription_required_ui
+    @_admin_required_ui
     def ui_dashboard():
         return render_template("stitch/dashboard.html")
 
     @app.route("/ui/signals")
     @_ui_auth_required
-    @_subscription_required_ui
+    @_admin_required_ui
     def ui_signals():
         return render_template("stitch/signals.html")
 
     @app.route("/ui/analysis")
     @_ui_auth_required
-    @_subscription_required_ui
+    @_admin_required_ui
     def ui_analysis():
         return render_template("stitch/analysis.html")
 
     @app.route("/ui/settings")
     @_ui_auth_required
-    @_subscription_required_ui
+    @_admin_required_ui
     def ui_settings():
         return render_template("stitch/settings.html")
+
+    @app.route("/ui/beta")
+    @_ui_auth_required
+    def ui_beta():
+        return render_template("stitch/beta.html")
+
+    @app.route("/ui/stock/<code>")
+    @_ui_auth_required
+    @_stock_page_required
+    def ui_stock(code: str):
+        normalized = _normalize_stock_code(code)
+        if normalized is None:
+            return redirect("/ui/beta", code=302)
+        return render_template(
+            "stitch/stock.html",
+            stock_code=normalized,
+            attribution=getattr(settings, "DATA_ATTRIBUTION", ""),
+        )
+
+    @app.route("/ui/screener")
+    @_ui_auth_required
+    @_stock_page_required
+    def ui_screener():
+        return render_template(
+            "stitch/screener.html",
+            attribution=getattr(settings, "DATA_ATTRIBUTION", ""),
+        )
+
+    @app.route("/ui/watchlist")
+    @_ui_auth_required
+    @_stock_page_required
+    def ui_watchlist():
+        return render_template("stitch/watchlist.html")
+
+    @app.route("/ui/portfolio")
+    @_ui_auth_required
+    @_stock_page_required
+    def ui_portfolio():
+        return render_template("stitch/portfolio.html")
+
+    @app.route("/ui/alerts")
+    @_ui_auth_required
+    @_stock_page_required
+    def ui_alerts():
+        return render_template("stitch/alerts.html")
 
     @app.route("/ui/billing")
     @_ui_auth_required

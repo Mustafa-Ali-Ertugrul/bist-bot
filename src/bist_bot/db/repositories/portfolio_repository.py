@@ -141,6 +141,7 @@ class PortfolioRepository:
         close_reason: str,
         actual_profit_pct: float | None = None,
         trade_id: int | None = None,
+        closed_at: datetime | None = None,
     ) -> None:
         """Close an open paper trade.
 
@@ -149,6 +150,9 @@ class PortfolioRepository:
         for callers without a trade reference; same-ticker double-OPEN rows
         must go through the id path so levels and PnL never mix across
         sibling trades.
+
+        ``closed_at`` (missed-session replay): historical exit timestamp;
+        defaults to now.
         """
 
         def _write(session):
@@ -171,7 +175,7 @@ class PortfolioRepository:
                 )
             if trade is None:
                 return
-            now = datetime.now(UTC)
+            now = closed_at if closed_at is not None else datetime.now(UTC)
             direction = _resolve_direction(trade.signal_type, trade.direction)
             trade.exit_price = exit_price
             trade.exit_date = now

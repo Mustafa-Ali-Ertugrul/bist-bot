@@ -7,19 +7,23 @@ import threading
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import TypeVar
 
 from sqlalchemy import (
+    Boolean,
+    Date,
     DateTime,
     Float,
     ForeignKey,
     Index,
     Integer,
     MetaData,
+    PrimaryKeyConstraint,
     String,
     Text,
+    UniqueConstraint,
     event,
     text,
 )
@@ -375,23 +379,6 @@ class BootstrapStateRecord(Base):
     )
 
 
-class RevokedTokenRecord(Base):
-    """Refresh-token JTIs revoked at logout (outlive a process restart).
-
-    Access tokens live at most 15 minutes and stay in the in-memory
-    blocklist; refresh tokens live up to 30 days, so their revocation
-    must be durable.
-    """
-
-    __tablename__ = "revoked_tokens"
-
-    jti: Mapped[str] = mapped_column(String, primary_key=True)
-    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=lambda: datetime.now(UTC)
-    )
-
-
 class AuditRecord(Base):
     __tablename__ = "audit_trail"
 
@@ -407,6 +394,321 @@ class AuditRecord(Base):
     details: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     trigger_source: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+
+class InstrumentRecord(Base):
+    """BIST pay universe (Faz 1). Refreshed from the vendor; never hardcoded."""
+
+    __tablename__ = "instruments"
+    __table_args__ = (
+        Index("ix_instruments_sector", "sector"),
+        Index("ix_instruments_is_active", "is_active"),
+    )
+
+    code: Mapped[str] = mapped_column(String, primary_key=True)
+    ticker: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    name: Mapped[str] = mapped_column(String, nullable=False, default="")
+    sector: Mapped[str | None] = mapped_column(String, nullable=True)
+    market: Mapped[str] = mapped_column(String, nullable=False, default="BIST")
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    first_seen: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+    )
+    last_seen: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+
+class DailyBarRecord(Base):
+    """End-of-day OHLCV in TL. ``close`` is split/bonus adjusted, ``close_raw`` is not.
+
+    Keys are (ticker, date) so a re-run of the same session is idempotent.
+    """
+
+    __tablename__ = "daily_bars"
+    __table_args__ = (
+        PrimaryKeyConstraint("ticker", "date", name="pk_daily_bars"),
+        Index("ix_daily_bars_date", "date"),
+    )
+
+    ticker: Mapped[str] = mapped_column(String, nullable=False)
+    date: Mapped[date] = mapped_column(Date, nullable=False)
+    open: Mapped[float | None] = mapped_column(Float, nullable=True)
+    high: Mapped[float | None] = mapped_column(Float, nullable=True)
+    low: Mapped[float | None] = mapped_column(Float, nullable=True)
+    close: Mapped[float] = mapped_column(Float, nullable=False)
+    close_raw: Mapped[float | None] = mapped_column(Float, nullable=True)
+    volume_tl: Mapped[float | None] = mapped_column(Float, nullable=True)
+    market_cap_tl: Mapped[float | None] = mapped_column(Float, nullable=True)
+    source: Mapped[str] = mapped_column(String, nullable=False, default="isyatirim")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+
+class FundamentalRecord(Base):
+    """Quarterly statement items (Faz 1). ``period`` is ``YYYY/MM`` (quarter end)."""
+
+    __tablename__ = "fundamentals"
+    __table_args__ = (
+        PrimaryKeyConstraint("ticker", "period", "item_code", name="pk_fundamentals"),
+        Index("ix_fundamentals_period", "period"),
+    )
+
+    ticker: Mapped[str] = mapped_column(String, nullable=False)
+    period: Mapped[str] = mapped_column(String, nullable=False)
+    item_code: Mapped[str] = mapped_column(String, nullable=False)
+    value: Mapped[float] = mapped_column(Float, nullable=False)
+    source: Mapped[str] = mapped_column(String, nullable=False, default="isyatirim")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+
+class ScanResultRecord(Base):
+    """Faz 2 screen output. One row per (screen, session, ticker); no messages."""
+
+    __tablename__ = "scan_results"
+    __table_args__ = (
+        PrimaryKeyConstraint("scan_id", "as_of", "ticker", name="pk_scan_results"),
+        Index("ix_scan_results_as_of", "as_of"),
+    )
+
+    scan_id: Mapped[str] = mapped_column(String, nullable=False)
+    as_of: Mapped[date] = mapped_column(Date, nullable=False)
+    ticker: Mapped[str] = mapped_column(String, nullable=False)
+    value: Mapped[float] = mapped_column(Float, nullable=False)
+    detail: Mapped[str] = mapped_column(String, nullable=False, default="")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+
+class ScreenSnapshotRecord(Base):
+    """Daily per-symbol metrics for the custom screener (Faz 4).
+
+    One row per session, computed from data known on that day. The custom
+    filter engine reads these rows instead of recomputing 630 symbols per request.
+    """
+
+    __tablename__ = "screen_snapshots"
+    __table_args__ = (
+        PrimaryKeyConstraint("ticker", "as_of", name="pk_screen_snapshots"),
+        Index("ix_screen_snapshots_as_of", "as_of"),
+    )
+
+    ticker: Mapped[str] = mapped_column(String, nullable=False)
+    as_of: Mapped[date] = mapped_column(Date, nullable=False)
+    close: Mapped[float] = mapped_column(Float, nullable=False)
+    change_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ret_1m: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ret_3m: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ret_1y: Mapped[float | None] = mapped_column(Float, nullable=True)
+    rsi14: Mapped[float | None] = mapped_column(Float, nullable=True)
+    sma50_gap_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    sma200_gap_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    from_52w_high_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    avg_volume_20: Mapped[float | None] = mapped_column(Float, nullable=True)
+    market_cap_tl: Mapped[float | None] = mapped_column(Float, nullable=True)
+    pe_ttm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    pb: Mapped[float | None] = mapped_column(Float, nullable=True)
+    net_margin_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    roe_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    sales_growth_yoy_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    fundamentals_period: Mapped[str | None] = mapped_column(String, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+
+class UserWatchlistRecord(Base):
+    """Personal watchlist (Faz 5). Separate from the bot's internal watchlist."""
+
+    __tablename__ = "user_watchlists"
+    __table_args__ = (
+        UniqueConstraint("user_id", "name", name="uq_user_watchlists_user_name"),
+        Index("ix_user_watchlists_user_id", "user_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+
+class UserWatchlistItemRecord(Base):
+    __tablename__ = "user_watchlist_items"
+    __table_args__ = (
+        UniqueConstraint("watchlist_id", "ticker", name="uq_user_watchlist_items_list_ticker"),
+        Index("ix_user_watchlist_items_watchlist_id", "watchlist_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    watchlist_id: Mapped[int] = mapped_column(
+        ForeignKey("user_watchlists.id", ondelete="CASCADE"), nullable=False
+    )
+    ticker: Mapped[str] = mapped_column(String, nullable=False)
+    added_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+
+class UserPortfolioRecord(Base):
+    """Personal portfolio of manually entered trades (Faz 5)."""
+
+    __tablename__ = "user_portfolios"
+    __table_args__ = (
+        UniqueConstraint("user_id", "name", name="uq_user_portfolios_user_name"),
+        Index("ix_user_portfolios_user_id", "user_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+
+class UserPortfolioTransactionRecord(Base):
+    __tablename__ = "user_portfolio_transactions"
+    __table_args__ = (
+        Index("ix_user_portfolio_transactions_portfolio_id", "portfolio_id"),
+        Index("ix_user_portfolio_transactions_ticker", "ticker"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    portfolio_id: Mapped[int] = mapped_column(
+        ForeignKey("user_portfolios.id", ondelete="CASCADE"), nullable=False
+    )
+    ticker: Mapped[str] = mapped_column(String, nullable=False)
+    side: Mapped[str] = mapped_column(String, nullable=False)  # buy | sell
+    trade_date: Mapped[date] = mapped_column(Date, nullable=False)
+    quantity: Mapped[float] = mapped_column(Float, nullable=False)
+    price: Mapped[float] = mapped_column(Float, nullable=False)
+    commission_tl: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+
+class BenchmarkBarRecord(Base):
+    """XU100 (and optional money-market) series used for portfolio comparison."""
+
+    __tablename__ = "benchmark_bars"
+    __table_args__ = (Index("ix_benchmark_bars_code_date", "code", "date"),)
+
+    code: Mapped[str] = mapped_column(String, primary_key=True)
+    date: Mapped[date] = mapped_column(Date, primary_key=True)
+    value: Mapped[float] = mapped_column(Float, nullable=False)
+    source: Mapped[str] = mapped_column(String, nullable=False, default="isyatirim")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+
+class UserTelegramLinkRecord(Base):
+    """Verified Telegram chat for a user (Faz 6). Personal data: delete on unlink."""
+
+    __tablename__ = "user_telegram_links"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+    chat_id: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    username: Mapped[str | None] = mapped_column(String, nullable=True)
+    linked_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+
+class UserTelegramLinkTokenRecord(Base):
+    """Single-use deep-link token; only the hash is stored."""
+
+    __tablename__ = "user_telegram_link_tokens"
+
+    token_hash: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+
+class UserAlertRecord(Base):
+    __tablename__ = "user_alerts"
+    __table_args__ = (Index("ix_user_alerts_user_id", "user_id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    kind: Mapped[str] = mapped_column(String, nullable=False)  # screen | price | change
+    target: Mapped[str] = mapped_column(String, nullable=False)  # scan_id or ticker
+    op: Mapped[str | None] = mapped_column(String, nullable=True)  # above | below
+    threshold: Mapped[float | None] = mapped_column(Float, nullable=True)
+    only_watchlist: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+
+class UserSavedScreenRecord(Base):
+    __tablename__ = "user_saved_screens"
+    __table_args__ = (
+        UniqueConstraint("user_id", "name", name="uq_user_saved_screens_user_name"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    payload: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+
+class UserDigestLogRecord(Base):
+    """Idempotency guard: at most one digest per user per session."""
+
+    __tablename__ = "user_digest_log"
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    as_of: Mapped[date] = mapped_column(Date, primary_key=True)
+    sent_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+
+class LegalAcceptanceRecord(Base):
+    """Which document version a user accepted, and when (Faz 7)."""
+
+    __tablename__ = "legal_acceptances"
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    document: Mapped[str] = mapped_column(String, primary_key=True)
+    version: Mapped[str] = mapped_column(String, primary_key=True)
+    accepted_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=lambda: datetime.now(UTC)
     )
 

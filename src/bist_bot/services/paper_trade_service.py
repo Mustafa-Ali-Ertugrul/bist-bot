@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 from bist_bot.app_logging import get_logger
 from bist_bot.config.settings import settings as default_settings
-from bist_bot.market_calendar import TR, bist_close_time, is_bist_holiday
+from bist_bot.market_calendar import (
+    TR,
+    bist_close_time,
+    is_bist_holiday,
+    missed_session_days,
+    session_eod_datetime,
+)
 from bist_bot.strategy.regime import detect_regime
 from bist_bot.strategy.signal_models import Signal, SignalType
 
@@ -239,7 +245,13 @@ class PaperTradeService:
             )
 
     def _record_ledger_close(
-        self, trade: Any, exit_price: float, reason: str, direction: str, net_pct: float
+        self,
+        trade: Any,
+        exit_price: float,
+        reason: str,
+        direction: str,
+        net_pct: float,
+        exit_time: datetime | None = None,
     ) -> None:
         """Sprint 2: mirror a paper close into the unified trade ledger.
 
@@ -267,6 +279,7 @@ class PaperTradeService:
                 close_reason=reason,
                 gross_pnl_pct=gross_pct,
                 net_pnl_pct=net_pct,
+                exit_time=exit_time,
             )
         except Exception as exc:
             logger.warning(
@@ -477,6 +490,127 @@ class PaperTradeService:
 
         logger.info("paper_trade_update_completed", ticker_count=len(prices))
 
+    def reconcile_missed_sessions(
+        self, fetcher: Any | None = None, *, now: datetime | None = None
+    ) -> dict[str, int]:
+        """Bilgisayar kapalıyken kaçırılan seansları tarihsel günlük barla kapat.
+
+        Açılışta bir kez çağrılır. Canlı kontratla birebir (close-only seviye
+        kontrolü — paper canlıda da high/low bakmaz): barı bulunan ilk kaçırılmış
+        seans pozisyonu kapatır, çıkış zaman damgası o seansın EOD'udur.
+        Opposite-signal ve trailing bu replay'de yoktur (scan-anı olaylarıdır;
+        stop orijinal seviyeden uygulanır — restart-safe davranışla aynı).
+        Asla fiyat uydurulmaz.
+        """
+        effective_now = now or datetime.now(UTC)
+        if effective_now.tzinfo is None:
+            effective_now = effective_now.replace(tzinfo=UTC)
+        summary = {"stale": 0, "closed": 0, "skipped_no_bars": 0, "errors": 0}
+        if not bool(getattr(self.settings, "MISSED_SESSION_RECONCILE", True)):
+            return summary
+        if not getattr(self.settings, "PAPER_MODE", False):
+            return summary
+        max_days = int(getattr(self.settings, "MISSED_SESSION_RECONCILE_MAX_DAYS", 10) or 0)
+        fetcher = fetcher if fetcher is not None else self.fetcher
+        if fetcher is None:
+            return summary
+        try:
+            open_trades = self.db.get_open_paper_trades()
+        except Exception as exc:
+            logger.warning("paper_reconcile_read_failed", error=str(exc))
+            return summary
+        for trade in open_trades:
+            try:
+                signal_time = trade.signal_time
+                if not isinstance(signal_time, datetime):
+                    raise ValueError("signal_time missing")
+                if signal_time.tzinfo is None:
+                    signal_time = signal_time.replace(tzinfo=UTC)
+                days = missed_session_days(signal_time, effective_now)
+            except Exception as exc:
+                logger.warning(
+                    "paper_reconcile_trade_failed",
+                    ticker=getattr(trade, "ticker", "?"),
+                    error=str(exc),
+                )
+                summary["errors"] += 1
+                continue
+            if max_days > 0:
+                days = days[-max_days:]
+            if not days:
+                continue
+            summary["stale"] += 1
+            try:
+                bars = fetcher.fetch_single(trade.ticker, period="3mo")
+            except Exception as exc:
+                logger.warning(
+                    "paper_reconcile_fetch_failed",
+                    ticker=trade.ticker,
+                    error=str(exc),
+                )
+                bars = None
+            if self._replay_trade_days(trade, days, bars):
+                summary["closed"] += 1
+            else:
+                summary["skipped_no_bars"] += 1
+        logger.info("paper_reconcile_completed", **summary)
+        return summary
+
+    def _replay_trade_days(
+        self, trade: Any, days: list[date], bars: Any | None
+    ) -> bool:
+        """Kaçırılan seansları sırayla değerlendir; barı bulunan ilk seans kapatır."""
+        if bars is None or getattr(bars, "empty", True):
+            return False
+        try:
+            bar_dates = [d.date() for d in bars.index]
+        except (AttributeError, TypeError, ValueError):
+            return False
+        direction = self._trade_direction(trade)
+        for day in days:
+            idx = [i for i, d in enumerate(bar_dates) if d == day]
+            if not idx:
+                continue
+            row = bars.iloc[idx[-1]]
+            try:
+                close = float(row["close"])
+            except (KeyError, TypeError, ValueError):
+                try:
+                    close = float(row["Close"])
+                except (KeyError, TypeError, ValueError):
+                    continue
+            if close <= 0:
+                continue
+            if direction == "short":
+                stop_hit = trade.stop_loss and close >= trade.stop_loss
+                target_hit = trade.target_price and close <= trade.target_price
+            else:
+                stop_hit = trade.stop_loss and close <= trade.stop_loss
+                target_hit = trade.target_price and close >= trade.target_price
+            if stop_hit:
+                reason = "STOP_HIT"
+            elif target_hit:
+                reason = "TARGET_HIT"
+            else:
+                reason = "EOD_CLOSE"
+            eod_now = session_eod_datetime(day).astimezone(UTC)
+            profit_pct = self.net_profit_pct(
+                trade.signal_price, close, self.costs, direction
+            )
+            self._close_trade(
+                trade, close, reason, direction, closed_at=eod_now, profit_pct=profit_pct
+            )
+            self._trail_extremes.pop(trade.ticker, None)
+            logger.info(
+                "paper_reconciled_close",
+                ticker=trade.ticker,
+                close_reason=reason,
+                exit_price=round(close, 2),
+                exit_ts=eod_now.isoformat(),
+            )
+            return True
+        return False
+
     def _record_price_skip(self, ticker: str) -> None:
         """Count consecutive price misses; alert once past the threshold."""
         from bist_bot.app_metrics import inc_counter
@@ -518,21 +652,38 @@ class PaperTradeService:
         except Exception:
             return False
 
-    def _close_trade(self, trade: Any, current: float, reason: str, direction: str) -> None:
+    def _close_trade(
+        self,
+        trade: Any,
+        current: float,
+        reason: str,
+        direction: str,
+        *,
+        closed_at: datetime | None = None,
+        profit_pct: float | None = None,
+    ) -> None:
         """Close a paper trade with direction-aware net PnL recorded.
 
         B3: trade.id ile kapatilir — ayni ticker'da iki acik pozisyon varken
-        seviyeler/PnL kardes isleme karismaz.
+        seviyeler/PnL kardes isleme karismaz. ``closed_at`` verilirse (missed
+        session replay) çıkış zaman damgası tarihsel olur; yoksa şimdi.
         """
-        profit_pct = self.net_profit_pct(trade.signal_price, current, self.costs, direction)
+        if profit_pct is None:
+            profit_pct = self.net_profit_pct(trade.signal_price, current, self.costs, direction)
+        # closed_at yalnızca replay'de verilir; canlı akışta çağrı imzası
+        # değişmez (regresyon testleri ve MagicMock assert'leri korunur).
+        extra = {"closed_at": closed_at} if closed_at is not None else {}
         self.db.close_paper_trade(
             trade.ticker,
             current,
             reason,
             actual_profit_pct=profit_pct,
             trade_id=getattr(trade, "id", None),
+            **extra,
         )
-        self._record_ledger_close(trade, current, reason, direction, profit_pct)
+        self._record_ledger_close(
+            trade, current, reason, direction, profit_pct, exit_time=closed_at
+        )
         event = {
             "STOP_HIT": "paper_trade_stop_hit",
             "TARGET_HIT": "paper_trade_target_hit",

@@ -46,6 +46,9 @@ class MarketScheduler:
         monthly_portfolio=None,
         league=None,
         overnight=None,
+        daily_bars=None,
+        screen_scans=None,
+        alerts=None,
     ):
         self.scanner = scan_service
         self.notifier = notifier
@@ -54,6 +57,9 @@ class MarketScheduler:
         self.monthly_portfolio = monthly_portfolio
         self.league = league
         self.overnight = overnight
+        self.daily_bars = daily_bars
+        self.screen_scans = screen_scans
+        self.alerts = alerts
         self.running = False
         # Faz 3 P1.1: post-close position pass fires once per trading day.
         self._eod_close_done_date: date | None = None
@@ -165,6 +171,35 @@ class MarketScheduler:
             logger.info("scheduler_eod_close_recovered_after_retry")
         logger.info("scheduler_eod_close_completed")
 
+    def _run_daily_bars(self, now: datetime) -> None:
+        """Faz 1 data ingestion, isolated from the EOD position pass."""
+        if self.daily_bars is None:
+            return
+        try:
+            self.daily_bars.run_if_due(now)
+        except Exception as exc:
+            logger.error(
+                "scheduler_daily_bars_failed", error_type=type(exc).__name__, error=str(exc)
+            )
+
+    def _run_screens(self, now: datetime) -> None:
+        """Faz 2 screens, isolated from the data sync and the EOD pass."""
+        if self.screen_scans is None:
+            return
+        try:
+            self.screen_scans.run_if_due(now)
+        except Exception as exc:
+            logger.error("scheduler_screens_failed", error_type=type(exc).__name__, error=str(exc))
+
+    def _run_alerts(self, now: datetime) -> None:
+        """Faz 6 evening digest, after data and screens. Never inside the EOD pass."""
+        if self.alerts is None:
+            return
+        try:
+            self.alerts.run_if_due(now)
+        except Exception as exc:
+            logger.error("scheduler_alerts_failed", error_type=type(exc).__name__, error=str(exc))
+
     def _run_monthly_portfolio(self, now: datetime) -> None:
         """Post-close paper jobs (M2, league, overnight); each isolated so none blocks the EOD pass."""
         for label, job in (
@@ -253,6 +288,29 @@ class MarketScheduler:
                 return
             sleep(10)
 
+    def _run_startup_reconcile(self) -> None:
+        """Bilgisayar kapalıyken kaçırılan seansları açılışta uzlaştır.
+
+        EOD pass yalnızca süreç ayaktayken koşar; makine kapalı olduğunda
+        pozisyonlar yaşar ve stop/target uygulanmaz (TRALT 6.2 gün). Bu pass
+        kaçırılan her seansı tarihsel günlük barla oynatır. Üst-alt pass
+        izoleli: hata döngüyü düşürmez, ilk taramayı engellemez.
+        """
+        if not bool(getattr(self.settings, "MISSED_SESSION_RECONCILE", True)):
+            return
+        reconciler = getattr(self.scanner, "reconcile_missed_sessions", None)
+        if not callable(reconciler):
+            logger.warning("startup_reconcile_unavailable")
+            return
+        try:
+            reconciler(now=self._now())
+        except Exception as exc:
+            logger.exception(
+                "startup_reconcile_failed",
+                error_type=type(exc).__name__,
+                error=str(exc),
+            )
+
     def _scan_once(self):
         signals = self.scanner.scan_once()
         if self.trading_agent is not None:
@@ -265,6 +323,7 @@ class MarketScheduler:
         logger.info("scheduler_started")
         warn_if_calendar_expiring()
         self.notifier.send_startup_message()
+        self._run_startup_reconcile()
 
         while self.running:
             try:
@@ -276,7 +335,16 @@ class MarketScheduler:
                 if self._pending_eod_close(now):
                     self._run_eod_close(now)
                     self._run_monthly_portfolio(now)
+                    self._run_daily_bars(now)
+                    self._run_screens(now)
+                    self._run_alerts(now)
                     continue
+
+                # Restart-safe: a worker that comes up after the close still
+                # fills that session's bars before sleeping until tomorrow.
+                self._run_daily_bars(now)
+                self._run_screens(now)
+                self._run_alerts(now)
 
                 if not is_bist_open(now):
                     self._sleep_until_next_session()

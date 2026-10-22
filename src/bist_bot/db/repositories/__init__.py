@@ -5,12 +5,15 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from bist_bot.db.database import DatabaseManager
+from bist_bot.db.repositories.alert_repository import AlertRepository
 from bist_bot.db.repositories.config_repository import ConfigRepository
 from bist_bot.db.repositories.ledger_repository import LedgerRepository
+from bist_bot.db.repositories.market_data_repository import MarketDataRepository
 from bist_bot.db.repositories.order_intents_repository import OrderIntentsRepository
 from bist_bot.db.repositories.orders_repository import OrdersRepository
 from bist_bot.db.repositories.portfolio_repository import PortfolioRepository
 from bist_bot.db.repositories.signals_repository import SignalsRepository
+from bist_bot.db.repositories.user_portfolio_repository import UserPortfolioRepository
 from bist_bot.strategy.signal_models import Signal
 
 
@@ -25,6 +28,9 @@ class AppRepository:
         self.config = ConfigRepository(self.manager)
         self.orders = OrdersRepository(self.manager)
         self.order_intents = OrderIntentsRepository(self.manager)
+        self.market_data = MarketDataRepository(self.manager)
+        self.user_data = UserPortfolioRepository(self.manager)
+        self.alerts = AlertRepository(self.manager)
 
     def ping(self) -> bool:
         return self.manager.ping()

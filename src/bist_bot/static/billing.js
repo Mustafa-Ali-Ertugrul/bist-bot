@@ -17,7 +17,7 @@
     });
     var st = document.getElementById('billing-status');
     if (st) st.textContent = plan === 'pro_plus'
-      ? 'Pro+ seçildi: ödeme sonrası özel Telegram kanalı davet linki oluşturulur.'
+      ? 'Pro+ seçildi.'
       : 'Pro seçildi.';
   }
 
@@ -56,21 +56,22 @@
         return infoRes.json().then(function (info) {
           billingInfo = info;
           var iban = document.getElementById('billing-iban');
-          if (iban) iban.textContent = billingInfo.iban || 'Henüz tanımlanmadı';
-          if (!billingInfo.enrollment_enabled) {
-            // Server rejects claims while enrollment is closed (403): say so
-            // up front instead of letting the user "pay" into a dead end.
-            document.querySelectorAll('[data-plan], #billing-claim-btn').forEach(function (b) {
-              b.disabled = true;
-              b.classList.add('opacity-50', 'cursor-not-allowed');
-            });
-            var st = document.getElementById('billing-status');
-            if (st) st.textContent = 'Ödeme kabulü şu an kapalı. Abonelik için yöneticiyle iletişime geçin.';
-          }
+          if (iban && billingInfo.iban) iban.textContent = billingInfo.iban;
           var pp = document.getElementById('price-pro');
           if (pp && billingInfo.pro_price_try) pp.textContent = billingInfo.pro_price_try;
           var ppp = document.getElementById('price-pro-plus');
           if (ppp && billingInfo.pro_plus_price_try) ppp.textContent = billingInfo.pro_plus_price_try;
+          if (billingInfo.enrollment_enabled === false) {
+            var eft = document.getElementById('billing-eft');
+            if (eft) eft.classList.add('hidden');
+            var st = document.getElementById('billing-status');
+            if (st) st.textContent = 'Yeni abonelik satışı şu anda kapalı.';
+            var buttons = document.querySelectorAll('[data-plan]');
+            for (var i = 0; i < buttons.length; i++) {
+              buttons[i].setAttribute('disabled', 'disabled');
+              buttons[i].textContent = 'Satış kapalı';
+            }
+          }
         });
       }
     }).catch(function () { /* ignore */ });
@@ -81,19 +82,11 @@
           var labels = { trial: 'Deneme', pro: 'Pro', pro_plus: 'Pro+' };
           var name = document.getElementById('billing-plan-name');
           var detail = document.getElementById('billing-plan-detail');
-          if (name) name.textContent = sub.unlimited ? 'Yönetici' : (labels[sub.plan] || sub.plan);
+          if (name) name.textContent = labels[sub.plan] || sub.plan;
           if (detail) {
-            if (sub.unlimited) {
-              detail.textContent = 'Yönetici hesabı: süresiz erişim.';
-            } else if (sub.status === 'active') {
-              var until = sub.expires_at
-                ? new Date(sub.expires_at).toLocaleDateString('tr-TR', { timeZone: 'Europe/Istanbul' })
-                : '';
-              detail.textContent = 'Planınız aktif' + (until ? ' (bitiş: ' + until + ', ' + sub.remaining_days + ' gün kaldı)' : '') +
-                '. Kalan süre dolmadan yenileyebilirsiniz.';
-            } else {
-              detail.textContent = 'Planınızın süresi dolmuş. Devam etmek için yukarıdan bir plan seçip ödemenizi bildirin.';
-            }
+            detail.textContent = sub.status === 'active'
+              ? 'Planınız aktif.'
+              : 'Planınızın süresi dolmuş.';
           }
         });
       }

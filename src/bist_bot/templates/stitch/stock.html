@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html class="dark" lang="tr">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Bist-Bot · Hisse</title>
+<link rel="stylesheet" href="/static/tailwind.css"/>
+<link rel="stylesheet" href="/static/stock.css?v=1"/>
+</head>
+<body class="bg-background font-body-md text-body-md text-on-surface antialiased" data-stock-code="{{ stock_code }}">
+<header class="w-full px-terminal-margin py-space-md border-b border-surface-container-high/40">
+<div class="w-full max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-space-md">
+<div class="flex items-center gap-space-sm">
+<span class="font-headline-md text-headline-md tracking-tight font-extrabold">Bist<span class="text-primary">-Bot</span></span>
+<span class="bg-surface-container-high px-space-xs py-space-3xs rounded text-secondary font-label-caps text-label-caps uppercase tracking-wider">Hisse</span>
+</div>
+<div class="flex items-center gap-space-sm w-full sm:w-auto">
+<label class="sr-only" for="stock-search">Hisse ara</label>
+<input id="stock-search" class="oc-input stock-search" type="search" placeholder="Kod veya şirket adı" autocomplete="off"/>
+<a class="px-space-md py-space-xs rounded-lg bg-surface-container-high text-on-surface font-body-sm text-body-sm" href="/ui/dashboard">Panel</a>
+</div>
+</div>
+<div id="search-results" class="w-full max-w-7xl mx-auto stock-search-results hidden"></div>
+</header>
+
+<main class="w-full max-w-7xl mx-auto px-terminal-margin py-space-lg flex flex-col gap-space-lg">
+<section class="bg-surface-container-low/90 rounded-xl p-space-lg">
+<div class="flex flex-wrap items-end justify-between gap-space-md">
+<div>
+<h1 class="font-headline-lg text-headline-lg font-extrabold tracking-tight"><span id="stock-code">{{ stock_code }}</span> <span id="stock-name" class="text-on-surface-variant font-body-md text-body-md"></span></h1>
+<p class="font-body-sm text-body-sm text-outline" id="stock-sector"></p>
+</div>
+<div class="flex items-end gap-space-lg">
+<div>
+<div class="font-label-caps text-label-caps text-outline uppercase">Son Kapanış</div>
+<div class="font-metric-value text-metric-value text-on-surface" id="stock-close">—</div>
+</div>
+<div>
+<div class="font-label-caps text-label-caps text-outline uppercase">Günlük</div>
+<div class="font-metric-value text-metric-value" id="stock-change">—</div>
+</div>
+<div>
+<div class="font-label-caps text-label-caps text-outline uppercase">Piyasa Değeri</div>
+<div class="font-metric-value text-metric-value text-on-surface" id="stock-mcap">—</div>
+</div>
+</div>
+</div>
+<p class="font-body-sm text-body-sm text-outline mt-space-sm" id="stock-asof">Gün sonu verisi yükleniyor…</p>
+</section>
+
+<section class="bg-surface-container-low/90 rounded-xl p-space-lg">
+<div class="flex flex-wrap items-center justify-between gap-space-sm">
+<h2 class="font-headline-md text-headline-md font-bold">Fiyat</h2>
+<div class="flex flex-wrap items-center gap-space-xs" id="range-buttons">
+<button class="stock-range" data-range="1m" type="button">1A</button>
+<button class="stock-range" data-range="3m" type="button">3A</button>
+<button class="stock-range" data-range="1y" type="button" aria-pressed="true">1Y</button>
+<button class="stock-range" data-range="5y" type="button">5Y</button>
+<button class="stock-range" data-range="all" type="button">Tümü</button>
+<label class="stock-toggle"><input type="checkbox" id="toggle-sma50" checked/> SMA50</label>
+<label class="stock-toggle"><input type="checkbox" id="toggle-sma200" checked/> SMA200</label>
+</div>
+</div>
+<div id="stock-chart" class="stock-chart"></div>
+<p class="font-body-sm text-body-sm text-outline mt-space-xs" id="chart-note">Düzeltilmiş kapanış. Açılış fiyatı kaynakta yok; mum grafiği gösterilmez.</p>
+</section>
+
+<section class="stock-grid" id="returns-grid"></section>
+
+<section class="stock-grid">
+<div class="bg-surface-container-low/90 rounded-xl p-space-lg">
+<h2 class="font-headline-md text-headline-md font-bold">Teknik Özet</h2>
+<div id="technical-grid" class="stock-kv mt-space-sm"></div>
+</div>
+<div class="bg-surface-container-low/90 rounded-xl p-space-lg">
+<h2 class="font-headline-md text-headline-md font-bold">Temel Oranlar</h2>
+<div id="ratios-grid" class="stock-kv mt-space-sm"></div>
+</div>
+</section>
+
+<section class="bg-surface-container-low/90 rounded-xl p-space-lg">
+<h2 class="font-headline-md text-headline-md font-bold">Çeyreklik Tablo</h2>
+<p class="font-body-sm text-body-sm text-outline mt-space-3xs" id="fundamentals-note">Kümülatif (yılbaşından itibaren), TL.</p>
+<div class="overflow-x-auto mt-space-sm">
+<table class="w-full font-body-sm text-body-sm">
+<thead>
+<tr class="text-outline font-label-caps text-label-caps uppercase">
+<th class="text-left py-space-3xs">Çeyrek</th>
+<th class="text-right py-space-3xs">Satış</th>
+<th class="text-right py-space-3xs">Net Kâr</th>
+<th class="text-right py-space-3xs">Özkaynak</th>
+</tr>
+</thead>
+<tbody id="quarters-body"></tbody>
+</table>
+</div>
+</section>
+
+<section class="bg-surface-container-low/90 rounded-xl p-space-lg">
+<h2 class="font-headline-md text-headline-md font-bold">Tarama Geçmişi</h2>
+<p class="font-body-sm text-body-sm text-outline mt-space-3xs">Son 30 günde bu hissenin eşleştiği taramalar.</p>
+<ul id="scans-list" class="stock-kv mt-space-sm"></ul>
+</section>
+
+<p class="font-body-sm text-body-sm text-outline pb-space-lg">Bu sayfa bilgilendirme amaçlıdır; alım-satım tavsiyesi değildir. Veriler gecelik olarak güncellenir ve gecikmeli olabilir.{% if attribution %}<br>{{ attribution }}{% endif %}</p>
+</main>
+<script src="/static/vendor/lightweight-charts.standalone.production.js"></script>
+<script src="/static/stock.js?v=1"></script>
+</body>
+</html>

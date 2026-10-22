@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html class="dark" lang="tr">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Bist-Bot · Alarmlar</title>
+<link rel="stylesheet" href="/static/tailwind.css"/>
+<link rel="stylesheet" href="/static/stock.css?v=1"/>
+<link rel="stylesheet" href="/static/screener.css?v=1"/>
+<link rel="stylesheet" href="/static/personal.css?v=1"/>
+</head>
+<body class="bg-background font-body-md text-body-md text-on-surface antialiased">
+<header class="w-full px-terminal-margin py-space-md border-b border-surface-container-high/40">
+<div class="w-full max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-space-md">
+<div class="flex items-center gap-space-sm">
+<span class="font-headline-md text-headline-md tracking-tight font-extrabold">Bist<span class="text-primary">-Bot</span></span>
+<span class="bg-surface-container-high px-space-xs py-space-3xs rounded text-secondary font-label-caps text-label-caps uppercase tracking-wider">Alarmlar</span>
+</div>
+<nav class="flex flex-wrap items-center gap-space-sm">
+<a class="personal-nav" href="/ui/dashboard">Panel</a>
+<a class="personal-nav" href="/ui/screener">Tarayıcı</a>
+<a class="personal-nav" href="/ui/watchlist">İzleme</a>
+<a class="personal-nav" href="/ui/portfolio">Portföy</a>
+</nav>
+</div>
+</header>
+
+<main class="w-full max-w-7xl mx-auto px-terminal-margin py-space-lg flex flex-col gap-space-lg">
+<section class="bg-surface-container-low/90 rounded-xl p-space-md">
+<h1 class="font-headline-md text-headline-md font-bold">Telegram</h1>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-space-3xs" id="telegram-status">Durum yükleniyor…</p>
+<div class="flex flex-wrap items-center gap-space-sm mt-space-sm">
+<button id="link-telegram" class="screen-button screen-button-primary" type="button">Telegram'ı bağla</button>
+<button id="unlink-telegram" class="screen-button" type="button">Bağlantıyı kaldır</button>
+<a id="telegram-link" class="personal-nav hidden" href="#" target="_blank" rel="noopener">Telegram'da aç</a>
+</div>
+<p class="font-body-sm text-body-sm text-outline mt-space-3xs" id="link-hint"></p>
+</section>
+
+<section class="bg-surface-container-low/90 rounded-xl p-space-md">
+<h2 class="font-headline-md text-headline-md font-bold">Alarmlar</h2>
+<form id="alert-form" class="personal-form mt-space-sm">
+<select class="screen-control" name="kind" id="alert-kind">
+<option value="screen">Tarama</option>
+<option value="price">Fiyat seviyesi</option>
+<option value="change">Günlük değişim</option>
+</select>
+<select class="screen-control hidden" name="scan_id" id="alert-scan"></select>
+<input class="screen-control" name="ticker" id="alert-ticker" placeholder="Hisse kodu" maxlength="12"/>
+<select class="screen-control hidden" name="op" id="alert-op">
+<option value="above">Üstüne çıkarsa</option>
+<option value="below">Altına inerse</option>
+</select>
+<input class="screen-control hidden" name="threshold" id="alert-threshold" type="number" step="any" min="0" placeholder="Eşik"/>
+<label class="screen-toggle hidden" id="watch-only-wrap"><input type="checkbox" name="only_watchlist" id="alert-watch-only"/> Sadece izleme listem</label>
+<button class="screen-button screen-button-primary" type="submit">Alarm ekle</button>
+</form>
+<p class="font-body-sm text-body-sm text-outline mt-space-3xs" id="alert-status"></p>
+<ul id="alert-list" class="stock-kv mt-space-sm"></ul>
+</section>
+
+<section class="bg-surface-container-low/90 rounded-xl p-space-md">
+<h2 class="font-headline-md text-headline-md font-bold">Kayıtlı Filtreler</h2>
+<p class="font-body-sm text-body-sm text-outline mt-space-3xs">Tarayıcıdaki kendi filtrenizi kaydedince burada görünür.</p>
+<ul id="saved-list" class="stock-kv mt-space-sm"></ul>
+</section>
+
+<section class="bg-surface-container-low/90 rounded-xl p-space-md">
+<div class="flex flex-wrap items-center justify-between gap-space-sm">
+<h2 class="font-headline-md text-headline-md font-bold">Özet Önizleme</h2>
+<button id="preview" class="screen-button" type="button">Bugünkü özeti oluştur</button>
+</div>
+<pre id="preview-text" class="alert-preview mt-space-sm"></pre>
+</section>
+
+<p class="font-body-sm text-body-sm text-outline pb-space-lg">Mesajlar yatırım tavsiyesi değildir. Gün içinde mesaj gönderilmez; yalnızca akşam tek özet gelir ve o gün tetiklenen bir şey yoksa mesaj gitmez.</p>
+</main>
+<script src="/static/alerts.js?v=2"></script>
+</body>
+</html>

@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html class="dark" lang="tr">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Bist-Bot · Portföy</title>
+<link rel="stylesheet" href="/static/tailwind.css"/>
+<link rel="stylesheet" href="/static/stock.css?v=1"/>
+<link rel="stylesheet" href="/static/screener.css?v=1"/>
+<link rel="stylesheet" href="/static/personal.css?v=1"/>
+</head>
+<body class="bg-background font-body-md text-body-md text-on-surface antialiased">
+<header class="w-full px-terminal-margin py-space-md border-b border-surface-container-high/40">
+<div class="w-full max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-space-md">
+<div class="flex items-center gap-space-sm">
+<span class="font-headline-md text-headline-md tracking-tight font-extrabold">Bist<span class="text-primary">-Bot</span></span>
+<span class="bg-surface-container-high px-space-xs py-space-3xs rounded text-secondary font-label-caps text-label-caps uppercase tracking-wider">Portföy</span>
+</div>
+<nav class="flex flex-wrap items-center gap-space-sm">
+<a class="personal-nav" href="/ui/dashboard">Panel</a>
+<a class="personal-nav" href="/ui/screener">Tarayıcı</a>
+<a class="personal-nav" href="/ui/watchlist">İzleme</a>
+</nav>
+</div>
+</header>
+
+<main class="w-full max-w-7xl mx-auto px-terminal-margin py-space-lg flex flex-col gap-space-lg">
+<section class="bg-surface-container-low/90 rounded-xl p-space-md">
+<div class="flex flex-wrap items-center justify-between gap-space-sm">
+<h1 class="font-headline-md text-headline-md font-bold">Portföylerim</h1>
+<div class="flex flex-wrap items-center gap-space-xs">
+<input id="portfolio-name" class="screen-control" type="text" placeholder="Yeni portföy adı" maxlength="60"/>
+<button id="create-portfolio" class="screen-button screen-button-primary" type="button">Oluştur</button>
+</div>
+</div>
+<div id="portfolios" class="personal-tabs mt-space-sm"></div>
+</section>
+
+<section class="bg-surface-container-low/90 rounded-xl p-space-md">
+<div class="flex flex-wrap items-center justify-between gap-space-sm">
+<h2 class="font-headline-md text-headline-md font-bold" id="active-portfolio-name">Portföy seçin</h2>
+<button id="delete-portfolio" class="screen-button" type="button">Portföyü sil</button>
+</div>
+<div class="stock-grid mt-space-sm" id="summary-cards"></div>
+<p class="font-body-sm text-body-sm text-outline mt-space-3xs" id="portfolio-status"></p>
+</section>
+
+<section class="bg-surface-container-low/90 rounded-xl p-space-md">
+<h2 class="font-headline-md text-headline-md font-bold">Değer ve Kıyas</h2>
+<div id="portfolio-chart" class="stock-chart"></div>
+<p class="font-body-sm text-body-sm text-outline mt-space-xs" id="chart-note"></p>
+</section>
+
+<section class="bg-surface-container-low/90 rounded-xl p-space-md">
+<h2 class="font-headline-md text-headline-md font-bold">Pozisyonlar</h2>
+<div class="overflow-x-auto mt-space-sm">
+<table class="w-full font-body-sm text-body-sm screen-table">
+<thead><tr class="text-outline font-label-caps text-label-caps uppercase">
+<th class="text-left">Kod</th><th class="text-right">Adet</th><th class="text-right">Ort. Maliyet</th>
+<th class="text-right">Fiyat</th><th class="text-right">Değer</th><th class="text-right">K/Z</th>
+<th class="text-right">Ağırlık</th>
+</tr></thead>
+<tbody id="positions-body"><tr><td colspan="7" class="py-space-sm">Portföy seçin.</td></tr></tbody>
+</table>
+</div>
+</section>
+
+<section class="bg-surface-container-low/90 rounded-xl p-space-md">
+<h2 class="font-headline-md text-headline-md font-bold">İşlem Ekle</h2>
+<form id="trade-form" class="personal-form mt-space-sm">
+<input class="screen-control" name="ticker" placeholder="Hisse kodu" maxlength="12" required/>
+<select class="screen-control" name="side"><option value="buy">Alış</option><option value="sell">Satış</option></select>
+<input class="screen-control" name="trade_date" type="date" required/>
+<input class="screen-control" name="quantity" type="number" step="any" min="0" placeholder="Adet" required/>
+<input class="screen-control" name="price" type="number" step="any" min="0" placeholder="Fiyat (TL)" required/>
+<input class="screen-control" name="commission_tl" type="number" step="any" min="0" placeholder="Komisyon (TL)"/>
+<button class="screen-button screen-button-primary" type="submit">Kaydet</button>
+</form>
+<p class="font-body-sm text-body-sm text-outline mt-space-3xs" id="trade-status"></p>
+<div class="overflow-x-auto mt-space-sm">
+<table class="w-full font-body-sm text-body-sm screen-table">
+<thead><tr class="text-outline font-label-caps text-label-caps uppercase">
+<th class="text-left">Tarih</th><th class="text-left">Kod</th><th class="text-left">Yön</th>
+<th class="text-right">Adet</th><th class="text-right">Fiyat</th><th class="text-right">Komisyon</th><th></th>
+</tr></thead>
+<tbody id="transactions-body"><tr><td colspan="7" class="py-space-sm">Portföy seçin.</td></tr></tbody>
+</table>
+</div>
+</section>
+
+<p class="font-body-sm text-body-sm text-outline pb-space-lg">Kıyas, aynı nakit akışının XU100'e veya para piyasasına yatırılmasıyla hesaplanır. Bu sayfa bilgilendirme amaçlıdır; alım-satım tavsiyesi değildir.</p>
+</main>
+<script src="/static/vendor/lightweight-charts.standalone.production.js"></script>
+<script src="/static/portfolio.js?v=2"></script>
+</body>
+</html>

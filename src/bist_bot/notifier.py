@@ -249,10 +249,11 @@ class TelegramNotifier:
     ):
         self.token = token or settings.TELEGRAM_BOT_TOKEN
         self.chat_id = chat_id or settings.TELEGRAM_CHAT_ID
-        # TELEGRAM_GROUP_ENABLED gates group routing; chat id alone must not enable it.
+        # Group dispatch is disabled by default (Faz 0b); only an explicit
+        # TELEGRAM_GROUP_ENABLED=true can re-enable routing.
         self.group_chat_id = (
             (getattr(settings, "TELEGRAM_GROUP_CHAT_ID", "") or None)
-            if getattr(settings, "TELEGRAM_GROUP_ENABLED", True)
+            if getattr(settings, "TELEGRAM_GROUP_ENABLED", False)
             else None
         )
         self.sender = sender
@@ -298,6 +299,19 @@ class TelegramNotifier:
 
     def send_message(self, text: str, parse_mode: str = "HTML") -> bool:
         return self._send(self.chat_id, text, parse_mode)
+
+    def send_to_chat(self, chat_id: str, text: str, parse_mode: str = "HTML") -> bool:
+        """Send to an explicit chat (per-user digests, link confirmations).
+
+        Works with only a bot token configured: the operator chat_id is not needed.
+        """
+        if not self.token or not chat_id:
+            return False
+        try:
+            return bool(self.sender(self.base_url, str(chat_id), text, parse_mode=parse_mode))
+        except Exception as exc:  # network/API errors are already logged by the sender
+            logger.error("telegram_send_failed", error_type=type(exc).__name__)
+            return False
 
     def send_to_group(self, text: str, parse_mode: str = "HTML") -> bool:
         """Send a message to the Telegram group chat."""
@@ -388,10 +402,6 @@ class TelegramNotifier:
     def send_signal(self, signal: Signal) -> bool:
         return self.send_message(self._build_signal_message(signal))
 
-    def send_signal_to_group(self, signal: Signal) -> bool:
-        """Send a signal to the group using the same detail format as the owner message."""
-        return self.send_to_group(self._build_signal_message(signal))
-
     def _build_signal_message(self, signal: Signal) -> str:
         """Build the canonical Telegram detail message for a signal."""
         name = settings.TICKER_NAMES.get(signal.ticker, signal.ticker)
@@ -441,10 +451,6 @@ class TelegramNotifier:
 
     def send_scan_summary(self, signals: list[Signal], total_scanned: int) -> bool:
         return self.send_message(self._build_scan_summary_message(signals, total_scanned))
-
-    def send_scan_summary_to_group(self, signals: list[Signal], total_scanned: int) -> bool:
-        """Send the canonical scan summary to the configured group."""
-        return self.send_to_group(self._build_scan_summary_message(signals, total_scanned))
 
     def _build_scan_summary_message(self, signals: list[Signal], total_scanned: int) -> str:
         """Build the canonical Telegram summary shared by owner and group."""

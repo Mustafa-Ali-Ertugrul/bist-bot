@@ -139,6 +139,31 @@ def bist_eod_time(d: date) -> time:
     return (base + timedelta(minutes=delay)).time()
 
 
+def session_eod_datetime(d: date) -> datetime:
+    """EOD reconciliation moment for a trading day, TR-aware."""
+    return datetime.combine(d, bist_eod_time(d), tzinfo=TR)
+
+
+def missed_session_days(entry: datetime, now: datetime) -> list[date]:
+    """Trading sessions whose EOD passed while a position stayed open.
+
+    Covers sessions strictly before today's date: today's session belongs to
+    the normal scan/EOD path, never to reconciliation. Entry-day guard: a
+    position opened after the session EOD belongs to the next session.
+    """
+    days: list[date] = []
+    today = now.astimezone(TR).date()
+    entry_tr = entry.astimezone(TR)
+    d = entry_tr.date()
+    if is_bist_holiday(d) or entry_tr.time() >= bist_eod_time(d):
+        d += timedelta(days=1)
+    while d < today:
+        if not is_bist_holiday(d) and session_eod_datetime(d) <= now.astimezone(TR):
+            days.append(d)
+        d += timedelta(days=1)
+    return days
+
+
 def next_bist_session(after: datetime | None = None) -> datetime:
     if after is None:
         after = datetime.now(TR)

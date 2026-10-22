@@ -305,3 +305,98 @@ def test_target_exit_price_floored_on_fade(tmp_path):
     assert len(closed) == 1
     assert closed[0]["outcome"] == "TARGET_HIT"
     assert closed[0]["exit_price"] == 110.0
+
+
+def test_max_hold_closes_without_fresh_price(tmp_path):
+    """Fiyat gelmeyen scan'lerde MAX_HOLD son bilinen fiyatla kapanır.
+
+    TRALT sınıfı: süreç/fiyat kesilince pozisyon günlerce açık kalmasın.
+    """
+    tracker, db = _tracker(tmp_path)
+    sig = _al_signal()
+    tracker.process_scan([sig], _market_data("THYAO.IS", 100.0), now=ENTRY_TIME)
+    # second scan records last_price=101
+    tracker.process_scan(
+        [], _market_data("THYAO.IS", 101.0), now=ENTRY_TIME + timedelta(hours=1)
+    )
+    # 6 days later, no price anywhere
+    closed = tracker.process_scan([], {}, now=ENTRY_TIME + timedelta(days=6))
+    assert len(closed) == 1
+    assert closed[0]["outcome"] == "MAX_HOLD"
+    assert closed[0]["exit_price"] == 101.0
+
+
+def test_unpriced_stuck_warns_once_and_stays_open(tmp_path, caplog):
+    """Hiç fiyat görmemiş (last_price yok) pozisyon kapanmaz ama bir kez uyarır."""
+    import json
+
+    tracker, db = _tracker(tmp_path)
+    # legacy open JSON without last_price (pre-fix file)
+    tracker._write_json(
+        tracker.open_path,
+        {
+            "THYAO.IS": {
+                "signal_id": None,
+                "ticker": "THYAO.IS",
+                "score": 30.0,
+                "entry_ts": ENTRY_TIME.isoformat(),
+                "side": "long",
+                "entry_price": 100.0,
+                "stop": 95.0,
+                "target": 110.0,
+                "quantity": 100.0,
+                "mfe_pct": 0.0,
+                "mae_pct": 0.0,
+                "max_high": 100.0,
+                "min_low": 100.0,
+            }
+        },
+    )
+    closed = tracker.process_scan([], {}, now=ENTRY_TIME + timedelta(days=6))
+    assert closed == []
+    assert "outcome_unpriced_stuck" in caplog.text
+    open_pos = json.loads(tracker.open_path.read_text(encoding="utf-8"))
+    assert open_pos["THYAO.IS"].get("stuck_warned") is True
+    # second scan → no repeat warning
+    caplog.clear()
+    closed = tracker.process_scan(
+        [], {}, now=ENTRY_TIME + timedelta(days=6, hours=1)
+    )
+    assert closed == []
+    assert "outcome_unpriced_stuck" not in caplog.text
+
+
+def test_eod_pass_uses_low_for_stale_position(tmp_path):
+    """EOD pass: dünden eski pozisyonda günlük low stop'a değmişse STOP_HIT."""
+    tracker, db = _tracker(tmp_path)
+    sig = _al_signal()
+    tracker.process_scan([sig], _market_data("THYAO.IS", 100.0), now=ENTRY_TIME)
+    # next-day EOD pass (21 Aug 18:12 TR): daily low touched stop, close recovered
+    eod_next = datetime(2026, 8, 21, 15, 12, tzinfo=UTC)
+    closed = tracker.process_scan(
+        [],
+        _market_data("THYAO.IS", 102.0, high=103.0, low=94.0),
+        now=eod_next,
+        eod_pass=True,
+    )
+    assert len(closed) == 1
+    assert closed[0]["outcome"] == "STOP_HIT"
+    assert closed[0]["exit_price"] == 95.0
+
+
+def test_eod_pass_ignores_low_for_same_day_entry(tmp_path):
+    """EOD pass: aynı gün girişte günlük low sahte stop üretmez (close-only)."""
+    tracker, db = _tracker(tmp_path)
+    sig = _al_signal()
+    tracker.process_scan([sig], _market_data("THYAO.IS", 100.0), now=ENTRY_TIME)
+    # same-day EOD pass (20 Aug 18:12 TR): daily low dips below stop, close holds
+    eod_same = datetime(2026, 8, 20, 15, 12, tzinfo=UTC)
+    closed = tracker.process_scan(
+        [],
+        _market_data("THYAO.IS", 102.0, high=103.0, low=94.0),
+        now=eod_same,
+        eod_pass=True,
+    )
+    assert len(closed) == 1
+    assert closed[0]["outcome"] == "EOD_CLOSE"
+    assert closed[0]["exit_price"] == 102.0

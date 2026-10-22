@@ -11,14 +11,13 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
+import sqlalchemy as sa
 from flask import Flask
 from flask.testing import FlaskClient
 
 from bist_bot.dashboard import create_dashboard_app
 
 ACCESS_COOKIE = "access_token_cookie"
-REFRESH_COOKIE = "refresh_token_cookie"
-REFRESH_CSRF_COOKIE = "csrf_refresh_token"
 GATED_ROUTES = ["/", "/ui", "/ui/dashboard", "/ui/signals", "/ui/analysis", "/ui/settings"]
 PUBLIC_ROUTES = ["/login", "/ui/login"]
 
@@ -49,7 +48,18 @@ def app(tmp_path) -> Flask:
             broker=MagicMock(),
         )
         application.config["TESTING"] = True
+        application.config["_test_manager"] = manager
         yield application
+
+
+def _promote_to_admin(app: Flask, email: str) -> None:
+    """Give the registered test user the admin role (signal pages are admin-only)."""
+    manager = app.config["_test_manager"]
+    with manager.engine.begin() as conn:
+        conn.execute(
+            sa.text("UPDATE users SET role = 'admin' WHERE email = :email"),
+            {"email": email},
+        )
 
 
 def _register_and_login(client: FlaskClient, email: str, password: str) -> dict[str, Any]:
@@ -79,14 +89,34 @@ def test_login_page_stays_public(app: Flask, route: str) -> None:
 
 
 @pytest.mark.parametrize("route", GATED_ROUTES)
-def test_authenticated_cookie_returns_html(app: Flask, route: str) -> None:
+def test_authenticated_admin_cookie_returns_html(app: Flask, route: str) -> None:
     with app.test_client() as client:
         _register_and_login(client, "ui@bistbot.local", "Str0ng-test-pass!")
+        _promote_to_admin(app, "ui@bistbot.local")
         resp = client.get(route)
         assert resp.status_code == 200
         assert "text/html" in (resp.content_type or "")
         csp = resp.headers.get("Content-Security-Policy", "")
         assert "frame-ancestors 'none'" in csp
+
+
+@pytest.mark.parametrize("route", GATED_ROUTES)
+def test_non_admin_is_redirected_to_beta(app: Flask, route: str) -> None:
+    """Faz 0b: signal pages and the dashboard are admin-only; members see /ui/beta."""
+    with app.test_client() as client:
+        _register_and_login(client, "member@bistbot.local", "Str0ng-test-pass!")
+        resp = client.get(route)
+        assert resp.status_code == 302
+        assert resp.headers.get("Location", "").endswith("/ui/beta")
+
+
+def test_beta_page_renders_for_member(app: Flask) -> None:
+    with app.test_client() as client:
+        _register_and_login(client, "beta@bistbot.local", "Str0ng-test-pass!")
+        resp = client.get("/ui/beta")
+        assert resp.status_code == 200
+        body = resp.get_data(as_text=True)
+        assert "Yeni sürüm hazırlanıyor" in body
 
 
 @pytest.mark.parametrize("route", GATED_ROUTES)
@@ -168,9 +198,9 @@ def test_session_cookie_grants_gated_page_without_prior_login_cookie(app: Flask)
     """
     with app.test_client() as naked_client:
         payload = _register_and_login(naked_client, "boot@bistbot.local", "Str0ng-test-pass!")
+        _promote_to_admin(app, "boot@bistbot.local")
         # Drop every cookie to simulate "token in storage, no cookie" state.
         naked_client.delete_cookie(ACCESS_COOKIE)
-        naked_client.delete_cookie(REFRESH_COOKIE)
         assert naked_client.get("/ui/dashboard").status_code == 302
         sess = naked_client.post(
             "/api/auth/session",
@@ -183,6 +213,7 @@ def test_session_cookie_grants_gated_page_without_prior_login_cookie(app: Flask)
 def test_settings_html_contains_no_embedded_credentials(app: Flask) -> None:
     with app.test_client() as client:
         _register_and_login(client, "audit@bistbot.local", "Str0ng-test-pass!")
+        _promote_to_admin(app, "audit@bistbot.local")
         resp = client.get("/ui/settings")
         assert resp.status_code == 200
         body = resp.get_data(as_text=True)
@@ -210,71 +241,3 @@ def test_stitch_static_assets_served(app: Flask) -> None:
         css = client.get("/static/tailwind.css")
         assert css.status_code == 200
         assert len(css.data) > 1000
-
-
-def _login(client: FlaskClient, email: str, remember: bool) -> dict[str, Any]:
-    reg = client.post("/api/auth/register", json={"email": email, "password": "Str0ng-test-pass!"})
-    assert reg.status_code == 201, reg.get_data(as_text=True)
-    login = client.post(
-        "/api/auth/login",
-        json={"email": email, "password": "Str0ng-test-pass!", "remember": remember},
-    )
-    assert login.status_code == 200, login.get_data(as_text=True)
-    return {"json": login.get_json(), "set_cookies": login.headers.getlist("Set-Cookie")}
-
-
-def test_login_remember_sets_persistent_http_only_refresh_cookie(app: Flask) -> None:
-    with app.test_client() as client:
-        result = _login(client, "remember@bistbot.local", remember=True)
-        refresh = [c for c in result["set_cookies"] if c.startswith(f"{REFRESH_COOKIE}=")]
-        assert refresh, f"refresh cookie missing in {result['set_cookies']}"
-        assert "HttpOnly" in refresh[0]
-        assert "SameSite=Strict" in refresh[0]
-        assert f"Max-Age={30 * 24 * 3600}" in refresh[0]
-
-
-def test_login_without_remember_sets_session_refresh_cookie(app: Flask) -> None:
-    with app.test_client() as client:
-        result = _login(client, "session-only@bistbot.local", remember=False)
-        refresh = [c for c in result["set_cookies"] if c.startswith(f"{REFRESH_COOKIE}=")]
-        assert refresh
-        assert "Max-Age" not in refresh[0]
-        assert "Expires" not in refresh[0]
-
-
-def test_expired_access_cookie_is_reminted_from_refresh_cookie(app: Flask) -> None:
-    with app.test_client() as client:
-        _login(client, "reminted@bistbot.local", remember=True)
-        client.delete_cookie(ACCESS_COOKIE)  # the 15-minute access cookie ran out
-        resp = client.get("/ui/dashboard")
-        assert resp.status_code == 200
-        assert any(c.startswith(f"{ACCESS_COOKIE}=") for c in resp.headers.getlist("Set-Cookie"))
-
-
-def test_refresh_endpoint_requires_csrf_and_returns_usable_token(app: Flask) -> None:
-    with app.test_client() as client:
-        _login(client, "refresh@bistbot.local", remember=True)
-        assert client.post("/api/auth/refresh").status_code == 401  # no CSRF header
-        csrf = client.get_cookie(REFRESH_CSRF_COOKIE)
-        assert csrf is not None
-        resp = client.post("/api/auth/refresh", headers={"X-CSRF-TOKEN": csrf.value})
-        assert resp.status_code == 200, resp.get_data(as_text=True)
-        token = resp.get_json()["access_token"]
-        verify = client.get("/api/auth/verify", headers={"Authorization": f"Bearer {token}"})
-        assert verify.status_code == 200
-        assert verify.get_json()["email"] == "refresh@bistbot.local"
-
-
-def test_logout_revokes_refresh_token_durably(app: Flask) -> None:
-    with app.test_client() as client:
-        _login(client, "logout@bistbot.local", remember=True)
-        old_refresh = client.get_cookie(REFRESH_COOKIE)
-        old_csrf = client.get_cookie(REFRESH_CSRF_COOKIE)
-        assert old_refresh is not None and old_csrf is not None
-        assert client.post("/api/auth/logout").status_code == 200
-        # A stolen copy of the old refresh cookie must no longer work.
-        client.set_cookie(REFRESH_COOKIE, old_refresh.value)
-        client.set_cookie(REFRESH_CSRF_COOKIE, old_csrf.value)
-        assert client.get("/ui/dashboard").status_code == 302
-        resp = client.post("/api/auth/refresh", headers={"X-CSRF-TOKEN": old_csrf.value})
-        assert resp.status_code == 401

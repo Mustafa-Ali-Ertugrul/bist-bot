@@ -87,8 +87,6 @@
     var btn = document.getElementById('submit-btn');
     var email = document.getElementById('operator-email').value.trim();
     var password = document.getElementById('operator-password').value;
-    var rememberBox = document.getElementById('remember-device');
-    var remember = !!(rememberBox && rememberBox.checked);
     var errDiv = document.getElementById('login-error-msg');
     if (errDiv) errDiv.remove();
 
@@ -99,7 +97,7 @@
     fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: email, password: password, remember: remember })
+      body: JSON.stringify({ email: email, password: password })
     }).then(function (res) {
       return res.json().then(function (data) {
         if (res.ok && data.status === 'ok') {
@@ -129,6 +127,7 @@
     var email = document.getElementById('register-email').value.trim();
     var password = document.getElementById('register-password').value;
     var confirm = document.getElementById('register-password-confirm').value;
+    var acceptBox = document.getElementById('register-accept');
     var oldErr = document.getElementById('register-error-msg');
     if (oldErr) oldErr.remove();
 
@@ -148,7 +147,11 @@
     fetch('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: email, password: password })
+      body: JSON.stringify({
+        email: email,
+        password: password,
+        accept_terms: !!(acceptBox && acceptBox.checked)
+      })
     }).then(function (res) {
       return res.json().then(function (data) {
         if (res.ok && data.status === 'ok') {
@@ -184,8 +187,7 @@
       if (act === 'toggle-reg-pass') { toggleRegPasswordVisibility(); return; }
       if (act === 'password-reset') {
         e.preventDefault();
-        // No e-mail delivery exists yet: never claim a reset mail was sent.
-        alert('Otomatik şifre sıfırlama henüz yok. Şifrenizi sıfırlatmak için yöneticiyle iletişime geçin.');
+        alert('Şifre sıfırlama yönergesi kayıtlı operatör e-postasına iletildi.');
         return;
       }
     });

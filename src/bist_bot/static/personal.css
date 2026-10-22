@@ -1,0 +1,57 @@
+/* Faz 5 personal pages layout. */
+.personal-nav {
+  padding: 0.3rem 0.7rem;
+  border-radius: 0.5rem;
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 0.85rem;
+}
+
+.personal-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.personal-tabs button {
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.personal-tabs button[aria-pressed="true"] {
+  background: rgba(78, 222, 163, 0.14);
+  border-color: rgba(78, 222, 163, 0.5);
+  color: #4edea3;
+}
+
+.personal-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.screen-table button.personal-remove {
+  padding: 0.15rem 0.5rem;
+  border-radius: 0.4rem;
+  border: 1px solid rgba(255, 138, 128, 0.45);
+  background: transparent;
+  color: #ff8a80;
+  cursor: pointer;
+}
+
+.alert-preview {
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: rgba(20, 24, 22, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  font-size: 0.85rem;
+  max-height: 420px;
+  overflow-y: auto;
+}

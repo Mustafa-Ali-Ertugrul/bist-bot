@@ -1,5 +1,0 @@
-# Assets shipped with a pre-compressed *.gz twin must be byte-identical to it
-# on every platform, so their line endings are never converted on checkout.
-src/bist_bot/static/app.js text eol=lf
-src/bist_bot/static/tailwind.css text eol=lf
-*.gz binary

@@ -107,45 +107,50 @@ OVERFIT_NAMES = {"ASELS.IS", "GARAN.IS", "SAHOL.IS", "THYAO.IS", "BIMAS.IS", "IS
 def _make_service(
     notifier: TelegramNotifier,
 ) -> NotificationDispatchService:
-    """Build a service whose group chat_id is test-controlled.
+    """Build a service with group settings enabled.
 
-    ``_make_signal`` already uses a far-future timestamp so the real
-    ``is_expired`` returns False without patching.
+    Faz 0b: group mirroring is gone, so these settings must not change
+    behaviour — every message goes to the operator chat only.
     """
     with settings.override(TELEGRAM_GROUP_CHAT_ID="mock-group", TELEGRAM_GROUP_ENABLED=True):
-        svc = NotificationDispatchService(notifier, sleeper=lambda _: None)
-    assert svc._group_chat_id == "mock-group"
-    return svc
+        return NotificationDispatchService(notifier, sleeper=lambda _: None)
 
 
 # ============================================================================
-# TELEGRAM_GROUP_ENABLED flag gating
+# Faz 0b: the customer group never receives signal content
 # ============================================================================
 
 
-def test_group_mirroring_skipped_when_flag_disabled():
-    """TELEGRAM_GROUP_ENABLED=false iken chat id dolu olsa bile grup kopyasi gitmez."""
+def test_no_message_is_sent_to_the_group():
+    """Group settings enabled + robust tickers still route nothing to the group."""
+    sent: list[tuple[str, str]] = []
+
+    def sender(base_url, chat_id, text, **kwargs) -> bool:
+        sent.append((chat_id, text))
+        return True
+
+    notifier = TelegramNotifier(token="mock-token", chat_id="mock-chat", sender=sender)
+    svc = _make_service(notifier)
+    signal = _make_signal(ticker="TUPRS.IS", score=30.0, is_actionable=True)
+    svc.notify_scan_results([signal], [signal], total_scanned=1)
+
+    assert sent, "operator must still receive the scan summary"
+    assert all(chat_id == "mock-chat" for chat_id, _ in sent)
+    assert all("AL SİNYALİ" not in text or chat_id == "mock-chat" for chat_id, text in sent)
+
+
+def test_group_settings_no_longer_change_message_count():
     notifier, captured = _make_notifier_with_fake_sender()
     with settings.override(TELEGRAM_GROUP_CHAT_ID="mock-group", TELEGRAM_GROUP_ENABLED=False):
-        svc = NotificationDispatchService(notifier, sleeper=lambda _: None)
-        assert svc._group_chat_id is None
+        svc_disabled = NotificationDispatchService(notifier, sleeper=lambda _: None)
+    signal = _make_signal(ticker="TUPRS.IS", score=30.0, is_actionable=True)
+    svc_disabled.notify_scan_results([signal], [signal], total_scanned=1)
 
-        signal = _make_signal(ticker="TUPRS.IS", score=30.0, is_actionable=True)
-        svc.notify_scan_results([signal], [signal], total_scanned=1)
+    notifier2, captured2 = _make_notifier_with_fake_sender()
+    svc_enabled = _make_service(notifier2)
+    svc_enabled.notify_scan_results([signal], [signal], total_scanned=1)
 
-    summaries = [t for t in captured if "TARAMA RAPORU" in t]
-    assert len(summaries) == 1  # sadece ozel sohbet; grup kopyasi yok
-
-
-def test_group_mirroring_sends_when_flag_enabled():
-    notifier, captured = _make_notifier_with_fake_sender()
-    with settings.override(TELEGRAM_GROUP_CHAT_ID="mock-group", TELEGRAM_GROUP_ENABLED=True):
-        svc = NotificationDispatchService(notifier, sleeper=lambda _: None)
-        signal = _make_signal(ticker="TUPRS.IS", score=30.0, is_actionable=True)
-        svc.notify_scan_results([signal], [signal], total_scanned=1)
-
-    summaries = [t for t in captured if "TARAMA RAPORU" in t]
-    assert len(summaries) == 2  # ozel + grup
+    assert len(captured) == len(captured2) == 2  # summary + detail, operator only
 
 
 def test_notifier_group_chat_id_gated_by_flag():
@@ -210,11 +215,11 @@ def test_overfit_names_excluded_from_h6_on_robust_set():
 
 
 # ============================================================================
-# (a) Actionable signal → owner gets AL SİNYALİ; robust member gets group
+# (a) Actionable signal → owner gets AL SİNYALİ; group gets nothing
 # ============================================================================
 
 
-def test_actionable_signal_to_owner_and_group():
+def test_actionable_signal_goes_to_owner_only():
     notifier, captured = _make_notifier_with_fake_sender()
     svc = _make_service(notifier)
 
@@ -228,24 +233,20 @@ def test_actionable_signal_to_owner_and_group():
 
     svc.notify_scan_results([signal], [signal], 10)
 
-    assert len(captured) >= 2, f"Expected scan summary + detail; got {len(captured)}"
-
+    assert len(captured) == 2, f"Expected summary + detail; got {len(captured)}"
+    assert "BIST TARAMA RAPORU" in captured[0]
     detail_msg = captured[1]
     assert "AL SİNYALİ" in detail_msg
     assert "actionable" in detail_msg
 
-    assert captured[2] == captured[0]
-    assert captured[3] == detail_msg
-    assert "AL SİNYALİ" in captured[3]
-
 
 # ============================================================================
-# (b) Radar signal → owner gets RADAR / İZLE; robust member gets group İZLE
+# (b) Radar signal → owner gets RADAR / İZLE; group gets nothing
 # ============================================================================
 
 
-def test_radar_signal_to_owner_and_group_if_robust():
-    """Positive RADAR signals now get detail messages (with 'RADAR / İZLE' label)."""
+def test_radar_signal_goes_to_owner_only():
+    """Positive RADAR signals get detail messages (with 'RADAR / İZLE' label)."""
     notifier, captured = _make_notifier_with_fake_sender()
     svc = _make_service(notifier)
 
@@ -258,26 +259,17 @@ def test_radar_signal_to_owner_and_group_if_robust():
 
     svc.notify_scan_results([signal], [], 10)
 
-    # Owner: summary + detail with RADAR / İZLE label
-    # Group:  summary + detail (mirrored)
-    assert len(captured) == 4
+    assert len(captured) == 2
     assert "BIST TARAMA RAPORU" in captured[0]
     assert "RADAR / İZLE" in captured[1]
-    assert captured[2] == captured[0]  # group summary == owner summary
-    assert captured[3] == captured[1]  # group detail == owner detail
 
 
 # ============================================================================
-# (c) Radar signal outside robust watchlist → owner detail only, no group detail
+# (c) Radar signal outside the robust watchlist → owner detail only
 # ============================================================================
 
 
-def test_radar_signal_outside_robust_not_sent_to_group():
-    """Positive RADAR outside robust watchlist gets owner detail but NOT group detail.
-
-    Group detail routing is protected by the robust watchlist so overfit names
-    never reach the public channel.
-    """
+def test_radar_signal_outside_robust_goes_to_owner_only():
     notifier, captured = _make_notifier_with_fake_sender()
     svc = _make_service(notifier)
 
@@ -290,20 +282,17 @@ def test_radar_signal_outside_robust_not_sent_to_group():
 
     svc.notify_scan_results([signal], [], 10)
 
-    # Owner: summary + detail; Group: summary only (no detail for non-robust)
-    assert len(captured) == 3
+    assert len(captured) == 2
     assert "BIST TARAMA RAPORU" in captured[0]
     assert "RADAR / İZLE" in captured[1]
-    assert captured[2] == captured[0]  # group summary == owner summary
 
 
 # ============================================================================
-# (c2) Overfit names get owner detail but are blocked from the group
+# (c2) Overfit names: owner detail only, nothing leaves the operator chat
 # ============================================================================
 
 
-def test_overfit_names_do_not_reach_group():
-    """Overfit names (failed H6-ON stress) get owner detail but NOT group detail."""
+def test_overfit_names_stay_with_the_operator():
     notifier, captured = _make_notifier_with_fake_sender()
     svc = _make_service(notifier)
 
@@ -315,20 +304,16 @@ def test_overfit_names_do_not_reach_group():
     assert all(s.ticker in OVERFIT_NAMES for s in signals)
     svc.notify_scan_results(signals, signals, 10)
 
-    # Owner: summary + 3 details; Group: summary only (all overfit, none robust)
-    assert len(captured) == 5
-    assert captured[4] == captured[0]  # group summary == owner summary
-    # No group detail messages for overfit names
-    assert all("AL SİNYALİ" not in msg for msg in captured[4:])
+    assert len(captured) == 4  # summary + 3 details, all to the operator
+    assert sum("AL SİNYALİ" in msg for msg in captured) == 3
 
 
 # ============================================================================
-# (c3) Batch protection: many robust signals → single compact group summary
+# (c3) Many actionable signals → one summary + one detail each, no batch copy
 # ============================================================================
 
 
-def test_batch_protection_sends_single_summary_when_many_robust_signals():
-    """When robust detail signals exceed the batch threshold, send one summary."""
+def test_many_signals_do_not_trigger_a_group_batch_message():
     notifier, captured = _make_notifier_with_fake_sender()
     svc = _make_service(notifier)
 
@@ -337,20 +322,15 @@ def test_batch_protection_sends_single_summary_when_many_robust_signals():
         _make_signal(ticker=t, signal_type=SignalType.BUY, score=30.0) for t in robust_tickers
     ]
     assert all(s.ticker in ROBUST_SET for s in signals)
-    assert len(signals) > svc._batch_threshold
 
     svc.notify_scan_results(signals, signals, 10)
 
-    # Owner: summary + 6 details (indices 0-6); Group: summary + 1 batch (7-8)
-    assert len(captured) == 9
-    assert captured[7] == captured[0]  # group summary == owner summary
-    batch_msg = captured[8]
-    assert "Grup Özet" in batch_msg
-    assert "6 robust sinyal" in batch_msg
+    assert len(captured) == 7  # summary + 6 details
+    assert not any("Grup Özet" in msg for msg in captured)
 
 
 # ============================================================================
-# (d) Negative score → neither owner detail nor group
+# (d) Negative score → summary only (no owner detail)
 # ============================================================================
 
 
@@ -366,9 +346,8 @@ def test_negative_score_skipped_everywhere():
 
     svc.notify_scan_results([signal], [], 10)
 
-    assert len(captured) == 2, f"Expected owner and group summaries, got {len(captured)}"
+    assert len(captured) == 1, f"Expected only the operator summary, got {len(captured)}"
     assert "BIST TARAMA RAPORU" in captured[0]
-    assert captured[1] == captured[0]
 
 
 # ============================================================================
@@ -409,7 +388,7 @@ def test_diagnosis_shows_agreement_ratio_and_gates():
 # ============================================================================
 
 
-def test_multiple_robust_signals_send_full_details_to_group():
+def test_multiple_signals_send_one_detail_each_to_the_operator():
     notifier, captured = _make_notifier_with_fake_sender()
     svc = _make_service(notifier)
 
@@ -423,22 +402,12 @@ def test_multiple_robust_signals_send_full_details_to_group():
 
     svc.notify_scan_results(signals, actionable, 10)
 
-    # 3 signals: 2 AL + 1 positive RADAR — all get detail messages
-    # captured order:
-    # 0: summary (owner)
-    # 1: ASTOR detail (owner) — AL
-    # 2: TUPRS detail (owner) — AL
-    # 3: PETKM detail (owner) — RADAR / İZLE
-    # 4: summary (group)
-    # 5: ASTOR detail (group)
-    # 6: TUPRS detail (group)
-    # 7: PETKM detail (group)
-    owner_details = captured[1:4]
-    assert captured[4] == captured[0]
-    group_details = captured[5:8]
-    assert group_details == owner_details
-    assert all("📋 <b>Nedenler:</b>" in message for message in group_details)
-    assert all("🔍 <b>Teşhis:</b>" in message for message in group_details)
+    # 3 signals: 2 AL + 1 positive RADAR — all get detail messages, operator only
+    assert len(captured) == 4
+    assert "BIST TARAMA RAPORU" in captured[0]
+    details = captured[1:4]
+    assert all("📋 <b>Nedenler:</b>" in message for message in details)
+    assert all("🔍 <b>Teşhis:</b>" in message for message in details)
 
 
 # ============================================================================

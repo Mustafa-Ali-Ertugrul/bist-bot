@@ -677,6 +677,55 @@ class ScanService:
             all_data.pop(ticker, None)
         return all_data
 
+    def reconcile_missed_sessions(self, *, now: datetime | None = None) -> dict[str, int]:
+        """Startup reconciliation — machine was off, EOD pass never ran.
+
+        Replays every missed session (between the position's entry and today)
+        with historical daily bars and closes at the first session that has a
+        bar. Exit price and exit timestamp come from that session's bar/EOD;
+        nothing is invented. Sub-passes are isolated: a paper failure must not
+        block outcome reconciliation (or the other way round).
+        """
+        effective_now = now or datetime.now(UTC)
+        summary: dict[str, int] = {
+            "paper_closed": 0,
+            "paper_skipped_no_bars": 0,
+            "paper_stale": 0,
+            "outcome_closed": 0,
+            "outcome_skipped_no_bars": 0,
+            "outcome_stale": 0,
+        }
+        try:
+            paper = self.paper_trade_service.reconcile_missed_sessions(
+                self.fetcher, now=effective_now
+            )
+            summary["paper_closed"] = int(paper.get("closed", 0))
+            summary["paper_skipped_no_bars"] = int(paper.get("skipped_no_bars", 0))
+            summary["paper_stale"] = int(paper.get("stale", 0))
+        except Exception as exc:
+            logger.exception("reconcile_paper_failed", error=exc)
+            summary["paper_closed"] = 0
+        try:
+            outcome = self.signal_outcome_tracker.reconcile_missed_sessions(
+                self.fetcher, now=effective_now
+            )
+            summary["outcome_closed"] = int(outcome.get("closed", 0))
+            summary["outcome_skipped_no_bars"] = int(outcome.get("skipped_no_bars", 0))
+            summary["outcome_stale"] = int(outcome.get("stale", 0))
+        except Exception as exc:
+            logger.exception("reconcile_outcome_failed", error=exc)
+            summary["outcome_closed"] = 0
+        total_closed = summary["paper_closed"] + summary["outcome_closed"]
+        if summary["paper_stale"] or summary["outcome_stale"]:
+            logger.info("reconcile_missed_sessions_completed", **summary)
+        if total_closed:
+            self.notifier.send_message(
+                f"🔧 <b>Gecikmiş seans uzlaştırması:</b> bilgisayar kapalıyken "
+                f"{summary['paper_stale']} paper + {summary['outcome_stale']} izlenen "
+                f"pozisyon seans kaçırmıştı; {total_closed} pozisyon tarihsel bardan kapatıldı."
+            )
+        return summary
+
     def close_positions_at_eod(self, *, now: datetime | None = None) -> None:
         """Faz 3 P1.1 — post-close discipline pass (silent, no signals/notifications).
 
@@ -717,14 +766,18 @@ class ScanService:
 
         # The daily bar's high/low spans the whole session, including prices
         # before an intraday entry (false STOP_HIT / MAE). Intraday touches are
-        # checked by the 15m scans, so the EOD pass decides on the close only.
-        close_only = {
-            ticker: frame[["close"]]
+        # checked by the 15m scans; the tracker itself ignores the daily
+        # low/high for same-session entries (eod_pass guard) and only uses
+        # them for stale positions, so pass them through.
+        eod_frames = {
+            ticker: frame[[c for c in ("close", "high", "low") if c in frame.columns]]
             for ticker, frame in market_data.items()
             if hasattr(frame, "columns") and "close" in frame.columns
         }
         try:
-            self.signal_outcome_tracker.process_scan([], close_only, now=effective_now)
+            self.signal_outcome_tracker.process_scan(
+                [], eod_frames, now=effective_now, eod_pass=True
+            )
         except Exception as exc:
             failures.append("outcome_close")
             logger.exception("eod_outcome_close_failed", error=exc)
