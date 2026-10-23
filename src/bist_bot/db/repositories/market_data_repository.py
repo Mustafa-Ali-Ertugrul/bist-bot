@@ -399,6 +399,59 @@ class MarketDataRepository:
 
         return list(self.manager.run_session(_read, read_only=True))
 
+    def get_scan_results_range(self, scan_id: str, *, start: date) -> list[dict[str, object]]:
+        """All hits of one screen since ``start`` (used by the scorecard)."""
+
+        def _read(session):
+            rows = session.execute(
+                select(
+                    ScanResultRecord.as_of,
+                    ScanResultRecord.ticker,
+                    ScanResultRecord.value,
+                )
+                .where(
+                    ScanResultRecord.scan_id == scan_id,
+                    ScanResultRecord.as_of >= start,
+                )
+                .order_by(ScanResultRecord.as_of, ScanResultRecord.ticker)
+            ).all()
+            return [
+                {"as_of": row[0], "ticker": str(row[1]), "value": float(row[2])} for row in rows
+            ]
+
+        return list(self.manager.run_session(_read, read_only=True))
+
+    def get_bars_for_tickers(
+        self, tickers: Sequence[str], *, start: date
+    ) -> dict[str, list[DailyBar]]:
+        """Daily bars for several tickers in one query (scorecard bulk read)."""
+        if not tickers:
+            return {}
+
+        def _read(session):
+            rows = session.scalars(
+                select(DailyBarRecord)
+                .where(
+                    DailyBarRecord.ticker.in_(list(tickers)),
+                    DailyBarRecord.date >= start,
+                )
+                .order_by(DailyBarRecord.ticker, DailyBarRecord.date)
+            ).all()
+            grouped: dict[str, list[DailyBar]] = {}
+            for row in rows:
+                grouped.setdefault(row.ticker, []).append(
+                    DailyBar(
+                        date=row.date,
+                        close=row.close,
+                        close_raw=row.close_raw,
+                        volume_tl=row.volume_tl,
+                        market_cap_tl=row.market_cap_tl,
+                    )
+                )
+            return grouped
+
+        return dict(self.manager.run_session(_read, read_only=True))
+
     def latest_market_date(self) -> date | None:
         """Latest session with any stored bar (used to gate screen runs)."""
 

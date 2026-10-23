@@ -353,6 +353,17 @@ Açıldığında worker, seans kapanışından sonra günde bir kez yalnızca ek
 - Alternatif: yetkili bir dağıtıcı (Matriks, Foreks, İdeal vb.) üzerinden alt dağıtıcı olmak.
 - BIST, veriden türetilen analizlerin de sözleşme kapsamında olduğunu belirtiyor. Kesin kapsam ve dönem sözleşme ekinde.
 
+## Tarama Karnesi (Faz 8a)
+
+`/ui/scorecard`: her hazır taramanın sinyal verdiği günlerde sonraki 5 / 20 / 60 işlem gününde ne getirdiğini gösterir.
+
+- Aynı günlerde iki kıyas: **XU100** ve **sabit rastgele 20 hisse** sepeti (tarama başına belirlenimci, tekrar üretilebilir).
+- Getiri düzeltilmiş kapanıştan; işlem maliyeti düşülmemiş.
+- **Kanıt eşiği:** en az 30 gözlem ve |t| ≥ 2. Altındaki satırlar "yetersiz veri" yazar. Bu, kendi ligimizdeki Bonferroni disipliniyle aynı çizgide.
+- API: `GET /api/scores?since=&horizons=` ve `GET /api/scores/<kod>`.
+- Veri yoksa tarama "kayıtlı sonuç yok" olarak listelenir; uydurma sayı üretilmez.
+- Yeni veri biriktikçe karne kendiliğinden güncellenir; ayrı bir job gerekmez.
+
 ## Historical Universe
 
 - Point-in-time universe snapshot'lari `src/bist_bot/data/universe/` altinda JSON olarak tutulur.

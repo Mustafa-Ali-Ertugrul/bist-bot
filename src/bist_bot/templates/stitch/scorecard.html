@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html class="dark" lang="tr">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Bist-Bot · Tarama Karnesi</title>
+<link rel="stylesheet" href="/static/tailwind.css"/>
+<link rel="stylesheet" href="/static/stock.css?v=1"/>
+<link rel="stylesheet" href="/static/screener.css?v=1"/>
+<link rel="stylesheet" href="/static/personal.css?v=1"/>
+</head>
+<body class="bg-background font-body-md text-body-md text-on-surface antialiased">
+<header class="w-full px-terminal-margin py-space-md border-b border-surface-container-high/40">
+<div class="w-full max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-space-md">
+<div class="flex items-center gap-space-sm">
+<span class="font-headline-md text-headline-md tracking-tight font-extrabold">Bist<span class="text-primary">-Bot</span></span>
+<span class="bg-surface-container-high px-space-xs py-space-3xs rounded text-secondary font-label-caps text-label-caps uppercase tracking-wider">Karne</span>
+</div>
+<nav class="flex flex-wrap items-center gap-space-sm">
+<a class="personal-nav" href="/ui/dashboard">Panel</a>
+<a class="personal-nav" href="/ui/screener">Tarayıcı</a>
+<a class="personal-nav" href="/ui/stock/THYAO">Hisse</a>
+<a class="personal-nav" href="/ui/alerts">Alarmlar</a>
+</nav>
+</div>
+</header>
+
+<main class="w-full max-w-7xl mx-auto px-terminal-margin py-space-lg flex flex-col gap-space-lg">
+<section class="bg-surface-container-low/90 rounded-xl p-space-md">
+<div class="flex flex-wrap items-center justify-between gap-space-sm">
+<div>
+<h1 class="font-headline-md text-headline-md font-bold">Tarama Karnesi</h1>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-space-3xs">
+          Her tarama için, sinyal verdiği günlerde sonraki 5 / 20 / 60 işlem gününde ne olduğu.
+          Aynı günlerde XU100 ve sabit rastgele bir hisse sepetiyle karşılaştırılır.
+        </p>
+</div>
+<div class="flex flex-wrap items-center gap-space-xs">
+<label class="screen-control-label" for="since">Başlangıç</label>
+<input id="since" class="screen-control" type="date"/>
+<label class="screen-control-label" for="horizons">Ufuk</label>
+<select id="horizons" class="screen-control">
+<option value="5,20,60">5 / 20 / 60 gün</option>
+<option value="5">5 gün</option>
+<option value="20">20 gün</option>
+<option value="60">60 gün</option>
+</select>
+<button id="reload" class="screen-button screen-button-primary" type="button">Hesapla</button>
+</div>
+</div>
+<p class="font-body-sm text-body-sm text-outline mt-space-3xs" id="score-status"></p>
+</section>
+
+<section class="bg-surface-container-low/90 rounded-xl p-space-md">
+<div class="overflow-x-auto">
+<table class="w-full font-body-sm text-body-sm screen-table">
+<thead>
+<tr class="text-outline font-label-caps text-label-caps uppercase">
+<th class="text-left">Tarama</th>
+<th class="text-right">Ufuk</th>
+<th class="text-right">Gözlem</th>
+<th class="text-right">Tarama %</th>
+<th class="text-right">XU100 %</th>
+<th class="text-right">Rastgele %</th>
+<th class="text-right">XU100 farkı</th>
+<th class="text-right">t</th>
+<th class="text-left">Durum</th>
+</tr>
+</thead>
+<tbody id="score-body"><tr><td colspan="9" class="py-space-sm">Hesaplanıyor…</td></tr></tbody>
+</table>
+</div>
+<p class="font-body-sm text-body-sm text-outline mt-space-sm">
+        Kanıt eşiği: en az 30 gözlem ve |t| ≥ 2. Altındaki satırlar "yetersiz veri" sayılır.
+        Getiriler düzeltilmiş kapanıştan hesaplanır; işlem maliyeti düşülmemiştir.
+      </p>
+</section>
+
+<p class="font-body-sm text-body-sm text-outline pb-space-lg">
+        Bu sayfa bilgilendirme amaçlıdır; alım-satım tavsiyesi değildir.
+        Geçmiş sonuç geleceği garanti etmez.
+      </p>
+</main>
+<script src="/static/scorecard.js?v=1"></script>
+</body>
+</html>

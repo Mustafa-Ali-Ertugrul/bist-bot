@@ -3319,6 +3319,63 @@ def create_dashboard_app(
         return response
 
     # -----------------------------------------------------------------------
+    # Faz 8a: scan scorecard (does the screen beat the market?)
+    # -----------------------------------------------------------------------
+    def _scorecard_service():
+        from bist_bot.services.scan_scorecard_service import ScanScorecardService
+
+        return ScanScorecardService(get_db().market_data, settings)
+
+    def _score_horizons(raw: str | None) -> tuple[int, ...]:
+        if not raw:
+            return (5, 20, 60)
+        values: list[int] = []
+        for part in raw.split(","):
+            try:
+                horizon = int(part.strip())
+            except ValueError:
+                continue
+            if 1 <= horizon <= 250:
+                values.append(horizon)
+        return tuple(sorted(set(values))[:4]) or (5, 20, 60)
+
+    @app.route("/api/scores")
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("20 per minute")
+    def api_scores_all():
+        since_raw = request.args.get("since")
+        since = None
+        if since_raw:
+            try:
+                since = date.fromisoformat(since_raw)
+            except ValueError:
+                return jsonify({"status": "error", "message": "Geçersiz tarih."}), 400
+        payload = _scorecard_service().all_scorecards(
+            since=since, horizons=_score_horizons(request.args.get("horizons"))
+        )
+        return jsonify({"status": "ok", "scores": payload})
+
+    @app.route("/api/scores/<scan_id>")
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("30 per minute")
+    def api_score_one(scan_id: str):
+        since_raw = request.args.get("since")
+        since = None
+        if since_raw:
+            try:
+                since = date.fromisoformat(since_raw)
+            except ValueError:
+                return jsonify({"status": "error", "message": "Geçersiz tarih."}), 400
+        payload = _scorecard_service().scorecard(
+            scan_id, since=since, horizons=_score_horizons(request.args.get("horizons"))
+        )
+        if payload is None:
+            return jsonify({"status": "error", "message": "Bilinmeyen tarama."}), 404
+        return jsonify({"status": "ok", "score": payload})
+
+    # -----------------------------------------------------------------------
     # Stitch 1:1 Pixel-Exact UI Routes (Modern Web Sitesi Yenileme)
     # -----------------------------------------------------------------------
     def _ui_auth_required(view):
@@ -3423,6 +3480,12 @@ def create_dashboard_app(
     @_stock_page_required
     def ui_alerts():
         return render_template("stitch/alerts.html")
+
+    @app.route("/ui/scorecard")
+    @_ui_auth_required
+    @_stock_page_required
+    def ui_scorecard():
+        return render_template("stitch/scorecard.html")
 
     @app.route("/ui/billing")
     @_ui_auth_required
