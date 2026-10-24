@@ -60,9 +60,9 @@ class MainActivity : AppCompatActivity() {
         configureWebView(binding.webView)
         configureBottomNavigation()
         if (baseUrl.isBlank()) {
-            showError("Sunucu adresi tanımlı değil. Settings sekmesinden girin.")
+            showError("Sunucu adresi tanımlı değil. Alarmlar sekmesine basılı tutarak girin.")
         } else {
-            binding.webView.loadUrl(url(PAGE_DASHBOARD))
+            binding.webView.loadUrl(url(PAGE_SCREENER))
         }
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
@@ -118,19 +118,23 @@ class MainActivity : AppCompatActivity() {
     private fun url(page: String): String = "$baseUrl$page"
 
     private fun configureBottomNavigation() {
-        binding.navDashboard.setOnClickListener { open(PAGE_DASHBOARD) }
-        binding.navSignals.setOnClickListener { open(PAGE_SIGNALS) }
-        binding.navAnalysis.setOnClickListener { open(PAGE_ANALYSIS) }
+        binding.navDashboard.setOnClickListener { open(PAGE_SCREENER) }
+        binding.navSignals.setOnClickListener { open(PAGE_WATCHLIST) }
+        binding.navAnalysis.setOnClickListener { open(PAGE_PORTFOLIO) }
         binding.navSettings.setOnClickListener { openSettings() }
-        updateBottomNavigation(url(PAGE_DASHBOARD))
+        binding.navSettings.setOnLongClickListener {
+            showSettingsPanel()
+            true
+        }
+        updateBottomNavigation(url(PAGE_SCREENER))
     }
 
-    /** Server settings page first; the connection panel only if the URL is unusable. */
+    /** Alerts page first; connection panel if URL is blank or on long-press. */
     private fun openSettings() {
         if (baseUrl.isBlank()) {
             showSettingsPanel()
         } else {
-            open(PAGE_SETTINGS)
+            open(PAGE_ALERTS)
         }
     }
 
@@ -168,7 +172,7 @@ class MainActivity : AppCompatActivity() {
                 if (v.startsWith("https://") || v.startsWith("http://")) {
                     saveBaseUrl(v)
                     toast("Kaydedildi")
-                    binding.webView.loadUrl(url(PAGE_DASHBOARD))
+                    binding.webView.loadUrl(url(PAGE_SCREENER))
                 } else {
                     toast("Adres https:// ile başlamalı")
                 }
@@ -176,7 +180,7 @@ class MainActivity : AppCompatActivity() {
             .setNeutralButton("Varsayılan") { _, _ ->
                 resetBaseUrl()
                 toast("Varsayılan adres geri alındı")
-                binding.webView.loadUrl(url(PAGE_DASHBOARD))
+                binding.webView.loadUrl(url(PAGE_SCREENER))
             }
             .setNegativeButton("İptal", null)
             .create()
@@ -186,10 +190,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateBottomNavigation(current: String) {
         val items = mapOf(
-            binding.navDashboard to PAGE_DASHBOARD,
-            binding.navSignals to PAGE_SIGNALS,
-            binding.navAnalysis to PAGE_ANALYSIS,
-            binding.navSettings to PAGE_SETTINGS
+            binding.navDashboard to PAGE_SCREENER,
+            binding.navSignals to PAGE_WATCHLIST,
+            binding.navAnalysis to PAGE_PORTFOLIO,
+            binding.navSettings to PAGE_ALERTS
         )
         items.forEach { (item, page) ->
             setBottomNavigationItemState(item, current.contains(page))
@@ -226,9 +230,9 @@ class MainActivity : AppCompatActivity() {
         /** Overridable at build time: ./gradlew -PBIST_BOT_BASE_URL=... */
         private const val DEFAULT_BASE_URL = BuildConfig.BASE_URL
 
-        private const val PAGE_DASHBOARD = "/ui/dashboard"
-        private const val PAGE_SIGNALS = "/ui/signals"
-        private const val PAGE_ANALYSIS = "/ui/analysis"
-        private const val PAGE_SETTINGS = "/ui/settings"
+        private const val PAGE_SCREENER = "/ui/screener"
+        private const val PAGE_WATCHLIST = "/ui/watchlist"
+        private const val PAGE_PORTFOLIO = "/ui/portfolio"
+        private const val PAGE_ALERTS = "/ui/alerts"
     }
 }

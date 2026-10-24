@@ -241,3 +241,29 @@ def test_stitch_static_assets_served(app: Flask) -> None:
         css = client.get("/static/tailwind.css")
         assert css.status_code == 200
         assert len(css.data) > 1000
+
+
+def test_product_pages_use_product_navigation_and_responsive_css(app: Flask) -> None:
+    """Faz C: product pages link to product views (not admin /ui/dashboard) and include mobile CSS."""
+    with app.test_client() as client:
+        _register_and_login(client, "fazc@bistbot.local", "Str0ng-test-pass!")
+        _promote_to_admin(app, "fazc@bistbot.local")
+        for route in (
+            "/ui/screener",
+            "/ui/stock/THYAO",
+            "/ui/watchlist",
+            "/ui/portfolio",
+            "/ui/alerts",
+            "/ui/scorecard",
+        ):
+            resp = client.get(route)
+            assert resp.status_code == 200
+            html = resp.get_data(as_text=True)
+            assert 'href="/ui/dashboard"' not in html
+            assert 'name="viewport"' in html
+
+        stock_css = client.get("/static/stock.css").get_data(as_text=True)
+        screener_css = client.get("/static/screener.css").get_data(as_text=True)
+        assert "max-width: 640px" in stock_css
+        assert "max-width: 640px" in screener_css
+

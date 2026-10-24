@@ -72,7 +72,9 @@
 }
 
 .stock-search {
-  min-width: 240px;
+  flex: 1 1 180px;
+  min-width: 0;
+  max-width: 260px;
   padding: 0.5rem 0.75rem;
   border-radius: 0.5rem;
   border: 1px solid rgba(255, 255, 255, 0.14);
@@ -107,6 +109,20 @@
 
 @media (max-width: 640px) {
   .stock-chart {
-    height: 300px;
+    height: 280px;
+  }
+
+  .stock-grid {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  }
+
+  .stock-search {
+    flex-basis: 100%;
+    max-width: 100%;
+  }
+
+  .stock-kv-row {
+    flex-wrap: wrap;
+    gap: 0.35rem 0.75rem;
   }
 }

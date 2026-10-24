@@ -28,25 +28,25 @@
             android:id="@+id/navDashboard"
             style="@style/BistBotBottomNavItem"
             android:drawableTop="@drawable/ic_nav_dashboard"
-            android:text="Dashboard" />
+            android:text="Tarayıcı" />
 
         <TextView
             android:id="@+id/navSignals"
             style="@style/BistBotBottomNavItem"
             android:drawableTop="@drawable/ic_nav_signals"
-            android:text="Signals" />
+            android:text="İzleme" />
 
         <TextView
             android:id="@+id/navAnalysis"
             style="@style/BistBotBottomNavItem"
             android:drawableTop="@drawable/ic_nav_analysis"
-            android:text="Analysis" />
+            android:text="Portföy" />
 
         <TextView
             android:id="@+id/navSettings"
             style="@style/BistBotBottomNavItem"
             android:drawableTop="@drawable/ic_nav_settings"
-            android:text="Settings" />
+            android:text="Alarmlar" />
     </LinearLayout>
 
 </LinearLayout>

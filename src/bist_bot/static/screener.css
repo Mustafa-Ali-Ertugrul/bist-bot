@@ -115,3 +115,25 @@
     grid-template-columns: 1fr;
   }
 }
+
+@media (max-width: 640px) {
+  .screen-list {
+    flex-direction: row;
+    overflow-x: auto;
+    padding-bottom: 0.25rem;
+    gap: 0.4rem;
+  }
+
+  .screen-list li {
+    flex: 0 0 auto;
+  }
+
+  .screen-list button {
+    white-space: nowrap;
+  }
+
+  .screen-condition .screen-control {
+    flex: 1 1 130px;
+    min-width: 0;
+  }
+}
