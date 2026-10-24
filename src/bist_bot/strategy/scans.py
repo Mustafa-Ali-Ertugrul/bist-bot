@@ -51,6 +51,7 @@ class FundamentalContext:
 
     statements: dict[str, dict[str, float]]
     market_cap_tl: float | None
+    dividend_yield_pct: float | None = None
 
     def annual_net_profit(self, as_of: date) -> tuple[int, float] | None:
         """Latest December net profit (``3Z``) whose statement is public by ``as_of``."""
@@ -251,6 +252,19 @@ def scan_sales_growth(
     )
 
 
+def scan_dividend_yield(
+    _bars: Sequence[DailyBar], _as_of: date, ctx: FundamentalContext
+) -> ScanHit | None:
+    """Gross trailing-12-month cash dividend yield of at least 4%."""
+    yield_pct = ctx.dividend_yield_pct
+    if yield_pct is None or yield_pct < 4.0:
+        return None
+    return ScanHit(
+        value=round(float(yield_pct), 2),
+        detail=f"Son 12 ay brüt nakit temettü verimi %{yield_pct:.2f}",
+    )
+
+
 # ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------
@@ -312,6 +326,13 @@ SCANS: tuple[ScanDefinition, ...] = (
         "fundamental",
         scan_sales_growth,
     ),
+    ScanDefinition(
+        "temettu_verimi",
+        "Temettü Verimi",
+        "Son 12 ay brüt nakit temettü verimi en az %4 olanlar.",
+        "temettu",
+        scan_dividend_yield,
+    ),
 )
 
 SCANS_BY_CODE: dict[str, ScanDefinition] = {scan.code: scan for scan in SCANS}
@@ -333,6 +354,7 @@ __all__ = [
     "scan_52w_high",
     "scan_bollinger_squeeze",
     "scan_cheap_profitable",
+    "scan_dividend_yield",
     "scan_rsi_dip",
     "scan_sales_growth",
     "scan_sma_5_22",

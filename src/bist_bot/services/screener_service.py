@@ -44,6 +44,7 @@ FIELDS: tuple[Field, ...] = (
     Field("net_margin_pct", "Net kâr marjı", "pct"),
     Field("roe_pct", "Özkaynak kârlılığı", "pct"),
     Field("sales_growth_yoy_pct", "Satış büyümesi (yıllık)", "pct"),
+    Field("dividend_yield_pct", "Temettü verimi (12 ay)", "pct"),
 )
 FIELDS_BY_CODE = {field.code: field for field in FIELDS}
 SORTABLE = tuple(field.code for field in FIELDS)

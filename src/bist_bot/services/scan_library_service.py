@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from bist_bot.app_logging import get_logger
@@ -66,12 +66,13 @@ class ScanLibraryService:
 
         enabled_fundamental = bool(getattr(self.settings, "SCREEN_FUNDAMENTAL_SCANS_ENABLED", True))
         screens: list[ScanDefinition] = [
-            scan for scan in SCANS if scan.kind == "technical" or enabled_fundamental
+            scan for scan in SCANS if scan.kind in {"technical", "temettu"} or enabled_fundamental
         ]
         bar_limit = max(40, int(getattr(self.settings, "SCREEN_SCANS_BARS_LIMIT", 400)))
 
         instruments = self.repository.list_active_instruments()
         statements = self.repository.get_all_statements() if enabled_fundamental else {}
+        dividends = self.repository.dividend_sums(since=target - timedelta(days=365))
         report.symbols = len(instruments)
 
         results: dict[str, list[tuple[str, float, str]]] = {scan.code: [] for scan in screens}
@@ -84,12 +85,18 @@ class ScanLibraryService:
             )
             if not bars:
                 continue
-            row = snapshot_row(instrument.ticker, bars, statements.get(instrument.ticker, {}))
+            row = snapshot_row(
+                instrument.ticker,
+                bars,
+                statements.get(instrument.ticker, {}),
+                dividend_per_share=dividends.get(instrument.ticker),
+            )
             if row is not None:
                 snapshots.append(row)
             context = FundamentalContext(
                 statements=statements.get(instrument.ticker, {}),
                 market_cap_tl=bars[-1].market_cap_tl,
+                dividend_yield_pct=row.get("dividend_yield_pct") if row else None,
             )
             for scan in screens:
                 try:

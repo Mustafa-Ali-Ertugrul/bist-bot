@@ -49,6 +49,7 @@ class MarketScheduler:
         daily_bars=None,
         screen_scans=None,
         alerts=None,
+        kap_sync=None,
     ):
         self.scanner = scan_service
         self.notifier = notifier
@@ -60,6 +61,7 @@ class MarketScheduler:
         self.daily_bars = daily_bars
         self.screen_scans = screen_scans
         self.alerts = alerts
+        self.kap_sync = kap_sync
         self.running = False
         # Faz 3 P1.1: post-close position pass fires once per trading day.
         self._eod_close_done_date: date | None = None
@@ -184,6 +186,15 @@ class MarketScheduler:
 
     def _run_screens(self, now: datetime) -> None:
         """Faz 2 screens, isolated from the data sync and the EOD pass."""
+        if self.kap_sync is not None:
+            try:
+                self.kap_sync.run_if_due(now)
+            except Exception as exc:
+                logger.error(
+                    "scheduler_kap_sync_failed",
+                    error_type=type(exc).__name__,
+                    error=str(exc),
+                )
         if self.screen_scans is None:
             return
         try:

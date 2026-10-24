@@ -517,6 +517,7 @@ class ScreenSnapshotRecord(Base):
     net_margin_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     roe_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     sales_growth_yoy_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    dividend_yield_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     fundamentals_period: Mapped[str | None] = mapped_column(String, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=lambda: datetime.now(UTC)
@@ -533,9 +534,7 @@ class UserWatchlistRecord(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
-    )
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     name: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=lambda: datetime.now(UTC)
@@ -569,9 +568,7 @@ class UserPortfolioRecord(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
-    )
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     name: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=lambda: datetime.now(UTC)
@@ -616,6 +613,59 @@ class BenchmarkBarRecord(Base):
     )
 
 
+class KapDisclosureRecord(Base):
+    """Faz A1: one KAP disclosure, keyed by KAP's own ``disclosureIndex``.
+
+    ``ticker`` is nullable on purpose: KAP publishes the company legal name, so a
+    row that cannot be matched to a listed symbol is still stored (and reported),
+    never guessed onto a symbol.
+    """
+
+    __tablename__ = "kap_disclosures"
+    __table_args__ = (
+        Index("ix_kap_disclosures_ticker_date", "ticker", "published_date"),
+        Index("ix_kap_disclosures_published_date", "published_date"),
+    )
+
+    disclosure_index: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    ticker: Mapped[str | None] = mapped_column(String, nullable=True)
+    company_title: Mapped[str] = mapped_column(String, nullable=False, default="")
+    subject: Mapped[str] = mapped_column(String, nullable=False, default="")
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    disclosure_class: Mapped[str | None] = mapped_column(String, nullable=True)
+    published_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    published_date: Mapped[date] = mapped_column(Date, nullable=False)
+    url: Mapped[str] = mapped_column(String, nullable=False, default="")
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+
+class CorporateActionRecord(Base):
+    """Faz A2: dividend / bonus / rights issue, one row per symbol and ex-date."""
+
+    __tablename__ = "corporate_actions"
+    __table_args__ = (
+        UniqueConstraint("ticker", "action_date", "kind", name="uq_corporate_actions"),
+        Index("ix_corporate_actions_ticker_date", "ticker", "action_date"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    ticker: Mapped[str] = mapped_column(String, nullable=False)
+    action_date: Mapped[date] = mapped_column(Date, nullable=False)
+    kind: Mapped[str] = mapped_column(String, nullable=False)
+    cash_per_share_tl: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cash_ratio_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    bonus_ratio_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    rights_ratio_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    rights_amount_tl: Mapped[float | None] = mapped_column(Float, nullable=True)
+    post_capital_tl: Mapped[float | None] = mapped_column(Float, nullable=True)
+    source: Mapped[str] = mapped_column(String, nullable=False, default="isyatirim")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+
 class UserTelegramLinkRecord(Base):
     """Verified Telegram chat for a user (Faz 6). Personal data: delete on unlink."""
 
@@ -638,9 +688,7 @@ class UserTelegramLinkTokenRecord(Base):
     __tablename__ = "user_telegram_link_tokens"
 
     token_hash: Mapped[str] = mapped_column(String, primary_key=True)
-    user_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
-    )
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -653,9 +701,7 @@ class UserAlertRecord(Base):
     __table_args__ = (Index("ix_user_alerts_user_id", "user_id"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
-    )
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     kind: Mapped[str] = mapped_column(String, nullable=False)  # screen | price | change
     target: Mapped[str] = mapped_column(String, nullable=False)  # scan_id or ticker
     op: Mapped[str | None] = mapped_column(String, nullable=True)  # above | below
@@ -669,14 +715,10 @@ class UserAlertRecord(Base):
 
 class UserSavedScreenRecord(Base):
     __tablename__ = "user_saved_screens"
-    __table_args__ = (
-        UniqueConstraint("user_id", "name", name="uq_user_saved_screens_user_name"),
-    )
+    __table_args__ = (UniqueConstraint("user_id", "name", name="uq_user_saved_screens_user_name"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
-    )
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     name: Mapped[str] = mapped_column(String, nullable=False)
     payload: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     created_at: Mapped[datetime] = mapped_column(

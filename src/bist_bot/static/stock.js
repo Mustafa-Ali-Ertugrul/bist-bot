@@ -333,6 +333,55 @@
     });
   }
 
+  // ------------------------------------------------------------------ actions
+  function renderActions(payload) {
+    var body = document.getElementById('actions-body');
+    var summary = document.getElementById('actions-summary');
+    var rows = (payload && payload.actions) || [];
+    var trailing = (payload && payload.trailing_dividend) || null;
+    if (summary) {
+      if (trailing && trailing.cash_per_share_tl) {
+        summary.textContent = 'Son 12 ay brüt nakit temettü: ' + num(trailing.cash_per_share_tl, 4) +
+          ' TL/hisse' + (trailing.yield_pct === null ? '' : ' · verim %' + num(trailing.yield_pct, 2));
+      } else {
+        summary.textContent = 'Son 12 ayda nakit temettü kaydı yok.';
+      }
+    }
+    if (!body) return;
+    if (!rows.length) {
+      body.innerHTML = '<tr><td colspan="6" class="py-space-sm text-outline">Kayıt yok.</td></tr>';
+      return;
+    }
+    body.innerHTML = rows.map(function (row) {
+      return '<tr class="border-b border-surface-container-high/30">' +
+        '<td class="py-space-3xs">' + escapeHtml(row.action_date) + '</td>' +
+        '<td class="py-space-3xs">' + escapeHtml(row.kind_label || row.kind) + '</td>' +
+        '<td class="py-space-3xs text-right">' + (row.cash_per_share_tl ? num(row.cash_per_share_tl, 4) : '—') + '</td>' +
+        '<td class="py-space-3xs text-right">' + (row.cash_ratio_pct ? '%' + num(row.cash_ratio_pct, 2) : '—') + '</td>' +
+        '<td class="py-space-3xs text-right">' + (row.bonus_ratio_pct ? '%' + num(row.bonus_ratio_pct, 2) : '—') + '</td>' +
+        '<td class="py-space-3xs text-right">' + (row.rights_ratio_pct ? '%' + num(row.rights_ratio_pct, 2) : '—') + '</td>' +
+        '</tr>';
+    }).join('');
+  }
+
+  // ---------------------------------------------------------------------- KAP
+  function renderKap(rows) {
+    var list = document.getElementById('kap-list');
+    if (!list) return;
+    if (!rows || !rows.length) {
+      list.innerHTML = '<li>Bu hisse için kayıtlı KAP bildirimi yok. Liste günlük toplanır.</li>';
+      return;
+    }
+    list.innerHTML = rows.slice(0, 20).map(function (row) {
+      var date = (row.published_date || '').split('-');
+      var shown = date.length === 3 ? date[2] + '.' + date[1] + '.' + date[0] : (row.published_date || '');
+      return '<li class="py-space-3xs border-b border-surface-container-high/30">' +
+        '<span class="text-outline">' + escapeHtml(shown) + '</span> · ' +
+        '<a class="text-primary" target="_blank" rel="noopener noreferrer" href="' +
+        escapeHtml(row.url) + '">' + escapeHtml(row.subject || 'Bildirim') + '</a></li>';
+    }).join('');
+  }
+
   function boot() {
     if (!code) return;
     wireRanges();
@@ -348,6 +397,18 @@
     api('/api/stocks/' + encodeURIComponent(code) + '/scans').then(function (data) {
       renderScans(data.scans);
     }).catch(function () { /* keep the empty state */ });
+    api('/api/stocks/' + encodeURIComponent(code) + '/corporate-actions').then(function (data) {
+      renderActions(data);
+    }).catch(function () {
+      var summary = document.getElementById('actions-summary');
+      if (summary) summary.textContent = 'Temettü verisi yüklenemedi.';
+    });
+    api('/api/stocks/' + encodeURIComponent(code) + '/kap').then(function (data) {
+      renderKap(data.disclosures);
+    }).catch(function () {
+      var list = document.getElementById('kap-list');
+      if (list) list.innerHTML = '<li>KAP bildirimleri yüklenemedi.</li>';
+    });
     loadBars('1y').catch(function () {
       var note = document.getElementById('chart-note');
       if (note) note.textContent = 'Bu hisse için grafik verisi henüz yüklenmedi.';

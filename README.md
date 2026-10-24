@@ -364,6 +364,39 @@ Açıldığında worker, seans kapanışından sonra günde bir kez yalnızca ek
 - Veri yoksa tarama "kayıtlı sonuç yok" olarak listelenir; uydurma sayı üretilmez.
 - Yeni veri biriktikçe karne kendiliğinden güncellenir; ayrı bir job gerekmez.
 
+## KAP Bildirimleri ve Temettü (Faz A)
+
+Hisse sayfası artık "şirkette ne oldu"yu da gösterir.
+
+**KAP akışı**
+- Kaynak: `https://www.kap.org.tr/tr/api/disclosure/list/light` (anahtarsız). Liste yalnızca **güncel günü** verir; geçmiş listelenen bir uç nokta yok. Bu yüzden veri günlük birikir, geçmiş uydurulmaz.
+- KAP şirketin **hukuki unvanını** verir, sembolü vermez. Eşleştirme sırası: kayıtlı unvan→sembol haritası → normalize edilmiş tam ad (hukuki ekler atılır) → içerme kuralı (tek aday) → **KAP detay sayfasındaki `stockCode`**.
+- Eşleşmeyen satır `ticker = NULL` olarak saklanır (ör. "KAP TEST A.Ş.", BISTECH devre kesici duyuruları). Tahmin edilmez.
+- Tablo `kap_disclosures` (PK: KAP'ın kendi `disclosureIndex` değeri). Migration `0015_kap_actions`.
+- API: `GET /api/stocks/<kod>/kap?limit=`.
+- Detay sayfası çağrısı pahalıdır (~350 KB); `KAP_DETAIL_LOOKUP_LIMIT` (varsayılan 50) ile sınırlanır ve çözülen unvan bir daha çağrılmaz.
+
+**Temettü ve sermaye artırımı**
+- Kaynak: İş Yatırım "Temel Değerler" sayfasındaki bölünme/temettü tablosu; **yalnızca cari yılı** kapsar.
+- Tablo `corporate_actions`: `temettu` / `bedelsiz` / `bedelli`, (ticker, tarih, tür) tekil.
+- Ham HTML hücreleri `lxml` ile okunur: `pandas.read_html` tarih sütununa da binlik/ondalık ayıracı uygulayıp `14.01.2026` → `14012026` yapıyor ve `converters` HTML tablolarında yok sayılıyor. Bu yüzden `0,8333` değeri 0.8333 kalır.
+- `dividend_yield_pct` artık `screen_snapshots` içinde: son 12 ay brüt nakit temettü / son kapanış.
+- Yeni hazır tarama: **`temettu_verimi`** (verim ≥ %4). Tarayıcıda alan olarak da seçilebilir.
+- Hisse sayfasında temettü tablosu + son 12 ay verimi, KAP bildirim listesi ve KAP bağlantıları.
+- API: `GET /api/stocks/<kod>/corporate-actions`.
+
+**Günlük iş**
+```bash
+python scripts/sync_kap_and_actions.py            # KAP + temettü
+python scripts/sync_kap_and_actions.py --kap-only
+```
+Worker içinde: `KAP_SYNC_ENABLED=true` olduğunda `KapSyncJob` her işlem günü `KAP_SYNC_HOUR_TR` (varsayılan 18:00 TR) sonrasında bir kez çalışır ve **tarama job'undan önce** temettü verimini tazeler.
+
+**Dürüst sınırlar**
+- KAP geçmişi bu kaynakla doldurulamaz; özellik yayına alındığı günden itibaren birikir.
+- Temettü tablosu cari yılla sınırlı; geçmiş yıllar için ayrı bir kaynak gerekir.
+- Verim brüttür; stopaj ve işlem maliyeti düşülmemiştir. Yatırım tavsiyesi değildir.
+
 ## Historical Universe
 
 - Point-in-time universe snapshot'lari `src/bist_bot/data/universe/` altinda JSON olarak tutulur.

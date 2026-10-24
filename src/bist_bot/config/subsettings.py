@@ -407,6 +407,13 @@ class DataSettings:
     STOCK_BARS_MAX: int = _get_int_env("STOCK_BARS_MAX", 2700)
     # Faz 4: non-paying members see only this many screener rows (server-side).
     SCREENER_FREE_LIMIT: int = _get_int_env("SCREENER_FREE_LIMIT", 5)
+    # --- Faz A: KAP disclosures and corporate actions ----------------------
+    # The anonymous KAP list endpoint is used for the current day only; history
+    # accumulates from daily runs. Keep the detail lookup small: each detail page
+    # is ~350 KB and only unresolved company titles need one.
+    KAP_DETAIL_LOOKUP_LIMIT: int = _get_int_env("KAP_DETAIL_LOOKUP_LIMIT", 50)
+    KAP_SYNC_ENABLED: bool = _get_bool_env("KAP_SYNC_ENABLED", False)
+    KAP_SYNC_HOUR_TR: int = _get_int_env("KAP_SYNC_HOUR_TR", 18)
     # --- Faz 5: personal portfolio benchmarks ---
     # XU100 is read from the index column of this liquid symbol's daily rows.
     BENCHMARK_PROXY_TICKER: str = _get_str_env("BENCHMARK_PROXY_TICKER", "THYAO")

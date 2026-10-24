@@ -10,8 +10,9 @@ from __future__ import annotations
 import io
 import re
 import time
-from datetime import date
+from datetime import date, datetime
 
+import lxml.html as lxml_html
 import pandas as pd
 import requests
 
@@ -205,12 +206,175 @@ def fetch_statements(
     return out
 
 
+def _tr_number(raw: object) -> float | None:
+    """Parse a Turkish-formatted number (``1.234,56``) from a raw HTML cell."""
+    if raw is None:
+        return None
+    text = str(raw).strip().replace(" ", "").replace("\u00a0", "")
+    if not text or text.lower() in {"nan", "none", "-"}:
+        return None
+    if "," in text:
+        text = text.replace(".", "").replace(",", ".")
+    else:
+        text = text.replace(".", "") if text.count(".") > 1 else text
+    try:
+        return float(text)
+    except ValueError:
+        return None
+
+
+def _tr_date(raw: object) -> date | None:
+    if not isinstance(raw, str):
+        return None
+    try:
+        return datetime.strptime(raw.strip(), "%d.%m.%Y").date()
+    except ValueError:
+        return None
+
+
+ACTION_FIELD_NAMES = (
+    "Kod",
+    "Tarih",
+    "Bölünme Sonrası Sermaye (TL)",
+    "Bedelli Oran (%)",
+    "Bedelli Nom. Tutar (TL)",
+    "Bedelsiz IK Oran (%)",
+    "Nakit Tem.Brüt (%)",
+    "Hisse Başı Brüt (TL)",
+)
+
+
+def _cell_texts(row) -> list[str]:
+    """Cell text with element boundaries kept as spaces.
+
+    The vendor splits labels into several elements (``Kapanış`` + ``(TL)``), so
+    ``text_content()`` alone yields ``Kapanış(TL)`` and no header would match.
+    """
+    return [" ".join(" ".join(cell.itertext()).split()) for cell in row.xpath("./td|./th")]
+
+
+def _field_key(name: str) -> str:
+    """Whitespace-free ASCII upper-case key so ``İK`` and ``IK`` compare equal."""
+    text = (
+        name.replace("İ", "I")
+        .replace("ı", "i")
+        .replace("Ş", "S")
+        .replace("ş", "s")
+        .replace("Ğ", "G")
+        .replace("ğ", "g")
+        .replace("Ü", "U")
+        .replace("ü", "u")
+        .replace("Ö", "O")
+        .replace("ö", "o")
+        .replace("Ç", "C")
+        .replace("ç", "c")
+    )
+    return "".join(text.split()).upper()
+
+
+def parse_corporate_action_rows(html_text: str) -> list[dict[str, str]]:
+    """Raw cell values of the "Bölünme / Temettü" table, keyed by header name.
+
+    lxml is used instead of ``pandas.read_html`` because pandas applies the
+    locale separators to the *date* column too (``14.01.2026`` -> 14012026) and
+    its ``converters`` argument is ignored for HTML tables. Reading the raw cells
+    keeps ``0,8333`` at 0.8333 instead of 8333.
+    """
+    try:
+        document = lxml_html.fromstring(html_text)
+    except (ValueError, lxml_html.etree.ParserError):
+        return []
+
+    canonical = {_field_key(name): name for name in ACTION_FIELD_NAMES}
+    wanted = _field_key("Bedelsiz IK Oran (%)")
+    for row in document.iter("tr"):
+        header = _cell_texts(row)
+        if wanted not in {_field_key(name) for name in header}:
+            continue
+        tables = row.xpath("ancestor::table[1]")
+        if not tables:
+            continue
+        index = {
+            canonical[key]: position
+            for position, name in enumerate(header)
+            if (key := _field_key(name)) in canonical
+        }
+        if "Kod" not in index or "Tarih" not in index:
+            continue
+        out: list[dict[str, str]] = []
+        started = False
+        for body_row in tables[0].xpath(".//tr"):
+            if body_row is row:
+                started = True
+                continue
+            if not started:
+                continue
+            cells = _cell_texts(body_row)
+            if len(cells) != len(header) or cells == header:
+                continue
+            if not cells[index["Kod"]]:
+                continue
+            out.append({name: cells[position] for name, position in index.items()})
+        return out
+    return []
+
+
+def fetch_corporate_actions(
+    session: requests.Session, timeout: int = 60
+) -> list[dict[str, object]]:
+    """Dividends, bonus issues and rights issues from the public ratios table.
+
+    The vendor table holds the current year only. Returns an empty list on
+    failure so the caller keeps stored rows.
+    """
+    try:
+        response = session.get(UNIVERSE_URL, headers=HEADERS, timeout=timeout)
+        response.raise_for_status()
+    except requests.RequestException:
+        return []
+
+    out: dict[tuple[str, date, str], dict[str, object]] = {}
+    for row in parse_corporate_action_rows(response.text):
+        code = str(row.get("Kod", "") or "").strip().upper()
+        action_date = _tr_date(row.get("Tarih"))
+        if not CODE_RE.fullmatch(code) or action_date is None:
+            continue
+        ticker = f"{code}.IS"
+        cash_per_share = _tr_number(row.get("Hisse Başı Brüt (TL)"))
+        cash_ratio = _tr_number(row.get("Nakit Tem.Brüt (%)"))
+        bonus_ratio = _tr_number(row.get("Bedelsiz IK Oran (%)"))
+        rights_ratio = _tr_number(row.get("Bedelli Oran (%)"))
+        rights_amount = _tr_number(row.get("Bedelli Nom. Tutar (TL)"))
+        post_capital = _tr_number(row.get("Bölünme Sonrası Sermaye (TL)"))
+        common: dict[str, object] = {
+            "ticker": ticker,
+            "action_date": action_date,
+            "cash_per_share_tl": cash_per_share or None,
+            "cash_ratio_pct": cash_ratio or None,
+            "bonus_ratio_pct": bonus_ratio or None,
+            "rights_ratio_pct": rights_ratio or None,
+            "rights_amount_tl": rights_amount or None,
+            "post_capital_tl": post_capital or None,
+            "source": "isyatirim",
+        }
+        for kind, present in (
+            ("temettu", cash_per_share and cash_per_share > 0),
+            ("bedelsiz", bonus_ratio and bonus_ratio > 0),
+            ("bedelli", rights_ratio and rights_ratio > 0),
+        ):
+            if present:
+                out[(ticker, action_date, kind)] = {**common, "kind": kind}
+    return sorted(out.values(), key=lambda item: (str(item["ticker"]), item["action_date"]))
+
+
 __all__ = [
     "DAILY_COLUMNS",
+    "fetch_corporate_actions",
     "fetch_daily",
     "fetch_index_daily",
     "fetch_statements",
     "fetch_universe",
+    "parse_corporate_action_rows",
     "published_quarters",
     "statement_available_from",
 ]

@@ -55,6 +55,16 @@ def main():
         from bist_bot.services.scan_library_service import ScanLibraryService
 
         screen_scans = ScanLibraryService(container.db.market_data, settings)
+    kap_sync = None
+    if settings.KAP_SYNC_ENABLED:
+        from bist_bot.services.corporate_actions_service import CorporateActionsService
+        from bist_bot.services.kap_service import KapService, KapSyncJob
+
+        kap_sync = KapSyncJob(
+            KapService(container.db.market_data, settings),
+            CorporateActionsService(container.db.market_data, settings),
+            settings,
+        )
     alerts = None
     user_bot_token = settings.TELEGRAM_USER_BOT_TOKEN or settings.TELEGRAM_BOT_TOKEN
     if settings.USER_DIGEST_ENABLED:
@@ -89,6 +99,7 @@ def main():
         daily_bars=daily_bars,
         screen_scans=screen_scans,
         alerts=alerts,
+        kap_sync=kap_sync,
     )
     order_tracker = OrderTracker(container.broker, container.db)
 

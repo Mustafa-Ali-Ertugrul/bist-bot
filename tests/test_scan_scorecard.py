@@ -19,6 +19,7 @@ from bist_bot.db.repositories.market_data_repository import (
     MarketDataRepository,
 )
 from bist_bot.services.scan_scorecard_service import ScanScorecardService
+from bist_bot.strategy.scans import SCANS
 
 D0 = date(2026, 1, 5)
 D1 = date(2026, 1, 6)
@@ -98,8 +99,8 @@ def test_unknown_scan_and_empty_history(repo) -> None:
 
 def test_all_scorecards_covers_the_registry(repo) -> None:
     scores = ScanScorecardService(repo).all_scorecards(horizons=(1,))
-    assert len(scores) == 8
-    assert {item["scan_id"] for item in scores} >= {"rsi_dip", "ucuz_karli"}
+    assert len(scores) == len(SCANS)
+    assert {item["scan_id"] for item in scores} >= {"rsi_dip", "ucuz_karli", "temettu_verimi"}
 
 
 # ---------------------------------------------------------------------------

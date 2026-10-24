@@ -10,10 +10,12 @@ from sqlalchemy import delete, func, select
 
 from bist_bot.db.database import (
     BenchmarkBarRecord,
+    CorporateActionRecord,
     DailyBarRecord,
     DatabaseManager,
     FundamentalRecord,
     InstrumentRecord,
+    KapDisclosureRecord,
     ScanResultRecord,
     ScreenSnapshotRecord,
 )
@@ -492,6 +494,7 @@ class MarketDataRepository:
                         net_margin_pct=_as_float(row.get("net_margin_pct")),
                         roe_pct=_as_float(row.get("roe_pct")),
                         sales_growth_yoy_pct=_as_float(row.get("sales_growth_yoy_pct")),
+                        dividend_yield_pct=_as_float(row.get("dividend_yield_pct")),
                         fundamentals_period=(
                             str(row["fundamentals_period"])
                             if row.get("fundamentals_period")
@@ -540,6 +543,7 @@ class MarketDataRepository:
                     "net_margin_pct": row.net_margin_pct,
                     "roe_pct": row.roe_pct,
                     "sales_growth_yoy_pct": row.sales_growth_yoy_pct,
+                    "dividend_yield_pct": row.dividend_yield_pct,
                     "fundamentals_period": row.fundamentals_period,
                 }
                 for row in rows
@@ -649,6 +653,198 @@ class MarketDataRepository:
 
         return self.manager.run_session(_read, read_only=True)
 
+    # ------------------------------------------------------------------
+    # KAP disclosures and corporate actions (Faz A)
+    # ------------------------------------------------------------------
+    def upsert_kap_disclosures(self, rows: Iterable[dict[str, object]]) -> dict[str, int]:
+        items = list(rows)
+        if not items:
+            return {"inserted": 0, "updated": 0, "total": 0}
+
+        def _write(session):
+            now = datetime.now(UTC)
+            inserted = updated = 0
+            for item in items:
+                index = int(item["disclosure_index"])  # type: ignore[arg-type]
+                record = session.get(KapDisclosureRecord, index)
+                if record is None:
+                    session.add(
+                        KapDisclosureRecord(
+                            disclosure_index=index,
+                            ticker=(str(item["ticker"]) if item.get("ticker") else None),
+                            company_title=str(item.get("company_title") or ""),
+                            subject=str(item.get("subject") or ""),
+                            summary=(str(item["summary"]) if item.get("summary") else None),
+                            disclosure_class=(
+                                str(item["disclosure_class"])
+                                if item.get("disclosure_class")
+                                else None
+                            ),
+                            published_at=item["published_at"],  # type: ignore[arg-type]
+                            published_date=item["published_date"],  # type: ignore[arg-type]
+                            url=str(item.get("url") or ""),
+                            fetched_at=now,
+                        )
+                    )
+                    inserted += 1
+                else:
+                    record.subject = str(item.get("subject") or record.subject)
+                    record.company_title = str(item.get("company_title") or record.company_title)
+                    summary = item.get("summary")
+                    if summary:
+                        record.summary = str(summary)
+                    # A later detail lookup may fill a missing symbol; never erase one.
+                    if item.get("ticker") and not record.ticker:
+                        record.ticker = str(item["ticker"])
+                    if item.get("disclosure_class"):
+                        record.disclosure_class = str(item["disclosure_class"])
+                    record.fetched_at = now
+                    updated += 1
+            return {"inserted": inserted, "updated": updated, "total": len(items)}
+
+        return dict(self.manager.run_session(_write))
+
+    def list_kap_disclosures(
+        self,
+        ticker: str,
+        *,
+        limit: int = 20,
+        since: date | None = None,
+    ) -> list[dict[str, object]]:
+        def _read(session):
+            stmt = select(KapDisclosureRecord).where(KapDisclosureRecord.ticker == ticker)
+            if since is not None:
+                stmt = stmt.where(KapDisclosureRecord.published_date >= since)
+            rows = session.scalars(
+                stmt.order_by(
+                    KapDisclosureRecord.published_at.desc(),
+                    KapDisclosureRecord.disclosure_index.desc(),
+                ).limit(max(1, min(limit, 100)))
+            ).all()
+            return [
+                {
+                    "disclosure_index": row.disclosure_index,
+                    "ticker": row.ticker,
+                    "company_title": row.company_title,
+                    "subject": row.subject,
+                    "summary": row.summary,
+                    "published_at": row.published_at.isoformat(),
+                    "published_date": row.published_date.isoformat(),
+                    "url": row.url,
+                }
+                for row in rows
+            ]
+
+        return list(self.manager.run_session(_read, read_only=True))
+
+    def kap_title_map(self) -> dict[str, str]:
+        """Company title -> ticker for rows a previous run already resolved."""
+
+        def _read(session):
+            rows = session.execute(
+                select(KapDisclosureRecord.company_title, KapDisclosureRecord.ticker)
+                .where(KapDisclosureRecord.ticker.is_not(None))
+                .distinct()
+            ).all()
+            return {str(title): str(ticker) for title, ticker in rows if title and ticker}
+
+        return dict(self.manager.run_session(_read, read_only=True))
+
+    def latest_kap_date(self) -> date | None:
+        def _read(session):
+            return session.scalar(
+                select(KapDisclosureRecord.published_date)
+                .order_by(KapDisclosureRecord.published_date.desc())
+                .limit(1)
+            )
+
+        return self.manager.run_session(_read, read_only=True)
+
+    def upsert_corporate_actions(self, rows: Iterable[dict[str, object]]) -> int:
+        items = list(rows)
+        if not items:
+            return 0
+
+        def _write(session):
+            now = datetime.now(UTC)
+            count = 0
+            for item in items:
+                ticker = str(item["ticker"])
+                action_date = item["action_date"]
+                kind = str(item["kind"])
+                record = session.scalar(
+                    select(CorporateActionRecord).where(
+                        CorporateActionRecord.ticker == ticker,
+                        CorporateActionRecord.action_date == action_date,  # type: ignore[arg-type]
+                        CorporateActionRecord.kind == kind,
+                    )
+                )
+                if record is None:
+                    record = CorporateActionRecord(
+                        ticker=ticker,
+                        action_date=action_date,  # type: ignore[arg-type]
+                        kind=kind,
+                    )
+                    session.add(record)
+                record.cash_per_share_tl = _optional_float(item.get("cash_per_share_tl"))
+                record.cash_ratio_pct = _optional_float(item.get("cash_ratio_pct"))
+                record.bonus_ratio_pct = _optional_float(item.get("bonus_ratio_pct"))
+                record.rights_ratio_pct = _optional_float(item.get("rights_ratio_pct"))
+                record.rights_amount_tl = _optional_float(item.get("rights_amount_tl"))
+                record.post_capital_tl = _optional_float(item.get("post_capital_tl"))
+                record.source = str(item.get("source") or "isyatirim")
+                record.updated_at = now
+                count += 1
+            return count
+
+        return int(self.manager.run_session(_write))
+
+    def dividend_sums(self, *, since: date) -> dict[str, float]:
+        """Gross cash dividend per ticker since ``since`` (one query for snapshots)."""
+
+        def _read(session):
+            rows = session.execute(
+                select(
+                    CorporateActionRecord.ticker,
+                    func.sum(CorporateActionRecord.cash_per_share_tl),
+                )
+                .where(
+                    CorporateActionRecord.kind == "temettu",
+                    CorporateActionRecord.action_date >= since,
+                    CorporateActionRecord.cash_per_share_tl.is_not(None),
+                )
+                .group_by(CorporateActionRecord.ticker)
+            ).all()
+            return {str(ticker): float(total) for ticker, total in rows if total}
+
+        return dict(self.manager.run_session(_read, read_only=True))
+
+    def list_corporate_actions(
+        self, ticker: str, *, since: date | None = None
+    ) -> list[dict[str, object]]:
+        def _read(session):
+            stmt = select(CorporateActionRecord).where(CorporateActionRecord.ticker == ticker)
+            if since is not None:
+                stmt = stmt.where(CorporateActionRecord.action_date >= since)
+            rows = session.scalars(stmt.order_by(CorporateActionRecord.action_date.desc())).all()
+            return [
+                {
+                    "ticker": row.ticker,
+                    "action_date": row.action_date.isoformat(),
+                    "kind": row.kind,
+                    "cash_per_share_tl": row.cash_per_share_tl,
+                    "cash_ratio_pct": row.cash_ratio_pct,
+                    "bonus_ratio_pct": row.bonus_ratio_pct,
+                    "rights_ratio_pct": row.rights_ratio_pct,
+                    "rights_amount_tl": row.rights_amount_tl,
+                    "post_capital_tl": row.post_capital_tl,
+                    "source": row.source,
+                }
+                for row in rows
+            ]
+
+        return list(self.manager.run_session(_read, read_only=True))
+
 
 def _as_float(value: object) -> float | None:
     if value is None:
@@ -657,3 +853,7 @@ def _as_float(value: object) -> float | None:
         return float(value)  # type: ignore[arg-type]
     except (TypeError, ValueError):
         return None
+
+
+def _optional_float(value: object) -> float | None:
+    return _as_float(value)

@@ -2499,7 +2499,9 @@ def create_dashboard_app(
             # Dashboard boot piggy-backs the top-10 signals on this response
             # (reuses the recent_signals query above: zero extra DB hit) so
             # the UI can skip its second /api/signals/history round trip.
-            sorted_signals = sorted(recent_signals, key=lambda s: float(s.get("score") or 0), reverse=True)
+            sorted_signals = sorted(
+                recent_signals, key=lambda s: float(s.get("score") or 0), reverse=True
+            )
             embedded = []
             for sig in sorted_signals[:10]:
                 s = dict(sig)
@@ -2658,6 +2660,16 @@ def create_dashboard_app(
 
         return StockProfileService(get_db().market_data, settings)
 
+    def _kap_service():
+        from bist_bot.services.kap_service import KapService
+
+        return KapService(get_db().market_data, settings)
+
+    def _corporate_actions_service():
+        from bist_bot.services.corporate_actions_service import CorporateActionsService
+
+        return CorporateActionsService(get_db().market_data, settings)
+
     def _stock_access_allowed() -> bool:
         user = _get_request_user()
         if user is None:
@@ -2756,6 +2768,40 @@ def create_dashboard_app(
         if hits is None:
             return jsonify({"status": "error", "message": "Hisse bulunamadı."}), 404
         return jsonify({"status": "ok", "scans": hits})
+
+    @app.route("/api/stocks/<code>/kap")
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("60 per minute")
+    def api_stock_kap(code: str):
+        normalized = _normalize_stock_code(code)
+        if normalized is None:
+            return jsonify({"status": "error", "message": "Geçersiz hisse kodu."}), 400
+        limit = max(1, min(request.args.get("limit", 20, type=int) or 20, 100))
+        rows = _kap_service().disclosures(normalized, limit=limit)
+        if rows is None:
+            return jsonify({"status": "error", "message": "Hisse bulunamadı."}), 404
+        return jsonify({"status": "ok", "disclosures": rows})
+
+    @app.route("/api/stocks/<code>/corporate-actions")
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("60 per minute")
+    def api_stock_corporate_actions(code: str):
+        normalized = _normalize_stock_code(code)
+        if normalized is None:
+            return jsonify({"status": "error", "message": "Geçersiz hisse kodu."}), 400
+        service = _corporate_actions_service()
+        rows = service.actions(normalized)
+        if rows is None:
+            return jsonify({"status": "error", "message": "Hisse bulunamadı."}), 404
+        return jsonify(
+            {
+                "status": "ok",
+                "actions": rows,
+                "trailing_dividend": service.trailing_dividend(normalized),
+            }
+        )
 
     # -----------------------------------------------------------------------
     # Faz 4: screener (ready-made screens + custom filter). Same access gate

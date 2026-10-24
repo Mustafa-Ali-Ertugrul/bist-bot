@@ -169,6 +169,7 @@ def snapshot_row(
     ticker: str,
     bars: list[DailyBar],
     statements: dict[str, dict[str, float]],
+    dividend_per_share: float | None = None,
 ) -> dict[str, object] | None:
     """One screener row (Faz 4) from the same numbers the stock page shows."""
     if not bars:
@@ -191,6 +192,9 @@ def snapshot_row(
     roe = None
     if view.ttm_net_profit is not None and view.equity and view.equity > 0:
         roe = round(view.ttm_net_profit / view.equity * 100.0, 1)
+    dividend_yield = None
+    if dividend_per_share and dividend_per_share > 0 and latest.close > 0:
+        dividend_yield = round(dividend_per_share / latest.close * 100.0, 2)
 
     return {
         "ticker": ticker,
@@ -210,6 +214,7 @@ def snapshot_row(
         "net_margin_pct": net_margin,
         "roe_pct": roe,
         "sales_growth_yoy_pct": view.sales_growth_yoy_pct,
+        "dividend_yield_pct": dividend_yield,
         "fundamentals_period": view.latest_period,
     }
 
