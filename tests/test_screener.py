@@ -284,7 +284,76 @@ def test_member_sees_only_free_rows_when_public(app: Flask) -> None:
             body = resp.get_json()
             assert len(body["rows"]) == 3
             assert body["truncated"] is True
+            assert body["plan_truncated"] is True
+            assert body["visible_total"] == 3
             assert body["total"] == len(CODES)
+
+            # Offset cannot bypass free row cap.
+            bypass = client.get(
+                "/api/screens/rsi_dip?offset=3&limit=10",
+                headers={"Authorization": f"Bearer {token}"},
+            ).get_json()
+            assert bypass["rows"] == []
+            assert bypass["plan_truncated"] is True
+
+            partial = client.get(
+                "/api/screens/rsi_dip?offset=2&limit=10",
+                headers={"Authorization": f"Bearer {token}"},
+            ).get_json()
+            assert len(partial["rows"]) == 1
+
+
+def test_paid_pagination_does_not_flag_plan_truncation(app: Flask) -> None:
+    with app.test_client() as client:
+        token = _login(client, "admin_page@bistbot.local")
+        _promote(app, "admin_page@bistbot.local")
+        headers = {"Authorization": f"Bearer {token}"}
+        page1 = client.get("/api/screens/rsi_dip?limit=2&offset=0", headers=headers).get_json()
+        assert page1["returned"] == 2
+        assert page1["total"] == len(CODES)
+        assert page1["visible_total"] == len(CODES)
+        assert page1["truncated"] is False
+        assert page1["plan_truncated"] is False
+
+
+def test_csv_export_endpoints_and_formula_guard(app: Flask) -> None:
+    from bist_bot.services.screener_service import rows_to_csv
+
+    csv_sample = rows_to_csv(
+        [
+            {
+                "code": "THYAO",
+                "name": "=SUM(1,2)",
+                "sector": "+Danger",
+                "scan_value": 28.5,
+                "metrics": {"close": 300.0, "market_cap_tl": 414_000_000_000.0},
+            }
+        ],
+        include_scan=True,
+    )
+    assert csv_sample.startswith("\ufeff")
+    assert "'=SUM(1,2)" in csv_sample
+    assert "'+Danger" in csv_sample
+
+    with settings.override(STOCK_PAGES_PUBLIC=True, SCREENER_FREE_LIMIT=2):
+        with app.test_client() as client:
+            free_token = _login(client, "free_csv@bistbot.local")
+            free_headers = {"Authorization": f"Bearer {free_token}"}
+            screen_csv = client.get("/api/screens/rsi_dip.csv", headers=free_headers)
+            assert screen_csv.status_code == 200
+            assert "text/csv" in screen_csv.content_type
+            lines = [line for line in screen_csv.get_data(as_text=True).strip().splitlines() if line]
+            # 1 header line + at most 2 free data rows
+            assert len(lines) == 3
+
+            query_csv = client.post(
+                "/api/screener/query.csv",
+                headers=free_headers,
+                json={"conditions": [{"field": "pe_ttm", "op": "<=", "value": 10}]},
+            )
+            assert query_csv.status_code == 200
+            q_lines = [line for line in query_csv.get_data(as_text=True).strip().splitlines() if line]
+            assert len(q_lines) == 3
 
 
 def test_query_endpoint_validates_and_returns_rows(app: Flask) -> None:
@@ -316,3 +385,33 @@ def test_screener_pages_have_no_advice_language() -> None:
         assert not re.search(r"\b(AL|SAT)\b", text), path.name
         assert "Stop-Loss" not in text, path.name
         assert "Hedef:" not in text, path.name
+
+
+def test_saved_filter_ui_is_wired_end_to_end() -> None:
+    root = Path(__file__).resolve().parents[1] / "src" / "bist_bot"
+    html = (root / "templates" / "stitch" / "screener.html").read_text(encoding="utf-8")
+    for marker in ('id="saved-filter-select"', 'id="save-filter-name"', 'id="save-filter"'):
+        assert marker in html, marker
+
+    screener_js = (root / "static" / "screener.js").read_text(encoding="utf-8")
+    assert "/api/saved-screens" in screener_js
+    assert "[?&]saved=" in screener_js
+    # Repository errors reach the user verbatim through the status line.
+    assert "error.message" in screener_js
+
+    alerts_js = (root / "static" / "alerts.js").read_text(encoding="utf-8")
+    assert "/ui/screener?saved=" in alerts_js
+
+
+def test_screener_grid_contains_intrinsic_mobile_widths() -> None:
+    root = Path(__file__).resolve().parents[1] / "src" / "bist_bot"
+    css = (root / "static" / "screener.css").read_text(encoding="utf-8")
+    assert "grid-template-columns: 280px minmax(0, 1fr);" in css
+    assert re.search(r"\.screen-layout\s*>\s*\*\s*\{\s*min-width:\s*0;", css)
+    assert re.search(
+        r"@media\s*\(max-width:\s*900px\)\s*\{\s*\.screen-layout\s*\{"
+        r"\s*grid-template-columns:\s*minmax\(0,\s*1fr\);",
+        css,
+    )
+    html = (root / "templates" / "stitch" / "screener.html").read_text(encoding="utf-8")
+    assert '/static/screener.css?v=5' in html

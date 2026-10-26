@@ -246,7 +246,7 @@ def render_overview_page() -> None:
         stats_response = _cached_api_request("GET", "/api/stats")
         signals_response = _cached_api_request("GET", "/api/signals/history", params={"limit": 20})
     except Exception as exc:
-        st.warning(f"{get_message('ui.api_data_failed')}: {exc}")
+        st.warning(f"{get_message('ui.api_data_failed')}: {html.escape(str(exc))}")
         return
 
     response_payload = stats_response.json() if stats_response.ok else {}

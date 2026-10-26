@@ -174,3 +174,27 @@ def next_bist_session(after: datetime | None = None) -> datetime:
         d += timedelta(days=1)
     open_hour, _, _ = _market_hours()
     return datetime.combine(d, time(open_hour, 0), tzinfo=TR)
+
+
+def latest_completed_session_date(now: datetime | None = None) -> date:
+    """Most recent BIST trading day whose EOD window has passed."""
+    now_tr = (now or datetime.now(TR)).astimezone(TR)
+    d = now_tr.date()
+    if is_bist_holiday(d) or now_tr < session_eod_datetime(d):
+        d -= timedelta(days=1)
+    while is_bist_holiday(d):
+        d -= timedelta(days=1)
+    return d
+
+
+def trading_sessions_between(earlier: date, later: date) -> int:
+    """Count BIST trading sessions strictly after ``earlier`` up to ``later``."""
+    if earlier >= later:
+        return 0
+    count = 0
+    cursor = earlier + timedelta(days=1)
+    while cursor <= later:
+        if not is_bist_holiday(cursor):
+            count += 1
+        cursor += timedelta(days=1)
+    return count

@@ -25,6 +25,12 @@
         android:paddingBottom="8dp">
 
         <TextView
+            android:id="@+id/navMarket"
+            style="@style/BistBotBottomNavItem"
+            android:drawableTop="@drawable/ic_nav_dashboard"
+            android:text="Piyasa" />
+
+        <TextView
             android:id="@+id/navDashboard"
             style="@style/BistBotBottomNavItem"
             android:drawableTop="@drawable/ic_nav_dashboard"

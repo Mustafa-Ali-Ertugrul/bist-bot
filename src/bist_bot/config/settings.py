@@ -32,6 +32,20 @@ _WEAK_JWT_SECRETS = frozenset(
         "password",
     }
 )
+
+
+def _is_placeholder_secret(value: str) -> bool:
+    """True for shipped template values like ``your_..._here``.
+
+    A verbatim copy of ``.env.example`` must never boot: those strings are
+    public, so anyone could forge admin tokens.
+    """
+    text = value.strip().lower()
+    return text in _WEAK_JWT_SECRETS or (
+        text.startswith("your_") and text.endswith("_here")
+    )
+
+
 if load_dotenv is not None and _DOTENV_FLAG not in __import__("sys").modules:
     load_dotenv()
     __import__("sys").modules[_DOTENV_FLAG] = True
@@ -207,28 +221,21 @@ class Settings:
     def require_security_config(self) -> None:
         if not self.JWT_SECRET_KEY:
             raise RuntimeError("Missing required security setting(s): JWT_SECRET_KEY")
-        if self.JWT_SECRET_KEY in _WEAK_JWT_SECRETS:
+        if _is_placeholder_secret(self.JWT_SECRET_KEY):
             raise RuntimeError(
                 "JWT_SECRET_KEY is set to a known placeholder value. "
                 "Set a strong, unique secret before starting the dashboard."
             )
         # AppSec R6: HS256 imza anahtari brute-force'a karsi yeterli entropi
-        # istiyor. Karaliste (yukarida) yalnizca BILINEN placeholder'lari
-        # yakalar; kisa-ama-ozel degerler ("abc" gibi) listeye dusmez ve
-        # cevrimsel olarak kirilabilir. Prod (CONFIG_STRICT=true) altinda
-        # minimum 32 karakter zorlanir; dev profilinde uyari verir.
+        # istiyor. Karaliste yalnizca BILINEN placeholder'lari yakalar;
+        # kisa-ama-ozel degerler ("abc" gibi) listeye dusmez ve cevrimsel
+        # olarak kirilabilir. Bu yuzden 32 karakter alt siniri her zaman
+        # zorlanir (yalnizca CONFIG_STRICT'te degil).
         if len(self.JWT_SECRET_KEY) < 32:
-            strict = str(os.getenv("CONFIG_STRICT", "false")).lower() in {"1", "true", "yes", "on"}
-            if strict:
-                raise RuntimeError(
-                    "JWT_SECRET_KEY en az 32 karakter olmali (HS256 brute-force "
-                    "savaruna yetersiz entropi). Ornek uretim: "
-                    '`python -c "import secrets; print(secrets.token_urlsafe(48))"`'
-                )
-            warnings.warn(
-                "JWT_SECRET_KEY 32 karakterden kisa — dev disina cikmadan "
-                "guclu bir degerle degistir (CONFIG_STRICT=true bunu zorlar).",
-                stacklevel=2,
+            raise RuntimeError(
+                "JWT_SECRET_KEY en az 32 karakter olmali (HS256 brute-force "
+                "savaruna yetersiz entropi). Ornek uretim: "
+                '`python -c "import secrets; print(secrets.token_urlsafe(48))"`'
             )
 
     @property

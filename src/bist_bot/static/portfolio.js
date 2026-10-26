@@ -80,12 +80,14 @@
     var totals = payload.totals || {};
     var benchmark = payload.benchmark || {};
     var cards = [
-      card('Portföy değeri', money(totals.value)),
+      card('Portföy değeri', money(totals.value), pct(totals.return_pct) + ' (dış sermayeye göre)'),
+      card('Dış sermaye', money(totals.net_invested)),
       card('Kalan maliyet', money(totals.invested_cost)),
-      card('Gerçekleşmemiş K/Z', money(totals.unrealized), pct(totals.return_pct) + ' (alışlara göre)'),
+      card('Gerçekleşmemiş K/Z', money(totals.unrealized)),
       card('Gerçekleşmiş K/Z', money(totals.realized)),
       card('Nakit', money(totals.cash))
     ];
+    var transactions = payload.transactions || [];
     if (benchmark.available) {
       cards.push(card('XU100 eşdeğeri', money(benchmark.xu100_value), 'fark: ' + pct(benchmark.vs_xu100)));
       if (benchmark.money_market_source === 'unset') {
@@ -97,7 +99,7 @@
         cards.push(card('Para piyasası eşdeğeri', money(benchmark.money_market_value),
           'fark: ' + pct(benchmark.vs_money_market) + ' · ' + mmLabel));
       }
-    } else {
+    } else if (transactions.length) {
       cards.push(card('Kıyas', 'XU100 verisi yok', 'Gün sonu verisi birikince görünür'));
     }
     document.getElementById('summary-cards').innerHTML = cards.join('');
@@ -106,35 +108,78 @@
     var positions = payload.positions || [];
     positionsBody.innerHTML = positions.length ? positions.map(function (row) {
       return '<tr>' +
-        '<td><a href="/ui/stock/' + encodeURIComponent(row.code) + '">' + esc(row.code) + '</a></td>' +
+        '<td class="sticky-col"><a href="/ui/stock/' + encodeURIComponent(row.code) + '">' + esc(row.code) + '</a></td>' +
         '<td class="text-right">' + num(row.quantity, 2) + '</td>' +
         '<td class="text-right">' + num(row.avg_cost, 2) + '</td>' +
         '<td class="text-right">' + num(row.price, 2) + '</td>' +
         '<td class="text-right">' + money(row.value) + '</td>' +
         '<td class="text-right">' + money(row.unrealized) + '<br><small>' + pct(row.unrealized_pct) + '</small></td>' +
+        '<td class="text-right">' + money(row.realized_pnl !== undefined ? row.realized_pnl : 0) + '</td>' +
         '<td class="text-right">' + pct(row.weight_pct) + '</td>' +
         '</tr>';
-    }).join('') : '<tr><td colspan="7" class="py-space-sm">Pozisyon yok.</td></tr>';
+    }).join('') : '<tr><td colspan="8" class="py-space-sm">Pozisyon yok.</td></tr>';
+
+    var closedNote = document.getElementById('closed-positions-note');
+    var closedPositions = payload.closed_positions || [];
+    if (closedNote) {
+      if (closedPositions.length) {
+        closedNote.textContent = 'Kapanan pozisyonlar (gerçekleşen K/Z): ' + closedPositions.map(function (cp) {
+          return cp.code + ' (' + money(cp.realized_pnl) + ')';
+        }).join(' · ');
+      } else {
+        closedNote.textContent = '';
+      }
+    }
 
     var txBody = document.getElementById('transactions-body');
-    var transactions = payload.transactions || [];
     txBody.innerHTML = transactions.length ? transactions.map(function (tx) {
+      var codeClean = tx.ticker.replace('.IS', '');
       return '<tr>' +
         '<td>' + esc(tx.trade_date) + '</td>' +
-        '<td>' + esc(tx.ticker.replace('.IS', '')) + '</td>' +
+        '<td class="sticky-col">' + esc(codeClean) + '</td>' +
         '<td>' + (tx.side === 'buy' ? 'Alış' : 'Satış') + '</td>' +
         '<td class="text-right">' + num(tx.quantity, 2) + '</td>' +
         '<td class="text-right">' + num(tx.price, 2) + '</td>' +
         '<td class="text-right">' + num(tx.commission_tl, 2) + '</td>' +
-        '<td><button type="button" class="personal-remove" data-id="' + tx.id + '">Sil</button></td>' +
+        '<td class="text-right">' +
+        '<button type="button" class="personal-nav" data-edit-id="' + tx.id + '" data-ticker="' + esc(codeClean) + '" data-side="' + esc(tx.side) + '" data-date="' + esc(tx.trade_date) + '" data-qty="' + esc(tx.quantity) + '" data-price="' + esc(tx.price) + '" data-comm="' + esc(tx.commission_tl) + '">Düzenle</button> ' +
+        '<button type="button" class="personal-remove" data-id="' + tx.id + '">Sil</button></td>' +
         '</tr>';
     }).join('') : '<tr><td colspan="7" class="py-space-sm">İşlem yok.</td></tr>';
+    var editButtons = txBody.querySelectorAll('button[data-edit-id]');
+    for (var j = 0; j < editButtons.length; j++) {
+      editButtons[j].addEventListener('click', function (event) {
+        var btn = event.currentTarget;
+        var form = document.getElementById('trade-form');
+        if (!form) return;
+        form.transaction_id.value = btn.getAttribute('data-edit-id');
+        form.ticker.value = btn.getAttribute('data-ticker');
+        form.side.value = btn.getAttribute('data-side');
+        form.trade_date.value = btn.getAttribute('data-date');
+        form.quantity.value = btn.getAttribute('data-qty');
+        form.price.value = btn.getAttribute('data-price');
+        form.commission_tl.value = btn.getAttribute('data-comm');
+        var titleEl = document.getElementById('trade-form-title');
+        if (titleEl) titleEl.textContent = 'İşlem Düzenle (#' + form.transaction_id.value + ')';
+        var cancelBtn = document.getElementById('cancel-edit-trade');
+        if (cancelBtn) cancelBtn.classList.remove('hidden');
+      });
+    }
     var buttons = txBody.querySelectorAll('button.personal-remove');
     for (var i = 0; i < buttons.length; i++) {
       buttons[i].addEventListener('click', function (event) {
         var id = event.currentTarget.getAttribute('data-id');
         api('/api/portfolios/' + activeId + '/transactions/' + id, { method: 'DELETE' })
-          .then(loadSummary).catch(function (error) { status(error.message); });
+          .then(function () {
+            var ts = document.getElementById('trade-status');
+            if (ts) ts.textContent = '';
+            return loadSummary();
+          })
+          .catch(function (error) {
+            var ts = document.getElementById('trade-status');
+            if (ts) ts.textContent = error.message;
+            status(error.message);
+          });
       });
     }
 
@@ -184,15 +229,28 @@
     chart.timeScale().fitContent();
     var note = document.getElementById('chart-note');
     if (note) {
-      note.textContent = benchmark.available
-        ? 'Yeşil: portföy · Mavi: aynı nakit akışıyla XU100 · Sarı: para piyasası'
-        : 'XU100 serisi yok; kıyas çizgileri gün sonu verisi birikince görünür.';
+      if (!series.length) {
+        note.textContent = 'İşlem eklediğinizde portföy ve kıyas eğrileri burada görünür.';
+      } else {
+        note.textContent = benchmark.available
+          ? 'Yeşil: portföy · Mavi: aynı nakit akışıyla XU100 · Sarı: para piyasası'
+          : 'XU100 serisi yok; kıyas çizgileri gün sonu verisi birikince görünür.';
+      }
     }
   }
 
   function loadSummary() {
     if (!activeId) {
+      var nameEl = document.getElementById('active-portfolio-name');
+      if (nameEl) nameEl.textContent = 'Portföy seçin';
       document.getElementById('summary-cards').innerHTML = '';
+      var positionsBody = document.getElementById('positions-body');
+      if (positionsBody) positionsBody.innerHTML = '<tr><td colspan="7" class="py-space-sm">Portföy seçin.</td></tr>';
+      var txBody = document.getElementById('transactions-body');
+      if (txBody) txBody.innerHTML = '<tr><td colspan="7" class="py-space-sm">Portföy seçin.</td></tr>';
+      var ts = document.getElementById('trade-status');
+      if (ts) ts.textContent = '';
+      drawChart([], {});
       return;
     }
     renderTabs();
@@ -237,6 +295,7 @@
         return;
       }
       var form = event.target;
+      var txId = form.transaction_id ? form.transaction_id.value : '';
       var payload = {
         ticker: form.ticker.value,
         side: form.side.value,
@@ -245,16 +304,77 @@
         price: form.price.value,
         commission_tl: form.commission_tl.value || 0
       };
-      api('/api/portfolios/' + activeId + '/transactions', {
-        method: 'POST', body: JSON.stringify(payload)
+      var path = txId
+        ? '/api/portfolios/' + activeId + '/transactions/' + encodeURIComponent(txId)
+        : '/api/portfolios/' + activeId + '/transactions';
+      var method = txId ? 'PUT' : 'POST';
+      api(path, {
+        method: method, body: JSON.stringify(payload)
       }).then(function () {
         form.reset();
-        document.getElementById('trade-status').textContent = 'İşlem kaydedildi.';
+        if (form.transaction_id) form.transaction_id.value = '';
+        var titleEl = document.getElementById('trade-form-title');
+        if (titleEl) titleEl.textContent = 'İşlem Ekle';
+        var cancelBtn = document.getElementById('cancel-edit-trade');
+        if (cancelBtn) cancelBtn.classList.add('hidden');
+        document.getElementById('trade-status').textContent = txId ? 'İşlem güncellendi.' : 'İşlem kaydedildi.';
         return loadSummary();
       }).catch(function (error) {
         document.getElementById('trade-status').textContent = error.message;
       });
     });
+
+    var cancelBtn = document.getElementById('cancel-edit-trade');
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', function () {
+        var form = document.getElementById('trade-form');
+        if (form) {
+          form.reset();
+          if (form.transaction_id) form.transaction_id.value = '';
+        }
+        var titleEl = document.getElementById('trade-form-title');
+        if (titleEl) titleEl.textContent = 'İşlem Ekle';
+        cancelBtn.classList.add('hidden');
+      });
+    }
+
+    function runCsvImport(dryRun) {
+      if (!activeId) {
+        status('Önce bir portföy oluşturun.');
+        return;
+      }
+      var csvInput = document.getElementById('csv-import-input');
+      var csvStatus = document.getElementById('csv-import-status');
+      var csvText = csvInput ? csvInput.value : '';
+      if (!csvText.trim()) {
+        if (csvStatus) csvStatus.textContent = 'CSV metni girin.';
+        return;
+      }
+      api('/api/portfolios/' + activeId + '/transactions/import', {
+        method: 'POST',
+        body: JSON.stringify({ csv: csvText, dry_run: dryRun })
+      }).then(function (res) {
+        if (dryRun) {
+          if (res.valid) {
+            if (csvStatus) csvStatus.textContent = 'Geçerli: ' + (res.valid_count || 0) + ' işlem hazır.';
+          } else {
+            var firstErr = (res.errors && res.errors[0] && res.errors[0].message) || 'Hata var';
+            if (csvStatus) csvStatus.textContent = 'Hata (' + (res.errors || []).length + '): ' + firstErr;
+          }
+        } else {
+          if (csvInput) csvInput.value = '';
+          if (csvStatus) csvStatus.textContent = (res.imported || 0) + ' işlem içe aktarıldı.';
+          return loadSummary();
+        }
+      }).catch(function (error) {
+        if (csvStatus) csvStatus.textContent = error.message;
+      });
+    }
+
+    var previewCsvBtn = document.getElementById('csv-preview-btn');
+    if (previewCsvBtn) previewCsvBtn.addEventListener('click', function () { runCsvImport(true); });
+    var importCsvBtn = document.getElementById('csv-import-btn');
+    if (importCsvBtn) importCsvBtn.addEventListener('click', function () { runCsvImport(false); });
   }
 
   if (document.readyState === 'loading') {

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 from sqlalchemy import text
@@ -8,6 +9,38 @@ from sqlalchemy import text
 from bist_bot.auth.passwords import hash_password
 from bist_bot.config.settings import settings
 from bist_bot.db import DatabaseManager
+
+
+def test_rbac_mode_defaults_to_enforce() -> None:
+    """Production posture: privileged routes deny unless a deployment opts in.
+
+    The default lives in a dataclass field (evaluated at import time), so it is
+    checked in a fresh interpreter — a module reload elsewhere in the suite
+    would otherwise make this order-dependent.
+    """
+    import os
+    import subprocess
+    import sys
+
+    src_dir = str(Path(__file__).resolve().parents[1] / "src")
+    code = "from bist_bot.config.subsettings import AuthSettings; print(AuthSettings().RBAC_MODE)"
+
+    def run(env_value: str | None) -> str:
+        env = {k: v for k, v in os.environ.items() if k != "RBAC_MODE"}
+        env["PYTHONPATH"] = src_dir
+        if env_value is not None:
+            env["RBAC_MODE"] = env_value
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return result.stdout.strip()
+
+    assert run(None) == "enforce"
+    assert run("") == "enforce"
 
 
 def test_enforce_mode_refuses_startup_without_privileged_user(tmp_path) -> None:
@@ -99,3 +132,37 @@ def test_bootstrap_update_promotes_existing_user_when_explicitly_enabled(tmp_pat
 
     assert role == "admin"
     assert audit_event == "admin_bootstrap_promoted_existing"
+
+
+def test_bootstrap_update_flag_cannot_rearm_via_marker_deletion(tmp_path) -> None:
+    """AppSec: clearing the per-email bootstrap marker must not re-enable the
+    env-driven admin overwrite — the global first-boot marker still refuses it."""
+    db_path = str(tmp_path / "bootstrap-flag-expiry.db")
+    with settings.override(
+        DB_PATH=db_path,
+        DATABASE_URL="",
+        RBAC_MODE="warn",
+        ADMIN_BOOTSTRAP_EMAIL="admin@bistbot.local",
+        ADMIN_BOOTSTRAP_PASSWORD_HASH=hash_password("first-password"),
+        ADMIN_BOOTSTRAP_UPDATE_EXISTING=True,
+    ):
+        manager = DatabaseManager(sqlite_path=db_path)
+        with manager.engine.begin() as conn:
+            conn.execute(
+                text(
+                    "DELETE FROM bootstrap_state "
+                    "WHERE key = 'admin_bootstrap_completed:admin@bistbot.local'"
+                )
+            )
+        manager.engine.dispose()
+
+    with settings.override(
+        DB_PATH=db_path,
+        DATABASE_URL="",
+        RBAC_MODE="warn",
+        ADMIN_BOOTSTRAP_EMAIL="admin@bistbot.local",
+        ADMIN_BOOTSTRAP_PASSWORD_HASH=hash_password("attacker-password"),
+        ADMIN_BOOTSTRAP_UPDATE_EXISTING=True,
+    ):
+        with pytest.raises(RuntimeError, match="already completed on this database"):
+            DatabaseManager(sqlite_path=db_path)

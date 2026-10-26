@@ -6,22 +6,25 @@
 <title>Bist-Bot · Tarayıcı</title>
 <link rel="stylesheet" href="/static/tailwind.css"/>
 <link rel="stylesheet" href="/static/stock.css?v=1"/>
-<link rel="stylesheet" href="/static/screener.css?v=1"/>
+<link rel="stylesheet" href="/static/screener.css?v=5"/>
 </head>
 <body class="bg-background font-body-md text-body-md text-on-surface antialiased">
 <header class="w-full px-terminal-margin py-space-md border-b border-surface-container-high/40">
 <div class="w-full max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-space-md">
 <div class="flex items-center gap-space-sm">
-<span class="font-headline-md text-headline-md tracking-tight font-extrabold">Bist<span class="text-primary">-Bot</span></span>
+<a class="font-headline-md text-headline-md tracking-tight font-extrabold text-on-surface" href="/ui/screener">Bist<span class="text-primary">-Bot</span></a>
 <span class="bg-surface-container-high px-space-xs py-space-3xs rounded text-secondary font-label-caps text-label-caps uppercase tracking-wider">Tarayıcı</span>
 </div>
 <div class="flex flex-wrap items-center gap-space-sm w-full sm:w-auto">
 <label class="sr-only" for="stock-search">Hisse ara</label>
 <input id="stock-search" class="stock-search" type="search" placeholder="Kod veya şirket adı" autocomplete="off"/>
+<a class="px-space-md py-space-xs rounded-lg bg-surface-container-high text-on-surface font-body-sm text-body-sm" href="/ui/market">Piyasa</a>
 <a class="px-space-md py-space-xs rounded-lg bg-surface-container-high text-on-surface font-body-sm text-body-sm" href="/ui/watchlist">İzleme</a>
 <a class="px-space-md py-space-xs rounded-lg bg-surface-container-high text-on-surface font-body-sm text-body-sm" href="/ui/portfolio">Portföy</a>
 <a class="px-space-md py-space-xs rounded-lg bg-surface-container-high text-on-surface font-body-sm text-body-sm" href="/ui/alerts">Alarmlar</a>
 <a class="px-space-md py-space-xs rounded-lg bg-surface-container-high text-on-surface font-body-sm text-body-sm" href="/ui/scorecard">Karne</a>
+<a class="px-space-md py-space-xs rounded-lg bg-surface-container-high text-on-surface font-body-sm text-body-sm" id="compare-selected" href="/ui/compare">Karşılaştır</a>
+<button class="px-space-md py-space-xs rounded-lg bg-surface-container-high text-on-surface font-body-sm text-body-sm" type="button" data-action="logout">Çıkış</button>
 </div>
 </div>
 <div id="search-results" class="w-full max-w-7xl mx-auto stock-search-results hidden"></div>
@@ -45,24 +48,46 @@
 <select id="screen-date" class="screen-control"></select>
 <label class="screen-control-label" for="screen-sort">Sırala</label>
 <select id="screen-sort" class="screen-control"></select>
+<button id="screen-order" class="screen-button" type="button" aria-label="Sıralama yönü" title="Sıralama yönünü değiştir">↓ Azalan</button>
+<button id="export-csv" class="screen-button" type="button">CSV İndir</button>
 </div>
 </div>
 <p class="font-body-sm text-body-sm text-outline mt-space-3xs" id="screen-meta"></p>
+<div class="flex flex-wrap items-center justify-between gap-space-xs mt-space-xs">
+<div class="flex flex-wrap items-center gap-space-xs">
+<label class="screen-control-label" for="bulk-watchlist-select">İzleme Listesi</label>
+<select id="bulk-watchlist-select" class="screen-control"><option value="">Liste seçin</option></select>
+<button id="bulk-watchlist-add" class="screen-button" type="button">Seçilenleri İzlemeye Ekle</button>
+<span id="bulk-watchlist-status" class="font-body-sm text-body-sm text-outline"></span>
+</div>
+<div id="screen-pagination" class="flex flex-wrap items-center gap-space-xs">
+<label class="screen-control-label" for="screen-page-size">Sayfa boyutu</label>
+<select id="screen-page-size" class="screen-control">
+<option value="25">25</option>
+<option value="50" selected>50</option>
+<option value="100">100</option>
+</select>
+<button id="screen-prev-page" class="screen-button" type="button" disabled>Önceki</button>
+<span id="screen-page-info" class="font-body-sm text-body-sm text-outline">1 / 1</span>
+<button id="screen-next-page" class="screen-button" type="button" disabled>Sonraki</button>
+</div>
+</div>
 <div class="overflow-x-auto mt-space-sm">
 <table class="w-full font-body-sm text-body-sm screen-table">
 <thead>
 <tr class="text-outline font-label-caps text-label-caps uppercase">
-<th class="text-left">Kod</th>
+<th class="text-left"><input id="select-all-rows" type="checkbox" aria-label="Tümünü seç"/></th>
+<th class="text-left sticky-col">Kod</th>
 <th class="text-left">Şirket</th>
 <th class="text-left">Sektör</th>
-<th class="text-right">Kapanış</th>
-<th class="text-right">Günlük</th>
-<th class="text-right">Değer</th>
-<th class="text-right">Piyasa Değeri</th>
+<th class="text-right" data-sort-field="close" aria-sort="none">Kapanış</th>
+<th class="text-right" data-sort-field="change_pct" aria-sort="none">Günlük</th>
+<th id="screen-metric-header" class="text-right" data-sort-field="" aria-sort="none">Değer</th>
+<th class="text-right" data-sort-field="market_cap_tl" aria-sort="descending">Piyasa Değeri</th>
 </tr>
 </thead>
 <tbody id="screen-body">
-<tr><td colspan="7" class="py-space-sm">Yükleniyor…</td></tr>
+<tr><td colspan="8" class="py-space-sm">Yükleniyor…</td></tr>
 </tbody>
 </table>
 </div>
@@ -85,10 +110,19 @@
 <button id="reset-filter" class="screen-button" type="button">Sıfırla</button>
 <span class="font-body-sm text-body-sm text-outline" id="filter-status"></span>
 </div>
+<div class="flex flex-wrap items-center gap-space-sm mt-space-sm">
+<label class="screen-control-label" for="saved-filter-select">Kayıtlı filtre</label>
+<select id="saved-filter-select" class="screen-control"><option value="">Kayıtlı filtre seçin</option></select>
+<label class="screen-control-label" for="save-filter-name">Filtre adı</label>
+<input id="save-filter-name" class="screen-control" type="text" maxlength="60" placeholder="Örn. Ucuz kârlılar" autocomplete="off"/>
+<button id="save-filter" class="screen-button screen-button-primary" type="button">Kaydet</button>
+</div>
+<p class="font-body-sm text-body-sm text-outline mt-space-3xs">Kayıtlı filtreler her akşam özetinde yeni giren hisselerle bildirilir.</p>
 </section>
 
 <p class="font-body-sm text-body-sm text-outline pb-space-lg">Bu sayfa bilgilendirme amaçlıdır; alım-satım tavsiyesi değildir. Taramalar gün sonu verisiyle çalışır.{% if attribution %}<br>{{ attribution }}{% endif %}</p>
 </main>
-<script src="/static/screener.js?v=2"></script>
+<script src="/static/screener.js?v=4"></script>
+<script src="/static/product-nav.js?v=2"></script>
 </body>
 </html>

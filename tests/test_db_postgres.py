@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -210,5 +211,63 @@ def test_live_postgres_optional() -> None:
         with manager.engine.connect() as conn:
             conn.exec_driver_sql("SELECT 1")
     finally:
+        manager.session_factory.remove()
+        manager.engine.dispose()
+
+
+@pytest.mark.integration
+def test_alert_event_insert_is_idempotent_under_concurrency() -> None:
+    """Eight racing writers must leave exactly one event row.
+
+    Runs only against a throwaway database named by
+    ``BIST_BOT_TEST_POSTGRES_URL``; never against production.
+    """
+    url = (os.environ.get("BIST_BOT_TEST_POSTGRES_URL") or "").strip()
+    if not url:
+        pytest.skip("BIST_BOT_TEST_POSTGRES_URL not set (needs a throwaway database)")
+
+    import sqlalchemy as sa
+    from sqlalchemy import text
+
+    from bist_bot.db.repositories.alert_repository import AlertRepository
+
+    manager = DatabaseManager(database_url=url)
+    manager.initialize()
+    repository = AlertRepository(manager)
+    now = datetime.now(UTC)
+    email = f"p4race-{now.timestamp()}@bistbot.local"
+    user_id = None
+    try:
+        with manager.engine.begin() as conn:
+            user_id = conn.execute(
+                text(
+                    "INSERT INTO users (email, password_hash, role, created_at, updated_at) "
+                    "VALUES (:e, 'x', 'user', :n, :n) RETURNING id"
+                ),
+                {"e": email, "n": now},
+            ).scalar()
+        event = {"kind": "price", "ref": "price:1", "title": "t", "message": "m"}
+        day = now.date()
+
+        def write_once() -> int:
+            return repository.record_events(int(user_id), day, [event])
+
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            counts = [future.result() for future in [pool.submit(write_once) for _ in range(8)]]
+
+        with manager.engine.connect() as conn:
+            rows = conn.execute(
+                text("SELECT count(*) FROM user_alert_events WHERE user_id = :u"),
+                {"u": user_id},
+            ).scalar()
+        assert rows == 1, f"expected one row, found {rows}"
+        assert sum(counts) == 1, counts
+    finally:
+        if user_id is not None:
+            with manager.engine.begin() as conn:
+                conn.execute(
+                    sa.text("DELETE FROM user_alert_events WHERE user_id = :u"), {"u": user_id}
+                )
+                conn.execute(sa.text("DELETE FROM users WHERE id = :u"), {"u": user_id})
         manager.session_factory.remove()
         manager.engine.dispose()

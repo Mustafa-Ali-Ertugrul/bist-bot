@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -229,6 +230,121 @@ def test_preview_does_not_mark_as_sent(env) -> None:
     assert not alerts.was_digest_sent(user_id, AS_OF)
 
 
+class _FailingNotifier:
+    def __init__(self, mode: str = "false") -> None:
+        self.mode = mode
+        self.sent: list[tuple[str, str]] = []
+
+    def send_to_chat(self, chat_id: str, text: str) -> bool:
+        self.sent.append((chat_id, text))
+        if self.mode == "raise":
+            raise RuntimeError("network down")
+        return False
+
+
+def test_disabled_price_alert_is_ignored(env) -> None:
+    _manager, market, alerts, users, user_id = env
+    alerts.save_link(user_id, "42", None)
+    alert_id = alerts.add_alert(
+        user_id, {"kind": "price", "target": "AAA.IS", "op": "above", "threshold": 10.5}
+    )
+    alerts.disable_alert(alert_id)
+    service = _digest(market, alerts, users)
+
+    result = service.build(user_id, AS_OF)
+    assert result.empty, "kapalı alarm yeniden tetiklenmemeli"
+
+
+def test_saved_screen_only_user_gets_digest(env) -> None:
+    _manager, market, alerts, users, user_id = env
+    alerts.save_link(user_id, "42", None)
+    screen_id = alerts.add_saved_screen(
+        user_id,
+        "Yükselenler",
+        {"conditions": [{"field": "change_pct", "op": ">=", "value": 5}]},
+    )
+    service = _digest(market, alerts, users)
+
+    result = service.build(user_id, AS_OF)
+    assert result.message is not None, "sadece kayıtlı filtresi olan kullanıcı özet almalı"
+    assert "filtresine girdi" in result.message
+    assert result.sections.get(f"filter:{screen_id}") == 2
+
+
+def test_saved_filter_digest_reads_every_page(env) -> None:
+    _manager, market, alerts, users, user_id = env
+    alerts.save_link(user_id, "42", None)
+    screen_id = alerts.add_saved_screen(
+        user_id,
+        "Geniş",
+        {"conditions": [{"field": "close", "op": ">=", "value": 1}]},
+    )
+    service = _digest(market, alerts, users)
+
+    class _Paged:
+        def __init__(self) -> None:
+            self.calls: list[dict[str, Any]] = []
+
+        def query(self, **kwargs: Any) -> dict[str, Any]:
+            self.calls.append(kwargs)
+            if kwargs["as_of"] != AS_OF:
+                return {"as_of": PREV.isoformat(), "total": 5, "rows": []}
+            offset = int(kwargs.get("offset") or 0)
+            rows = [{"code": f"C{index}"} for index in range(offset, min(offset + 2, 5))]
+            return {"as_of": AS_OF.isoformat(), "total": 5, "rows": rows}
+
+    paged = _Paged()
+    service.screener = paged
+    result = service.build(user_id, AS_OF)
+
+    assert result.sections.get(f"filter:{screen_id}") == 5
+    today_calls = [c for c in paged.calls if c["as_of"] == AS_OF]
+    assert max(int(c.get("offset") or 0) for c in today_calls) >= 4
+
+
+def test_failed_send_keeps_price_alert_active(env) -> None:
+    _manager, market, alerts, users, user_id = env
+    alerts.save_link(user_id, "42", None)
+    alert_id = alerts.add_alert(
+        user_id, {"kind": "price", "target": "AAA.IS", "op": "above", "threshold": 10.5}
+    )
+    service = _digest(market, alerts, users, _FailingNotifier("raise"))
+
+    service.run(as_of=AS_OF)
+    stored = next(a for a in alerts.list_alerts(user_id) if a["id"] == alert_id)
+    assert stored["enabled"] is True, "gönderim hatası alarmı kapatmamalı"
+    assert not alerts.was_digest_sent(user_id, AS_OF)
+
+
+def test_send_false_never_consumes_price_alert(env) -> None:
+    _manager, market, alerts, users, user_id = env
+    alerts.save_link(user_id, "42", None)
+    alert_id = alerts.add_alert(
+        user_id, {"kind": "price", "target": "AAA.IS", "op": "above", "threshold": 10.5}
+    )
+    service = _digest(market, alerts, users)
+
+    service.run(as_of=AS_OF, send=False)
+    stored = next(a for a in alerts.list_alerts(user_id) if a["id"] == alert_id)
+    assert stored["enabled"] is True
+
+
+def test_successful_send_consumes_price_alert(env) -> None:
+    _manager, market, alerts, users, user_id = env
+    alerts.save_link(user_id, "42", None)
+    alert_id = alerts.add_alert(
+        user_id, {"kind": "price", "target": "AAA.IS", "op": "above", "threshold": 10.5}
+    )
+    notifier = _NullNotifier()
+    service = _digest(market, alerts, users, notifier)
+
+    service.run(as_of=AS_OF)
+    assert len(notifier.sent) == 1
+    stored = next(a for a in alerts.list_alerts(user_id) if a["id"] == alert_id)
+    assert stored["enabled"] is False
+    assert alerts.was_digest_sent(user_id, AS_OF)
+
+
 def test_digest_escapes_and_stays_short(env) -> None:
     _manager, market, alerts, users, user_id = env
     alerts.save_link(user_id, "42", None)
@@ -335,10 +451,35 @@ def test_admin_alert_flow(app: Flask) -> None:
             headers=headers,
             json={
                 "name": "Ucuzlar",
-                "payload": {"conditions": [{"field": "pe_ttm", "op": "<=", "value": 10}]},
+                "payload": {"conditions": [{"field": "close", "op": ">=", "value": 10}]},
             },
         )
         assert saved.status_code == 201
+        preview2 = client.get("/api/alerts/preview?as_of=2026-10-21", headers=headers)
+        assert preview2.status_code == 200
+        plain_text = preview2.get_json()["text"] or ""
+        assert "'Ucuzlar'" in plain_text
+        assert "&#x27;" not in plain_text
+
+
+def test_preview_does_not_disable_price_alert(app: Flask) -> None:
+    with app.test_client() as client:
+        token = _login(client, "preview@bistbot.local")
+        _promote(app, "preview@bistbot.local")
+        headers = _headers(token)
+        created = client.post(
+            "/api/alerts",
+            headers=headers,
+            json={"kind": "price", "target": "AAA", "op": "above", "threshold": 10},
+        ).get_json()
+
+        preview = client.get("/api/alerts/preview?as_of=2026-10-21", headers=headers)
+        assert preview.status_code == 200
+        assert "AAA" in (preview.get_json()["message"] or "")
+
+        listed = client.get("/api/alerts", headers=headers).get_json()["alerts"]
+        stored = next(a for a in listed if a["id"] == created["id"])
+        assert stored["enabled"] is True, "önizleme fiyat alarmını kapatmamalı"
 
 
 def test_alert_validation(app: Flask) -> None:
@@ -369,6 +510,63 @@ def test_alert_validation(app: Flask) -> None:
         assert bad_screen.status_code == 400
 
 
+def test_saved_screen_payload_is_validated(app: Flask) -> None:
+    with app.test_client() as client:
+        token = _login(client, "screens@bistbot.local")
+        _promote(app, "screens@bistbot.local")
+        headers = _headers(token)
+
+        assert (
+            client.post(
+                "/api/saved-screens", headers=headers, json={"name": "X", "payload": "metin"}
+            ).status_code
+            == 400
+        )
+        assert (
+            client.post(
+                "/api/saved-screens",
+                headers=headers,
+                json={"name": "X", "payload": {"scan_id": "yok-boyle-tarama"}},
+            ).status_code
+            == 400
+        )
+        assert (
+            client.post(
+                "/api/saved-screens", headers=headers, json={"name": "X", "payload": {}}
+            ).status_code
+            == 400
+        )
+
+        saved = client.post(
+            "/api/saved-screens",
+            headers=headers,
+            json={
+                "name": "X",
+                "payload": {
+                    "conditions": [{"field": "close", "op": ">=", "value": 1}],
+                    "sector": "Test",
+                    "scan_id": "rsi_dip",
+                },
+            },
+        )
+        assert saved.status_code == 201
+        listed = client.get("/api/saved-screens", headers=headers).get_json()["screens"]
+        assert listed[0]["payload"]["sector"] == "Test"
+        assert listed[0]["payload"]["scan_id"] == "rsi_dip"
+        assert listed[0]["payload"]["conditions"][0]["field"] == "close"
+
+
+def test_saved_screen_limit_errors_are_specific(env) -> None:
+    _manager, _market, alerts, _users, user_id = env
+    alerts.add_saved_screen(user_id, "Bir", {"conditions": []}, limit=1)
+    with pytest.raises(ValueError, match="En fazla 1 filtre"):
+        alerts.add_saved_screen(user_id, "İki", {"conditions": []}, limit=1)
+    with pytest.raises(ValueError, match="Bu adda bir filtre var"):
+        alerts.add_saved_screen(user_id, "Bir", {"conditions": []}, limit=5)
+    with pytest.raises(ValueError, match="Filtre adı boş olamaz"):
+        alerts.add_saved_screen(user_id, "  ", {"conditions": []}, limit=5)
+
+
 def test_alerts_pages_have_no_advice_language() -> None:
     import re
     from pathlib import Path
@@ -379,3 +577,130 @@ def test_alerts_pages_have_no_advice_language() -> None:
         assert not re.search(r"\b(AL|SAT)\b", text), name
         assert "Stop-Loss" not in text, name
         assert "Hedef:" not in text, name
+
+
+# ---------------------------------------------------------------------------
+# Faz P3.3: in-app alert events and alert pause/resume
+# ---------------------------------------------------------------------------
+
+
+def test_events_are_recorded_once_per_reference(env) -> None:
+    _manager, market, alerts, users, user_id = env
+    alerts.save_link(user_id, "42", None)
+    alert_id = alerts.add_alert(
+        user_id, {"kind": "price", "target": "AAA.IS", "op": "above", "threshold": 10.5}
+    )
+    service = _digest(market, alerts, users)
+
+    events = service.build_events(user_id, AS_OF)
+    assert events, "tetiklenen alarm olay üretmeli"
+    assert any(item["kind"] == "alert" for item in events)
+    assert any(str(alert_id) in item["ref"] for item in events)
+
+    assert alerts.record_events(user_id, AS_OF, events) == len(events)
+    assert alerts.record_events(user_id, AS_OF, events) == 0
+    assert alerts.count_unread_events(user_id) == len(events)
+
+
+def test_events_are_marked_read(env) -> None:
+    _manager, market, alerts, users, user_id = env
+    alerts.save_link(user_id, "42", None)
+    alerts.add_alert(user_id, {"kind": "screen", "target": "rsi_dip"})
+    events = _digest(market, alerts, users).build_events(user_id, AS_OF)
+    alerts.record_events(user_id, AS_OF, events)
+
+    listed = alerts.list_events(user_id)
+    assert listed and listed[0]["read"] is False
+
+    assert alerts.mark_events_read(user_id) == len(listed)
+    assert alerts.count_unread_events(user_id) == 0
+    assert all(item["read"] for item in alerts.list_events(user_id))
+
+
+def test_run_inapp_covers_users_without_telegram_link(env) -> None:
+    _manager, market, alerts, users, user_id = env
+    alerts.add_alert(user_id, {"kind": "screen", "target": "rsi_dip"})
+    # No Telegram link on purpose: in-app events must still be produced.
+    result = _digest(market, alerts, users).run_inapp(as_of=AS_OF)
+    assert result["users"] == 1
+    assert result["events"] >= 1
+    assert alerts.count_unread_events(user_id) >= 1
+
+
+def test_alert_can_be_paused_and_resumed(env) -> None:
+    _manager, _market, alerts, _users, user_id = env
+    alert_id = alerts.add_alert(
+        user_id, {"kind": "price", "target": "AAA.IS", "op": "above", "threshold": 10.5}
+    )
+    paused = alerts.update_alert(user_id, alert_id, {"enabled": False})
+    assert paused["enabled"] is False
+    resumed = alerts.update_alert(user_id, alert_id, {"enabled": True, "threshold": 12.0})
+    assert resumed["enabled"] is True
+    assert resumed["threshold"] == 12.0
+
+
+def test_alert_update_rejects_foreign_alert(env) -> None:
+    manager, _market, alerts, _users, user_id = env
+    alert_id = alerts.add_alert(
+        user_id, {"kind": "price", "target": "AAA.IS", "op": "above", "threshold": 10.5}
+    )
+    other = _make_user(manager, "other@example.com")
+    from bist_bot.db.repositories.user_portfolio_repository import OwnershipError
+
+    with pytest.raises(OwnershipError):
+        alerts.update_alert(other, alert_id, {"enabled": False})
+
+
+def test_events_api_flow(app: Flask) -> None:
+    with app.test_client() as client:
+        token = _login(client, "events@bistbot.local")
+        _promote(app, "events@bistbot.local")
+        headers = _headers(token)
+
+        client.post(
+            "/api/alerts",
+            headers=headers,
+            json={"kind": "price", "target": "AAA", "op": "above", "threshold": 10},
+        )
+        refreshed = client.post("/api/alerts/events/refresh?as_of=2026-10-21", headers=headers)
+        assert refreshed.status_code == 200
+        body = refreshed.get_json()
+        assert body["written"] >= 1
+        assert body["unread"] >= 1
+
+        listed = client.get("/api/alerts/events", headers=headers).get_json()
+        assert listed["unread"] == body["unread"]
+        assert listed["events"][0]["as_of"] == "2026-10-21"
+
+        count = client.get("/api/alerts/events/unread-count", headers=headers).get_json()
+        assert count["unread"] == body["unread"]
+
+        marked = client.post("/api/alerts/events/read", headers=headers, json={}).get_json()
+        assert marked["marked"] >= 1
+        assert marked["unread"] == 0
+
+
+def test_alert_patch_api(app: Flask) -> None:
+    with app.test_client() as client:
+        token = _login(client, "patch@bistbot.local")
+        _promote(app, "patch@bistbot.local")
+        headers = _headers(token)
+        created = client.post(
+            "/api/alerts",
+            headers=headers,
+            json={"kind": "price", "target": "AAA", "op": "above", "threshold": 10},
+        ).get_json()
+
+        paused = client.patch(
+            f"/api/alerts/{created['id']}", headers=headers, json={"enabled": False}
+        )
+        assert paused.status_code == 200
+        assert paused.get_json()["alert"]["enabled"] is False
+
+        bad = client.patch("/api/alerts/" + str(created["id"]), headers=headers, json={})
+        assert bad.status_code == 400
+
+        bad_op = client.patch(
+            f"/api/alerts/{created['id']}", headers=headers, json={"op": "sideways"}
+        )
+        assert bad_op.status_code == 400

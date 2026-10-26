@@ -7,6 +7,8 @@ rows a caller may see; this service only paginates.
 
 from __future__ import annotations
 
+import csv
+import io
 from dataclasses import dataclass
 from datetime import date
 from typing import Any
@@ -251,7 +253,7 @@ class ScreenerService:
         non_null = [row for row in rows if row.get(sort) is not None]
         nulls = [row for row in rows if row.get(sort) is None]
         ordered = sorted(non_null, key=lambda row: row.get(sort), reverse=reverse) + nulls
-        page_size = max(1, min(int(limit), 200))
+        page_size = max(1, min(int(limit), 1000))
         start = max(0, int(offset))
         page = ordered[start : start + page_size]
 
@@ -282,3 +284,50 @@ class ScreenerService:
     @staticmethod
     def field_list() -> list[dict[str, str]]:
         return [{"code": field.code, "label": field.label, "unit": field.unit} for field in FIELDS]
+
+
+def _csv_safe_text(value: Any) -> str:
+    if value is None:
+        return ""
+    text = str(value)
+    if text and (text[0] in ("=", "+", "-", "@", "\t", "\r") or text.lstrip()[:1] in ("=", "+", "-", "@")):
+        return "'" + text
+    return text
+
+
+def rows_to_csv(rows: list[dict[str, Any]], *, include_scan: bool = False) -> str:
+    """Serialize screener rows to UTF-8 CSV with formula-injection protection."""
+    buf = io.StringIO()
+    writer = csv.writer(buf, lineterminator="\r\n")
+    headers = ["kod", "sirket", "sektor", "tarih"]
+    if include_scan:
+        headers.extend(["tarama_degeri", "tarama_detay"])
+    headers.extend(field.code for field in FIELDS)
+    writer.writerow(headers)
+    for row in rows:
+        metrics = row.get("metrics") or {}
+        line: list[Any] = [
+            _csv_safe_text(row.get("code")),
+            _csv_safe_text(row.get("name")),
+            _csv_safe_text(row.get("sector")),
+            _csv_safe_text(row.get("as_of")),
+        ]
+        if include_scan:
+            scan_val = row.get("scan_value")
+            if scan_val is None:
+                line.append("")
+            elif isinstance(scan_val, str):
+                line.append(_csv_safe_text(scan_val))
+            else:
+                line.append(scan_val)
+            line.append(_csv_safe_text(row.get("detail")))
+        for field in FIELDS:
+            val = metrics.get(field.code)
+            if val is None:
+                line.append("")
+            elif isinstance(val, str):
+                line.append(_csv_safe_text(val))
+            else:
+                line.append(val)
+        writer.writerow(line)
+    return "\ufeff" + buf.getvalue()

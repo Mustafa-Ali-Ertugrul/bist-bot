@@ -393,6 +393,12 @@ class DataSettings:
     DAILY_BARS_UNIVERSE_REFRESH_DAYS: int = _get_int_env("DAILY_BARS_UNIVERSE_REFRESH_DAYS", 7)
     DAILY_FUNDAMENTALS_ENABLED: bool = _get_bool_env("DAILY_FUNDAMENTALS_ENABLED", False)
     DAILY_FUNDAMENTALS_QUARTERS: int = _get_int_env("DAILY_FUNDAMENTALS_QUARTERS", 12)
+    # Faz P3.5: fundamentals on a slow cadence even when the daily sync skips them.
+    # Default off so production behaviour only changes when an operator opts in.
+    WEEKLY_FUNDAMENTALS_ENABLED: bool = _get_bool_env("WEEKLY_FUNDAMENTALS_ENABLED", False)
+    WEEKLY_FUNDAMENTALS_INTERVAL_HOURS: int = _get_int_env(
+        "WEEKLY_FUNDAMENTALS_INTERVAL_HOURS", 168
+    )
     # --- Faz 2: end-of-day screens over daily_bars (no customer messages) ---
     SCREEN_SCANS_ENABLED: bool = _get_bool_env("SCREEN_SCANS_ENABLED", False)
     SCREEN_FUNDAMENTAL_SCANS_ENABLED: bool = _get_bool_env(
@@ -429,6 +435,8 @@ class DataSettings:
     TELEGRAM_LINK_POLLING_ENABLED: bool = _get_bool_env("TELEGRAM_LINK_POLLING_ENABLED", False)
     USER_DIGEST_ENABLED: bool = _get_bool_env("USER_DIGEST_ENABLED", False)
     USER_DIGEST_HOUR_TR: int = _get_int_env("USER_DIGEST_HOUR_TR", 18)
+    # Faz P3.3: in-app alert history is independent of Telegram delivery.
+    IN_APP_ALERT_EVENTS_ENABLED: bool = _get_bool_env("IN_APP_ALERT_EVENTS_ENABLED", True)
     PUBLIC_BASE_URL: str = _get_str_env("PUBLIC_BASE_URL")
     ALERT_MAX_PER_USER: int = _get_int_env("ALERT_MAX_PER_USER", 20)
     SAVED_SCREENS_MAX_PER_USER: int = _get_int_env("SAVED_SCREENS_MAX_PER_USER", 10)
@@ -448,7 +456,7 @@ class DataSettings:
     FREE_PORTFOLIOS: int = _get_int_env("FREE_PORTFOLIOS", 1)
     FREE_TRANSACTIONS: int = _get_int_env("FREE_TRANSACTIONS", 50)
     FREE_HISTORY_DAYS: int = _get_int_env("FREE_HISTORY_DAYS", 90)
-    PAID_SCREENER_ROWS: int = _get_int_env("PAID_SCREENER_ROWS", 200)
+    PAID_SCREENER_ROWS: int = _get_int_env("PAID_SCREENER_ROWS", 1000)
     PAID_SAVED_SCREENS: int = _get_int_env("PAID_SAVED_SCREENS", 10)
     PAID_ALERTS: int = _get_int_env("PAID_ALERTS", 20)
     PAID_WATCHLISTS: int = _get_int_env("PAID_WATCHLISTS", 5)
@@ -518,15 +526,19 @@ class DatabaseSettings:
 class AuthSettings:
     JWT_SECRET_KEY: str = _get_str_env("JWT_SECRET_KEY")
     # AppSec (Round 10): Flask session signing key, separated from the JWT key.
-    # Empty default preserves legacy behavior (falls back to JWT_SECRET_KEY);
-    # set SECRET_KEY in production for signing-domain separation.
+    # Empty default keeps legacy boots working, but the dashboard then derives
+    # a domain-separated key from the JWT key instead of reusing it directly;
+    # set SECRET_KEY in production for fully independent entropy.
     SECRET_KEY: str = _get_str_env("SECRET_KEY")
     JWT_ACCESS_TOKEN_MINUTES: int = _get_int_env("JWT_ACCESS_TOKEN_MINUTES", 15)
-    RBAC_MODE: str = _get_str_env("RBAC_MODE", "warn").lower()
+    # AppSec: privileged routes must deny by default. "warn" is an explicit,
+    # temporary migration opt-in; anything unrecognized is treated as enforce.
+    RBAC_MODE: str = (_get_str_env("RBAC_MODE", "enforce").lower() or "enforce")
     ADMIN_BOOTSTRAP_EMAIL: str = _get_str_env("ADMIN_BOOTSTRAP_EMAIL")
     ADMIN_BOOTSTRAP_PASSWORD_HASH: str = _get_str_env("ADMIN_BOOTSTRAP_PASSWORD_HASH")
     ADMIN_BOOTSTRAP_UPDATE_EXISTING: bool = _get_bool_env("ADMIN_BOOTSTRAP_UPDATE_EXISTING", False)
-    JWT_COOKIE_SECURE: bool = _get_bool_env("JWT_COOKIE_SECURE", False)
+    # AppSec: session cookies ride on HTTPS unless a dev explicitly opts out.
+    JWT_COOKIE_SECURE: bool = _get_bool_env("JWT_COOKIE_SECURE", True)
     ALLOW_PUBLIC_REGISTRATION: bool = _get_bool_env("ALLOW_PUBLIC_REGISTRATION", False)
     CORS_ORIGINS: tuple[str, ...] = field(default_factory=lambda: _get_csv_env("CORS_ORIGINS"))
 

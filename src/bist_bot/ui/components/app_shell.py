@@ -217,8 +217,12 @@ def render_section_title(title: str, caption: str = "") -> None:
     )
 
 
+_PANEL_ACCENTS = frozenset({"", "primary", "secondary", "positive", "danger", "neutral"})
+
+
 def render_html_panel(content: str, accent: str = "") -> None:
-    accent_class = f" bb-panel-{accent}" if accent else ""
+    """Render a raw-HTML panel; ``content`` must be pre-escaped by the caller."""
+    accent_class = f" bb-panel-{accent}" if accent in _PANEL_ACCENTS and accent else ""
     st.markdown(
         f"<section class='bb-panel{accent_class}'>{content}</section>",
         unsafe_allow_html=True,

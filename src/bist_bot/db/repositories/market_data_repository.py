@@ -17,6 +17,7 @@ from bist_bot.db.database import (
     InstrumentRecord,
     KapDisclosureRecord,
     ScanResultRecord,
+    ScorecardCacheRecord,
     ScreenSnapshotRecord,
 )
 
@@ -844,6 +845,87 @@ class MarketDataRepository:
             ]
 
         return list(self.manager.run_session(_read, read_only=True))
+
+    def data_coverage_summary(self) -> dict[str, object]:
+        def _read(session):
+            instruments = session.scalars(
+                select(InstrumentRecord)
+                .where(InstrumentRecord.is_active.is_(True))
+                .order_by(InstrumentRecord.code)
+            ).all()
+            bar_tickers = {
+                str(t) for t in session.scalars(select(DailyBarRecord.ticker).distinct()).all()
+            }
+            fund_tickers = {
+                str(t) for t in session.scalars(select(FundamentalRecord.ticker).distinct()).all()
+            }
+            latest_bar = session.scalar(
+                select(DailyBarRecord.date).order_by(DailyBarRecord.date.desc()).limit(1)
+            )
+            latest_snap = session.scalar(
+                select(ScreenSnapshotRecord.as_of)
+                .order_by(ScreenSnapshotRecord.as_of.desc())
+                .limit(1)
+            )
+            latest_kap = session.scalar(
+                select(KapDisclosureRecord.published_date)
+                .order_by(KapDisclosureRecord.published_date.desc())
+                .limit(1)
+            )
+            missing_bars = [
+                inst.code for inst in instruments if str(inst.ticker) not in bar_tickers
+            ]
+            missing_fundamentals = [
+                inst.code for inst in instruments if str(inst.ticker) not in fund_tickers
+            ]
+            return {
+                "instrument_count": len(instruments),
+                "bars_as_of": latest_bar.isoformat() if latest_bar else None,
+                "snapshots_as_of": latest_snap.isoformat() if latest_snap else None,
+                "kap_as_of": latest_kap.isoformat() if latest_kap else None,
+                "missing_bars_count": len(missing_bars),
+                "missing_bars_codes": missing_bars,
+                "missing_fundamentals_count": len(missing_fundamentals),
+                "missing_fundamentals_codes": missing_fundamentals,
+            }
+
+        return dict(self.manager.run_session(_read, read_only=True))
+
+
+    # ------------------------------------------------------------------
+    # Scorecard cache (Faz P3.4)
+    # ------------------------------------------------------------------
+    def get_scorecard_cache(self, cache_key: str) -> dict[str, object] | None:
+        def _read(session):
+            row = session.get(ScorecardCacheRecord, cache_key)
+            if row is None:
+                return None
+            return {"payload": row.payload, "computed_at": row.computed_at}
+
+        return self.manager.run_session(_read, read_only=True)
+
+    def set_scorecard_cache(self, cache_key: str, payload: str) -> None:
+        def _write(session):
+            row = session.get(ScorecardCacheRecord, cache_key)
+            if row is None:
+                session.add(
+                    ScorecardCacheRecord(
+                        cache_key=cache_key,
+                        payload=payload,
+                        computed_at=datetime.now(UTC),
+                    )
+                )
+            else:
+                row.payload = payload
+                row.computed_at = datetime.now(UTC)
+
+        self.manager.run_session(_write)
+
+    def clear_scorecard_cache(self) -> int:
+        def _write(session):
+            return int(session.execute(delete(ScorecardCacheRecord)).rowcount or 0)
+
+        return int(self.manager.run_session(_write))
 
 
 def _as_float(value: object) -> float | None:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import threading
 from collections.abc import MutableMapping
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
@@ -438,7 +439,7 @@ def ensure_initial_data() -> None:
             st.session_state.signals = map_cached_signals(cached)
     except Exception as exc:
         logger.error("ui_initial_scan_failed", error=str(exc))
-        st.error(f"Tarama hatası: {exc}")
+        st.error(f"Tarama hatası: {html.escape(str(exc))}")
 
     if st.session_state.get("scan_in_progress"):
         return

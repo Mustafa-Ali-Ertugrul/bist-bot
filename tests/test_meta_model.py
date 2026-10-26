@@ -65,6 +65,15 @@ def test_signal_meta_model_rejects_pickle_artifacts(tmp_path) -> None:
         SignalMetaModel.load_artifacts(tmp_path)
 
 
+def test_unsigned_joblib_artifacts_are_refused(tmp_path) -> None:
+    """AppSec: joblib is pickle-equivalent — never load it without a verified manifest."""
+    (tmp_path / "feature_columns.json").write_text('["score"]', encoding="utf-8")
+    (tmp_path / "meta_model.joblib").write_bytes(b"not-used")
+
+    with pytest.raises(ValueError, match="verified Ed25519 manifest"):
+        SignalMetaModel.load_artifacts(tmp_path)
+
+
 @pytest.mark.parametrize("method", ["platt", "isotonic"])
 def test_calibrator_json_round_trip_preserves_probabilities(method) -> None:
     calibrator = ProbabilityCalibrator(method)

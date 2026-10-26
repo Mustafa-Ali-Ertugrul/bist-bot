@@ -203,9 +203,20 @@ class MarketScheduler:
             logger.error("scheduler_screens_failed", error_type=type(exc).__name__, error=str(exc))
 
     def _run_alerts(self, now: datetime) -> None:
-        """Faz 6 evening digest, after data and screens. Never inside the EOD pass."""
+        """Faz 6 evening digest, after data and screens. Never inside the EOD pass.
+
+        In-app events run first: a successful Telegram digest disables one-shot
+        price alerts, and a disabled alert produces no event. Writing the
+        history before the digest keeps both channels in sync.
+        """
         if self.alerts is None:
             return
+        try:
+            self.alerts.run_inapp_if_due(now)
+        except Exception as exc:
+            logger.error(
+                "scheduler_alert_events_failed", error_type=type(exc).__name__, error=str(exc)
+            )
         try:
             self.alerts.run_if_due(now)
         except Exception as exc:

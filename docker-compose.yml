@@ -31,7 +31,7 @@ services:
       FLASK_PORT: "5000"
       FLASK_DEBUG: "False"
       API_BASE_URL: http://bot:5000
-      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://bist:bist@postgres:5432/bist_bot}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://bist:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/bist_bot}
       DB_PATH: /app/data/bist_signals.db
       # C7: Prometheus ic agdan JWT'siz scrape icin (port host'a acilmadikca risk dusuk).
       METRICS_PUBLIC: ${METRICS_PUBLIC:-false}
@@ -97,7 +97,7 @@ services:
     environment:
       PYTHONPATH: /app/src
       API_BASE_URL: http://bot:5000
-      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://bist:bist@postgres:5432/bist_bot}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://bist:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/bist_bot}
       DB_PATH: /app/data/bist_signals.db
       LOG_FORMAT: ${LOG_FORMAT:-json}
       BROKER_MODE: ${BROKER_MODE:-paper}
@@ -152,7 +152,8 @@ services:
       - no-new-privileges:true
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-bist}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bist}
+      # AppSec: no silent default DB credential — fail closed if unset.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: ${POSTGRES_DB:-bist_bot}
     ports:
       - "127.0.0.1:5432:5432"

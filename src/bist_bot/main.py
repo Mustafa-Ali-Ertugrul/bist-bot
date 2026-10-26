@@ -67,15 +67,23 @@ def main():
         )
     alerts = None
     user_bot_token = settings.TELEGRAM_USER_BOT_TOKEN or settings.TELEGRAM_BOT_TOKEN
-    if settings.USER_DIGEST_ENABLED:
+    # In-app alert history does not need Telegram: build the service when either
+    # the digest or the in-app events are enabled, and only attach a notifier
+    # when the Telegram digest is actually on.
+    if settings.USER_DIGEST_ENABLED or getattr(settings, "IN_APP_ALERT_EVENTS_ENABLED", False):
         from bist_bot.notifier import TelegramNotifier
         from bist_bot.services.alert_digest_service import AlertDigestService
 
+        digest_notifier = (
+            TelegramNotifier(token=user_bot_token, chat_id=settings.TELEGRAM_CHAT_ID)
+            if settings.USER_DIGEST_ENABLED
+            else None
+        )
         alerts = AlertDigestService(
             container.db.alerts,
             container.db.market_data,
             container.db.user_data,
-            TelegramNotifier(token=user_bot_token, chat_id=settings.TELEGRAM_CHAT_ID),
+            digest_notifier,
             settings,
         )
     if settings.TELEGRAM_LINK_POLLING_ENABLED and user_bot_token:

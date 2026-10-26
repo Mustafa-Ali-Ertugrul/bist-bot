@@ -15,7 +15,7 @@ import sqlalchemy as sa
 from flask import Flask
 from flask.testing import FlaskClient
 
-from bist_bot.dashboard import create_dashboard_app
+from bist_bot.dashboard import _derive_session_secret, create_dashboard_app
 
 ACCESS_COOKIE = "access_token_cookie"
 GATED_ROUTES = ["/", "/ui", "/ui/dashboard", "/ui/signals", "/ui/analysis", "/ui/settings"]
@@ -31,6 +31,7 @@ def app(tmp_path) -> Flask:
     with settings.override(
         DB_PATH=db_path,
         JWT_SECRET_KEY="test-secret-key-for-ui-routes-123456",
+        SECRET_KEY="",
         JWT_COOKIE_SECURE=False,
         BROKER_MODE="paper",
         BROKER_PROVIDER="paper",
@@ -70,6 +71,14 @@ def _register_and_login(client: FlaskClient, email: str, password: str) -> dict[
     payload: dict[str, Any] = login.get_json()
     assert payload.get("access_token")
     return payload
+
+
+def test_session_key_is_domain_separated_from_jwt_key(app: Flask) -> None:
+    """AppSec: the Flask session key must never be the JWT signing key itself."""
+    from bist_bot.config.settings import settings
+
+    assert app.config["SECRET_KEY"] != settings.JWT_SECRET_KEY
+    assert app.config["SECRET_KEY"] == _derive_session_secret(settings.JWT_SECRET_KEY)
 
 
 @pytest.mark.parametrize("route", GATED_ROUTES)
@@ -266,4 +275,79 @@ def test_product_pages_use_product_navigation_and_responsive_css(app: Flask) -> 
         screener_css = client.get("/static/screener.css").get_data(as_text=True)
         assert "max-width: 640px" in stock_css
         assert "max-width: 640px" in screener_css
+
+
+def test_session_endpoint_returns_product_redirect(app: Flask) -> None:
+    from bist_bot.config.settings import settings
+
+    with app.test_client() as client:
+        payload = _register_and_login(client, "redir@bistbot.local", "Str0ng-test-pass!")
+        headers = {"Authorization": f"Bearer {payload['access_token']}"}
+        with settings.override(STOCK_PAGES_PUBLIC=False, DATA_PUBLIC_SERVING_ENABLED=False):
+            member = client.post("/api/auth/session", headers=headers)
+            assert member.status_code == 200
+            assert member.get_json()["redirect_to"] == "/ui/beta"
+
+        _promote_to_admin(app, "redir@bistbot.local")
+        admin = client.post("/api/auth/session", headers=headers)
+        assert admin.status_code == 200
+        assert admin.get_json()["redirect_to"] == "/ui/screener"
+
+
+def test_unknown_page_redirects_to_product_or_login(app: Flask) -> None:
+    from bist_bot.config.settings import settings
+
+    with app.test_client() as client:
+        anonymous = client.get("/ui/olmayan-sayfa")
+        assert anonymous.status_code == 302
+        assert anonymous.headers.get("Location", "").endswith("/login")
+
+        _register_and_login(client, "lost@bistbot.local", "Str0ng-test-pass!")
+        with settings.override(STOCK_PAGES_PUBLIC=False, DATA_PUBLIC_SERVING_ENABLED=False):
+            member = client.get("/ui/olmayan-sayfa")
+            assert member.headers.get("Location", "").endswith("/ui/beta")
+
+        _promote_to_admin(app, "lost@bistbot.local")
+        admin = client.get("/ui/olmayan-sayfa")
+        assert admin.headers.get("Location", "").endswith("/ui/screener")
+
+        assert client.get("/api/olmayan-endpoint").status_code == 404
+
+
+def test_product_pages_have_logout_and_shared_nav_script(app: Flask) -> None:
+    with app.test_client() as client:
+        _register_and_login(client, "nav@bistbot.local", "Str0ng-test-pass!")
+        _promote_to_admin(app, "nav@bistbot.local")
+        for route in (
+            "/ui/screener",
+            "/ui/stock/THYAO",
+            "/ui/watchlist",
+            "/ui/portfolio",
+            "/ui/alerts",
+            "/ui/scorecard",
+        ):
+            html = client.get(route).get_data(as_text=True)
+            assert 'data-action="logout"' in html, route
+            assert "/static/product-nav.js" in html, route
+            assert 'href="/ui/screener"' in html, route
+            assert "onclick=" not in html, route
+
+        nav_js = client.get("/static/product-nav.js").get_data(as_text=True)
+        assert "/api/auth/logout" in nav_js
+        assert "bistbot_token" in nav_js
+        assert "bistbot_email" in nav_js
+
+
+def test_login_js_uses_server_redirect_target(app: Flask) -> None:
+    with app.test_client() as client:
+        login_js = client.get("/static/login.js").get_data(as_text=True)
+        assert "redirect_to" in login_js
+        assert "/ui/dashboard" not in login_js
+        assert "handleRegister" in login_js
+
+        # app.js bounces session-holding visitors off /login: that hop must use
+        # the server-chosen target too, never the admin-only /ui/dashboard.
+        app_js = client.get("/static/app.js").get_data(as_text=True)
+        assert "data.redirect_to" in app_js
+        assert "window.location.replace('/ui/dashboard')" not in app_js
 

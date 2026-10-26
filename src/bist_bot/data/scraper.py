@@ -89,6 +89,8 @@ def _extract_quote_from_html(html: str) -> ScrapeQuoteResult:
 def scrape_bist_quote(ticker: str, rate_limiter: RateLimiterProtocol) -> ScrapeQuoteResult:
     """Try to scrape a quote from Borsa Istanbul without raising upstream."""
     symbol = ticker.replace(".IS", "").upper()
+    if not symbol or not symbol.isascii() or not symbol.isalnum():
+        raise ValueError(f"Invalid ticker symbol for scraping: {ticker!r}")
     candidate_urls = [
         f"https://www.borsaistanbul.com/tr/sirketler/islem-goren-sirketler/sirket-bilgileri?kod={symbol}",
         f"https://www.borsaistanbul.com/tr/sirketler/sirket-karti?kod={symbol}",

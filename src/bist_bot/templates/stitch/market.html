@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html class="dark" lang="tr">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Bist-Bot · Piyasa</title>
+<link rel="stylesheet" href="/static/tailwind.css"/>
+<link rel="stylesheet" href="/static/stock.css?v=1"/>
+<link rel="stylesheet" href="/static/screener.css?v=5"/>
+<link rel="stylesheet" href="/static/personal.css?v=3"/>
+</head>
+<body class="bg-background font-body-md text-body-md text-on-surface antialiased">
+<header class="w-full px-terminal-margin py-space-md border-b border-surface-container-high/40">
+<div class="w-full max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-space-md">
+<div class="flex items-center gap-space-sm">
+<a class="font-headline-md text-headline-md tracking-tight font-extrabold text-on-surface" href="/ui/market">Bist<span class="text-primary">-Bot</span></a>
+<span class="bg-surface-container-high px-space-xs py-space-3xs rounded text-secondary font-label-caps text-label-caps uppercase tracking-wider">Piyasa</span>
+</div>
+<nav class="flex flex-wrap items-center gap-space-sm">
+<a class="personal-nav" href="/ui/screener">Tarayıcı</a>
+<a class="personal-nav" href="/ui/watchlist">İzleme</a>
+<a class="personal-nav" href="/ui/portfolio">Portföy</a>
+<a class="personal-nav" href="/ui/alerts">Alarmlar</a>
+<a class="personal-nav" href="/ui/scorecard">Karne</a>
+<button class="personal-nav" type="button" data-action="logout">Çıkış</button>
+</nav>
+</div>
+</header>
+
+<main class="w-full max-w-7xl mx-auto px-terminal-margin py-space-lg flex flex-col gap-space-lg">
+<section class="bg-surface-container-low/90 rounded-xl p-space-md">
+<div class="flex flex-wrap items-end justify-between gap-space-sm">
+<div>
+<h1 class="font-headline-md text-headline-md font-bold">Piyasa Özeti</h1>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-space-3xs" id="market-asof">Yükleniyor…</p>
+</div>
+<div class="flex flex-wrap items-center gap-space-xs">
+<label class="screen-control-label" for="market-date">Tarih</label>
+<select id="market-date" class="screen-control"></select>
+<button id="market-reload" class="screen-button" type="button">Yenile</button>
+</div>
+</div>
+<div class="market-kpis">
+<div class="bg-surface-container-high/60 rounded-lg p-space-sm">
+<p class="font-label-caps text-label-caps uppercase text-outline">XU100</p>
+<p class="font-metric-value text-metric-value" id="market-index">—</p>
+<p class="font-body-sm text-body-sm" id="market-index-change">—</p>
+</div>
+<div class="bg-surface-container-high/60 rounded-lg p-space-sm">
+<p class="font-label-caps text-label-caps uppercase text-outline">Yükselen</p>
+<p class="font-metric-value text-metric-value stock-positive" id="market-advancers">—</p>
+<p class="font-body-sm text-body-sm text-outline" id="market-advancers-share">—</p>
+</div>
+<div class="bg-surface-container-high/60 rounded-lg p-space-sm">
+<p class="font-label-caps text-label-caps uppercase text-outline">Düşen</p>
+<p class="font-metric-value text-metric-value stock-negative" id="market-decliners">—</p>
+<p class="font-body-sm text-body-sm text-outline" id="market-decliners-share">—</p>
+</div>
+<div class="bg-surface-container-high/60 rounded-lg p-space-sm">
+<p class="font-label-caps text-label-caps uppercase text-outline">İşlem Gören</p>
+<p class="font-metric-value text-metric-value" id="market-total">—</p>
+<p class="font-body-sm text-body-sm text-outline" id="market-unchanged">—</p>
+</div>
+</div>
+<p class="font-body-sm text-body-sm text-outline mt-space-xs" id="market-status"></p>
+</section>
+
+<section class="market-boards">
+<div class="market-board bg-surface-container-low/90 rounded-xl p-space-md">
+<h2 class="font-headline-md text-headline-md font-bold">En Çok Yükselen</h2>
+<div class="overflow-x-auto mt-space-sm">
+<table class="w-full font-body-sm text-body-sm screen-table">
+<thead><tr class="text-outline font-label-caps text-label-caps uppercase">
+<th class="text-left">Kod</th><th class="text-right">Kapanış</th><th class="text-right">Günlük</th>
+</tr></thead>
+<tbody id="market-gainers"><tr><td colspan="3" class="py-space-sm">Yükleniyor…</td></tr></tbody>
+</table>
+</div>
+</div>
+<div class="market-board bg-surface-container-low/90 rounded-xl p-space-md">
+<h2 class="font-headline-md text-headline-md font-bold">En Çok Düşen</h2>
+<div class="overflow-x-auto mt-space-sm">
+<table class="w-full font-body-sm text-body-sm screen-table">
+<thead><tr class="text-outline font-label-caps text-label-caps uppercase">
+<th class="text-left">Kod</th><th class="text-right">Kapanış</th><th class="text-right">Günlük</th>
+</tr></thead>
+<tbody id="market-losers"><tr><td colspan="3" class="py-space-sm">Yükleniyor…</td></tr></tbody>
+</table>
+</div>
+</div>
+<div class="market-board bg-surface-container-low/90 rounded-xl p-space-md">
+<h2 class="font-headline-md text-headline-md font-bold">Hacim</h2>
+<div class="overflow-x-auto mt-space-sm">
+<table class="w-full font-body-sm text-body-sm screen-table">
+<thead><tr class="text-outline font-label-caps text-label-caps uppercase">
+<th class="text-left">Kod</th><th class="text-right">20g Ort. Hacim</th><th class="text-right">Günlük</th>
+</tr></thead>
+<tbody id="market-volume"><tr><td colspan="3" class="py-space-sm">Yükleniyor…</td></tr></tbody>
+</table>
+</div>
+</div>
+</section>
+
+<section class="bg-surface-container-low/90 rounded-xl p-space-md">
+<h2 class="font-headline-md text-headline-md font-bold">Sektörler</h2>
+<p class="font-body-sm text-body-sm text-outline mt-space-3xs">Sektör içindeki hisselerin ortalama günlük ve 1 aylık getirisi.</p>
+<div class="overflow-x-auto mt-space-sm">
+<table class="w-full font-body-sm text-body-sm screen-table">
+<thead><tr class="text-outline font-label-caps text-label-caps uppercase">
+<th class="text-left sticky-col">Sektör</th><th class="text-right">Hisse</th>
+<th class="text-right">Ort. Günlük</th><th class="text-right">Medyan Günlük</th><th class="text-right">Ort. 1 Ay</th>
+</tr></thead>
+<tbody id="market-sectors"><tr><td colspan="5" class="py-space-sm">Yükleniyor…</td></tr></tbody>
+</table>
+</div>
+</section>
+
+<section class="bg-surface-container-low/90 rounded-xl p-space-md">
+<div class="flex flex-wrap items-center justify-between gap-space-sm">
+<h2 class="font-headline-md text-headline-md font-bold">Bugünün Tarama Sonuçları</h2>
+<a class="personal-nav" href="/ui/screener">Tarayıcıya git</a>
+</div>
+<div id="market-scans" class="personal-tabs mt-space-sm"></div>
+</section>
+
+<p class="font-body-sm text-body-sm text-outline pb-space-lg">Bu sayfa bilgilendirme amaçlıdır; alım-satım tavsiyesi değildir. Sıralamalar yalnızca geçmiş fiyat ve hacim verisini gösterir.</p>
+</main>
+<script src="/static/market.js?v=2"></script>
+<script src="/static/product-nav.js?v=2"></script>
+</body>
+</html>

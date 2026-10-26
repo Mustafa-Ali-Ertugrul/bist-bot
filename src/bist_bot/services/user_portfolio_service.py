@@ -6,6 +6,10 @@ show a fake loss: units = qty * raw_price / adjusted_price at the trade date.
 
 from __future__ import annotations
 
+import csv
+import io
+import math
+import threading
 from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any
@@ -37,6 +41,21 @@ def _pct(numerator: float, denominator: float) -> float | None:
     if denominator <= 0:
         return None
     return round((numerator / denominator - 1.0) * 100.0, 2)
+
+
+_LEDGER_LOCKS: dict[tuple[int, int], threading.Lock] = {}
+_LEDGER_LOCKS_GUARD = threading.Lock()
+
+
+def _ledger_lock(user_id: int, portfolio_id: int) -> threading.Lock:
+    """Per-portfolio lock serializing ledger check-then-act mutations."""
+    key = (int(user_id), int(portfolio_id))
+    with _LEDGER_LOCKS_GUARD:
+        lock = _LEDGER_LOCKS.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _LEDGER_LOCKS[key] = lock
+        return lock
 
 
 class UserPortfolioService:
@@ -87,6 +106,7 @@ class UserPortfolioService:
             return {
                 "transactions": [],
                 "positions": [],
+                "closed_positions": [],
                 "totals": {},
                 "benchmark": {},
                 "series": [],
@@ -101,6 +121,7 @@ class UserPortfolioService:
         realized = 0.0
         total_bought = 0.0
         total_sold = 0.0
+        net_invested = 0.0
         for tx in transactions:
             ticker = tx["ticker"]
             point = self._price_on(prices[ticker], tx["trade_date"])
@@ -109,29 +130,51 @@ class UserPortfolioService:
             units = tx["quantity"] * point.raw / point.adjusted
             gross = tx["quantity"] * tx["price"]
             if tx["side"] == "buy":
-                # Buys are funded from outside the portfolio; they are not cash out.
+                # A buy draws down portfolio cash first; only the remainder is
+                # fresh money from outside (net_invested).
                 total_bought += gross
-                state = holdings.setdefault(ticker, {"units": 0.0, "cost": 0.0})
+                outflow = gross + tx["commission_tl"]
+                used = max(0.0, min(cash, outflow))
+                cash -= used
+                net_invested += outflow - used
+                state = holdings.setdefault(
+                    ticker, {"units": 0.0, "cost": 0.0, "realized": 0.0}
+                )
                 state["units"] += units
-                state["cost"] += gross + tx["commission_tl"]
+                state["cost"] += outflow
             else:
-                state = holdings.setdefault(ticker, {"units": 0.0, "cost": 0.0})
+                state = holdings.setdefault(
+                    ticker, {"units": 0.0, "cost": 0.0, "realized": 0.0}
+                )
                 if units > state["units"] + 1e-9:
                     raise TradeError(f"{ticker} için elde olandan fazla satış.")
                 average = state["cost"] / state["units"] if state["units"] else 0.0
                 removed_cost = average * units
                 state["units"] -= units
                 state["cost"] -= removed_cost
-                cash += gross - tx["commission_tl"]
+                # Sale proceeds stay inside the portfolio as cash.
+                proceeds = gross - tx["commission_tl"]
+                cash += proceeds
                 total_sold += gross
-                realized += gross - tx["commission_tl"] - removed_cost
+                tx_realized = proceeds - removed_cost
+                realized += tx_realized
+                state["realized"] += tx_realized
 
         instruments = {item.ticker: item for item in self.market_repository.list_instruments()}
         positions: list[dict[str, Any]] = []
+        closed_positions: list[dict[str, Any]] = []
         market_value = 0.0
         remaining_cost = 0.0
         for ticker, state in holdings.items():
+            instrument = instruments.get(ticker)
             if state["units"] <= 1e-9:
+                closed_positions.append(
+                    {
+                        "code": instrument.code if instrument else ticker.removesuffix(".IS"),
+                        "name": instrument.name if instrument else "",
+                        "realized_pnl": round(state["realized"], 2),
+                    }
+                )
                 continue
             bars = prices[ticker]
             latest_date, latest = bars[-1]
@@ -139,7 +182,6 @@ class UserPortfolioService:
             cost = state["cost"]
             market_value += value
             remaining_cost += cost
-            instrument = instruments.get(ticker)
             positions.append(
                 {
                     "code": instrument.code if instrument else ticker.removesuffix(".IS"),
@@ -153,6 +195,7 @@ class UserPortfolioService:
                     "cost_basis": round(cost, 2),
                     "unrealized": round(value - cost, 2),
                     "unrealized_pct": _pct(value, cost),
+                    "realized_pnl": round(state["realized"], 2),
                     "weight_pct": None,
                 }
             )
@@ -171,13 +214,15 @@ class UserPortfolioService:
             "realized": round(realized, 2),
             "total_bought": round(total_bought, 2),
             "total_sold": round(total_sold, 2),
-            "return_pct": _pct(total_value, total_bought) if total_bought else None,
+            "net_invested": round(net_invested, 2),
+            "return_pct": _pct(total_value, net_invested) if net_invested else None,
         }
         return {
             "transactions": [
                 {**tx, "trade_date": tx["trade_date"].isoformat()} for tx in transactions
             ],
             "positions": sorted(positions, key=lambda row: row["value"], reverse=True),
+            "closed_positions": closed_positions,
             "totals": totals,
             "benchmark": benchmark["summary"],
             "series": benchmark["series"],
@@ -186,24 +231,23 @@ class UserPortfolioService:
     # ------------------------------------------------------------------
     # Trade validation + persistence
     # ------------------------------------------------------------------
-    def add_transaction(
-        self,
-        user_id: int,
-        portfolio_id: int,
-        payload: dict[str, Any],
-        *,
-        limit: int = 500,
-    ) -> int:
+    def _parse_transaction_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
         ticker_input = str(payload.get("ticker") or "").strip().upper()
         code = ticker_input.removesuffix(".IS")
         instrument = self.market_repository.get_instrument(code)
         if instrument is None:
             raise TradeError("Hisse bulunamadı.")
-        side = str(payload.get("side") or "").lower()
+        raw_side = str(payload.get("side") or "").strip().lower()
+        if raw_side in ("alış", "alis", "al", "b"):
+            side = "buy"
+        elif raw_side in ("satış", "satis", "sat", "s"):
+            side = "sell"
+        else:
+            side = raw_side
         if side not in VALID_SIDES:
             raise TradeError("Yön alış veya satış olmalı.")
         try:
-            trade_date = date.fromisoformat(str(payload.get("trade_date") or ""))
+            trade_date = date.fromisoformat(str(payload.get("trade_date") or "").strip())
         except ValueError as exc:
             raise TradeError("Tarih YYYY-AA-GG olmalı.") from exc
         configured_start = str(getattr(self.settings, "DAILY_BARS_START_DATE", "2016-01-01"))
@@ -218,37 +262,244 @@ class UserPortfolioService:
         try:
             quantity = float(payload.get("quantity"))
             price = float(payload.get("price"))
-            commission = float(payload.get("commission_tl") or 0.0)
+            commission_raw = payload.get("commission_tl")
+            if commission_raw in (None, ""):
+                commission_raw = payload.get("commission")
+            commission = float(commission_raw or 0.0)
         except (TypeError, ValueError) as exc:
             raise TradeError("Adet, fiyat ve komisyon sayı olmalı.") from exc
+        for value in (quantity, price, commission):
+            if not math.isfinite(value):
+                raise TradeError("Adet, fiyat ve komisyon geçerli sayı olmalı.")
         if quantity <= 0 or price <= 0:
             raise TradeError("Adet ve fiyat sıfırdan büyük olmalı.")
         if commission < 0:
             raise TradeError("Komisyon negatif olamaz.")
+        return {
+            "ticker": instrument.ticker,
+            "side": side,
+            "trade_date": trade_date,
+            "quantity": quantity,
+            "price": price,
+            "commission_tl": commission,
+            "note": payload.get("note"),
+        }
 
-        if side == "sell":
-            held = self._held_units(user_id, portfolio_id, instrument.ticker, trade_date)
-            point = self._price_on(self._prices(instrument.ticker, trade_date), trade_date)
+    def add_transaction(
+        self,
+        user_id: int,
+        portfolio_id: int,
+        payload: dict[str, Any],
+        *,
+        limit: int = 500,
+    ) -> int:
+        with _ledger_lock(user_id, portfolio_id):
+            return self._add_transaction_unlocked(
+                user_id, portfolio_id, payload, limit=limit
+            )
+
+    def _add_transaction_unlocked(
+        self,
+        user_id: int,
+        portfolio_id: int,
+        payload: dict[str, Any],
+        *,
+        limit: int = 500,
+    ) -> int:
+        record = self._parse_transaction_payload(payload)
+        if record["side"] == "sell":
+            held = self._held_units(
+                user_id, portfolio_id, record["ticker"], record["trade_date"]
+            )
+            point = self._price_on(
+                self._prices(record["ticker"], record["trade_date"]), record["trade_date"]
+            )
             if point is None:
                 raise TradeError("Satış tarihinde fiyat verisi yok.")
-            units = quantity * point.raw / point.adjusted
+            units = record["quantity"] * point.raw / point.adjusted
             if units > held + 1e-9:
                 raise TradeError("Elde olandan fazla satış girilemez.")
 
-        return self.user_repository.add_transaction(
-            user_id,
-            portfolio_id,
-            {
-                "ticker": instrument.ticker,
-                "side": side,
-                "trade_date": trade_date,
-                "quantity": quantity,
-                "price": price,
-                "commission_tl": commission,
-                "note": payload.get("note"),
-            },
-            limit=limit,
+        existing = self.user_repository.get_transactions(user_id, portfolio_id)
+        self._validate_ledger([*existing, record])
+        return self.user_repository.add_transaction(user_id, portfolio_id, record, limit=limit)
+
+    def update_transaction(
+        self,
+        user_id: int,
+        portfolio_id: int,
+        transaction_id: int,
+        payload: dict[str, Any],
+    ) -> None:
+        with _ledger_lock(user_id, portfolio_id):
+            self._update_transaction_unlocked(
+                user_id, portfolio_id, transaction_id, payload
+            )
+
+    def _update_transaction_unlocked(
+        self,
+        user_id: int,
+        portfolio_id: int,
+        transaction_id: int,
+        payload: dict[str, Any],
+    ) -> None:
+        record = self._parse_transaction_payload(payload)
+        existing = self.user_repository.get_transactions(user_id, portfolio_id)
+        updated: list[dict[str, Any]] = []
+        found = False
+        for tx in existing:
+            if int(tx["id"]) == int(transaction_id):
+                found = True
+                updated.append({**record, "id": tx["id"]})
+            else:
+                updated.append(tx)
+        if not found:
+            raise OwnershipError("İşlem bulunamadı.")
+        self._validate_ledger(updated)
+        self.user_repository.update_transaction(user_id, portfolio_id, transaction_id, record)
+
+    def import_transactions_csv(
+        self,
+        user_id: int,
+        portfolio_id: int,
+        csv_text: str,
+        *,
+        dry_run: bool = False,
+        limit: int = 500,
+    ) -> dict[str, Any]:
+        existing = self.user_repository.get_transactions(user_id, portfolio_id)
+        cleaned = (csv_text or "").lstrip("\ufeff").strip()
+        if not cleaned:
+            raise TradeError("CSV içeriği boş olamaz.")
+        first_line = cleaned.splitlines()[0]
+        delimiter = ";" if first_line.count(";") > first_line.count(",") else ","
+        reader = csv.reader(io.StringIO(cleaned), delimiter=delimiter)
+        raw_rows = [row for row in reader if any(cell.strip() for cell in row)]
+        if not raw_rows:
+            raise TradeError("CSV içeriği boş olamaz.")
+
+        header_aliases = {
+            "trade_date": "trade_date",
+            "date": "trade_date",
+            "tarih": "trade_date",
+            "ticker": "ticker",
+            "code": "ticker",
+            "kod": "ticker",
+            "hisse": "ticker",
+            "side": "side",
+            "yon": "side",
+            "yön": "side",
+            "quantity": "quantity",
+            "qty": "quantity",
+            "adet": "quantity",
+            "price": "price",
+            "fiyat": "price",
+            "commission": "commission_tl",
+            "commission_tl": "commission_tl",
+            "komisyon": "commission_tl",
+            "note": "note",
+            "not": "note",
+        }
+        first_norm = [cell.strip().lower() for cell in raw_rows[0]]
+        has_header = any(col in header_aliases for col in first_norm)
+        if has_header:
+            col_map = [header_aliases.get(col) for col in first_norm]
+            data_rows = list(enumerate(raw_rows[1:], start=2))
+        else:
+            default_cols = [
+                "trade_date",
+                "ticker",
+                "side",
+                "quantity",
+                "price",
+                "commission_tl",
+                "note",
+            ]
+            col_map = default_cols[: len(raw_rows[0])]
+            data_rows = list(enumerate(raw_rows, start=1))
+
+        if not data_rows:
+            raise TradeError("CSV içinde eklenecek işlem satırı yok.")
+        if len(existing) + len(data_rows) > limit:
+            raise TradeError(f"Bir portföyde en fazla {limit} işlem olabilir.")
+
+        parsed: list[dict[str, Any]] = []
+        errors: list[dict[str, Any]] = []
+        for line_no, cells in data_rows:
+            row_dict: dict[str, Any] = {}
+            for idx, key in enumerate(col_map):
+                if key and idx < len(cells):
+                    row_dict[key] = cells[idx].strip()
+            try:
+                parsed.append(self._parse_transaction_payload(row_dict))
+            except TradeError as exc:
+                errors.append({"row": line_no, "message": str(exc)})
+
+        if not errors and parsed:
+            try:
+                self._validate_ledger([*existing, *parsed])
+            except TradeError as exc:
+                errors.append({"row": 0, "message": str(exc)})
+
+        if errors:
+            return {
+                "valid": False,
+                "dry_run": dry_run,
+                "imported": 0,
+                "preview_count": len(parsed),
+                "errors": errors,
+            }
+
+        imported = 0
+        if not dry_run:
+            imported = self.user_repository.add_transactions_bulk(
+                user_id, portfolio_id, parsed, limit=limit
+            )
+        return {
+            "valid": True,
+            "dry_run": dry_run,
+            "imported": imported,
+            "preview_count": len(parsed),
+            "errors": [],
+        }
+
+    def delete_transaction(self, user_id: int, portfolio_id: int, transaction_id: int) -> None:
+        existing = self.user_repository.get_transactions(user_id, portfolio_id)
+        remaining = [tx for tx in existing if int(tx["id"]) != int(transaction_id)]
+        if len(remaining) == len(existing):
+            raise OwnershipError("İşlem bulunamadı.")
+        self._validate_ledger(remaining)
+        self.user_repository.delete_transaction(user_id, portfolio_id, transaction_id)
+
+    def _validate_ledger(self, transactions: list[dict[str, Any]]) -> None:
+        """Replay the ledger in trade order; no point in time may oversell.
+
+        Checking only up to the inserted/deleted transaction misses back-dated
+        entries, which leave later sells over-owning and break summary().
+        """
+        if not transactions:
+            return
+        starts: dict[str, date] = {}
+        for tx in transactions:
+            current = starts.get(tx["ticker"])
+            if current is None or tx["trade_date"] < current:
+                starts[tx["ticker"]] = tx["trade_date"]
+        prices = {ticker: self._prices(ticker, start) for ticker, start in starts.items()}
+        held: dict[str, float] = {}
+        ordered = sorted(
+            transactions,
+            key=lambda item: (item["trade_date"], 0 if item["side"] == "buy" else 1),
         )
+        for tx in ordered:
+            ticker = tx["ticker"]
+            point = self._price_on(prices[ticker], tx["trade_date"])
+            if point is None:
+                raise TradeError(f"{ticker} için {tx['trade_date']} civarında fiyat yok.")
+            units = tx["quantity"] * point.raw / point.adjusted
+            balance = held.get(ticker, 0.0) + (units if tx["side"] == "buy" else -units)
+            if balance < -1e-9:
+                raise TradeError(f"{ticker} için elde olandan fazla satış.")
+            held[ticker] = balance
 
     def _held_units(self, user_id: int, portfolio_id: int, ticker: str, until: date) -> float:
         transactions = [
@@ -347,27 +598,36 @@ class UserPortfolioService:
         for tx in transactions:
             grouped.setdefault(tx["trade_date"], []).append(tx)
 
-        days = [day for day in sorted(xu) if day >= start]
+        # Include every trade date so weekend/holiday trades are not dropped
+        # just because the benchmark has no session that day.
+        days = sorted({*[day for day in xu if day >= start], *grouped})
         series: list[dict[str, Any]] = []
         units_by_ticker: dict[str, float] = {}
+        benchmark_complete = True
         for day in days:
             for tx in grouped.get(day, []):
                 point = self._price_on(prices[tx["ticker"]], day)
                 if point is None:
                     continue
                 gross = tx["quantity"] * tx["price"]
-                amount = (
-                    gross + tx["commission_tl"]
-                    if tx["side"] == "buy"
-                    else -(gross - tx["commission_tl"])
-                )
-                day_xu = xu_on(day)
-                if day_xu:
-                    xu_units += amount / day_xu
-                mm_day = mm_on(day)
-                if mm_day:
-                    mm_units += amount / mm_day
-                if tx["side"] == "sell":
+                if tx["side"] == "buy":
+                    outflow = gross + tx["commission_tl"]
+                    used = max(0.0, min(cash, outflow))
+                    cash -= used
+                    # Benchmarks track the same outside money only; internal
+                    # cash (sale proceeds) never adds benchmark units.
+                    external = outflow - used
+                    if external > 0:
+                        day_xu = xu_on(day)
+                        if day_xu is None:
+                            benchmark_complete = False
+                        else:
+                            xu_units += external / day_xu
+                        mm_day = mm_on(day)
+                        if mm_day:
+                            mm_units += external / mm_day
+                else:
+                    # Sale proceeds stay in the portfolio as cash.
                     cash += gross - tx["commission_tl"]
                 units_delta = tx["quantity"] * point.raw / point.adjusted
                 units_by_ticker[tx["ticker"]] = units_by_ticker.get(tx["ticker"], 0.0) + (
@@ -390,6 +650,9 @@ class UserPortfolioService:
                     "money_market": round(mm_units * mm_on(day), 2),
                 }
             )
+
+        if not benchmark_complete:
+            return {"summary": {"available": False}, "series": []}
 
         portfolio_now = series[-1]["portfolio"] if series else 0.0
         xu_now = series[-1]["xu100"] if series else 0.0

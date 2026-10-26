@@ -62,7 +62,12 @@
     return fetch('/api/auth/session', {
       method: 'POST',
       headers: { 'Authorization': 'Bearer ' + token }
-    }).then(function (res) { return res.ok; }).catch(function () { return false; });
+    }).then(function (res) {
+      if (!res.ok) return null;
+      return res.json().then(function (data) {
+        return data.redirect_to || '/ui/screener';
+      });
+    }).catch(function () { return null; });
   }
 
   // ── Error display (XSS defence-in-depth) ──
@@ -104,8 +109,14 @@
           localStorage.setItem('bistbot_token', data.access_token);
           localStorage.setItem('bistbot_email', email);
           btn.innerHTML = '<span class="material-symbols-outlined text-[20px]">check_circle</span><span>Bağlantı Kuruldu</span>';
-          establishSession(data.access_token).then(function () {
-            setTimeout(function () { window.location.href = '/ui/dashboard'; }, 300);
+          establishSession(data.access_token).then(function (target) {
+            if (!target) {
+              btn.innerHTML = originalContent;
+              btn.disabled = false;
+              showLoginError('Oturum başlatılamadı. Lütfen tekrar deneyin.');
+              return;
+            }
+            setTimeout(function () { window.location.href = target; }, 300);
           });
         } else {
           btn.innerHTML = originalContent;
@@ -158,8 +169,14 @@
           localStorage.setItem('bistbot_token', data.access_token);
           localStorage.setItem('bistbot_email', email);
           btn.innerHTML = '<span class="material-symbols-outlined text-[20px]">check_circle</span><span>Deneme Başlatıldı</span>';
-          establishSession(data.access_token).then(function () {
-            setTimeout(function () { window.location.href = '/ui/dashboard'; }, 300);
+          establishSession(data.access_token).then(function (target) {
+            if (!target) {
+              btn.innerHTML = originalContent;
+              btn.disabled = false;
+              showLoginError('Oturum başlatılamadı. Lütfen tekrar deneyin.', 'auth-form-register');
+              return;
+            }
+            setTimeout(function () { window.location.href = target; }, 300);
           });
         } else {
           btn.innerHTML = originalContent;

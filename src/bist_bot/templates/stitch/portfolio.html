@@ -6,21 +6,23 @@
 <title>Bist-Bot · Portföy</title>
 <link rel="stylesheet" href="/static/tailwind.css"/>
 <link rel="stylesheet" href="/static/stock.css?v=1"/>
-<link rel="stylesheet" href="/static/screener.css?v=1"/>
-<link rel="stylesheet" href="/static/personal.css?v=1"/>
+<link rel="stylesheet" href="/static/screener.css?v=5"/>
+<link rel="stylesheet" href="/static/personal.css?v=3"/>
 </head>
 <body class="bg-background font-body-md text-body-md text-on-surface antialiased">
 <header class="w-full px-terminal-margin py-space-md border-b border-surface-container-high/40">
 <div class="w-full max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-space-md">
 <div class="flex items-center gap-space-sm">
-<span class="font-headline-md text-headline-md tracking-tight font-extrabold">Bist<span class="text-primary">-Bot</span></span>
+<a class="font-headline-md text-headline-md tracking-tight font-extrabold text-on-surface" href="/ui/screener">Bist<span class="text-primary">-Bot</span></a>
 <span class="bg-surface-container-high px-space-xs py-space-3xs rounded text-secondary font-label-caps text-label-caps uppercase tracking-wider">Portföy</span>
 </div>
 <nav class="flex flex-wrap items-center gap-space-sm">
+<a class="personal-nav" href="/ui/market">Piyasa</a>
 <a class="personal-nav" href="/ui/screener">Tarayıcı</a>
 <a class="personal-nav" href="/ui/watchlist">İzleme</a>
 <a class="personal-nav" href="/ui/alerts">Alarmlar</a>
 <a class="personal-nav" href="/ui/scorecard">Karne</a>
+<button class="personal-nav" type="button" data-action="logout">Çıkış</button>
 </nav>
 </div>
 </header>
@@ -57,31 +59,44 @@
 <div class="overflow-x-auto mt-space-sm">
 <table class="w-full font-body-sm text-body-sm screen-table">
 <thead><tr class="text-outline font-label-caps text-label-caps uppercase">
-<th class="text-left">Kod</th><th class="text-right">Adet</th><th class="text-right">Ort. Maliyet</th>
-<th class="text-right">Fiyat</th><th class="text-right">Değer</th><th class="text-right">K/Z</th>
-<th class="text-right">Ağırlık</th>
+<th class="text-left sticky-col">Kod</th><th class="text-right">Adet</th><th class="text-right">Ort. Maliyet</th>
+<th class="text-right">Fiyat</th><th class="text-right">Değer</th><th class="text-right">Açık K/Z</th>
+<th class="text-right">Gerçekleşen K/Z</th><th class="text-right">Ağırlık</th>
 </tr></thead>
-<tbody id="positions-body"><tr><td colspan="7" class="py-space-sm">Portföy seçin.</td></tr></tbody>
+<tbody id="positions-body"><tr><td colspan="8" class="py-space-sm">Portföy seçin.</td></tr></tbody>
 </table>
 </div>
+<p class="font-body-sm text-body-sm text-outline mt-space-xs" id="closed-positions-note"></p>
 </section>
 
 <section class="bg-surface-container-low/90 rounded-xl p-space-md">
-<h2 class="font-headline-md text-headline-md font-bold">İşlem Ekle</h2>
+<h2 class="font-headline-md text-headline-md font-bold" id="trade-form-title">İşlem Ekle</h2>
 <form id="trade-form" class="personal-form mt-space-sm">
+<input type="hidden" name="transaction_id" value=""/>
 <input class="screen-control" name="ticker" placeholder="Hisse kodu" maxlength="12" required/>
 <select class="screen-control" name="side"><option value="buy">Alış</option><option value="sell">Satış</option></select>
 <input class="screen-control" name="trade_date" type="date" required/>
 <input class="screen-control" name="quantity" type="number" step="any" min="0" placeholder="Adet" required/>
 <input class="screen-control" name="price" type="number" step="any" min="0" placeholder="Fiyat (TL)" required/>
 <input class="screen-control" name="commission_tl" type="number" step="any" min="0" placeholder="Komisyon (TL)"/>
-<button class="screen-button screen-button-primary" type="submit">Kaydet</button>
+<button id="trade-submit-btn" class="screen-button screen-button-primary" type="submit">Kaydet</button>
+<button id="cancel-edit-trade" class="screen-button hidden" type="button">İptal</button>
 </form>
 <p class="font-body-sm text-body-sm text-outline mt-space-3xs" id="trade-status"></p>
+<div class="mt-space-md border-t border-surface-container-high/30 pt-space-sm">
+<h3 class="font-body-md text-body-md font-semibold">CSV ile Toplu İşlem İçe Aktar</h3>
+<p class="font-body-sm text-body-sm text-outline mt-space-3xs">Biçim: <code>trade_date,ticker,side,quantity,price,commission_tl</code> (veya Türkçe başlıklar).</p>
+<textarea id="csv-import-input" class="screen-control w-full mt-space-xs" rows="3" placeholder="2025-01-15,THYAO,buy,100,285.5,5"></textarea>
+<div class="flex flex-wrap items-center gap-space-xs mt-space-xs">
+<button id="csv-preview-btn" class="screen-button" type="button">Önizle (Kontrol Et)</button>
+<button id="csv-import-btn" class="screen-button screen-button-primary" type="button">İçe Aktar</button>
+<span id="csv-import-status" class="font-body-sm text-body-sm text-outline"></span>
+</div>
+</div>
 <div class="overflow-x-auto mt-space-sm">
 <table class="w-full font-body-sm text-body-sm screen-table">
 <thead><tr class="text-outline font-label-caps text-label-caps uppercase">
-<th class="text-left">Tarih</th><th class="text-left">Kod</th><th class="text-left">Yön</th>
+<th class="text-left">Tarih</th><th class="text-left sticky-col">Kod</th><th class="text-left">Yön</th>
 <th class="text-right">Adet</th><th class="text-right">Fiyat</th><th class="text-right">Komisyon</th><th></th>
 </tr></thead>
 <tbody id="transactions-body"><tr><td colspan="7" class="py-space-sm">Portföy seçin.</td></tr></tbody>
@@ -92,6 +107,7 @@
 <p class="font-body-sm text-body-sm text-outline pb-space-lg">Kıyas, aynı nakit akışının XU100'e veya para piyasasına yatırılmasıyla hesaplanır. Bu sayfa bilgilendirme amaçlıdır; alım-satım tavsiyesi değildir.</p>
 </main>
 <script src="/static/vendor/lightweight-charts.standalone.production.js"></script>
-<script src="/static/portfolio.js?v=2"></script>
+<script src="/static/portfolio.js?v=3"></script>
+<script src="/static/product-nav.js?v=2"></script>
 </body>
 </html>

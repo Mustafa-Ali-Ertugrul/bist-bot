@@ -1,9 +1,9 @@
 """AppSec R6: JWT secret entropy enforcement regression guard.
 
 `settings.require_security_config` HS256 anahtarına karsi brute-force savunu
-olarak minimum uzunluk zorlar: CONFIG_STRICT=true altinda 32 karakter alti
-fail-closed, dev modunda uyar. Testler settings.override() kullanir —
-module reload'a gerek yok, singleton temiz kalir.
+olarak minimum uzunlugu HER zaman zorlar (yalnizca CONFIG_STRICT'te degil);
+`.env.example` placeholder degerleri de reddedilir. Testler settings.override()
+kullanir — module reload'a gerek yok, singleton temiz kalir.
 """
 
 import pytest
@@ -18,15 +18,25 @@ def test_short_jwt_secret_fails_closed_in_strict_mode(monkeypatch):
             settings.require_security_config()
 
 
-def test_short_jwt_secret_warns_in_dev_mode(monkeypatch):
+def test_short_jwt_secret_fails_closed_in_dev_mode(monkeypatch):
+    # Dev profili de kisa anahtari kabul etmez: imzalama anahtari her zaman
+    # brute-force'a karsi yeterli entropi istemelidir.
     monkeypatch.setenv("CONFIG_STRICT", "false")
     with settings.override(JWT_SECRET_KEY="short"):
-        with pytest.warns(UserWarning, match="32 karakterden kisa"):
+        with pytest.raises(RuntimeError, match="JWT_SECRET_KEY en az 32 karakter"):
             settings.require_security_config()
 
 
 def test_placeholder_jwt_secret_still_rejected():
     with settings.override(JWT_SECRET_KEY="change-me"):
+        with pytest.raises(RuntimeError, match="known placeholder"):
+            settings.require_security_config()
+
+
+def test_env_example_placeholder_is_rejected():
+    # .env.example dosyasindaki deger kopyalanip yapistirildiginda uygulama
+    # acilmamali; herkese acik bir anahtarla token uretilebilir.
+    with settings.override(JWT_SECRET_KEY="your_secure_random_jwt_secret_key_here"):
         with pytest.raises(RuntimeError, match="known placeholder"):
             settings.require_security_config()
 

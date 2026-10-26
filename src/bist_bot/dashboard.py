@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import concurrent.futures
+import hashlib
 import json
 import math
 import os
@@ -16,7 +17,16 @@ from datetime import UTC, date, datetime, timedelta, timezone
 from functools import wraps
 from typing import Any, cast
 
-from flask import Flask, g, has_request_context, jsonify, redirect, render_template, request
+from flask import (
+    Flask,
+    Response,
+    g,
+    has_request_context,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+)
 from flask_cors import CORS
 from flask_jwt_extended import (
     JWTManager,
@@ -80,6 +90,24 @@ def safe_join_static(directory: str, *untrusted: str) -> str | None:
     """
     normalized = [str(part).replace("\\", "/") for part in untrusted]
     return safe_join(directory, *normalized)
+
+
+def precompressed_is_fresh(gz_path: str | None, source_path: str | None) -> bool:
+    """A pre-compressed asset is usable only when it is not older than its source.
+
+    The .gz is a build artifact of the plain asset: if the asset was edited
+    after the .gz was produced, the .gz serves stale bytes (old JS/CSS) to
+    every gzip-accepting browser. The fast-path must then skip it and let the
+    transparent compression below serve the current content instead.
+    """
+    if not gz_path or not source_path:
+        return False
+    try:
+        if os.path.getmtime(gz_path) < os.path.getmtime(source_path):
+            return False
+        return os.path.isfile(gz_path)
+    except OSError:
+        return False
 
 
 def _round_value(value: Any) -> float | None:
@@ -384,6 +412,19 @@ def _apply_bars_limit(payload: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
+def _derive_session_secret(jwt_secret: str) -> str:
+    """Flask session key for deployments without an explicit ``SECRET_KEY``.
+
+    Never reuse the JWT signing key as-is: a value signed for one purpose must
+    not verify under the other. The derived key is a one-way hash with a
+    distinct prefix, so it is stable across restarts yet independent from the
+    JWT key.
+    """
+    return hashlib.sha256(
+        b"bist_bot.flask_session.v1:" + jwt_secret.encode("utf-8")
+    ).hexdigest()
+
+
 def _auth_rate_limit_key() -> str:
     """Per-account + per-IP rate-limit bucket for login/register.
 
@@ -401,6 +442,18 @@ def _auth_rate_limit_key() -> str:
     if email:
         return f"{remote_addr}:{email}"
     return str(remote_addr)
+
+
+def _ip_rate_limit_key() -> str:
+    """Per-IP-only bucket stacked onto login/register.
+
+    AppSec: the per-email key above caps one account, but an attacker rotating
+    email addresses would get a fresh bucket per address (credential stuffing).
+    This second, coarser cap bounds the whole host instead. The limit is kept
+    generous because behind a shared frontend proxy every client looks like one
+    peer address.
+    """
+    return str(get_remote_address())
 
 
 def _client_rate_limit_key() -> str:
@@ -459,7 +512,9 @@ def create_dashboard_app(
     app.config["db"] = db
     app.config["broker"] = broker
     app.config["circuit_breaker"] = circuit_breaker
-    app.config["SECRET_KEY"] = settings.SECRET_KEY or settings.JWT_SECRET_KEY
+    app.config["SECRET_KEY"] = settings.SECRET_KEY or _derive_session_secret(
+        settings.JWT_SECRET_KEY
+    )
     app.config["SESSION_COOKIE_HTTPONLY"] = True
     app.config["SESSION_COOKIE_SAMESITE"] = "Strict"
     app.config["SESSION_COOKIE_SECURE"] = settings.JWT_COOKIE_SECURE
@@ -685,14 +740,18 @@ def create_dashboard_app(
                     "allowed_roles": sorted(allowed),
                 }
                 if not authorized:
-                    mode = str(app.config.get("RBAC_MODE", "warn") or "warn").lower()
-                    event_type = "rbac_access_denied" if mode == "enforce" else "rbac_would_deny"
+                    # Fail closed. "warn" is the single explicit migration
+                    # opt-in; every other value (including an unset or unknown
+                    # one) denies the request.
+                    mode = str(app.config.get("RBAC_MODE", "enforce") or "enforce").lower()
+                    warn_only = mode == "warn"
+                    event_type = "rbac_would_deny" if warn_only else "rbac_access_denied"
                     logger.warning(
                         event_type,
                         **audit_details,
                     )
                     _write_security_audit(event_type, audit_details)
-                    if mode == "enforce":
+                    if not warn_only:
                         return jsonify({"status": "error", "message": "Forbidden"}), 403
                 else:
                     logger.info(
@@ -804,8 +863,8 @@ def create_dashboard_app(
         """Hard admin-only API gate (independent of RBAC_MODE).
 
         Signal payloads contain buy/sell levels and must never reach a
-        non-admin account, so this decorator denies with 403 even while
-        RBAC_MODE is the default "warn".
+        non-admin account, so this decorator denies with 403 regardless of
+        RBAC_MODE (it is not affected by the "warn" migration mode).
         """
 
         @wraps(view)
@@ -1077,7 +1136,8 @@ def create_dashboard_app(
             if static_folder:
                 rel_path = request.path[len("/static/") :].lstrip("/")
                 safe_path = safe_join_static(static_folder, rel_path + ".gz")
-                if safe_path and os.path.isfile(safe_path):
+                source_path = safe_join_static(static_folder, rel_path)
+                if precompressed_is_fresh(safe_path, source_path):
                     try:
                         with open(safe_path, "rb") as f:
                             gz_bytes = f.read()
@@ -1129,7 +1189,14 @@ def create_dashboard_app(
             return jsonify(
                 {"status": "error", "message": "İstenen kaynak veya endpoint bulunamadı."}
             ), 404
-        return redirect("/ui/dashboard", code=302)
+        target = "/login"
+        try:
+            verify_jwt_in_request(optional=True, locations=["cookies", "headers"])
+            if _get_request_user() is not None:
+                target = "/ui/screener" if _stock_access_allowed() else "/ui/beta"
+        except Exception:
+            target = "/login"
+        return redirect(target, code=302)
 
     @app.errorhandler(405)
     def _handle_method_not_allowed(e: Any):
@@ -1364,6 +1431,7 @@ def create_dashboard_app(
         )
 
     @app.route("/api/auth/login", methods=["POST"])
+    @limiter.limit("30 per minute", key_func=_ip_rate_limit_key)
     @limiter.limit("5 per minute", key_func=_auth_rate_limit_key)
     def api_auth_login():
         payload = _safe_json_payload()
@@ -1408,6 +1476,7 @@ def create_dashboard_app(
         return response
 
     @app.route("/api/auth/register", methods=["POST"])
+    @limiter.limit("10 per minute", key_func=_ip_rate_limit_key)
     @limiter.limit("5 per minute", key_func=_auth_rate_limit_key)
     def api_auth_register():
         if not bool(app.config.get("ALLOW_PUBLIC_REGISTRATION", False)):
@@ -1489,18 +1558,30 @@ def create_dashboard_app(
         identity = str(get_jwt_identity() or "")
         if not identity:
             return jsonify({"status": "error", "message": "Authentication required"}), 401
+        # Re-read the role from the database: a demoted user must not keep a
+        # stale "admin" claim by re-minting cookies from an old token.
+        db_user = _get_request_user()
+        if db_user is None:
+            return jsonify({"status": "error", "message": "Authentication required"}), 401
+        role = str(db_user.get("role") or "").lower()
+        email = str(db_user.get("email") or claims.get("email") or "")
         cookie_token = create_access_token(
             identity=identity,
             additional_claims={
-                "role": str(claims.get("role") or ""),
-                "email": str(claims.get("email") or ""),
+                "role": role,
+                "email": email,
             },
         )
-        response = jsonify({"status": "ok"})
+        response = jsonify(
+            {
+                "status": "ok",
+                "redirect_to": "/ui/screener" if _stock_access_allowed() else "/ui/beta",
+            }
+        )
         set_access_cookies(response, cookie_token)
         return response, 200
 
-    @app.route("/api/auth/logout", methods=["POST", "GET"])
+    @app.route("/api/auth/logout", methods=["POST"])
     def api_auth_logout():
         """Revoke the current JWT (jti) and clear client session cookies."""
         try:
@@ -2721,10 +2802,68 @@ def create_dashboard_app(
         normalized = _normalize_stock_code(code)
         if normalized is None:
             return jsonify({"status": "error", "message": "Geçersiz hisse kodu."}), 400
-        profile = _stock_service().profile(normalized)
+        div_info = _corporate_actions_service().trailing_dividend(normalized)
+        div_per_share = (
+            float(div_info["cash_per_share_tl"])
+            if isinstance(div_info, dict) and div_info.get("cash_per_share_tl") is not None
+            else (float(div_info) if isinstance(div_info, int | float) else None)
+        )
+        profile = _stock_service().profile(normalized, dividend_per_share=div_per_share)
         if profile is None:
             return jsonify({"status": "error", "message": "Hisse bulunamadı."}), 404
         return jsonify({"status": "ok", "profile": profile})
+
+    @app.route("/api/stocks/<code>/peers")
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("60 per minute")
+    def api_stock_peers(code: str):
+        normalized = _normalize_stock_code(code)
+        if normalized is None:
+            return jsonify({"status": "error", "message": "Geçersiz hisse kodu."}), 400
+        payload = _stock_service().peers(normalized)
+        if payload is None:
+            return jsonify({"status": "error", "message": "Hisse bulunamadı."}), 404
+        return jsonify({"status": "ok", **payload})
+
+    @app.route("/api/stocks/<code>/valuation")
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("60 per minute")
+    def api_stock_valuation(code: str):
+        normalized = _normalize_stock_code(code)
+        if normalized is None:
+            return jsonify({"status": "error", "message": "Geçersiz hisse kodu."}), 400
+        range_key = request.args.get("range", "3y")
+        if range_key not in {"1y", "3y", "5y", "all"}:
+            return jsonify({"status": "error", "message": "Geçersiz aralık."}), 400
+        payload = _stock_service().valuation_history(normalized, range_key)
+        if payload is None:
+            return jsonify({"status": "error", "message": "Hisse bulunamadı."}), 404
+        return jsonify({"status": "ok", **payload})
+
+    @app.route("/api/stocks/compare")
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("30 per minute")
+    def api_stocks_compare():
+        raw = request.args.get("codes", "")
+        codes = [part for part in re.split(r"[,\s]+", raw) if part]
+        if not codes:
+            return jsonify({"status": "error", "message": "En az bir hisse kodu girin."}), 400
+        if len(codes) > 4:
+            return jsonify({"status": "error", "message": "En fazla 4 hisse karşılaştırılır."}), 400
+        range_key = request.args.get("range", "1y")
+        if range_key not in {"1m", "3m", "1y", "5y", "all"}:
+            return jsonify({"status": "error", "message": "Geçersiz aralık."}), 400
+        normalized = []
+        for code in codes:
+            value = _normalize_stock_code(code)
+            if value is None:
+                return jsonify({"status": "error", "message": f"Geçersiz hisse kodu: {code}"}), 400
+            normalized.append(value)
+        payload = _stock_service().compare(normalized, range_key=range_key)
+        return jsonify({"status": "ok", **payload})
 
     @app.route("/api/stocks/<code>/bars")
     @jwt_required()
@@ -2830,20 +2969,29 @@ def create_dashboard_app(
         except ValueError as exc:
             raise ValueError("Geçersiz tarih.") from exc
 
-    def _screener_response(payload: dict[str, Any], user, requested: int) -> Any:
+    def _screener_response(
+        payload: dict[str, Any], user, requested: int, offset: int = 0
+    ) -> Any:
         allowed = _screen_row_limit(user)
+        total = int(payload.get("total", 0))
+        visible_total = min(total, allowed)
+        plan_truncated = total > allowed
         rows = payload.get("rows", [])
-        if len(rows) > allowed:
-            rows = rows[:allowed]
-        truncated = len(rows) < int(payload.get("total", len(rows)))
+        remaining = max(0, allowed - offset)
+        if len(rows) > remaining:
+            rows = rows[:remaining]
         return jsonify(
             {
                 "status": "ok",
                 "as_of": payload.get("as_of"),
-                "total": payload.get("total", 0),
+                "total": total,
+                "visible_total": visible_total,
                 "returned": len(rows),
-                "truncated": truncated,
-                "limit": allowed if truncated else requested,
+                "offset": offset,
+                "truncated": plan_truncated,
+                "plan_truncated": plan_truncated,
+                "limit": allowed if plan_truncated else requested,
+                "allowed_limit": allowed,
                 "rows": rows,
             }
         )
@@ -2873,6 +3021,38 @@ def create_dashboard_app(
             }
         )
 
+    @app.route("/api/screens/<scan_id>.csv")
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("20 per minute")
+    def api_screen_rows_csv(scan_id: str):
+        from bist_bot.services.screener_service import ScreenerError, rows_to_csv
+
+        user = _get_request_user()
+        allowed = _screen_row_limit(user)
+        try:
+            payload = _screener_service().screen_rows(
+                scan_id,
+                as_of=_parse_as_of(request.args.get("as_of")),
+                sort=request.args.get("sort", "market_cap_tl"),
+                order=request.args.get("order", "desc"),
+                limit=allowed,
+                offset=0,
+            )
+        except (ScreenerError, ValueError) as exc:
+            return jsonify({"status": "error", "message": str(exc)}), 400
+        rows = (payload.get("rows") or [])[:allowed]
+        csv_text = rows_to_csv(rows, include_scan=True)
+        safe_scan = re.sub(r"[^a-zA-Z0-9_-]", "", scan_id) or "tarama"
+        as_of_str = str(payload.get("as_of") or "guncel")
+        return Response(
+            csv_text,
+            mimetype="text/csv; charset=utf-8",
+            headers={
+                "Content-Disposition": f'attachment; filename="bist-tarama-{safe_scan}-{as_of_str}.csv"'
+            },
+        )
+
     @app.route("/api/screens/<scan_id>")
     @jwt_required()
     @_stock_api_required
@@ -2882,6 +3062,7 @@ def create_dashboard_app(
 
         user = _get_request_user()
         requested = max(1, min(request.args.get("limit", 50, type=int) or 50, 200))
+        offset = max(0, request.args.get("offset", 0, type=int) or 0)
         try:
             payload = _screener_service().screen_rows(
                 scan_id,
@@ -2889,11 +3070,50 @@ def create_dashboard_app(
                 sort=request.args.get("sort", "market_cap_tl"),
                 order=request.args.get("order", "desc"),
                 limit=requested,
-                offset=max(0, request.args.get("offset", 0, type=int) or 0),
+                offset=offset,
             )
         except (ScreenerError, ValueError) as exc:
             return jsonify({"status": "error", "message": str(exc)}), 400
-        return _screener_response(payload, user, requested)
+        return _screener_response(payload, user, requested, offset)
+
+    @app.route("/api/screener/query.csv", methods=["POST"])
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("20 per minute")
+    def api_screener_query_csv():
+        from bist_bot.services.screener_service import (
+            ScreenerError,
+            parse_conditions,
+            rows_to_csv,
+        )
+
+        user = _get_request_user()
+        allowed = _screen_row_limit(user)
+        payload = _safe_json_payload()
+        try:
+            conditions = parse_conditions(payload.get("conditions"))
+            result = _screener_service().query(
+                conditions=conditions,
+                sector=(str(payload.get("sector")).strip() if payload.get("sector") else None),
+                scan_id=(str(payload.get("scan_id")) if payload.get("scan_id") else None),
+                as_of=_parse_as_of(payload.get("as_of")),
+                sort=str(payload.get("sort") or "market_cap_tl"),
+                order=str(payload.get("order") or "desc"),
+                limit=allowed,
+                offset=0,
+            )
+        except (ScreenerError, ValueError) as exc:
+            return jsonify({"status": "error", "message": str(exc)}), 400
+        rows = (result.get("rows") or [])[:allowed]
+        csv_text = rows_to_csv(rows, include_scan=False)
+        as_of_str = str(result.get("as_of") or "guncel")
+        return Response(
+            csv_text,
+            mimetype="text/csv; charset=utf-8",
+            headers={
+                "Content-Disposition": f'attachment; filename="bist-filtre-{as_of_str}.csv"'
+            },
+        )
 
     @app.route("/api/screener/query", methods=["POST"])
     @jwt_required()
@@ -2905,6 +3125,7 @@ def create_dashboard_app(
         user = _get_request_user()
         payload = _safe_json_payload()
         requested = max(1, min(int(payload.get("limit") or 50), 200))
+        offset = max(0, int(payload.get("offset") or 0))
         try:
             conditions = parse_conditions(payload.get("conditions"))
             result = _screener_service().query(
@@ -2915,11 +3136,11 @@ def create_dashboard_app(
                 sort=str(payload.get("sort") or "market_cap_tl"),
                 order=str(payload.get("order") or "desc"),
                 limit=requested,
-                offset=max(0, int(payload.get("offset") or 0)),
+                offset=offset,
             )
         except (ScreenerError, ValueError) as exc:
             return jsonify({"status": "error", "message": str(exc)}), 400
-        return _screener_response(result, user, requested)
+        return _screener_response(result, user, requested, offset)
 
     # -----------------------------------------------------------------------
     # Faz 5: personal watchlists and manual portfolios. Ownership misses always
@@ -2999,6 +3220,38 @@ def create_dashboard_app(
             return _user_error(exc)
         return jsonify({"status": "ok", "ticker": instrument.ticker})
 
+    @app.route("/api/watchlists/<int:watchlist_id>/items/bulk", methods=["POST"])
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("30 per minute")
+    def api_watchlist_addItems_bulk(watchlist_id: int):
+        payload = _safe_json_payload()
+        raw_tickers = payload.get("tickers")
+        if not isinstance(raw_tickers, list) or not raw_tickers:
+            return jsonify({"status": "error", "message": "En az bir hisse seçin."}), 400
+        market = get_db().market_data
+        valid_tickers: list[str] = []
+        not_found: list[str] = []
+        for item in raw_tickers[:200]:
+            code = str(item or "").strip().upper().removesuffix(".IS")
+            if not code:
+                continue
+            inst = market.get_instrument(code)
+            if inst is None:
+                not_found.append(code)
+            else:
+                valid_tickers.append(inst.ticker)
+        try:
+            result = get_db().user_data.add_watchlist_items_bulk(
+                _user_id(),
+                watchlist_id,
+                valid_tickers,
+                limit=_entitlements().watchlist_items,
+            )
+        except Exception as exc:
+            return _user_error(exc)
+        return jsonify({"status": "ok", **result, "not_found": not_found})
+
     @app.route("/api/watchlists/<int:watchlist_id>/items/<ticker>", methods=["DELETE"])
     @jwt_required()
     @_stock_api_required
@@ -3077,6 +3330,23 @@ def create_dashboard_app(
 
     @app.route(
         "/api/portfolios/<int:portfolio_id>/transactions/<int:transaction_id>",
+        methods=["PUT"],
+    )
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("60 per minute")
+    def api_portfolio_update_transaction(portfolio_id: int, transaction_id: int):
+        payload = _safe_json_payload()
+        try:
+            _user_portfolio_service().update_transaction(
+                _user_id(), portfolio_id, transaction_id, payload
+            )
+        except Exception as exc:
+            return _user_error(exc)
+        return jsonify({"status": "ok", "id": transaction_id})
+
+    @app.route(
+        "/api/portfolios/<int:portfolio_id>/transactions/<int:transaction_id>",
         methods=["DELETE"],
     )
     @jwt_required()
@@ -3084,10 +3354,126 @@ def create_dashboard_app(
     @limiter.limit("60 per minute")
     def api_portfolio_delete_transaction(portfolio_id: int, transaction_id: int):
         try:
-            get_db().user_data.delete_transaction(_user_id(), portfolio_id, transaction_id)
+            _user_portfolio_service().delete_transaction(_user_id(), portfolio_id, transaction_id)
         except Exception as exc:
             return _user_error(exc)
         return jsonify({"status": "ok"})
+
+    @app.route("/api/portfolios/<int:portfolio_id>/transactions/import", methods=["POST"])
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("20 per minute")
+    def api_portfolio_import_transactions(portfolio_id: int):
+        payload = _safe_json_payload()
+        csv_text = str(payload.get("csv") or "")
+        dry_run = bool(payload.get("dry_run", False))
+        try:
+            result = _user_portfolio_service().import_transactions_csv(
+                _user_id(),
+                portfolio_id,
+                csv_text,
+                dry_run=dry_run,
+                limit=_entitlements().transactions,
+            )
+        except Exception as exc:
+            return _user_error(exc)
+        if not result.get("valid") and not dry_run:
+            first_msg = (
+                result["errors"][0]["message"]
+                if result.get("errors")
+                else "CSV doğrulama hatası."
+            )
+            return jsonify({"status": "error", "message": first_msg, **result}), 400
+        return jsonify({"status": "ok", **result})
+
+    @app.route("/api/data-status")
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("60 per minute")
+    def api_data_status():
+        from datetime import datetime as _dt
+
+        from bist_bot.market_calendar import (
+            TR,
+            latest_completed_session_date,
+            trading_sessions_between,
+        )
+
+        repo = get_db().market_data
+        bars_date = repo.latest_market_date()
+        snaps = repo.list_snapshot_dates(limit=1)
+        snap_date = date.fromisoformat(str(snaps[0]["as_of"])) if snaps else None
+        expected = latest_completed_session_date(_dt.now(TR))
+        effective_date = snap_date or bars_date
+        lag_sessions = (
+            trading_sessions_between(effective_date, expected)
+            if effective_date is not None
+            else None
+        )
+        stale = bool(effective_date is None or (lag_sessions is not None and lag_sessions >= 1))
+        fundamentals_period, fundamentals_stale = _fundamentals_freshness(repo, effective_date)
+        return jsonify(
+            {
+                "status": "ok",
+                "as_of": effective_date.isoformat() if effective_date else None,
+                "bars_as_of": bars_date.isoformat() if bars_date else None,
+                "snapshots_as_of": snap_date.isoformat() if snap_date else None,
+                "expected_session": expected.isoformat(),
+                "lag_sessions": lag_sessions,
+                "stale": stale,
+                "fundamentals_period": fundamentals_period,
+                "fundamentals_stale": fundamentals_stale,
+            }
+        )
+
+    def _fundamentals_freshness(repo, effective_date: date | None) -> tuple[str | None, bool]:
+        """Latest reported period in the snapshots and whether it looks stale."""
+        if effective_date is None:
+            return None, True
+        try:
+            rows = repo.get_snapshots(effective_date)
+        except Exception:  # pragma: no cover - never break the status call
+            return None, False
+        periods = sorted(
+            {
+                str(row.get("fundamentals_period"))
+                for row in rows
+                if row.get("fundamentals_period")
+            }
+        )
+        if not periods:
+            return None, True
+        latest = periods[-1]
+        from bist_bot.services.stock_profile_service import fundamentals_stale
+
+        # Freshness is relative to today, not to a lagging snapshot date.
+        return latest, fundamentals_stale(latest)
+
+    def _market_overview_service():
+        from bist_bot.services.market_overview_service import MarketOverviewService
+
+        return MarketOverviewService(get_db().market_data, settings)
+
+    @app.route("/api/market/overview")
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("30 per minute")
+    def api_market_overview():
+        try:
+            as_of = _parse_as_of(request.args.get("as_of"))
+        except ValueError as exc:
+            return jsonify({"status": "error", "message": str(exc)}), 400
+        limit = request.args.get("limit", 10, type=int) or 10
+        payload = _market_overview_service().overview(as_of=as_of, limit=limit)
+        return jsonify({"status": "ok", **payload})
+
+    @app.route("/api/admin/data-coverage")
+    @jwt_required()
+    @_admin_only_api
+    @limiter.limit("30 per minute")
+    def api_admin_data_coverage():
+        summary = get_db().market_data.data_coverage_summary()
+        return jsonify({"status": "ok", **summary})
 
     # -----------------------------------------------------------------------
     # Faz 6: Telegram linking, alerts, saved screens and digest preview.
@@ -3208,6 +3594,122 @@ def create_dashboard_app(
             return _user_error(exc)
         return jsonify({"status": "ok"})
 
+    @app.route("/api/alerts/<int:alert_id>", methods=["PATCH"])
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("30 per minute")
+    def api_alert_update(alert_id: int):
+        payload = _safe_json_payload()
+        changes: dict[str, Any] = {}
+        if "enabled" in payload:
+            if not isinstance(payload["enabled"], bool):
+                return (
+                    jsonify(
+                        {"status": "error", "message": "enabled alanı true/false olmalı."}
+                    ),
+                    400,
+                )
+            changes["enabled"] = payload["enabled"]
+        if payload.get("threshold") is not None:
+            try:
+                threshold = float(payload["threshold"])
+            except (TypeError, ValueError):
+                return jsonify({"status": "error", "message": "Eşik sayı olmalı."}), 400
+            if not math.isfinite(threshold):
+                return jsonify({"status": "error", "message": "Eşik sonlu bir sayı olmalı."}), 400
+            if threshold < 0:
+                return jsonify({"status": "error", "message": "Eşik negatif olamaz."}), 400
+            changes["threshold"] = threshold
+        if payload.get("op") is not None:
+            if str(payload["op"]) not in {"above", "below"}:
+                return jsonify({"status": "error", "message": "Geçersiz yön."}), 400
+            changes["op"] = str(payload["op"])
+        if not changes:
+            return jsonify({"status": "error", "message": "Güncellenecek alan yok."}), 400
+        try:
+            alert = get_db().alerts.update_alert(_user_id(), alert_id, changes)
+        except Exception as exc:
+            return _user_error(exc)
+        return jsonify({"status": "ok", "alert": alert})
+
+    @app.route("/api/alerts/events")
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("60 per minute")
+    def api_alert_events():
+        limit = max(1, min(request.args.get("limit", 50, type=int) or 50, 200))
+        unread_only = request.args.get("unread") in {"1", "true", "yes"}
+        repo = get_db().alerts
+        return jsonify(
+            {
+                "status": "ok",
+                "events": repo.list_events(_user_id(), limit=limit, unread_only=unread_only),
+                "unread": repo.count_unread_events(_user_id()),
+            }
+        )
+
+    @app.route("/api/alerts/events/unread-count")
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("90 per minute")
+    def api_alert_events_unread():
+        return jsonify({"status": "ok", "unread": get_db().alerts.count_unread_events(_user_id())})
+
+    @app.route("/api/alerts/events/refresh", methods=["POST"])
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("10 per minute")
+    def api_alert_events_refresh():
+        from datetime import datetime as _dt
+
+        from bist_bot.notifier import TR
+
+        raw = request.args.get("as_of")
+        try:
+            if raw:
+                target = date.fromisoformat(raw)
+            else:
+                latest = get_db().market_data.list_snapshot_dates(limit=1)
+                target = date.fromisoformat(latest[0]["as_of"]) if latest else _dt.now(TR).date()
+        except ValueError:
+            return jsonify({"status": "error", "message": "Geçersiz tarih."}), 400
+        repo = get_db().alerts
+        user_id = _user_id()
+        try:
+            rows = _digest_service().build_events(user_id, target)
+        except Exception as exc:
+            return _user_error(exc)
+        written = repo.record_events(user_id, target, rows)
+        return jsonify(
+            {
+                "status": "ok",
+                "as_of": target.isoformat(),
+                "written": written,
+                "unread": repo.count_unread_events(user_id),
+            }
+        )
+
+    @app.route("/api/alerts/events/read", methods=["POST"])
+    @jwt_required()
+    @_stock_api_required
+    @limiter.limit("60 per minute")
+    def api_alert_events_read():
+        payload = _safe_json_payload()
+        event_id = payload.get("id")
+        if event_id is not None:
+            try:
+                event_id = int(event_id)
+            except (TypeError, ValueError):
+                return jsonify({"status": "error", "message": "Geçersiz kayıt."}), 400
+        marked = get_db().alerts.mark_events_read(_user_id(), event_id=event_id)
+        return jsonify(
+            {
+                "status": "ok",
+                "marked": marked,
+                "unread": get_db().alerts.count_unread_events(_user_id()),
+            }
+        )
+
     @app.route("/api/saved-screens")
     @jwt_required()
     @_stock_api_required
@@ -3221,18 +3723,39 @@ def create_dashboard_app(
     @limiter.limit("30 per minute")
     def api_saved_screen_create():
         from bist_bot.services.screener_service import ScreenerError, parse_conditions
+        from bist_bot.strategy.scans import SCANS_BY_CODE
 
         payload = _safe_json_payload()
         body = payload.get("payload") or {}
+        if not isinstance(body, dict):
+            return jsonify({"status": "error", "message": "Filtre ayarları geçersiz."}), 400
         try:
-            parse_conditions(body.get("conditions"))
+            conditions = parse_conditions(body.get("conditions"))
         except ScreenerError as exc:
             return jsonify({"status": "error", "message": str(exc)}), 400
+        sector = body.get("sector")
+        if sector is not None and not isinstance(sector, str):
+            return jsonify({"status": "error", "message": "Sektör metin olmalı."}), 400
+        sector = sector.strip() if isinstance(sector, str) else None
+        scan_id = body.get("scan_id")
+        if scan_id is not None and not isinstance(scan_id, str):
+            return jsonify({"status": "error", "message": "Tarama kodu geçersiz."}), 400
+        scan_id = scan_id.strip() if isinstance(scan_id, str) else None
+        if scan_id and scan_id not in SCANS_BY_CODE:
+            return jsonify({"status": "error", "message": "Bilinmeyen tarama."}), 400
+        if not conditions and not sector and not scan_id:
+            return jsonify(
+                {"status": "error", "message": "En az bir koşul, sektör veya tarama seçin."}
+            ), 400
         try:
             screen_id = get_db().alerts.add_saved_screen(
                 _user_id(),
                 str(payload.get("name") or ""),
-                body,
+                {
+                    "conditions": conditions,
+                    "sector": sector or None,
+                    "scan_id": scan_id or None,
+                },
                 limit=_entitlements().saved_screens,
             )
         except Exception as exc:
@@ -3255,6 +3778,7 @@ def create_dashboard_app(
     @_stock_api_required
     @limiter.limit("20 per minute")
     def api_alerts_preview():
+        import html as _html
         from datetime import datetime as _dt
 
         from bist_bot.notifier import TR
@@ -3268,8 +3792,8 @@ def create_dashboard_app(
                 target = date.fromisoformat(latest[0]["as_of"]) if latest else _dt.now(TR).date()
         except ValueError:
             return jsonify({"status": "error", "message": "Geçersiz tarih."}), 400
-        result = _digest_service().build(_user_id(), target)
-        plain = re.sub(r"<[^>]+>", "", result.message) if result.message else None
+        result = _digest_service().build(_user_id(), target, consume=False)
+        plain = _html.unescape(re.sub(r"<[^>]+>", "", result.message)) if result.message else None
         return jsonify(
             {
                 "status": "ok",
@@ -3397,10 +3921,25 @@ def create_dashboard_app(
                 since = date.fromisoformat(since_raw)
             except ValueError:
                 return jsonify({"status": "error", "message": "Geçersiz tarih."}), 400
-        payload = _scorecard_service().all_scorecards(
-            since=since, horizons=_score_horizons(request.args.get("horizons"))
+        refresh = request.args.get("refresh") in {"1", "true", "yes"}
+        horizons = _score_horizons(request.args.get("horizons"))
+        service = _scorecard_service()
+        payload = service.all_scorecards(
+            since=since,
+            horizons=horizons,
+            use_cache=not refresh,
         )
-        return jsonify({"status": "ok", "scores": payload})
+        meta = service.cache_metadata(since=since, horizons=horizons)
+        return jsonify(
+            {
+                "status": "ok",
+                "scores": payload,
+                "cached": bool(service.cache_hit),
+                "refresh": bool(refresh),
+                "computed_at": meta["computed_at"],
+                "ttl_hours": meta["ttl_hours"],
+            }
+        )
 
     @app.route("/api/scores/<scan_id>")
     @jwt_required()
@@ -3500,12 +4039,30 @@ def create_dashboard_app(
             attribution=getattr(settings, "DATA_ATTRIBUTION", ""),
         )
 
+    @app.route("/ui/market")
+    @_ui_auth_required
+    @_stock_page_required
+    def ui_market():
+        return render_template(
+            "stitch/market.html",
+            attribution=getattr(settings, "DATA_ATTRIBUTION", ""),
+        )
+
     @app.route("/ui/screener")
     @_ui_auth_required
     @_stock_page_required
     def ui_screener():
         return render_template(
             "stitch/screener.html",
+            attribution=getattr(settings, "DATA_ATTRIBUTION", ""),
+        )
+
+    @app.route("/ui/compare")
+    @_ui_auth_required
+    @_stock_page_required
+    def ui_compare():
+        return render_template(
+            "stitch/compare.html",
             attribution=getattr(settings, "DATA_ATTRIBUTION", ""),
         )
 

@@ -111,6 +111,16 @@ def test_user_role_cannot_trigger_scan_in_enforce_mode(tmp_path) -> None:
     assert response.status_code == 403
 
 
+def test_unknown_rbac_mode_denies_privileged_routes(tmp_path) -> None:
+    """Fail closed: only the explicit "warn" migration mode may allow."""
+    client, _manager, _users, tokens = _build_client(tmp_path)
+    client.application.config["RBAC_MODE"] = "banana"
+
+    response = _scan(client, tokens["user@bistbot.local"])
+
+    assert response.status_code == 403
+
+
 def test_trader_role_can_trigger_scan_in_enforce_mode(tmp_path) -> None:
     client, _manager, _users, tokens = _build_client(tmp_path)
 

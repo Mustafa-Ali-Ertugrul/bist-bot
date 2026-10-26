@@ -16,7 +16,7 @@ import pathlib
 
 from werkzeug.utils import safe_join
 
-from bist_bot.dashboard import safe_join_static
+from bist_bot.dashboard import precompressed_is_fresh, safe_join_static
 
 STATIC_DIR = pathlib.Path(__file__).resolve().parent.parent / "src" / "bist_bot" / "static"
 
@@ -82,3 +82,40 @@ def test_gzip_files_are_valid_and_not_bombs():
         # Decompressed size must stay within a sane ratio (<200x) of the
         # compressed size; JavaScript/CSS text rarely exceeds 20x.
         assert len(data) < max(200 * compressed, 1024 * 1024), f"suspect ratio: {gz}"
+
+
+def test_precompressed_assets_match_their_sources():
+    """A shipped .gz must decompress to exactly the current source bytes.
+
+    The gzip fast-path serves the .gz to every browser that accepts gzip, so
+    an edited source with an old .gz ships stale JS/CSS (the app.js
+    regression). If this fails, rebuild the .gz from the source.
+    """
+    if not STATIC_DIR.exists():
+        return
+    gz_files = list(STATIC_DIR.rglob("*.gz"))
+    assert gz_files, "static folder must ship at least one .gz asset"
+    for gz in gz_files:
+        source = gz.with_suffix("")
+        assert source.is_file(), f"orphan .gz without source: {gz}"
+        with gzip.open(gz, "rb") as fh:
+            assert fh.read() == source.read_bytes(), f"stale pre-compressed asset: {gz}"
+
+
+def test_precompressed_freshness_guard_skips_stale_artifacts(tmp_path):
+    """A .gz older than its source must never be served by the fast-path."""
+    source = tmp_path / "app.js"
+    gz = tmp_path / "app.js.gz"
+    source.write_text("current", encoding="utf-8")
+    gz.write_bytes(gzip.compress(b"stale"))
+
+    os.utime(gz, (1_000_000, 1_000_000))
+    os.utime(source, (2_000_000, 2_000_000))
+    assert precompressed_is_fresh(str(gz), str(source)) is False, "stale .gz must be skipped"
+
+    os.utime(gz, (3_000_000, 3_000_000))
+    assert precompressed_is_fresh(str(gz), str(source)) is True
+
+    assert precompressed_is_fresh(str(tmp_path / "missing.js.gz"), str(source)) is False
+    assert precompressed_is_fresh(None, str(source)) is False
+    assert precompressed_is_fresh(str(gz), None) is False

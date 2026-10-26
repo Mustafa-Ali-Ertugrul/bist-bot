@@ -287,16 +287,19 @@ def render_analyze_page() -> None:
         try:
             response = api_request("GET", f"/api/analyze/{ticker_input}")
         except Exception as exc:
-            st.error(f"API hatası: {exc}")
+            st.error(f"API hatası: {html.escape(str(exc))}")
             return
 
         if not response.ok:
-            st.error(f"Analiz başarısız: {response.json().get('message', 'Bilinmeyen hata')}")
+            st.error(
+                f"Analiz başarısız: "
+                f"{html.escape(str(response.json().get('message', 'Bilinmeyen hata')))}"
+            )
             return
 
         data = response.json()
         if data.get("status") != "ok":
-            st.error(f"Sonuç hatası: {data.get('message', '')}")
+            st.error(f"Sonuç hatası: {html.escape(str(data.get('message', '')))}")
             return
 
         st.session_state["last_analyzed_ticker"] = ticker_input

@@ -90,7 +90,8 @@ class MainActivity : AppCompatActivity() {
         }
         // Login survives app restarts.
         CookieManager.getInstance().setAcceptCookie(true)
-        CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true)
+        // Third-party cookies are off: only our own origin needs the session.
+        CookieManager.getInstance().setAcceptThirdPartyCookies(webView, false)
         webView.clearCache(false)
 
         webView.webViewClient = object : WebViewClient() {
@@ -98,7 +99,14 @@ class MainActivity : AppCompatActivity() {
                 val target = request?.url?.toString().orEmpty()
                 // Keep same-origin navigation inside the WebView; hand anything
                 // else (Telegram deep links, docs) to the system browser.
-                if (target.isBlank() || target.startsWith(baseUrl)) return false
+                // Compare hosts, not prefixes: "app.example.com.evil.com" must
+                // never count as our own origin.
+                val sameOrigin = try {
+                    request?.url?.host != null && request.url.host == Uri.parse(baseUrl).host
+                } catch (_: Exception) {
+                    false
+                }
+                if (target.isBlank() || sameOrigin) return false
                 return try {
                     startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(target)))
                     true
@@ -111,13 +119,54 @@ class MainActivity : AppCompatActivity() {
                 super.onPageFinished(view, url)
                 updateBottomNavigation(url.orEmpty())
             }
+
+            override fun onReceivedError(
+                view: WebView?,
+                request: WebResourceRequest?,
+                error: android.webkit.WebResourceError?
+            ) {
+                super.onReceivedError(view, request, error)
+                val isMainFrame = request?.isForMainFrame ?: false
+                if (!isMainFrame) return
+                showOfflinePage(request?.url?.toString().orEmpty())
+            }
         }
         webView.webChromeClient = android.webkit.WebChromeClient()
+    }
+
+    /**
+     * Offline / unreachable-server page. Without it the WebView shows the raw
+     * Chromium error and the user cannot get back to a working page from the app.
+     */
+    private fun showOfflinePage(failedUrl: String) {
+        val retryTarget = if (baseUrl.isNotBlank()) failedUrl.ifBlank { url(PAGE_MARKET) } else ""
+        val retry = if (retryTarget.isBlank()) "about:blank" else retryTarget
+        val html = """
+            <!DOCTYPE html>
+            <html lang="tr"><head><meta charset="utf-8"/>
+            <meta name="viewport" content="width=device-width, initial-scale=1"/>
+            <style>
+              body{margin:0;padding:24px;background:#06090A;color:#E6E8EE;
+                   font-family:sans-serif;line-height:1.5}
+              h1{font-size:1.25rem;margin:0 0 .5rem}
+              p{color:#8B90A0;font-size:.9rem}
+              button{margin-top:1rem;padding:.6rem 1rem;border:0;border-radius:.5rem;
+                     background:#48DDBC;color:#10141A;font-weight:700;font-size:.9rem}
+            </style></head>
+            <body>
+              <h1>Sunucuya ulaşılamadı</h1>
+              <p>Bağlantıyı kontrol edin. Sorun sürerse Alarmlar sekmesine basılı tutarak
+                 sunucu adresini güncelleyin.</p>
+              <button onclick="location.href='$retry'">Yeniden dene</button>
+            </body></html>
+        """.trimIndent()
+        binding.webView.loadDataWithBaseURL(baseUrl.takeIf { it.isNotBlank() }, html, "text/html", "utf-8", null)
     }
 
     private fun url(page: String): String = "$baseUrl$page"
 
     private fun configureBottomNavigation() {
+        binding.navMarket.setOnClickListener { open(PAGE_MARKET) }
         binding.navDashboard.setOnClickListener { open(PAGE_SCREENER) }
         binding.navSignals.setOnClickListener { open(PAGE_WATCHLIST) }
         binding.navAnalysis.setOnClickListener { open(PAGE_PORTFOLIO) }
@@ -147,6 +196,19 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
+     * Server URLs must be https. Plain http is accepted only for loopback
+     * development (adb tunnels / local dev servers on 127.0.0.1, ::1 or
+     * localhost) so session cookies never travel in cleartext off-device.
+     */
+    private fun isAllowedServerUrl(raw: String): Boolean {
+        val v = raw.trim()
+        if (v.startsWith("https://", ignoreCase = true)) return true
+        if (!v.startsWith("http://", ignoreCase = true)) return false
+        val host = Uri.parse(v).host?.trim()?.lowercase()?.removeSurrounding("[", "]")
+        return host == "127.0.0.1" || host == "localhost" || host == "::1"
+    }
+
+    /**
      * Minimal in-WebView server configuration. The console is behind a login, so
      * a broken base URL would otherwise leave the user with no way back in.
      */
@@ -165,16 +227,16 @@ class MainActivity : AppCompatActivity() {
         }
         val dialog = AlertDialog.Builder(this)
             .setTitle("Sunucu adresi")
-            .setMessage("Botun web adresini girin (https:// ile başlamalı).")
+            .setMessage("Botun web adresini girin (https:// ile başlamalı; http yalnızca 127.0.0.1/localhost için).")
             .setView(wrap)
             .setPositiveButton("Kaydet") { _, _ ->
                 val v = input.text.toString().trim()
-                if (v.startsWith("https://") || v.startsWith("http://")) {
+                if (isAllowedServerUrl(v)) {
                     saveBaseUrl(v)
                     toast("Kaydedildi")
                     binding.webView.loadUrl(url(PAGE_SCREENER))
                 } else {
-                    toast("Adres https:// ile başlamalı")
+                    toast("Adres https:// ile başlamalı (http yalnızca 127.0.0.1/localhost)")
                 }
             }
             .setNeutralButton("Varsayılan") { _, _ ->
@@ -190,6 +252,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateBottomNavigation(current: String) {
         val items = mapOf(
+            binding.navMarket to PAGE_MARKET,
             binding.navDashboard to PAGE_SCREENER,
             binding.navSignals to PAGE_WATCHLIST,
             binding.navAnalysis to PAGE_PORTFOLIO,
@@ -230,6 +293,7 @@ class MainActivity : AppCompatActivity() {
         /** Overridable at build time: ./gradlew -PBIST_BOT_BASE_URL=... */
         private const val DEFAULT_BASE_URL = BuildConfig.BASE_URL
 
+        private const val PAGE_MARKET = "/ui/market"
         private const val PAGE_SCREENER = "/ui/screener"
         private const val PAGE_WATCHLIST = "/ui/watchlist"
         private const val PAGE_PORTFOLIO = "/ui/portfolio"

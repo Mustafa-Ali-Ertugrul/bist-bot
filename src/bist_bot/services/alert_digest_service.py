@@ -27,6 +27,7 @@ class DigestResult:
     user_id: int
     message: str | None = None
     sections: dict[str, int] = field(default_factory=dict)
+    fired_alert_ids: list[int] = field(default_factory=list)
 
     @property
     def empty(self) -> bool:
@@ -49,14 +50,16 @@ class AlertDigestService:
         self.settings = settings or default_settings
         self.screener = ScreenerService(market_repository, settings)
         self._last_run_date: date | None = None
+        self._last_inapp_date: date | None = None
 
     # ------------------------------------------------------------------
     # Building
     # ------------------------------------------------------------------
-    def build(self, user_id: int, as_of: date) -> DigestResult:
+    def build(self, user_id: int, as_of: date, *, consume: bool = True) -> DigestResult:
         result = DigestResult(user_id=user_id)
-        alerts = self.alerts.list_alerts(user_id)
-        if not alerts:
+        alerts = [a for a in self.alerts.list_alerts(user_id) if a["enabled"]]
+        saved_screens = self.alerts.list_saved_screens(user_id)
+        if not alerts and not saved_screens:
             return result
 
         snapshots = {row["ticker"]: row for row in self.market.get_snapshots(as_of)}
@@ -100,39 +103,25 @@ class AlertDigestService:
         filter_lines: list[str] = []
         snapshot_days = [row["as_of"] for row in self.market.list_snapshot_dates(limit=10)]
         previous_day = next((d for d in snapshot_days if d < as_of.isoformat()), None)
-        for saved in self.alerts.list_saved_screens(user_id):
+        for saved in saved_screens:
             payload = saved.get("payload") or {}
             try:
                 conditions = parse_conditions(payload.get("conditions"))
-                today_rows = self.screener.query(
-                    conditions=conditions,
-                    sector=payload.get("sector"),
-                    scan_id=payload.get("scan_id"),
-                    as_of=as_of,
-                    limit=200,
-                )
+                today_rows = self._filter_rows(conditions, payload, as_of)
                 previous_rows = (
-                    self.screener.query(
-                        conditions=conditions,
-                        sector=payload.get("sector"),
-                        scan_id=payload.get("scan_id"),
-                        as_of=date.fromisoformat(previous_day),
-                        limit=200,
-                    )
+                    self._filter_rows(conditions, payload, date.fromisoformat(previous_day))
                     if previous_day
-                    else {"rows": []}
+                    else []
                 )
             except ScreenerError:
                 continue
-            before = {row["code"] for row in previous_rows.get("rows", [])}
-            for row in today_rows.get("rows", []):
-                if row["code"] in before:
-                    continue
+            before = {row["code"] for row in previous_rows}
+            entered = [row for row in today_rows if row["code"] not in before]
+            for row in entered:
                 ticker = f"{row['code']}.IS"
                 filter_lines.append(
                     self._line(ticker, instruments, f"'{saved['name']}' filtresine girdi")
                 )
-            entered = [row for row in today_rows.get("rows", []) if row["code"] not in before]
             if entered:
                 result.sections[f"filter:{saved['id']}"] = len(entered)
 
@@ -156,7 +145,9 @@ class AlertDigestService:
                             f"kapanış {close:.2f} TL ({'≥' if alert['op'] == 'above' else '≤'} {threshold:.2f})",
                         )
                     )
-                    self.alerts.disable_alert(int(alert["id"]))
+                    result.fired_alert_ids.append(int(alert["id"]))
+                    if consume:
+                        self.alerts.disable_alert(int(alert["id"]))
                     result.sections[f"price:{alert['id']}"] = 1
             elif alert["kind"] == "change":
                 ticker = str(alert["target"])
@@ -198,18 +189,100 @@ class AlertDigestService:
         result.message = message
         return result
 
+    def _filter_rows(
+        self, conditions: list[dict[str, Any]], payload: dict[str, Any], as_of: date
+    ) -> list[dict[str, Any]]:
+        """Run one saved filter to completion (every page, not just the first)."""
+        rows: list[dict[str, Any]] = []
+        offset = 0
+        for _ in range(50):
+            page = self.screener.query(
+                conditions=conditions,
+                sector=payload.get("sector"),
+                scan_id=payload.get("scan_id"),
+                as_of=as_of,
+                limit=200,
+                offset=offset,
+            )
+            batch = list(page.get("rows", []))
+            rows.extend(batch)
+            offset += len(batch)
+            if not batch or offset >= int(page.get("total") or 0):
+                break
+        return rows
+
     def _line(self, ticker: str, instruments: dict[str, Any], detail: str) -> str:
         instrument = instruments.get(ticker)
         code = instrument.code if instrument else ticker.removesuffix(".IS")
         name = html.escape(instrument.name if instrument else "")
         base = str(getattr(self.settings, "PUBLIC_BASE_URL", "") or "").rstrip("/")
         label = (
-            f'<a href="{html.escape(base)}/ui/stock/{code}">{html.escape(code)}</a>'
+            f'<a href="{html.escape(base)}/ui/stock/{html.escape(code)}">{html.escape(code)}</a>'
             if base
             else html.escape(code)
         )
         suffix = f" · {name}" if name else ""
         return f"• {label}{suffix} — {html.escape(detail)}"
+
+    # ------------------------------------------------------------------
+    # In-app events (Faz P3.3)
+    # ------------------------------------------------------------------
+    def build_events(self, user_id: int, as_of: date) -> list[dict[str, Any]]:
+        """Map one digest build into per-section in-app events (no Telegram)."""
+        alerts = {int(a["id"]): a for a in self.alerts.list_alerts(user_id) if a["enabled"]}
+        saved = {int(item["id"]): item for item in self.alerts.list_saved_screens(user_id)}
+        result = self.build(user_id, as_of, consume=False)
+
+        events: list[dict[str, Any]] = []
+        for key, count in result.sections.items():
+            scope, _, ref = key.partition(":")
+            if scope == "screen":
+                scan = SCANS_BY_CODE.get(ref)
+                title = f"{scan.title} taramasında {count} yeni hisse" if scan else f"{ref}: {count}"
+                kind = "scan"
+            elif scope == "filter":
+                item = saved.get(int(ref)) if ref.isdigit() else None
+                name = item["name"] if item else ref
+                title = f"'{name}' filtresine {count} hisse girdi"
+                kind = "filter"
+            else:
+                alert = alerts.get(int(ref)) if ref.isdigit() else None
+                if alert is not None:
+                    target = str(alert["target"]).replace(".IS", "")
+                    if alert["kind"] == "price":
+                        title = f"{target} fiyat alarmı tetiklendi"
+                    else:
+                        title = f"{target} günlük değişim alarmı tetiklendi"
+                else:
+                    title = "Alarm tetiklendi"
+                kind = "alert"
+            events.append(
+                {
+                    "kind": kind,
+                    "ref": key,
+                    "title": title,
+                    "message": result.message,
+                }
+            )
+        return events
+
+    def run_inapp(self, *, as_of: date | None = None) -> dict[str, int]:
+        """Write in-app events for every user with alerts or saved screens."""
+        target = as_of or datetime.now(TR).date()
+        users = 0
+        events = 0
+        for user_id in self.alerts.list_user_ids_with_alerts():
+            try:
+                rows = self.build_events(int(user_id), target)
+            except Exception as exc:  # pragma: no cover - defensive
+                logger.warning(
+                    "alert_events_build_failed", user_id=user_id, error_type=type(exc).__name__
+                )
+                continue
+            users += 1
+            events += self.alerts.record_events(int(user_id), target, rows)
+        logger.info("alert_events_written", users=users, events=events, as_of=target.isoformat())
+        return {"users": users, "events": events}
 
     # ------------------------------------------------------------------
     # Sending
@@ -221,19 +294,44 @@ class AlertDigestService:
             user_id = int(link["user_id"])
             if self.alerts.was_digest_sent(user_id, target):
                 continue
-            result = self.build(user_id, target)
+            result = self.build(user_id, target, consume=False)
             results.append(result)
-            if result.empty:
+            if result.empty or not send:
                 continue
-            if send:
-                if self.notifier is not None:
-                    sent = self.notifier.send_to_chat(link["chat_id"], result.message)
-                    if not sent:
-                        logger.warning("digest_send_failed", user_id=user_id)
-                        continue
-                self.alerts.mark_digest_sent(user_id, target)
-                logger.info("digest_sent", user_id=user_id, as_of=target.isoformat())
+            if self.notifier is None:
+                logger.warning("digest_notifier_missing", user_id=user_id)
+                continue
+            try:
+                sent = self.notifier.send_to_chat(link["chat_id"], result.message)
+            except Exception as exc:
+                logger.warning(
+                    "digest_send_error", user_id=user_id, error_type=type(exc).__name__
+                )
+                continue
+            if not sent:
+                logger.warning("digest_send_failed", user_id=user_id)
+                continue
+            # Record the history before consuming one-shot alerts: after
+            # ``disable_alert`` the event builder no longer sees them.
+            self._record_events_for(user_id, target)
+            for alert_id in result.fired_alert_ids:
+                self.alerts.disable_alert(alert_id)
+            self.alerts.mark_digest_sent(user_id, target)
+            logger.info("digest_sent", user_id=user_id, as_of=target.isoformat())
         return results
+
+    def _record_events_for(self, user_id: int, as_of: date) -> int:
+        """Write the day's in-app events for one user; never fails the digest."""
+        if not bool(getattr(self.settings, "IN_APP_ALERT_EVENTS_ENABLED", True)):
+            return 0
+        try:
+            rows = self.build_events(user_id, as_of)
+            return self.alerts.record_events(user_id, as_of, rows)
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning(
+                "alert_events_build_failed", user_id=user_id, error_type=type(exc).__name__
+            )
+            return 0
 
     def run_if_due(self, now: datetime) -> bool:
         if not bool(getattr(self.settings, "USER_DIGEST_ENABLED", False)):
@@ -255,4 +353,28 @@ class AlertDigestService:
             logger.error("digest_run_failed", error_type=type(exc).__name__, error=str(exc))
             return False
         self._last_run_date = today
+        return True
+
+    def run_inapp_if_due(self, now: datetime) -> bool:
+        """Write the day's in-app alert events after the close (no Telegram needed)."""
+        if not bool(getattr(self.settings, "IN_APP_ALERT_EVENTS_ENABLED", True)):
+            return False
+        today = now.date()
+        if self._last_inapp_date == today:
+            return False
+        if is_bist_holiday(today):
+            return False
+        earliest_hour = max(0, min(int(getattr(self.settings, "USER_DIGEST_HOUR_TR", 18)), 23))
+        if now.hour < earliest_hour:
+            return False
+        if self.market.latest_market_date() != today:
+            return False
+        try:
+            self.run_inapp(as_of=today)
+        except Exception as exc:
+            logger.error(
+                "alert_events_run_failed", error_type=type(exc).__name__, error=str(exc)
+            )
+            return False
+        self._last_inapp_date = today
         return True

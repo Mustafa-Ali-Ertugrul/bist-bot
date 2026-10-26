@@ -60,12 +60,16 @@
         return;
       }
       horizons.forEach(function (score, index) {
-        var status = score.reliable
-          ? (score.excess_vs_xu100_pct > 0 ? 'kanıtlı pozitif' : 'kanıtlı negatif')
-          : 'yetersiz veri';
+        var status;
+        if (!score.observations) {
+          status = 'ileri getiri yok';
+        } else if (score.reliable) {
+          status = score.excess_vs_xu100_pct > 0 ? 'kanıtlı pozitif' : 'kanıtlı negatif';
+        } else {
+          status = 'yetersiz veri';
+        }
         rows.push('<tr>' +
-          '<td>' + (index === 0 ? esc(scan.title) : '') + '</td>' +
-          '<td class="text-right">' + num(score.horizon, 0) + 'g</td>' +
+          '<td>' + (index === 0 ? esc(scan.title) : '') + '</td>' +          '<td class="text-right">' + num(score.horizon, 0) + 'g</td>' +
           '<td class="text-right">' + num(score.observations, 0) + '</td>' +
           '<td class="text-right">' + pct(score.scan_mean_pct) + '</td>' +
           '<td class="text-right">' + pct(score.xu100_mean_pct) + '</td>' +
@@ -75,6 +79,12 @@
           '<td>' + esc(status) + '</td>' +
           '</tr>');
       });
+      var matured = horizons.some(function (score) { return score.observations > 0; });
+      if (!matured && scan.note) {
+        rows.push('<tr><td></td><td colspan="8" class="text-outline">' + esc(scan.note) +
+          (scan.hit_days ? ' · ' + scan.hit_days + ' gün, ' + num(scan.hit_count, 0) + ' kayıt' : '') +
+          '</td></tr>');
+      }
     });
     body.innerHTML = rows.join('') || '<tr><td colspan="9" class="py-space-sm">Kayıtlı tarama sonucu yok.</td></tr>';
   }
@@ -87,7 +97,10 @@
     setStatus('Hesaplanıyor…');
     api('/api/scores' + query).then(function (data) {
       render(data.scores || []);
-      setStatus('Son hesaplama: ' + new Date().toLocaleTimeString('tr-TR'));
+      var when = data.computed_at ? new Date(data.computed_at).toLocaleString('tr-TR') : '—';
+      var source = data.cached ? 'önbellekten' : 'yeni hesaplandı';
+      setStatus('Hesaplama: ' + when + ' (' + source + ', önbellek ' +
+        num(data.ttl_hours, 0) + ' saat)');
     }).catch(function (error) {
       setStatus(error.message);
     });

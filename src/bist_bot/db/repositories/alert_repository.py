@@ -6,10 +6,12 @@ import json
 from datetime import UTC, date, datetime
 from typing import Any
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
+from sqlalchemy.exc import IntegrityError
 
 from bist_bot.db.database import (
     DatabaseManager,
+    UserAlertEventRecord,
     UserAlertRecord,
     UserDigestLogRecord,
     UserSavedScreenRecord,
@@ -17,6 +19,16 @@ from bist_bot.db.database import (
     UserTelegramLinkTokenRecord,
 )
 from bist_bot.db.repositories.user_portfolio_repository import OwnershipError
+
+
+def _is_duplicate_violation(exc: IntegrityError) -> bool:
+    """True only for a unique-key race, never for a real data error."""
+    orig = getattr(exc, "orig", None)
+    sqlstate = getattr(orig, "sqlstate", None) or getattr(orig, "pgcode", None)
+    if sqlstate == "23505":  # PostgreSQL unique_violation
+        return True
+    text = str(orig or exc).lower()
+    return "unique constraint failed" in text or "duplicate key value" in text
 
 
 class AlertRepository:
@@ -43,15 +55,27 @@ class AlertRepository:
         moment = now or datetime.now(UTC)
 
         def _write(session):
+            # Atomic claim: only one concurrent /start can flip used_at, so a
+            # single-use token can never be spent twice (TOCTOU guard). The
+            # expiry check stays in Python to keep its tz normalization.
+            claimed = session.execute(
+                update(UserTelegramLinkTokenRecord)
+                .where(
+                    UserTelegramLinkTokenRecord.token_hash == token_hash,
+                    UserTelegramLinkTokenRecord.used_at.is_(None),
+                )
+                .values(used_at=moment)
+            )
+            if claimed.rowcount != 1:
+                return None
             record = session.get(UserTelegramLinkTokenRecord, token_hash)
-            if record is None or record.used_at is not None:
+            if record is None:
                 return None
             expires = record.expires_at
             if expires.tzinfo is None:
                 expires = expires.replace(tzinfo=UTC)
             if expires < moment:
                 return None
-            record.used_at = moment
             return record.user_id
 
         return self.manager.run_session(_write)
@@ -164,6 +188,19 @@ class AlertRepository:
                 }
                 for row in rows
             ]
+
+        return list(self.manager.run_session(_read, read_only=True))
+
+    def list_user_ids_with_alerts(self) -> list[int]:
+        """Users who have at least one enabled alert or one saved screen."""
+        def _read(session):
+            alert_users = set(
+                session.scalars(
+                    select(UserAlertRecord.user_id).where(UserAlertRecord.enabled.is_(True))
+                ).all()
+            )
+            screen_users = set(session.scalars(select(UserSavedScreenRecord.user_id)).all())
+            return sorted({int(value) for value in alert_users | screen_users})
 
         return list(self.manager.run_session(_read, read_only=True))
 
@@ -300,3 +337,140 @@ class AlertRepository:
                 )
 
         self.manager.run_session(_write)
+
+    # ------------------------------------------------------------------
+    # Alert events (Faz P3.3 in-app history)
+    # ------------------------------------------------------------------
+    def record_events(self, user_id: int, as_of: date, events: list[dict[str, Any]]) -> int:
+        """Insert one row per (user, day, ref); duplicates are ignored.
+
+        The unique constraint is the real guard: two scheduler runs racing on the
+        same day must not double-write, so each row is inserted inside its own
+        savepoint and a constraint violation is swallowed instead of aborting
+        the whole transaction.
+        """
+        if not events:
+            return 0
+
+        def _write(session):
+            inserted = 0
+            for item in events:
+                ref = str(item["ref"])[:120]
+                existing = session.scalar(
+                    select(UserAlertEventRecord.id).where(
+                        UserAlertEventRecord.user_id == user_id,
+                        UserAlertEventRecord.as_of == as_of,
+                        UserAlertEventRecord.ref == ref,
+                    )
+                )
+                if existing is not None:
+                    continue
+                try:
+                    with session.begin_nested():
+                        session.add(
+                            UserAlertEventRecord(
+                                user_id=user_id,
+                                as_of=as_of,
+                                kind=str(item.get("kind") or "alert"),
+                                ref=ref,
+                                title=str(item.get("title") or "")[:200],
+                                message=(
+                                    str(item["message"])[:2000] if item.get("message") else None
+                                ),
+                                created_at=datetime.now(UTC),
+                            )
+                        )
+                except IntegrityError as exc:
+                    # Only a concurrent duplicate is expected here; anything
+                    # else (NOT NULL, FK, ...) is a real bug and must surface.
+                    if not _is_duplicate_violation(exc):
+                        raise
+                    continue
+                inserted += 1
+            return inserted
+
+        return int(self.manager.run_session(_write))
+
+    def list_events(
+        self, user_id: int, *, limit: int = 50, unread_only: bool = False
+    ) -> list[dict[str, Any]]:
+        def _read(session):
+            stmt = select(UserAlertEventRecord).where(UserAlertEventRecord.user_id == user_id)
+            if unread_only:
+                stmt = stmt.where(UserAlertEventRecord.read_at.is_(None))
+            rows = session.scalars(
+                stmt.order_by(
+                    UserAlertEventRecord.as_of.desc(), UserAlertEventRecord.id.desc()
+                ).limit(max(1, min(int(limit), 200)))
+            ).all()
+            return [
+                {
+                    "id": row.id,
+                    "as_of": row.as_of.isoformat(),
+                    "kind": row.kind,
+                    "ref": row.ref,
+                    "title": row.title,
+                    "message": row.message,
+                    "read": row.read_at is not None,
+                }
+                for row in rows
+            ]
+
+        return list(self.manager.run_session(_read, read_only=True))
+
+    def count_unread_events(self, user_id: int) -> int:
+        def _read(session):
+            return session.scalar(
+                select(func.count(UserAlertEventRecord.id)).where(
+                    UserAlertEventRecord.user_id == user_id,
+                    UserAlertEventRecord.read_at.is_(None),
+                )
+            )
+
+        return int(self.manager.run_session(_read, read_only=True) or 0)
+
+    def mark_events_read(self, user_id: int, *, event_id: int | None = None) -> int:
+        def _write(session):
+            stmt = select(UserAlertEventRecord).where(
+                UserAlertEventRecord.user_id == user_id,
+                UserAlertEventRecord.read_at.is_(None),
+            )
+            if event_id is not None:
+                stmt = stmt.where(UserAlertEventRecord.id == event_id)
+            rows = session.scalars(stmt).all()
+            now = datetime.now(UTC)
+            for row in rows:
+                row.read_at = now
+            return len(rows)
+
+        return int(self.manager.run_session(_write))
+
+    def update_alert(
+        self, user_id: int, alert_id: int, changes: dict[str, Any]
+    ) -> dict[str, Any]:
+        def _write(session):
+            row = session.scalar(
+                select(UserAlertRecord).where(
+                    UserAlertRecord.id == alert_id,
+                    UserAlertRecord.user_id == user_id,
+                )
+            )
+            if row is None:
+                raise OwnershipError("Alarm bulunamadı.")
+            if "enabled" in changes:
+                row.enabled = bool(changes["enabled"])
+            if "threshold" in changes and changes["threshold"] is not None:
+                row.threshold = float(changes["threshold"])
+            if changes.get("op"):
+                row.op = str(changes["op"])
+            return {
+                "id": row.id,
+                "kind": row.kind,
+                "target": row.target,
+                "op": row.op,
+                "threshold": row.threshold,
+                "only_watchlist": row.only_watchlist,
+                "enabled": row.enabled,
+            }
+
+        return dict(self.manager.run_session(_write))

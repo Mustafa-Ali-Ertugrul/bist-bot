@@ -90,13 +90,27 @@
       } else {
         title = alert.target.replace('.IS', '') + ' günlük değişim ≥ %' + Math.abs(alert.threshold);
       }
-      return '<div class="stock-kv-row"><span>' + esc(title) + '</span><span>' +
+      var paused = alert.enabled === false;
+      return '<div class="stock-kv-row"><span>' + esc(title) +
+        (paused ? ' <small>(duraklatıldı)</small>' : '') + '</span><span>' +
+        '<button type="button" class="personal-remove" data-toggle="' + alert.id + '">' +
+        (paused ? 'Aç' : 'Duraklat') + '</button> ' +
         '<button type="button" class="personal-remove" data-id="' + alert.id + '">Sil</button></span></div>';
     }).join('');
     var buttons = list.querySelectorAll('button.personal-remove');
     for (var i = 0; i < buttons.length; i++) {
       buttons[i].addEventListener('click', function (event) {
-        api('/api/alerts/' + event.currentTarget.getAttribute('data-id'), { method: 'DELETE' })
+        var button = event.currentTarget;
+        var toggleId = button.getAttribute('data-toggle');
+        if (toggleId) {
+          var current = alerts.filter(function (item) { return String(item.id) === toggleId; })[0];
+          api('/api/alerts/' + toggleId, {
+            method: 'PATCH',
+            body: JSON.stringify({ enabled: !(current && current.enabled) })
+          }).then(loadAlerts).catch(function (error) { setText('alert-status', error.message); });
+          return;
+        }
+        api('/api/alerts/' + button.getAttribute('data-id'), { method: 'DELETE' })
           .then(loadAlerts).catch(function (error) { setText('alert-status', error.message); });
       });
     }
@@ -114,7 +128,10 @@
       return;
     }
     list.innerHTML = screensList.map(function (item) {
-      return '<div class="stock-kv-row"><span>' + esc(item.name) + '</span><span>' +
+      var conditions = (item.payload && item.payload.conditions) || [];
+      var detail = conditions.length ? conditions.length + ' koşul' : 'koşulsuz filtre';
+      return '<div class="stock-kv-row"><span>' + esc(item.name) + ' <small>(' + esc(detail) + ')</small></span><span>' +
+        '<a class="personal-nav" href="/ui/screener?saved=' + encodeURIComponent(item.id) + '">Tarayıcıda aç</a> ' +
         '<button type="button" class="personal-remove" data-id="' + item.id + '">Sil</button></span></div>';
     }).join('');
     var buttons = list.querySelectorAll('button.personal-remove');
@@ -131,8 +148,49 @@
       .catch(function () { /* optional */ });
   }
 
+  function renderEvents(events, unread) {
+    setText('events-unread', unread ? unread + ' okunmamış' : 'Okunmamış yok');
+    var list = document.getElementById('event-list');
+    if (!list) return;
+    if (!events.length) {
+      list.innerHTML = '<div class="stock-kv-row"><span>Kayıt yok</span><span></span></div>';
+      return;
+    }
+    list.innerHTML = events.map(function (item) {
+      return '<div class="stock-kv-row"><span>' + esc(item.title) +
+        ' <small>(' + esc(item.as_of) + ')</small></span><span>' +
+        (item.read ? '<small>okundu</small>' : '<button type="button" class="personal-remove" data-read="' +
+          item.id + '">Okundu</button>') + '</span></div>';
+    }).join('');
+    var buttons = list.querySelectorAll('button[data-read]');
+    for (var i = 0; i < buttons.length; i++) {
+      buttons[i].addEventListener('click', function (event) {
+        api('/api/alerts/events/read', {
+          method: 'POST',
+          body: JSON.stringify({ id: Number(event.currentTarget.getAttribute('data-read')) })
+        }).then(loadEvents).catch(function (error) { setText('events-status', error.message); });
+      });
+    }
+  }
+
+  function loadEvents() {
+    return api('/api/alerts/events?limit=20').then(function (data) {
+      renderEvents(data.events || [], data.unread || 0);
+    }).catch(function (error) { setText('events-status', error.message); });
+  }
+
   function wire() {
     document.getElementById('alert-kind').addEventListener('change', syncForm);
+    var params = new URLSearchParams(window.location.search || '');
+    var prefillTicker = params.get('ticker');
+    var prefillPrice = params.get('price');
+    if (prefillTicker) {
+      document.getElementById('alert-kind').value = 'price';
+      document.getElementById('alert-ticker').value = prefillTicker.toUpperCase();
+      if (prefillPrice) {
+        document.getElementById('alert-threshold').value = prefillPrice;
+      }
+    }
     syncForm();
 
     document.getElementById('link-telegram').addEventListener('click', function () {
@@ -177,13 +235,32 @@
         document.getElementById('preview-text').textContent = data.text || 'Bugün tetiklenen bir alarm yok.';
       }).catch(function (error) { setText('preview-text', error.message); });
     });
+
+    var refreshButton = document.getElementById('events-refresh');
+    if (refreshButton) {
+      refreshButton.addEventListener('click', function () {
+        setText('events-status', 'İşleniyor…');
+        api('/api/alerts/events/refresh', { method: 'POST' }).then(function (data) {
+          setText('events-status', data.written ? data.written + ' yeni kayıt' : 'Yeni kayıt yok');
+          return loadEvents();
+        }).catch(function (error) { setText('events-status', error.message); });
+      });
+    }
+
+    var readButton = document.getElementById('events-read');
+    if (readButton) {
+      readButton.addEventListener('click', function () {
+        api('/api/alerts/events/read', { method: 'POST', body: JSON.stringify({}) })
+          .then(loadEvents).catch(function (error) { setText('events-status', error.message); });
+      });
+    }
   }
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', function () {
-      wire(); loadScreens(); loadTelegram(); loadAlerts(); loadSaved();
+      wire(); loadScreens(); loadTelegram(); loadAlerts(); loadSaved(); loadEvents();
     });
   } else {
-    wire(); loadScreens(); loadTelegram(); loadAlerts(); loadSaved();
+    wire(); loadScreens(); loadTelegram(); loadAlerts(); loadSaved(); loadEvents();
   }
 })();

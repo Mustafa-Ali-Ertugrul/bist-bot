@@ -10,6 +10,38 @@ if str(SRC_DIR) not in sys.path:
 
 
 @pytest.fixture(autouse=True)
+def _rbac_warn_default(monkeypatch):
+    """Keep the enforce-by-default RBAC posture out of unrelated tests.
+
+    Production defaults ``RBAC_MODE`` to ``enforce`` (privileged routes deny,
+    and a database without an admin/trader user refuses to initialize). Most
+    tests exercise non-RBAC behaviour and would fail at fixture setup, so the
+    suite runs on the explicit ``warn`` migration mode. Tests that cover RBAC
+    or bootstrap enforcement set ``RBAC_MODE`` themselves (e.g.
+    ``tests/test_rbac_bootstrap.py``, ``tests/test_scan_authz.py``).
+
+    The env var covers modules rebuilt after ``importlib.reload``; the
+    settings override covers the already-imported singleton.
+    """
+    from bist_bot.config.settings import settings
+
+    monkeypatch.setenv("RBAC_MODE", "warn")
+    override = settings.override(RBAC_MODE="warn")
+    override.__enter__()
+    try:
+        yield
+    finally:
+        try:
+            override.__exit__(None, None, None)
+        except ValueError:
+            # test_config.py reloads the settings module, replacing the
+            # ContextVar the override token belongs to. The reloaded module
+            # rebuilds settings from the environment, which is already covered
+            # by the monkeypatch above.
+            pass
+
+
+@pytest.fixture(autouse=True)
 def _freeze_market_hours_off(monkeypatch):
     """Keep scan orchestration tests independent of wall-clock market hours (B4).
 

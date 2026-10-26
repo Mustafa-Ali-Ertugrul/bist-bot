@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
+import tempfile
 import threading
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -402,6 +403,15 @@ class ShadowTradeService:
 
     def _write_json(self, path: Path, payload: Any) -> None:
         self.results_dir.mkdir(parents=True, exist_ok=True)
-        temporary = path.with_suffix(f"{path.suffix}.tmp")
-        temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        # Unique temp name per writer + atomic rename: no clobber/symlink window.
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=path.name + ".",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            handle.write(json.dumps(payload, ensure_ascii=False, indent=2))
+            temporary = Path(handle.name)
         temporary.replace(path)

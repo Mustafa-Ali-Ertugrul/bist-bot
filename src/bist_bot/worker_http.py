@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from ipaddress import ip_address
 from threading import Thread
 
 from bist_bot.app_logging import get_logger
@@ -26,6 +27,24 @@ from bist_bot.market_calendar import TR, is_bist_open
 logger = get_logger(__name__, component="worker_http")
 
 _READY_GRACE_MINUTES = 40
+
+
+def _metrics_client_allowed(client_ip: str, metrics_public: bool) -> bool:
+    """Whether a /metrics client may read worker metrics.
+
+    Loopback and private-network scrapers (container health checks, Prometheus
+    on the docker network) are always allowed. Public clients need an explicit
+    ``METRICS_PUBLIC=true`` opt-in; anything unparseable is denied.
+    """
+    if metrics_public:
+        return True
+    try:
+        addr = ip_address(str(client_ip or "").split("%")[0])
+    except ValueError:
+        return False
+    if addr.version == 6 and addr.ipv4_mapped is not None:
+        addr = addr.ipv4_mapped
+    return bool(addr.is_loopback or addr.is_private or addr.is_link_local)
 
 
 class WorkerHealthServer:
@@ -75,6 +94,16 @@ class WorkerHealthServer:
         class Handler(BaseHTTPRequestHandler):
             def do_GET(self):
                 if self.path == "/metrics":
+                    # Metrics expose queue depth and job state. They stay open to
+                    # loopback and private-network scrapers (container health,
+                    # Prometheus on the docker network) but never to the public
+                    # internet unless METRICS_PUBLIC is explicitly enabled.
+                    if not _metrics_client_allowed(
+                        self.client_address[0],
+                        bool(getattr(server.settings, "METRICS_PUBLIC", False)),
+                    ):
+                        self._json(403, {"error": "metrics_disabled"})
+                        return
                     body = render_metrics().encode("utf-8")
                     self.send_response(200)
                     self.send_header("Content-Type", "text/plain; version=0.0.4")

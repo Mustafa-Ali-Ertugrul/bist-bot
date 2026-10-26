@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import html
+
 import streamlit as st
 
 from bist_bot.config import store as config_store
@@ -39,8 +41,10 @@ def render_settings_page() -> None:
 
     with runtime_right:
         tg_ready = bool(settings.TELEGRAM_BOT_TOKEN and settings.TELEGRAM_CHAT_ID)
-        token_preview = mask_secret(getattr(settings, "TELEGRAM_BOT_TOKEN", ""))
-        chat_preview = mask_secret(getattr(settings, "TELEGRAM_CHAT_ID", ""), prefix=3, suffix=2)
+        token_preview = html.escape(mask_secret(getattr(settings, "TELEGRAM_BOT_TOKEN", "")))
+        chat_preview = html.escape(
+            mask_secret(getattr(settings, "TELEGRAM_CHAT_ID", ""), prefix=3, suffix=2)
+        )
         render_section_title("Alert routing", "Secrets stay masked")
         render_html_panel(
             (

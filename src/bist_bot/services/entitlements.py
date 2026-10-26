@@ -30,7 +30,7 @@ def entitlements_for(user: dict[str, Any] | None, settings: Any) -> Entitlements
     if user is None:
         return Entitlements("none", False, 0, 0, 0, 0, 0, 0, 0, 0)
     if str(user.get("role") or "").lower() == "admin":
-        return Entitlements("admin", True, 200, 50, 100, 20, 500, 20, 2000, 3650)
+        return Entitlements("admin", True, 1000, 50, 100, 20, 500, 20, 2000, 3650)
 
     plan = normalize_plan(user.get("plan"))
     paid = plan in PAID_PLANS and is_subscription_active(user)
@@ -38,7 +38,7 @@ def entitlements_for(user: dict[str, Any] | None, settings: Any) -> Entitlements
         return Entitlements(
             plan=plan,
             paid=True,
-            screener_rows=int(getattr(settings, "PAID_SCREENER_ROWS", 200)),
+            screener_rows=int(getattr(settings, "PAID_SCREENER_ROWS", 1000)),
             saved_screens=int(getattr(settings, "PAID_SAVED_SCREENS", 10)),
             alerts=int(getattr(settings, "PAID_ALERTS", 20)),
             watchlists=int(getattr(settings, "PAID_WATCHLISTS", 5)),

@@ -104,10 +104,54 @@
     }).catch(function () { alert('Bağlantı hatası.'); });
   }
 
+  function loadCoverage() {
+    var status = document.getElementById('admin-coverage-status');
+    fetch('/api/admin/data-coverage', { headers: authHeaders() }).then(function (res) {
+      if (res.status === 403) {
+        if (status) status.textContent = 'Yetkisiz erişim.';
+        return;
+      }
+      return res.json().then(function (data) {
+        if (!res.ok) {
+          if (status) status.textContent = data.message || 'Kapsam okunamadı.';
+          return;
+        }
+        var setText = function (id, value) {
+          var el = document.getElementById(id);
+          if (el) el.textContent = value == null ? '—' : String(value);
+        };
+        setText('coverage-instruments', data.instrument_count);
+        setText('coverage-bars', data.bars_as_of || 'yok');
+        setText('coverage-snapshots', data.snapshots_as_of || 'yok');
+        setText('coverage-kap', data.kap_as_of || 'yok');
+        if (status) {
+          status.textContent = 'Fiyatı eksik: ' + (data.missing_bars_count || 0) +
+            ' · Temeli eksik: ' + (data.missing_fundamentals_count || 0);
+        }
+        var missing = document.getElementById('coverage-missing');
+        if (missing) {
+          var parts = [];
+          if ((data.missing_bars_codes || []).length) {
+            parts.push('Fiyat yok: ' + data.missing_bars_codes.join(', '));
+          }
+          if ((data.missing_fundamentals_codes || []).length) {
+            parts.push('Temel veri yok: ' + data.missing_fundamentals_codes.join(', '));
+          }
+          missing.textContent = parts.join(' · ');
+        }
+      });
+    }).catch(function () {
+      if (status) status.textContent = 'Bağlantı hatası.';
+    });
+  }
+
   // ── Event delegation (CSP-safe: no inline onclick needed) ──
   document.addEventListener('DOMContentLoaded', function () {
     loadAdminRequests();
     loadAdminUsers();
+    loadCoverage();
+    var refreshCoverageBtn = document.getElementById('admin-refresh-coverage');
+    if (refreshCoverageBtn) refreshCoverageBtn.addEventListener('click', function () { loadCoverage(); });
 
     // Refresh buttons
     var refreshUsersBtn = document.getElementById('admin-refresh-users');

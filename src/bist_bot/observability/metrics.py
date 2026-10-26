@@ -23,6 +23,16 @@ except ImportError:  # pragma: no cover
     _prom = None
 
 
+def _escape_label(value: str) -> str:
+    """Prometheus text-format label escaping (backslash, quote, newline)."""
+    return (
+        str(value)
+        .replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\n", "\\n")
+    )
+
+
 class _ObservabilityMetrics:
     def __init__(self) -> None:
         self._lock = threading.RLock()
@@ -135,12 +145,17 @@ class _ObservabilityMetrics:
             lines: list[str] = []
             lines.append("# TYPE bist_bot_signals_total counter")
             for signal_type, value in sorted(self._signals.items()):
-                lines.append(f'bist_bot_signals_total{{signal_type="{signal_type}"}} {value}')
+                lines.append(
+                    f'bist_bot_signals_total{{signal_type="{_escape_label(signal_type)}"}} {value}'
+                )
             if not self._signals:
                 lines.append('bist_bot_signals_total{signal_type="NONE"} 0.0')
             lines.append("# TYPE bist_bot_orders_total counter")
             for (side, status), value in sorted(self._orders.items()):
-                lines.append(f'bist_bot_orders_total{{side="{side}",status="{status}"}} {value}')
+                lines.append(
+                    f'bist_bot_orders_total{{side="{_escape_label(side)}",'
+                    f'status="{_escape_label(status)}"}} {value}'
+                )
             if not self._orders:
                 lines.append('bist_bot_orders_total{side="NONE",status="NONE"} 0.0')
             lines.append("# TYPE bist_bot_positions_current gauge")

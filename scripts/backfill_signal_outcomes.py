@@ -27,6 +27,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from collections import Counter
 from datetime import UTC, datetime
@@ -217,13 +218,19 @@ def ensure_provenance_columns(engine: sa.engine.Engine) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--apply", action="store_true")
-    parser.add_argument("--db", required=True, help="SQLAlchemy URL (Postgres)")
+    parser.add_argument(
+        "--db",
+        default=os.environ.get("BIST_BOT_DATABASE_URL") or os.environ.get("DATABASE_URL") or "",
+        help="SQLAlchemy URL (Postgres); defaults to BIST_BOT_DATABASE_URL / DATABASE_URL",
+    )
     parser.add_argument("--ticker", default=None)
     parser.add_argument("--period", default="1y")
     parser.add_argument("--interval", default="1d")
     parser.add_argument("--bars-dir", default=None)
     parser.add_argument("--report", default="results/backfill_outcome_raporu.md")
     args = parser.parse_args()
+    if not args.db:
+        parser.error("--db or BIST_BOT_DATABASE_URL/DATABASE_URL is required")
 
     engine = sa.create_engine(args.db)
     print(ensure_provenance_columns(engine))

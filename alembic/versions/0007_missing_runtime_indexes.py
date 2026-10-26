@@ -37,7 +37,8 @@ def upgrade() -> None:
         "idx_audit_trail_timestamp",
         "idx_orders_position_id",
     ):
-        op.execute(f"DROP INDEX IF EXISTS {idx}")
+        # Literal identifier quoting — never interpolate input into DDL.
+        op.execute(f'DROP INDEX IF EXISTS "{idx}"')
 
 
 def downgrade() -> None:

@@ -11,17 +11,20 @@
 <header class="w-full px-terminal-margin py-space-md border-b border-surface-container-high/40">
 <div class="w-full max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-space-md">
 <div class="flex items-center gap-space-sm">
-<span class="font-headline-md text-headline-md tracking-tight font-extrabold">Bist<span class="text-primary">-Bot</span></span>
+<a class="font-headline-md text-headline-md tracking-tight font-extrabold text-on-surface" href="/ui/screener">Bist<span class="text-primary">-Bot</span></a>
 <span class="bg-surface-container-high px-space-xs py-space-3xs rounded text-secondary font-label-caps text-label-caps uppercase tracking-wider">Hisse</span>
 </div>
 <div class="flex flex-wrap items-center gap-space-sm w-full sm:w-auto">
 <label class="sr-only" for="stock-search">Hisse ara</label>
 <input id="stock-search" class="oc-input stock-search" type="search" placeholder="Kod veya şirket adı" autocomplete="off"/>
+<a class="px-space-md py-space-xs rounded-lg bg-surface-container-high text-on-surface font-body-sm text-body-sm" href="/ui/market">Piyasa</a>
 <a class="px-space-md py-space-xs rounded-lg bg-surface-container-high text-on-surface font-body-sm text-body-sm" href="/ui/screener">Tarayıcı</a>
+<a class="px-space-md py-space-xs rounded-lg bg-surface-container-high text-on-surface font-body-sm text-body-sm" href="/ui/compare?codes={{ stock_code }}">Karşılaştır</a>
 <a class="px-space-md py-space-xs rounded-lg bg-surface-container-high text-on-surface font-body-sm text-body-sm" href="/ui/watchlist">İzleme</a>
 <a class="px-space-md py-space-xs rounded-lg bg-surface-container-high text-on-surface font-body-sm text-body-sm" href="/ui/portfolio">Portföy</a>
 <a class="px-space-md py-space-xs rounded-lg bg-surface-container-high text-on-surface font-body-sm text-body-sm" href="/ui/alerts">Alarmlar</a>
 <a class="px-space-md py-space-xs rounded-lg bg-surface-container-high text-on-surface font-body-sm text-body-sm" href="/ui/scorecard">Karne</a>
+<button class="px-space-md py-space-xs rounded-lg bg-surface-container-high text-on-surface font-body-sm text-body-sm" type="button" data-action="logout">Çıkış</button>
 </div>
 </div>
 <div id="search-results" class="w-full max-w-7xl mx-auto stock-search-results hidden"></div>
@@ -83,19 +86,59 @@
 </section>
 
 <section class="bg-surface-container-low/90 rounded-xl p-space-lg">
+<div class="flex flex-wrap items-center justify-between gap-space-sm">
+<div>
 <h2 class="font-headline-md text-headline-md font-bold">Çeyreklik Tablo</h2>
-<p class="font-body-sm text-body-sm text-outline mt-space-3xs" id="fundamentals-note">Kümülatif (yılbaşından itibaren), TL.</p>
+<p class="font-body-sm text-body-sm text-outline mt-space-3xs" id="fundamentals-note">Tek çeyrek ve kümülatif (yılbaşından itibaren) değerler, TL.</p>
+</div>
+</div>
 <div class="overflow-x-auto mt-space-sm">
 <table class="w-full font-body-sm text-body-sm">
 <thead>
 <tr class="text-outline font-label-caps text-label-caps uppercase">
 <th class="text-left py-space-3xs">Çeyrek</th>
-<th class="text-right py-space-3xs">Satış</th>
-<th class="text-right py-space-3xs">Net Kâr</th>
+<th class="text-right py-space-3xs">Çeyrek Satış</th>
+<th class="text-right py-space-3xs">Çeyrek Net Kâr</th>
+<th class="text-right py-space-3xs">Net Marj</th>
+<th class="text-right py-space-3xs">Kümülatif Satış</th>
+<th class="text-right py-space-3xs">Kümülatif Net Kâr</th>
 <th class="text-right py-space-3xs">Özkaynak</th>
+<th class="text-right py-space-3xs">ROE (TTM)</th>
 </tr>
 </thead>
 <tbody id="quarters-body"></tbody>
+</table>
+</div>
+</section>
+
+<section class="bg-surface-container-low/90 rounded-xl p-space-lg" id="valuation-section">
+<div class="flex flex-wrap items-center justify-between gap-space-sm">
+<div>
+<h2 class="font-headline-md text-headline-md font-bold">Tarihsel Çarpan Bantları</h2>
+<p class="font-body-sm text-body-sm text-outline mt-space-3xs">Bilanço yayın tarihlerine göre geçmiş F/K ve PD/DD dağılımı (son 3 yıl).</p>
+</div>
+</div>
+<div id="valuation-bands" class="stock-grid mt-space-sm"></div>
+</section>
+
+<section class="bg-surface-container-low/90 rounded-xl p-space-lg" id="peers-section">
+<h2 class="font-headline-md text-headline-md font-bold">Sektör Karşılaştırması</h2>
+<p class="font-body-sm text-body-sm text-outline mt-space-3xs" id="peers-summary">Sektör verisi yükleniyor…</p>
+<div class="overflow-x-auto mt-space-sm">
+<table class="w-full font-body-sm text-body-sm screen-table">
+<thead>
+<tr class="text-outline font-label-caps text-label-caps uppercase">
+<th class="text-left">Kod</th>
+<th class="text-left">Şirket</th>
+<th class="text-right">Piyasa Değeri</th>
+<th class="text-right">F/K</th>
+<th class="text-right">PD/DD</th>
+<th class="text-right">ROE</th>
+<th class="text-right">Net Marj</th>
+<th class="text-right">1A Getiri</th>
+</tr>
+</thead>
+<tbody id="peers-body"><tr><td colspan="8" class="py-space-sm text-outline">Yükleniyor…</td></tr></tbody>
 </table>
 </div>
 </section>
@@ -137,6 +180,7 @@
 <p class="font-body-sm text-body-sm text-outline pb-space-lg">Bu sayfa bilgilendirme amaçlıdır; alım-satım tavsiyesi değildir. Veriler gecelik olarak güncellenir ve gecikmeli olabilir.{% if attribution %}<br>{{ attribution }}{% endif %}</p>
 </main>
 <script src="/static/vendor/lightweight-charts.standalone.production.js"></script>
-<script src="/static/stock.js?v=1"></script>
+<script src="/static/stock.js?v=3"></script>
+<script src="/static/product-nav.js?v=2"></script>
 </body>
 </html>

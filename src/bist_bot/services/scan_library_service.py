@@ -118,6 +118,14 @@ class ScanLibraryService:
         self.repository.write_snapshots(target, snapshots)
         report.snapshots = len(snapshots)
 
+        # Fresh screen hits change the scorecard's input set.
+        clearer = getattr(self.repository, "clear_scorecard_cache", None)
+        if clearer is not None:
+            try:
+                clearer()
+            except Exception as exc:  # cache invalidation must not fail the scan
+                logger.warning("scorecard_cache_clear_failed", error_type=type(exc).__name__)
+
         report.screens = len(screens)
         report.elapsed_seconds = time.monotonic() - started
         logger.info("screens_completed", **report.as_dict())

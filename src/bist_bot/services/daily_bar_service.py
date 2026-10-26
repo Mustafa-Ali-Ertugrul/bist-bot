@@ -106,6 +106,7 @@ class DailyBarService:
         self.settings = settings or default_settings
         self.source = source or build_market_source(self.settings)
         self._last_run_date: date | None = None
+        self._last_fundamentals_at: datetime | None = None
         self._last_universe_refresh: date | None = None
 
     # ------------------------------------------------------------------
@@ -236,9 +237,25 @@ class DailyBarService:
 
         report.benchmarks = self.sync_benchmarks(as_of=target, full_history=full_history)
 
+        # New bars change forward returns, so any stored scorecard is stale.
+        if report.written or report.benchmarks:
+            self._invalidate_scorecard_cache()
+
         report.elapsed_seconds = time.monotonic() - started
         logger.info("daily_bars_sync_completed", **report.as_dict())
         return report
+
+    def _invalidate_scorecard_cache(self) -> None:
+        clearer = getattr(self.repository, "clear_scorecard_cache", None)
+        if clearer is None:
+            return
+        try:
+            cleared = int(clearer())
+        except Exception as exc:  # cache invalidation must never fail a sync
+            logger.warning("scorecard_cache_clear_failed", error_type=type(exc).__name__)
+            return
+        if cleared:
+            logger.info("scorecard_cache_cleared", rows=cleared)
 
     # ------------------------------------------------------------------
     # Benchmarks (Faz 5)
@@ -324,4 +341,29 @@ class DailyBarService:
             logger.error("daily_bars_run_failed", error_type=type(exc).__name__, error=str(exc))
             return False
         self._last_run_date = today
+        self._run_weekly_fundamentals_if_due(now)
+        return True
+
+    def _run_weekly_fundamentals_if_due(self, now: datetime) -> bool:
+        """Faz P3.5: refresh fundamentals on a slow cadence when the daily run skips them."""
+        if not bool(getattr(self.settings, "WEEKLY_FUNDAMENTALS_ENABLED", False)):
+            return False
+        if bool(getattr(self.settings, "DAILY_FUNDAMENTALS_ENABLED", False)):
+            return False  # the daily pass already refreshed them
+        interval = max(1, int(getattr(self.settings, "WEEKLY_FUNDAMENTALS_INTERVAL_HOURS", 168)))
+        moment = now if now.tzinfo else now.replace(tzinfo=TR)
+        if self._last_fundamentals_at is not None:
+            elapsed = moment - self._last_fundamentals_at
+            if elapsed.total_seconds() < interval * 3600:
+                return False
+        try:
+            self.sync_fundamentals(
+                self.repository.list_active_instruments(), as_of=now.date()
+            )
+        except Exception as exc:
+            logger.error(
+                "daily_fundamentals_run_failed", error_type=type(exc).__name__, error=str(exc)
+            )
+            return False
+        self._last_fundamentals_at = moment
         return True

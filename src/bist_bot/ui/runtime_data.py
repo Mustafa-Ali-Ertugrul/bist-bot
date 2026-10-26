@@ -2,27 +2,21 @@
 
 from __future__ import annotations
 
-import xml.etree.ElementTree as ET  # nosec B405: defusedxml primary; fallback capped.
+import xml.etree.ElementTree as ET  # nosec B405: type only; parsing goes through defusedxml.
 from collections import OrderedDict
 from datetime import UTC, datetime, timedelta, timezone
 from typing import cast
+from urllib.parse import quote_plus
 
 import numpy as np
 import pandas as pd
 import requests
 import streamlit as st
+from defusedxml.ElementTree import fromstring as _rss_fromstring
 
 from bist_bot.config.settings import settings
 from bist_bot.indicators import cached_add_all
 from bist_bot.strategy.signal_models import Signal, SignalType
-
-try:  # XXE-safe RSS parsing when available (declared in requirements.txt).
-    from defusedxml.ElementTree import fromstring as _rss_fromstring
-except ImportError:  # pragma: no cover - fallback for minimal installs.
-
-    def _rss_fromstring(content: bytes) -> ET.Element:
-        return ET.fromstring(content)  # nosec B314: Google News RSS fallback path.
-
 
 #: RSS payload cap: Google News feeds are a few KB; anything larger is rejected
 #: before XML parsing (entity-expansion / billion-laughs guard).
@@ -30,7 +24,7 @@ MAX_RSS_BYTES = 512 * 1024
 
 
 def _parse_rss(content: bytes) -> ET.Element:
-    """Parse an RSS payload with size cap + entity-forbidding parser."""
+    """Parse an RSS payload: size cap + defusedxml (no entity expansion)."""
     if len(content) > MAX_RSS_BYTES:
         raise ValueError(f"RSS payload too large ({len(content)} bytes)")
     return _rss_fromstring(content)
@@ -82,7 +76,10 @@ def fetch_stock_news(ticker, max_results=5):
     name = settings.TICKER_NAMES.get(ticker, ticker.replace(".IS", ""))
     all_news = []
     try:
-        url = f"https://news.google.com/rss/search?q={name}+hisse+senedi&hl=tr&gl=TR&ceid=TR:tr"
+        url = (
+            "https://news.google.com/rss/search?q="
+            f"{quote_plus(name)}+hisse+senedi&hl=tr&gl=TR&ceid=TR:tr"
+        )
         response = requests.get(url, timeout=8, headers={"User-Agent": "Mozilla/5.0"})
         response.raise_for_status()
         root = _parse_rss(response.content)

@@ -273,3 +273,135 @@ def test_search_and_no_advice_language(app: Flask) -> None:
         assert not re.search(r"\b(AL|SAT)\b", text), path.name
         assert "Stop-Loss" not in text, path.name
         assert "Hedef:" not in text, path.name
+
+
+def test_statement_view_standalone_quarters_and_dividend_yield(repo: MarketDataRepository) -> None:
+    _seed(repo, closes=[100.0 + i for i in range(60)])
+    repo.write_statements(
+        "THYAO.IS",
+        {
+            "2025/03": {"3C": 40.0, "3Z": 4.0, "2O": 400.0},
+            "2025/06": {"3C": 100.0, "3Z": 10.0, "2O": 450.0},
+            "2025/09": {"3C": 150.0, "3Z": 15.0, "2O": 470.0},
+            "2025/12": {"3C": 200.0, "3Z": 20.0, "2O": 480.0},
+            "2026/03": {"3C": 50.0, "3Z": 6.0, "2O": 490.0},
+            "2026/06": {"3C": 120.0, "3Z": 12.0, "2O": 500.0},
+        },
+        source="isyatirim",
+    )
+    service = StockProfileService(repo, settings)
+    fund = service.fundamentals("THYAO")
+    assert fund is not None
+    by_period = {row["period"]: row for row in fund["quarters"]}
+    assert by_period["2026/03"]["q_sales"] == pytest.approx(50.0)
+    assert by_period["2026/06"]["q_sales"] == pytest.approx(70.0)
+    assert by_period["2026/06"]["q_net_profit"] == pytest.approx(6.0)
+    assert by_period["2026/06"]["q_net_margin_pct"] == pytest.approx(8.6)
+    assert by_period["2026/06"]["ttm_net_profit"] == pytest.approx(22.0)
+    assert by_period["2026/06"]["roe_pct"] == pytest.approx(4.4)
+
+    prof = service.profile("THYAO", dividend_per_share=7.95)
+    assert prof is not None
+    assert prof["fundamentals"]["ratios"]["dividend_yield_pct"] == pytest.approx(
+        round(7.95 / prof["last_close"] * 100.0, 2)
+    )
+
+
+def test_peers_and_point_in_time_valuation_endpoints(app: Flask) -> None:
+    manager = app.config["_test_manager"]
+    market = MarketDataRepository(manager)
+    market.upsert_instruments(
+        [
+            Instrument(code="PGSUS", ticker="PGSUS.IS", name="Pegasus", sector="Ulaşım"),
+            Instrument(code="CLEBI", ticker="CLEBI.IS", name="Çelebi", sector="Ulaşım"),
+        ]
+    )
+    snap_date = date(2026, 3, 1)
+    market.write_snapshots(
+        snap_date,
+        [
+            {
+                "ticker": "THYAO.IS",
+                "close": 300.0,
+                "market_cap_tl": 400_000_000_000.0,
+                "pe_ttm": 6.0,
+                "pb": 1.2,
+                "roe_pct": 20.0,
+                "net_margin_pct": 12.0,
+                "ret_1m": 5.0,
+            },
+            {
+                "ticker": "PGSUS.IS",
+                "close": 220.0,
+                "market_cap_tl": 110_000_000_000.0,
+                "pe_ttm": 8.0,
+                "pb": 1.8,
+                "roe_pct": 18.0,
+                "net_margin_pct": 10.0,
+                "ret_1m": 3.0,
+            },
+            {
+                "ticker": "CLEBI.IS",
+                "close": 1800.0,
+                "market_cap_tl": 40_000_000_000.0,
+                "pe_ttm": 10.0,
+                "pb": 2.4,
+                "roe_pct": 25.0,
+                "net_margin_pct": 15.0,
+                "ret_1m": 8.0,
+            },
+        ],
+    )
+    with app.test_client() as client:
+        token = _login(client, "peers_admin@bistbot.local")
+        _promote(app, "peers_admin@bistbot.local")
+        headers = {"Authorization": f"Bearer {token}"}
+
+        peers_resp = client.get("/api/stocks/THYAO/peers", headers=headers)
+        assert peers_resp.status_code == 200
+        peers_data = peers_resp.get_json()
+        assert peers_data["sufficient"] is True
+        assert peers_data["peer_count"] == 3
+        assert peers_data["medians"]["pe_ttm"] == pytest.approx(8.0)
+
+        val_resp = client.get("/api/stocks/THYAO/valuation?range=3y", headers=headers)
+        assert val_resp.status_code == 200
+        val_data = val_resp.get_json()
+        # 2025/12 statement is available from 2026-03-11 (70 days after Dec 31).
+        # Bars seeded start on 2026-01-01 (60 days -> up to early March), so before 2026-03-11
+        # only 2025/06 (whose TTM isn't complete) is available -> no lookahead.
+        for pt in val_data["series"]:
+            if pt["time"] < "2026-03-11":
+                assert pt["period"] != "2025/12"
+
+
+def test_data_status_and_admin_data_coverage_endpoints(app: Flask) -> None:
+    from datetime import datetime
+
+    from bist_bot.market_calendar import TR, latest_completed_session_date, trading_sessions_between
+
+    # Sunday 2026-10-25 -> latest completed session is Friday 2026-10-23
+    sun = datetime(2026, 10, 25, 14, 0, tzinfo=TR)
+    assert latest_completed_session_date(sun) == date(2026, 10, 23)
+    assert trading_sessions_between(date(2026, 10, 22), date(2026, 10, 23)) == 1
+
+    with settings.override(STOCK_PAGES_PUBLIC=True):
+        with app.test_client() as client:
+            member_tok = _login(client, "member_cov@bistbot.local")
+            member_headers = {"Authorization": f"Bearer {member_tok}"}
+            status_resp = client.get("/api/data-status", headers=member_headers)
+            assert status_resp.status_code == 200
+            assert "stale" in status_resp.get_json()
+
+            # Non-admin denied on /api/admin/data-coverage
+            assert client.get("/api/admin/data-coverage", headers=member_headers).status_code == 403
+
+            admin_tok = _login(client, "admin_cov@bistbot.local")
+            _promote(app, "admin_cov@bistbot.local")
+            cov_resp = client.get(
+                "/api/admin/data-coverage", headers={"Authorization": f"Bearer {admin_tok}"}
+            )
+            assert cov_resp.status_code == 200
+            cov = cov_resp.get_json()
+            assert cov["instrument_count"] >= 1
+            assert "bars_as_of" in cov

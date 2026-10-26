@@ -11,7 +11,8 @@
     zirve_52h: '52 Hafta Zirvesi',
     bb_sikisma: 'Bollinger Sıkışması',
     ucuz_karli: 'Ucuz ve Kârlı',
-    satis_buyume: 'Satış Büyümesi'
+    satis_buyume: 'Satış Büyümesi',
+    temettu_verimi: 'Temettü Verimi'
   };
 
   function token() {
@@ -137,14 +138,17 @@
     var ratioGrid = document.getElementById('ratios-grid');
     if (ratioGrid) {
       ratioGrid.innerHTML = [
-        kvRow('F/K (son 12 ay)', ratios.pe_ttm ? num(ratios.pe_ttm, 2) : '—'),
-        kvRow('PD/DD', ratios.pb ? num(ratios.pb, 2) : '—'),
+        kvRow('F/K (son 12 ay)', ratios.pe_ttm === null || ratios.pe_ttm === undefined ? 'veri yok' : num(ratios.pe_ttm, 2)),
+        kvRow('PD/DD', ratios.pb === null || ratios.pb === undefined ? 'veri yok' : num(ratios.pb, 2)),
+        kvRow('Temettü verimi', ratios.dividend_yield_pct === null || ratios.dividend_yield_pct === undefined ? '—' : pct(ratios.dividend_yield_pct)),
         kvRow('Net kâr marjı', ratios.net_margin_pct === null ? '—' : pct(ratios.net_margin_pct)),
         kvRow('Özkaynak kârlılığı', ratios.roe_pct === null ? '—' : pct(ratios.roe_pct)),
         kvRow('Satış büyümesi (yıllık)', pct(ratios.sales_growth_yoy_pct)),
-        kvRow('Son 12 ay satış', fund.ttm_sales ? money(fund.ttm_sales) : '—'),
-        kvRow('Son 12 ay net kâr', fund.ttm_net_profit ? money(fund.ttm_net_profit) : '—'),
-        kvRow('Son çeyrek', fund.latest_period || '—')
+        kvRow('Son 12 ay satış', fund.ttm_sales === null || fund.ttm_sales === undefined ? 'veri yok' : money(fund.ttm_sales)),
+        kvRow('Son 12 ay net kâr', fund.ttm_net_profit === null || fund.ttm_net_profit === undefined ? 'veri yok' : money(fund.ttm_net_profit)),
+        kvRow('Bilanço dönemi', fund.latest_period
+          ? (fund.latest_period + (fund.stale ? ' · gecikmiş' : ''))
+          : 'Bilanço verisi yok')
       ].join('');
     }
   }
@@ -155,15 +159,75 @@
     if (!body) return;
     var rows = (payload && payload.quarters) || [];
     if (!rows.length) {
-      body.innerHTML = '<tr><td class="py-space-xs" colspan="4">Bilanço verisi henüz yüklenmedi.</td></tr>';
+      body.innerHTML = '<tr><td class="py-space-xs" colspan="8">Bilanço verisi henüz yüklenmedi.</td></tr>';
       return;
     }
     body.innerHTML = rows.slice().reverse().map(function (row) {
+      var qSales = row.q_sales === null || row.q_sales === undefined ? '—' : num(row.q_sales, 0);
+      var qNet = row.q_net_profit === null || row.q_net_profit === undefined ? '—' : num(row.q_net_profit, 0);
+      var qMargin = row.q_net_margin_pct === null || row.q_net_margin_pct === undefined ? '—' : pct(row.q_net_margin_pct);
+      var roeVal = row.roe_pct === null || row.roe_pct === undefined ? '—' : pct(row.roe_pct);
       return '<tr class="border-b border-surface-container-high/30">' +
         '<td class="py-space-3xs">' + escapeHtml(row.period) + '</td>' +
+        '<td class="py-space-3xs text-right">' + qSales + '</td>' +
+        '<td class="py-space-3xs text-right">' + qNet + '</td>' +
+        '<td class="py-space-3xs text-right">' + qMargin + '</td>' +
         '<td class="py-space-3xs text-right">' + (row.sales === null ? '—' : num(row.sales, 0)) + '</td>' +
         '<td class="py-space-3xs text-right">' + (row.net_profit === null ? '—' : num(row.net_profit, 0)) + '</td>' +
         '<td class="py-space-3xs text-right">' + (row.equity === null ? '—' : num(row.equity, 0)) + '</td>' +
+        '<td class="py-space-3xs text-right">' + roeVal + '</td>' +
+        '</tr>';
+    }).join('');
+  }
+
+  function renderValuation(payload) {
+    var box = document.getElementById('valuation-bands');
+    if (!box) return;
+    var pe = (payload && payload.pe_band) || {};
+    var pb = (payload && payload.pb_band) || {};
+    if (pe.median === null && pb.median === null) {
+      box.innerHTML = '<div class="stock-kv-row"><span>Tarihsel çarpan hesabı için yeterli bilanço/fiyat verisi yok.</span><span></span></div>';
+      return;
+    }
+    box.innerHTML = [
+      kvRow('F/K Güncel / Medyan', (pe.current !== null && pe.current !== undefined ? num(pe.current, 2) : '—') + ' / ' + (pe.median !== null && pe.median !== undefined ? num(pe.median, 2) : '—')),
+      kvRow('F/K Min – Maks', (pe.min !== null && pe.min !== undefined ? num(pe.min, 2) : '—') + ' – ' + (pe.max !== null && pe.max !== undefined ? num(pe.max, 2) : '—')),
+      kvRow('PD/DD Güncel / Medyan', (pb.current !== null && pb.current !== undefined ? num(pb.current, 2) : '—') + ' / ' + (pb.median !== null && pb.median !== undefined ? num(pb.median, 2) : '—')),
+      kvRow('PD/DD Min – Maks', (pb.min !== null && pb.min !== undefined ? num(pb.min, 2) : '—') + ' – ' + (pb.max !== null && pb.max !== undefined ? num(pb.max, 2) : '—'))
+    ].join('');
+  }
+
+  function renderPeers(payload) {
+    var summary = document.getElementById('peers-summary');
+    var body = document.getElementById('peers-body');
+    if (!body) return;
+    if (!payload || !payload.peers || !payload.peers.length) {
+      if (summary) summary.textContent = 'Sektör eşleşmesi bulunamadı.';
+      body.innerHTML = '<tr><td colspan="8" class="py-space-sm text-outline">Veri yok.</td></tr>';
+      return;
+    }
+    var medians = payload.medians || {};
+    if (summary) {
+      if (payload.sufficient) {
+        summary.textContent = (payload.sector || 'Sektör') + ' (' + payload.peer_count + ' şirket) · Medyan F/K: ' +
+          (medians.pe_ttm !== null && medians.pe_ttm !== undefined ? num(medians.pe_ttm, 2) : '—') +
+          ' · Medyan PD/DD: ' + (medians.pb !== null && medians.pb !== undefined ? num(medians.pb, 2) : '—') +
+          ' · Medyan ROE: ' + (medians.roe_pct !== null && medians.roe_pct !== undefined ? pct(medians.roe_pct) : '—');
+      } else {
+        summary.textContent = (payload.sector || 'Sektör') + ' (' + payload.peer_count + ' şirket — medyan için en az 3 şirket gerekir)';
+      }
+    }
+    body.innerHTML = payload.peers.map(function (peer) {
+      var highlight = peer.is_self ? ' class="font-bold"' : '';
+      return '<tr' + highlight + '>' +
+        '<td><a href="/ui/stock/' + encodeURIComponent(peer.code) + '">' + escapeHtml(peer.code) + '</a></td>' +
+        '<td>' + escapeHtml(peer.name || '') + '</td>' +
+        '<td class="text-right">' + money(peer.market_cap_tl) + '</td>' +
+        '<td class="text-right">' + (peer.pe_ttm !== null && peer.pe_ttm !== undefined ? num(peer.pe_ttm, 2) : '—') + '</td>' +
+        '<td class="text-right">' + (peer.pb !== null && peer.pb !== undefined ? num(peer.pb, 2) : '—') + '</td>' +
+        '<td class="text-right">' + (peer.roe_pct !== null && peer.roe_pct !== undefined ? pct(peer.roe_pct) : '—') + '</td>' +
+        '<td class="text-right">' + (peer.net_margin_pct !== null && peer.net_margin_pct !== undefined ? pct(peer.net_margin_pct) : '—') + '</td>' +
+        '<td class="text-right">' + pct(peer.ret_1m) + '</td>' +
         '</tr>';
     }).join('');
   }
@@ -408,6 +472,14 @@
     }).catch(function () {
       var list = document.getElementById('kap-list');
       if (list) list.innerHTML = '<li>KAP bildirimleri yüklenemedi.</li>';
+    });
+    api('/api/stocks/' + encodeURIComponent(code) + '/valuation').then(function (data) {
+      renderValuation(data);
+    }).catch(function () { /* keep the empty state */ });
+    api('/api/stocks/' + encodeURIComponent(code) + '/peers').then(function (data) {
+      renderPeers(data);
+    }).catch(function () {
+      setText('peers-summary', 'Sektör verisi yüklenemedi.');
     });
     loadBars('1y').catch(function () {
       var note = document.getElementById('chart-note');

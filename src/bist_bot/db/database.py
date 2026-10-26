@@ -713,6 +713,28 @@ class UserAlertRecord(Base):
     )
 
 
+class UserAlertEventRecord(Base):
+    """Faz P3.3: in-app record of what an alert produced on a given session."""
+
+    __tablename__ = "user_alert_events"
+    __table_args__ = (
+        UniqueConstraint("user_id", "as_of", "ref", name="uq_user_alert_events_user_day_ref"),
+        Index("ix_user_alert_events_user_id", "user_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    as_of: Mapped[date] = mapped_column(Date, nullable=False)
+    kind: Mapped[str] = mapped_column(String, nullable=False)  # alert | scan | filter
+    ref: Mapped[str] = mapped_column(String, nullable=False)
+    title: Mapped[str] = mapped_column(String, nullable=False)
+    message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+    )
+    read_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class UserSavedScreenRecord(Base):
     __tablename__ = "user_saved_screens"
     __table_args__ = (UniqueConstraint("user_id", "name", name="uq_user_saved_screens_user_name"),)
@@ -736,6 +758,18 @@ class UserDigestLogRecord(Base):
     )
     as_of: Mapped[date] = mapped_column(Date, primary_key=True)
     sent_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+
+class ScorecardCacheRecord(Base):
+    """Faz P3.4: computed scan scorecards, keyed by request parameters."""
+
+    __tablename__ = "scorecard_cache"
+
+    cache_key: Mapped[str] = mapped_column(String, primary_key=True)
+    payload: Mapped[str] = mapped_column(Text, nullable=False)
+    computed_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=lambda: datetime.now(UTC)
     )
 
@@ -881,7 +915,7 @@ class DatabaseManager:
             "No admin/trader user exists. Configure ADMIN_BOOTSTRAP_EMAIL and "
             "ADMIN_BOOTSTRAP_PASSWORD_HASH before enabling RBAC_MODE=enforce."
         )
-        if str(settings.RBAC_MODE).lower() == "enforce":
+        if str(settings.RBAC_MODE).lower() != "warn":
             raise RuntimeError(message)
         logger.warning("no_privileged_user_configured", message=message)
 
@@ -1074,17 +1108,36 @@ class DatabaseManager:
 
         now = self.now_utc()
         state_key = f"admin_bootstrap_completed:{settings.ADMIN_BOOTSTRAP_EMAIL}"
+        first_boot_key = "admin_bootstrap_first_completed"
         with self.engine.begin() as conn:
             # Check if bootstrap has already completed once for this email
             try:
-                state_completed = conn.execute(
-                    text("SELECT value FROM bootstrap_state WHERE key = :key LIMIT 1"),
-                    {"key": state_key},
-                ).scalar_one_or_none()
+                marker_rows = conn.execute(
+                    text(
+                        "SELECT key FROM bootstrap_state "
+                        "WHERE key IN (:state_key, :first_boot_key)"
+                    ),
+                    {"state_key": state_key, "first_boot_key": first_boot_key},
+                ).scalars().all()
             except OperationalError:
-                state_completed = None
+                # Fail closed: if the one-shot marker cannot be read we cannot
+                # prove this is the first boot, and re-running the seed here
+                # would turn a transient DB error into an admin re-bootstrap.
+                logger.exception(
+                    "admin_bootstrap_state_unreadable",
+                    email=_mask_email(settings.ADMIN_BOOTSTRAP_EMAIL),
+                )
+                raise
+            markers = set(marker_rows)
+            state_completed = state_key in markers
+            first_boot_done = first_boot_key in markers
 
-            if state_completed is not None:
+            if state_completed:
+                if not first_boot_done:
+                    # Backfill the tamper-evident marker for deployments that
+                    # bootstrapped before it existed, so clearing this email's
+                    # row alone cannot re-arm the env-driven admin overwrite.
+                    self._mark_bootstrap_completed(conn, first_boot_key, "1")
                 logger.warning(
                     "admin_bootstrap_skipped_one_shot",
                     reason="bootstrap has already completed for this email; delete bootstrap_state row to re-arm",
@@ -1102,6 +1155,20 @@ class DatabaseManager:
             )
             if admin_row is not None:
                 if settings.ADMIN_BOOTSTRAP_UPDATE_EXISTING:
+                    if first_boot_done:
+                        # Fail closed: a bootstrap already completed once, so this
+                        # is not first-boot provisioning — it is the env-driven
+                        # admin takeover path (clear this email's bootstrap_state
+                        # row, keep the flag on, and every boot would reset the
+                        # admin password/role from the environment).
+                        raise RuntimeError(
+                            "ADMIN_BOOTSTRAP_UPDATE_EXISTING=true with user "
+                            f"'{settings.ADMIN_BOOTSTRAP_EMAIL}' but a bootstrap has "
+                            "already completed on this database. Refusing to reset an "
+                            "admin password/role from the environment. Set "
+                            "ADMIN_BOOTSTRAP_UPDATE_EXISTING=false; if a reset is "
+                            "genuinely needed, do it via the admin UI or direct SQL."
+                        )
                     logger.warning(
                         "admin_bootstrap_overwrite_enabled",
                         detail="ADMIN_BOOTSTRAP_UPDATE_EXISTING açık; ilk kurulum sonrası .env içinde false yapılması önerilir.",
@@ -1129,6 +1196,7 @@ class DatabaseManager:
                         previous_role=str(admin_row["role"]),
                     )
                     self._mark_bootstrap_completed(conn, state_key, "promoted")
+                    self._mark_bootstrap_completed(conn, first_boot_key, "1")
                 else:
                     log_method = (
                         logger.info if str(admin_row["role"]) == "admin" else logger.warning
@@ -1174,6 +1242,7 @@ class DatabaseManager:
                     previous_role=None,
                 )
                 self._mark_bootstrap_completed(conn, state_key, "created")
+                self._mark_bootstrap_completed(conn, first_boot_key, "1")
             except IntegrityError:
                 logger.warning(
                     "admin_bootstrap_duplicate",
@@ -1190,8 +1259,14 @@ class DatabaseManager:
                 ),
                 {"key": key, "value": value, "created_at": self.now_utc()},
             )
-        except Exception:
-            logger.warning("bootstrap_state_record_failed", key=key)
+        except IntegrityError:
+            # Already recorded (e.g. marker backfill); nothing to do.
+            pass
+        except SQLAlchemyError:
+            # Fail closed: without the one-shot marker the seed would run again
+            # on the next boot, so an unwritable marker must abort the boot.
+            logger.exception("bootstrap_state_record_failed", key=key)
+            raise
 
     def _write_bootstrap_audit(
         self,

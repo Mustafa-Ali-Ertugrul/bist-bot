@@ -130,6 +130,59 @@ class UserPortfolioRepository:
 
         self.manager.run_session(_write)
 
+    def add_watchlist_items_bulk(
+        self, user_id: int, watchlist_id: int, tickers: list[str], *, limit: int = 100
+    ) -> dict[str, Any]:
+        clean_tickers = [
+            str(item or "").strip().upper()
+            for item in tickers
+            if str(item or "").strip()
+        ]
+
+        def _write(session):
+            row = session.scalar(
+                select(UserWatchlistRecord).where(
+                    UserWatchlistRecord.id == watchlist_id,
+                    UserWatchlistRecord.user_id == user_id,
+                )
+            )
+            if row is None:
+                raise OwnershipError("Liste bulunamadı.")
+            existing_rows = session.scalars(
+                select(UserWatchlistItemRecord.ticker).where(
+                    UserWatchlistItemRecord.watchlist_id == watchlist_id
+                )
+            ).all()
+            existing_set = {str(t) for t in existing_rows}
+            current_count = len(existing_set)
+            added = 0
+            skipped = 0
+            limit_reached = False
+            now = datetime.now(UTC)
+            for ticker in clean_tickers:
+                if ticker in existing_set:
+                    skipped += 1
+                    continue
+                if current_count >= limit:
+                    limit_reached = True
+                    break
+                session.add(
+                    UserWatchlistItemRecord(
+                        watchlist_id=watchlist_id, ticker=ticker, added_at=now
+                    )
+                )
+                existing_set.add(ticker)
+                current_count += 1
+                added += 1
+            return {
+                "added": added,
+                "skipped": skipped,
+                "limit_reached": limit_reached,
+                "limit": limit,
+            }
+
+        return dict(self.manager.run_session(_write))
+
     def remove_watchlist_item(self, user_id: int, watchlist_id: int, ticker: str) -> None:
         def _write(session):
             row = session.scalar(
@@ -255,6 +308,77 @@ class UserPortfolioRepository:
             return record.id
 
         return int(self.manager.run_session(_write))
+
+    def add_transactions_bulk(
+        self, user_id: int, portfolio_id: int, txs: list[dict[str, Any]], *, limit: int = 500
+    ) -> int:
+        if not txs:
+            return 0
+
+        def _write(session):
+            row = session.scalar(
+                select(UserPortfolioRecord).where(
+                    UserPortfolioRecord.id == portfolio_id,
+                    UserPortfolioRecord.user_id == user_id,
+                )
+            )
+            if row is None:
+                raise OwnershipError("Portföy bulunamadı.")
+            count = session.scalar(
+                select(func.count(UserPortfolioTransactionRecord.id)).where(
+                    UserPortfolioTransactionRecord.portfolio_id == portfolio_id
+                )
+            )
+            if int(count or 0) + len(txs) > limit:
+                raise ValueError(f"Bir portföyde en fazla {limit} işlem olabilir.")
+            now = datetime.now(UTC)
+            for tx in txs:
+                session.add(
+                    UserPortfolioTransactionRecord(
+                        portfolio_id=portfolio_id,
+                        ticker=str(tx["ticker"]),
+                        side=str(tx["side"]),
+                        trade_date=tx["trade_date"],
+                        quantity=float(tx["quantity"]),
+                        price=float(tx["price"]),
+                        commission_tl=float(tx.get("commission_tl") or 0.0),
+                        note=(str(tx["note"])[:500] if tx.get("note") else None),
+                        created_at=now,
+                    )
+                )
+            return len(txs)
+
+        return int(self.manager.run_session(_write))
+
+    def update_transaction(
+        self, user_id: int, portfolio_id: int, transaction_id: int, tx: dict[str, Any]
+    ) -> None:
+        def _write(session):
+            portfolio = session.scalar(
+                select(UserPortfolioRecord).where(
+                    UserPortfolioRecord.id == portfolio_id,
+                    UserPortfolioRecord.user_id == user_id,
+                )
+            )
+            if portfolio is None:
+                raise OwnershipError("Portföy bulunamadı.")
+            record = session.scalar(
+                select(UserPortfolioTransactionRecord).where(
+                    UserPortfolioTransactionRecord.id == transaction_id,
+                    UserPortfolioTransactionRecord.portfolio_id == portfolio_id,
+                )
+            )
+            if record is None:
+                raise OwnershipError("İşlem bulunamadı.")
+            record.ticker = str(tx["ticker"])
+            record.side = str(tx["side"])
+            record.trade_date = tx["trade_date"]
+            record.quantity = float(tx["quantity"])
+            record.price = float(tx["price"])
+            record.commission_tl = float(tx.get("commission_tl") or 0.0)
+            record.note = str(tx["note"])[:500] if tx.get("note") else None
+
+        self.manager.run_session(_write)
 
     def delete_transaction(self, user_id: int, portfolio_id: int, transaction_id: int) -> None:
         def _write(session):

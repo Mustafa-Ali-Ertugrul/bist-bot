@@ -121,8 +121,9 @@
   // -------------------------------------------------------------------------
   async function ensureSession(token) {
     // Confirm a usable session AND the UI cookie before any navigation.
-    // Returns false without navigating, so a stale token can never
-    // ping-pong between /login and a gated page (and burn rate limits).
+    // Returns the server-chosen product target, or false without navigating,
+    // so a stale token can never ping-pong between /login and a gated page
+    // (and burn rate limits).
     try {
       const verify = await fetch('/api/auth/verify', {
         headers: { 'Authorization': 'Bearer ' + token }
@@ -132,7 +133,9 @@
         method: 'POST',
         headers: { 'Authorization': 'Bearer ' + token }
       });
-      return session.ok;
+      if (!session.ok) return false;
+      const data = await session.json();
+      return data.redirect_to || '/ui/screener';
     } catch (err) {
       return false;
     }
@@ -148,8 +151,9 @@
       return false;
     }
     if (token && onLoginPage) {
-      if (await ensureSession(token)) {
-        window.location.replace('/ui/dashboard');
+      const target = await ensureSession(token);
+      if (target) {
+        window.location.replace(target);
         return false;
       }
       localStorage.removeItem('bistbot_token');

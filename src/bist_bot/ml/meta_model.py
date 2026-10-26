@@ -193,13 +193,14 @@ def _write_artifact_manifest(path: Path, file_names: Iterable[str]) -> None:
     )
 
 
-def _verify_artifact_manifest(path: Path, trust_mode: str) -> None:
+def _verify_artifact_manifest(path: Path, trust_mode: str) -> bool:
+    """Verify the artifact manifest; True only when an Ed25519 signature held."""
     manifest_path = path / "artifact_manifest.json"
     if not manifest_path.exists():
         if trust_mode == "enforce":
             raise ValueError("Signed artifact manifest is required")
         logger.warning("artifact_manifest_missing", path=str(path))
-        return
+        return False
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     payload = manifest.get("payload")
     if not isinstance(payload, dict) or int(payload.get("version", 0)) != 1:
@@ -209,7 +210,7 @@ def _verify_artifact_manifest(path: Path, trust_mode: str) -> None:
         raise ValueError("Artifact manifest has no files")
     for name, expected_hash in files.items():
         safe_name = str(name)
-        if Path(safe_name).name != safe_name:
+        if safe_name in {"", ".", ".."} or Path(safe_name).name != safe_name:
             raise ValueError("Artifact manifest contains an invalid file name")
         artifact = path / safe_name
         if not artifact.is_file() or _sha256(artifact) != str(expected_hash):
@@ -221,7 +222,7 @@ def _verify_artifact_manifest(path: Path, trust_mode: str) -> None:
         if trust_mode == "enforce":
             raise ValueError("Ed25519 artifact signature and public key are required")
         logger.warning("artifact_signature_not_verified", path=str(path))
-        return
+        return False
     try:
         from cryptography.exceptions import InvalidSignature
         from cryptography.hazmat.primitives import serialization
@@ -235,6 +236,7 @@ def _verify_artifact_manifest(path: Path, trust_mode: str) -> None:
         key.verify(base64.b64decode(str(signature), validate=True), _canonical_json(payload))
     except (InvalidSignature, ValueError) as exc:
         raise ValueError("Artifact signature verification failed") from exc
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -417,7 +419,7 @@ class SignalMetaModel:
         trust_mode = str(settings.CALIBRATOR_TRUST or "warn").lower()
         if trust_mode not in {"warn", "enforce"}:
             raise ValueError(f"Unsupported CALIBRATOR_TRUST mode: {trust_mode}")
-        _verify_artifact_manifest(path, trust_mode)
+        signature_verified = _verify_artifact_manifest(path, trust_mode)
         feature_names = json.loads((path / "feature_columns.json").read_text(encoding="utf-8"))
 
         # Model: try XGBoost native (.ubj), then joblib (.joblib).
@@ -430,6 +432,11 @@ class SignalMetaModel:
             model = _build_classifier()
             model.load_model(str(ubj_path))
         elif joblib_path.exists():
+            if not signature_verified:
+                raise ValueError(
+                    "joblib model artifacts require a verified Ed25519 manifest "
+                    "(pickle-equivalent load); convert to .ubj or sign the artifacts"
+                )
             model = joblib.load(joblib_path)
         elif pkl_path.exists():
             logger.warning("pickle_model_rejected", path=str(pkl_path))
@@ -439,7 +446,8 @@ class SignalMetaModel:
         else:
             raise FileNotFoundError(f"No model file (ubj/joblib) found in {path}")
 
-        # Calibrator: safe JSON is primary; joblib is warn-mode migration only.
+        # Calibrator: safe JSON is primary; joblib is legacy and only loaded
+        # behind a verified Ed25519 manifest (pickle-equivalent format).
         cal_json = path / "probability_calibrator.json"
         cal_joblib = path / "probability_calibrator.joblib"
         cal_pkl = path / "probability_calibrator.pkl"
@@ -448,14 +456,16 @@ class SignalMetaModel:
             if not isinstance(calibrator_payload, dict):
                 raise ValueError("Calibrator JSON must contain an object")
             calibrator = ProbabilityCalibrator.from_json_dict(calibrator_payload)
-        elif cal_joblib.exists() and trust_mode != "enforce":
-            # Validate that the file is not empty and resides in a trusted path
+        elif cal_joblib.exists():
+            if not signature_verified:
+                raise ValueError(
+                    "joblib calibrator requires a verified Ed25519 manifest; "
+                    "convert to probability_calibrator.json"
+                )
             if cal_joblib.stat().st_size == 0:
                 raise ValueError(f"Corrupt or empty calibrator file: {cal_joblib}")
             logger.warning("legacy_joblib_calibrator_loaded", path=str(cal_joblib))
             calibrator = joblib.load(cal_joblib)
-        elif cal_joblib.exists():
-            raise ValueError("JSON calibrator is required in enforce mode")
         elif cal_pkl.exists():
             logger.warning("pickle_calibrator_rejected", path=str(cal_pkl))
             raise FileNotFoundError(

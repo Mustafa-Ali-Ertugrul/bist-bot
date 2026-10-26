@@ -6,21 +6,23 @@
 <title>Bist-Bot · Alarmlar</title>
 <link rel="stylesheet" href="/static/tailwind.css"/>
 <link rel="stylesheet" href="/static/stock.css?v=1"/>
-<link rel="stylesheet" href="/static/screener.css?v=1"/>
-<link rel="stylesheet" href="/static/personal.css?v=1"/>
+<link rel="stylesheet" href="/static/screener.css?v=5"/>
+<link rel="stylesheet" href="/static/personal.css?v=3"/>
 </head>
 <body class="bg-background font-body-md text-body-md text-on-surface antialiased">
 <header class="w-full px-terminal-margin py-space-md border-b border-surface-container-high/40">
 <div class="w-full max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-space-md">
 <div class="flex items-center gap-space-sm">
-<span class="font-headline-md text-headline-md tracking-tight font-extrabold">Bist<span class="text-primary">-Bot</span></span>
+<a class="font-headline-md text-headline-md tracking-tight font-extrabold text-on-surface" href="/ui/screener">Bist<span class="text-primary">-Bot</span></a>
 <span class="bg-surface-container-high px-space-xs py-space-3xs rounded text-secondary font-label-caps text-label-caps uppercase tracking-wider">Alarmlar</span>
 </div>
 <nav class="flex flex-wrap items-center gap-space-sm">
+<a class="personal-nav" href="/ui/market">Piyasa</a>
 <a class="personal-nav" href="/ui/screener">Tarayıcı</a>
 <a class="personal-nav" href="/ui/watchlist">İzleme</a>
 <a class="personal-nav" href="/ui/portfolio">Portföy</a>
 <a class="personal-nav" href="/ui/scorecard">Karne</a>
+<button class="personal-nav" type="button" data-action="logout">Çıkış</button>
 </nav>
 </div>
 </header>
@@ -73,8 +75,23 @@
 <pre id="preview-text" class="alert-preview mt-space-sm"></pre>
 </section>
 
+<section class="bg-surface-container-low/90 rounded-xl p-space-md">
+<div class="flex flex-wrap items-center justify-between gap-space-sm">
+<h2 class="font-headline-md text-headline-md font-bold">Alarm Geçmişi</h2>
+<div class="flex flex-wrap items-center gap-space-xs">
+<span class="font-body-sm text-body-sm text-outline" id="events-unread">—</span>
+<button id="events-refresh" class="screen-button" type="button">Bugünü işle</button>
+<button id="events-read" class="screen-button" type="button">Tümünü okundu say</button>
+</div>
+</div>
+<p class="font-body-sm text-body-sm text-outline mt-space-3xs">Gün sonu verisiyle tetiklenen alarmlar. Mesaj gönderilmese de burada listelenir.</p>
+<p class="font-body-sm text-body-sm text-outline mt-space-3xs" id="events-status"></p>
+<ul id="event-list" class="stock-kv mt-space-sm"></ul>
+</section>
+
 <p class="font-body-sm text-body-sm text-outline pb-space-lg">Mesajlar yatırım tavsiyesi değildir. Gün içinde mesaj gönderilmez; yalnızca akşam tek özet gelir ve o gün tetiklenen bir şey yoksa mesaj gitmez.</p>
 </main>
-<script src="/static/alerts.js?v=2"></script>
+<script src="/static/alerts.js?v=4"></script>
+<script src="/static/product-nav.js?v=2"></script>
 </body>
 </html>

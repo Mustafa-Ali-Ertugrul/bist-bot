@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html class="dark" lang="tr">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Bist-Bot · Karşılaştır</title>
+<link rel="stylesheet" href="/static/tailwind.css"/>
+<link rel="stylesheet" href="/static/stock.css?v=1"/>
+<link rel="stylesheet" href="/static/screener.css?v=5"/>
+<link rel="stylesheet" href="/static/personal.css?v=3"/>
+</head>
+<body class="bg-background font-body-md text-body-md text-on-surface antialiased">
+<header class="w-full px-terminal-margin py-space-md border-b border-surface-container-high/40">
+<div class="w-full max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-space-md">
+<div class="flex items-center gap-space-sm">
+<a class="font-headline-md text-headline-md tracking-tight font-extrabold text-on-surface" href="/ui/market">Bist<span class="text-primary">-Bot</span></a>
+<span class="bg-surface-container-high px-space-xs py-space-3xs rounded text-secondary font-label-caps text-label-caps uppercase tracking-wider">Karşılaştır</span>
+</div>
+<nav class="flex flex-wrap items-center gap-space-sm">
+<a class="personal-nav" href="/ui/market">Piyasa</a>
+<a class="personal-nav" href="/ui/screener">Tarayıcı</a>
+<a class="personal-nav" href="/ui/watchlist">İzleme</a>
+<a class="personal-nav" href="/ui/portfolio">Portföy</a>
+<a class="personal-nav" href="/ui/alerts">Alarmlar</a>
+<a class="personal-nav" href="/ui/scorecard">Karne</a>
+<button class="personal-nav" type="button" data-action="logout">Çıkış</button>
+</nav>
+</div>
+</header>
+
+<main class="w-full max-w-7xl mx-auto px-terminal-margin py-space-lg flex flex-col gap-space-lg">
+<section class="bg-surface-container-low/90 rounded-xl p-space-md">
+<h1 class="font-headline-md text-headline-md font-bold">Hisse Karşılaştırma</h1>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-space-3xs">
+        En fazla 4 hisseyi yan yana koyar. Fiyat serisi ortak ilk seansta 100'e normalize edilir.
+      </p>
+<div class="flex flex-wrap items-center gap-space-xs mt-space-sm">
+<label class="sr-only" for="compare-codes">Hisse kodları</label>
+<input id="compare-codes" class="screen-control" type="text" placeholder="THYAO, ASELS, KCHOL" maxlength="60"/>
+<label class="screen-control-label" for="compare-range">Aralık</label>
+<select id="compare-range" class="screen-control">
+<option value="1m">1 ay</option>
+<option value="3m">3 ay</option>
+<option value="1y" selected>1 yıl</option>
+<option value="5y">5 yıl</option>
+</select>
+<button id="compare-run" class="screen-button screen-button-primary" type="button">Karşılaştır</button>
+</div>
+<p class="font-body-sm text-body-sm text-outline mt-space-3xs" id="compare-status"></p>
+</section>
+
+<section class="bg-surface-container-low/90 rounded-xl p-space-md">
+<h2 class="font-headline-md text-headline-md font-bold">Normalize Fiyat</h2>
+<p class="font-body-sm text-body-sm text-outline mt-space-3xs" id="compare-base">—</p>
+<div id="compare-chart" class="stock-chart compare-chart"></div>
+<div id="compare-legend" class="flex flex-wrap items-center gap-space-sm mt-space-xs"></div>
+</section>
+
+<section class="bg-surface-container-low/90 rounded-xl p-space-md">
+<h2 class="font-headline-md text-headline-md font-bold">Getiri ve Oranlar</h2>
+<div class="overflow-x-auto mt-space-sm">
+<table class="w-full font-body-sm text-body-sm screen-table">
+<thead><tr class="text-outline font-label-caps text-label-caps uppercase">
+<th class="text-left sticky-col">Kod</th>
+<th class="text-right">Son</th><th class="text-right">Günlük</th>
+<th class="text-right">1 Ay</th><th class="text-right">3 Ay</th><th class="text-right">1 Yıl</th>
+<th class="text-right">RSI(14)</th><th class="text-right">SMA50'ye</th>
+<th class="text-right">52h Zirveye</th><th class="text-right">F/K</th>
+<th class="text-right">PD/DD</th><th class="text-right">ROE</th>
+<th class="text-right">Dönem</th>
+</tr></thead>
+<tbody id="compare-body"><tr><td colspan="13" class="py-space-sm">Kod girin.</td></tr></tbody>
+</table>
+</div>
+</section>
+
+<p class="font-body-sm text-body-sm text-outline pb-space-lg">Bu sayfa bilgilendirme amaçlıdır; alım-satım tavsiyesi değildir. Karşılaştırma geçmiş verinin göreli gösterimidir.</p>
+</main>
+<script src="/static/compare.js?v=3"></script>
+<script src="/static/product-nav.js?v=2"></script>
+</body>
+</html>

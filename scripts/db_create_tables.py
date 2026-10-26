@@ -7,8 +7,18 @@ from sqlalchemy import text
 from bist_bot.db.database import Base, DatabaseManager
 
 
+def _redact_db_url(url: str | None) -> str | None:
+    """Hide the password when echoing a SQLAlchemy DSN to the console."""
+    if not url or "://" not in url or "@" not in url:
+        return url
+    scheme, rest = url.split("://", 1)
+    creds, host = rest.rsplit("@", 1)
+    user = creds.split(":", 1)[0]
+    return f"{scheme}://{user}:***@{host}"
+
+
 def main() -> None:
-    print("DATABASE_URL =", os.environ.get("DATABASE_URL"))
+    print("DATABASE_URL =", _redact_db_url(os.environ.get("DATABASE_URL")))
     print("DB_PATH      =", os.environ.get("DB_PATH"))
     mgr = DatabaseManager()
     print("engine url   =", mgr.engine.url)
